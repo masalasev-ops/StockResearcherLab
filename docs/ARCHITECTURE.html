@@ -1,0 +1,926 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EDF1F4; --surface:#FFFFFF; --surface-2:#F6F8FA;
+  --ink:#13202A; --ink2:#546674; --ink3:#8093A0;
+  --rule:#D1DBE2; --rule2:#E4EBF0;
+  --ingest:#2F6F8F; --compute:#5A5B9F; --select:#8E4B6E;
+  --decide:#A8761D; --execute:#2F7A5C; --learn:#A34A45; --present:#1F6B70;
+  --hot:#C0392B;
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box}
+.doc{background:var(--paper);color:var(--ink);font-family:var(--sans);
+  font-size:15px;line-height:1.65;padding:56px 24px 96px;margin:0}
+.wrap{max-width:1060px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink3);margin:0 0 14px}
+h1{font-size:38px;line-height:1.12;font-weight:700;letter-spacing:-.02em;margin:0 0 14px}
+.lede{font-size:17px;color:var(--ink2);max-width:70ch;margin:0 0 8px}
+h2{font-size:23px;font-weight:600;letter-spacing:-.01em;margin:0}
+h3{font-size:16px;font-weight:600;margin:30px 0 10px}
+p{margin:0 0 14px;max-width:78ch}
+.muted{color:var(--ink2)}
+code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);
+  border:1px solid var(--rule2);border-radius:4px;padding:1px 5px}
+section{margin-top:58px;border-top:1px solid var(--rule);padding-top:26px}
+.sechead{display:flex;align-items:baseline;gap:14px;margin-bottom:18px}
+.secno{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink3);letter-spacing:.1em}
+.board{background:var(--surface);border:1px solid var(--rule);border-radius:10px;
+  padding:26px 20px;margin:20px 0 10px;overflow-x:auto}
+.cap{font-family:var(--mono);font-size:11px;color:var(--ink3);letter-spacing:.09em;
+  text-transform:uppercase;margin:0 0 18px}
+.flow{display:flex;flex-direction:column;align-items:center;gap:0;min-width:min-content}
+.row{display:flex;gap:14px;align-items:stretch;justify-content:center;flex-wrap:wrap}
+.arrow{color:var(--ink3);font-size:15px;line-height:1;padding:7px 0;font-family:var(--mono)}
+.harrow{display:flex;align-items:center;color:var(--ink3);font-family:var(--mono);padding:0 4px}
+.node{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--ink3);
+  border-radius:6px;padding:9px 13px;min-width:190px;max-width:300px;text-align:left}
+.node .id{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.08em;color:var(--ink3)}
+.node .nm{font-weight:600;font-size:14px;line-height:1.3;margin-top:1px}
+.node .rl{font-size:12.5px;color:var(--ink2);line-height:1.4;margin-top:3px}
+.n-ingest{border-left-color:var(--ingest)} .n-ingest .id{color:var(--ingest)}
+.n-compute{border-left-color:var(--compute)} .n-compute .id{color:var(--compute)}
+.n-select{border-left-color:var(--select)} .n-select .id{color:var(--select)}
+.n-decide{border-left-color:var(--decide)} .n-decide .id{color:var(--decide)}
+.n-execute{border-left-color:var(--execute)} .n-execute .id{color:var(--execute)}
+.n-learn{border-left-color:var(--learn)} .n-learn .id{color:var(--learn)}
+.n-present{border-left-color:var(--present)} .n-present .id{color:var(--present)}
+.n-hot{border-left-color:var(--hot);border-color:var(--hot);background:#FDF4F3}
+.n-hot .id{color:var(--hot)}
+.store{background:var(--surface-2);border:1px dashed var(--rule);border-radius:6px;
+  padding:7px 11px;font-family:var(--mono);font-size:12px;color:var(--ink2);text-align:center;min-width:150px}
+.store b{display:block;font-weight:600;color:var(--ink);font-size:12.5px}
+.band{display:flex;gap:9px;align-items:stretch;min-width:min-content}
+.lay{flex:1;min-width:138px;border:1px solid var(--rule);border-radius:8px;
+  background:var(--surface);padding:12px 11px 14px;border-top:3px solid var(--ink3)}
+.lay h4{margin:0 0 2px;font-size:14px;font-weight:600}
+.lay .lid{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;color:var(--ink3)}
+.lay ul{margin:8px 0 0;padding-left:0;list-style:none}
+.lay li{font-family:var(--mono);font-size:11px;color:var(--ink2);line-height:1.7;white-space:nowrap}
+.l-ingest{border-top-color:var(--ingest)} .l-compute{border-top-color:var(--compute)}
+.l-select{border-top-color:var(--select)} .l-decide{border-top-color:var(--decide)}
+.l-execute{border-top-color:var(--execute)} .l-learn{border-top-color:var(--learn)}
+.l-present{border-top-color:var(--present)}
+.lane{border:1px solid var(--rule);border-radius:8px;background:var(--surface-2);
+  padding:12px 12px 14px;min-width:240px;display:flex;flex-direction:column;align-items:center}
+.lane.hot{background:#FDF4F3;border-color:#E9C4BF}
+.lanehd{font-family:var(--mono);font-size:11px;letter-spacing:.09em;font-weight:600;
+  color:var(--ink3);margin-bottom:10px;text-align:center}
+.lane.hot .lanehd{color:var(--hot)}
+.step{background:var(--surface);border:1px solid var(--rule);border-radius:6px;
+  padding:8px 12px;width:100%;text-align:left;font-size:13px;line-height:1.45}
+.step b{display:block;font-size:13px;font-weight:600;margin-bottom:1px}
+.step span{color:var(--ink2);font-size:12.5px}
+.count{font-family:var(--mono);font-size:12px;color:var(--ink3);padding:6px 0;font-weight:600}
+.fbar{border:1px solid var(--rule);background:var(--surface);border-radius:6px;
+  padding:10px 14px;text-align:center}
+.fbar .n{font-family:var(--mono);font-size:19px;font-weight:600;line-height:1.1}
+.fbar .l{font-size:12.5px;color:var(--ink2);margin-top:2px}
+.fbar.hot{border-color:var(--hot);background:#FDF4F3} .fbar.hot .n{color:var(--hot)}
+.tag{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:600;
+  letter-spacing:.06em;padding:2px 6px;border-radius:3px;background:var(--surface-2);
+  border:1px solid var(--rule);color:var(--ink2);vertical-align:2px}
+.tag.new{background:#FBF3E3;border-color:#E4CFA0;color:#7A5510}
+.tag.hot{background:#FDF4F3;border-color:#E9C4BF;color:var(--hot)}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px}
+th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink3);font-weight:600;padding:0 12px 8px 0;
+  border-bottom:1px solid var(--rule)}
+td{padding:9px 12px 9px 0;border-bottom:1px solid var(--rule2);vertical-align:top;line-height:1.5}
+td.mono,th.mono{font-family:var(--mono);font-size:12px;white-space:nowrap}
+td.wrapmono{font-family:var(--mono);font-size:11.5px;line-height:1.6}
+tbody tr:hover{background:var(--surface-2)}
+tr.taken{background:#F1F8F4} tr.taken:hover{background:#E8F3EC}
+tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
+.note{border-left:2px solid var(--rule);padding:2px 0 2px 16px;margin:18px 0;color:var(--ink2);max-width:76ch}
+.note b{color:var(--ink);font-weight:600}
+.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(275px,1fr));gap:16px;margin:18px 0}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:15px 17px}
+.card h4{margin:0 0 6px;font-size:13.5px;font-weight:600;font-family:var(--mono);letter-spacing:.03em}
+.card p{font-size:13.5px;margin:0;color:var(--ink2)}
+.settled{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:4px 20px 10px;margin:18px 0}
+.settled dl{margin:0} 
+.settled dt{font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--execute);margin-top:13px;letter-spacing:.04em}
+.settled dd{margin:2px 0 0;font-size:13.5px;color:var(--ink2)}
+@media (max-width:760px){.doc{padding:36px 16px 72px} h1{font-size:29px} .band{flex-direction:column} .lay li{white-space:normal} .row{flex-direction:column;align-items:center}}
+</style>
+
+<div class="doc"><div class="wrap">
+
+<p class="eyebrow">Paper trading research system / architecture v0.4</p>
+<h1>Thirty-three components, seven layers, one researcher</h1>
+<p class="lede">Every open decision from scoping is now closed. Five independent screens surface candidates from the whole US market by five different mechanisms, the researcher judges each one alone against an absolute bar, and three portfolios run in parallel so the researcher can be measured rather than believed.</p>
+
+<div class="settled">
+<dl>
+<dt>SETTLED SINCE v0.3</dt>
+<dd>Long only. Opus 5 as the researcher. $100,000 starting equity at 0.5 percent risk per trade. Postgres. C# throughout with an API layer and a Blazor front end. Five years of backfill before go-live.</dd>
+<dt>THE ARBITRATION RULE</dt>
+<dd>Conviction sort with a date-seeded coin flip only where conviction ties at the cutoff, plus a hard bucket cap in the risk layer. Section 10.</dd>
+<dt>RANK-BASED FILTERING REMOVED</dt>
+<dd>The news ingest previously narrowed to the top 400 names by prior screen score, which made the sentiment screen unable to discover anything it had not already found. Absolute filters now live in the universe definition and nowhere else.</dd>
+<dt>BENCHMARKS CORRECTED</dt>
+<dd>Forward returns are stored three ways. The learning loops read the peer-relative version, because measuring a $500M company against SPY would have caused the tuner to dismantle the two screens that keep this system off megacaps.</dd>
+<dt>PRESENTATION LAYER ADDED</dt>
+<dd>v0.3 had twenty-eight components and no way to look at anything. Layer 7, section 14.</dd>
+</dl>
+</div>
+
+<section style="border-top:none;padding-top:34px">
+<div class="sechead"><span class="secno">01</span><h2>Layer map</h2></div>
+
+<div class="board">
+<p class="cap">Figure 1 — the seven layers and their components</p>
+<div class="band">
+  <div class="lay l-ingest"><span class="lid">LAYER 1</span><h4>Ingest</h4>
+    <ul><li>C01 UniverseBuilder</li><li>C02 PriceIngestor</li><li>C03 FundamentalsIngest</li><li>C04 SentimentIngestor</li><li>C05 FlowIngestor</li><li>C06 EventsIngestor</li><li>C07 FreshnessGuard</li><li>C29 HeadlineIngestor</li></ul></div>
+  <div class="lay l-compute"><span class="lid">LAYER 2</span><h4>Compute</h4>
+    <ul><li>C08 IndicatorEngine</li><li>C09 ValuationEngine</li><li>C10 MarketContext</li><li>C11 PercentileEngine</li></ul></div>
+  <div class="lay l-select"><span class="lid">LAYER 3</span><h4>Select</h4>
+    <ul><li>C12 GateEngine</li><li>C13 ScreenEngine</li><li>C14 CandidateAllocator</li><li>C33 NewsDigester</li><li>C15 DossierBuilder</li></ul></div>
+  <div class="lay l-decide"><span class="lid">LAYER 4</span><h4>Decide</h4>
+    <ul><li>C16 ResearcherClient</li><li>C17 ProposalValidator</li></ul></div>
+  <div class="lay l-execute"><span class="lid">LAYER 5</span><h4>Execute</h4>
+    <ul><li>C18 RiskGate</li><li>C19 PaperBroker</li><li>C20 PositionManager</li><li>C25 PortfolioRunner</li></ul></div>
+  <div class="lay l-learn"><span class="lid">LAYER 6</span><h4>Learn</h4>
+    <ul><li>C21 ForwardReturnFill</li><li>C22 ScreenTuner</li><li>C23 LessonWriter</li><li>C24 CalibrationReport</li></ul></div>
+  <div class="lay l-present"><span class="lid">LAYER 7</span><h4>Present</h4>
+    <ul><li>C30 QueryApi</li><li>C31 ReadModelBuilder</li><li>Blazor client</li></ul></div>
+</div>
+</div>
+<p class="muted" style="font-size:13.5px">Four components sit outside the layers. <span class="tag">C26 CostLedger</span> records tokens and money per call and trips a circuit breaker. <span class="tag">C27 RunLog</span> records status, duration and row count per stage. <span class="tag">C28 ConcentrationMonitor</span> tracks the megacap share of recent candidates and the distinct ticker count over sixty days, so the diversity guarantees are measured rather than assumed. <span class="tag new">C32 LocalModelClient</span> talks to the local inference server over its OpenAI-compatible endpoint and reports health, loaded model and latency.</p>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">02</span><h2>The universe</h2></div>
+<p>This is the only place in the system where anything is filtered out. No component downstream narrows by rank, because ranking at ingest decides what can be discovered before anything has had a chance to be discovered.</p>
+
+<table>
+<thead><tr><th>Criterion</th><th class="mono">Threshold</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Instrument type</td><td class="mono">Common stock and ADRs</td><td>Funds, trusts and SPACs excluded. Three of the five screens need company fundamentals that a fund does not have.</td></tr>
+<tr><td>Market capitalisation</td><td class="mono">≥ $300M</td><td>Floor of the small bucket. Below this the fundamental data thins out and the participation cap binds on every order.</td></tr>
+<tr><td>Share price</td><td class="mono">≥ $5</td><td>Excludes penny stocks without excluding small companies.</td></tr>
+<tr><td>20-day median dollar volume</td><td class="mono">≥ $2M</td><td>One percent of $2M is a $20,000 order ceiling, which clears a typical $8,300 position with room. At $1M the cap would reject orders at the bottom of the universe.</td></tr>
+<tr><td>Trading history</td><td class="mono">≥ 250 days</td><td>Every screen ranks on percentiles or changes that need a year of history behind them.</td></tr>
+</tbody>
+</table>
+
+<p class="muted" style="font-size:13.5px">Around 2,000 names live, and roughly 2,500 distinct tickers across the five-year backfill once delisted names are included. Size buckets: large and above at $10B or more, mid from $2B to $10B, small from $300M to $2B.</p>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">03</span><h2>Component catalogue</h2></div>
+<table>
+<thead><tr><th class="mono">ID</th><th>Component</th><th>Runs</th><th>Reads</th><th>Writes</th></tr></thead>
+<tbody>
+<tr><td class="mono"><b>C01</b></td><td>UniverseBuilder<br><span class="muted" style="font-size:12.5px">Applies section 2, assigns size buckets</span></td><td>Weekly, Sun</td><td>Symbol list, <code>price_daily</code>, <code>fundamental_snapshot</code></td><td class="mono">security</td></tr>
+<tr><td class="mono"><b>C02</b></td><td>PriceIngestor<br><span class="muted" style="font-size:12.5px">One bulk call, entire US market</span></td><td>Daily 17:30</td><td>Bulk EOD endpoint</td><td class="mono">price_daily</td></tr>
+<tr><td class="mono"><b>C03</b></td><td>FundamentalsIngestor<br><span class="muted" style="font-size:12.5px">Rolling rotation, earnings jump the queue. Keyed on filing date, never period end</span></td><td>Daily 17:45</td><td>Fundamentals endpoint, <code>events</code></td><td class="mono">fundamental_snapshot</td></tr>
+<tr><td class="mono"><b>C04</b></td><td>SentimentIngestor <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Whole universe, no pre-selection. Feeds the sentiment screen's ranking</span></td><td>Daily 18:00</td><td>Sentiment endpoint</td><td class="mono">sentiment_daily</td></tr>
+<tr><td class="mono"><b>C05</b></td><td>FlowIngestor<br><span class="muted" style="font-size:12.5px">Short interest keyed on publication date, not settlement date</span></td><td>Weekly</td><td>Insider, short interest, ownership</td><td class="mono">flow_daily</td></tr>
+<tr><td class="mono"><b>C06</b></td><td>EventsIngestor</td><td>Daily 17:45</td><td>Calendar, splits, dividends</td><td class="mono">events</td></tr>
+<tr><td class="mono"><b>C07</b></td><td>FreshnessGuard<br><span class="muted" style="font-size:12.5px">Aborts the run rather than trading stale bars</span></td><td>Daily 17:40</td><td><code>price_daily</code>, <code>run_log</code></td><td class="mono">run_log</td></tr>
+<tr><td class="mono"><b>C29</b></td><td>HeadlineIngestor <span class="tag new">NEW</span><br><span class="muted" style="font-size:12.5px">Headline strings for the ~28 candidates only. Runs inside the select layer because candidates do not exist until then</span></td><td>Daily 18:32</td><td>News endpoint, <code>candidate_set</code></td><td class="mono">headline</td></tr>
+<tr><td class="mono"><b>C33</b></td><td>NewsDigester <span class="tag new">NEW</span><br><span class="muted" style="font-size:12.5px">Condenses each candidate's recent articles into ~150 tokens. Owns the ordered provider chain and the nightly rotation. Transforms evidence, never judges</span></td><td>Daily 18:33</td><td><code>headline</code>, <code>candidate_set</code>, <code>digest_provider</code></td><td class="mono">news_digest</td></tr>
+<tr><td class="mono"><b>C32</b></td><td>LocalModelClient <span class="tag new">NEW</span><br><span class="muted" style="font-size:12.5px">OpenAI-compatible client for the local inference server. Health, loaded model name, latency</span></td><td>On demand</td><td><code>local_model_config</code></td><td class="mono">run_log</td></tr>
+<tr><td class="mono"><b>C08</b></td><td>IndicatorEngine<br><span class="muted" style="font-size:12.5px">All technicals computed locally, never bought</span></td><td>Daily 18:05</td><td><code>price_daily</code>, <code>security</code></td><td class="mono">indicator_daily</td></tr>
+<tr><td class="mono"><b>C09</b></td><td>ValuationEngine<br><span class="muted" style="font-size:12.5px">Recomputed daily because price moves</span></td><td>Daily 18:05</td><td><code>price_daily</code>, <code>fundamental_snapshot</code></td><td class="mono">valuation_daily</td></tr>
+<tr><td class="mono"><b>C10</b></td><td>MarketContextEngine<br><span class="muted" style="font-size:12.5px">Breadth, VIX, regime label, sector relative strength</span></td><td>Daily 18:05</td><td>Index and sector prices, <code>indicator_daily</code></td><td class="mono">market_context_daily</td></tr>
+<tr><td class="mono"><b>C11</b></td><td>PercentileEngine<br><span class="muted" style="font-size:12.5px">Ranks inside size bucket by sector cells, falling back to size bucket alone when a cell has fewer than 15 members</span></td><td>Daily 18:15</td><td>All metric stores, <code>security</code></td><td class="mono">*_pctile columns</td></tr>
+<tr><td class="mono"><b>C12</b></td><td>GateEngine<br><span class="muted" style="font-size:12.5px">Earnings blackout, gap, halt, already held, cooldown</span></td><td>Daily 18:20</td><td><code>events</code>, <code>price_daily</code>, <code>position</code>, <code>trade_outcome</code></td><td class="mono">gate_result</td></tr>
+<tr><td class="mono"><b>C13</b></td><td>ScreenEngine<br><span class="muted" style="font-size:12.5px">Runs the five screens from config. Maintains each screen's trailing 250-day distribution for its floor</span></td><td>Daily 18:25</td><td>Percentiles, <code>config_rows</code>, <code>screen_history</code></td><td class="mono">screen_score_daily</td></tr>
+<tr><td class="mono"><b>C14</b></td><td>CandidateAllocator<br><span class="muted" style="font-size:12.5px">Size quota per screen, no backfill, dedup across screens, writes attribution</span></td><td>Daily 18:30</td><td><code>screen_score_daily</code>, <code>gate_result</code></td><td class="mono">candidate_set, attribution</td></tr>
+<tr><td class="mono"><b>C15</b></td><td>DossierBuilder<br><span class="muted" style="font-size:12.5px">One byte-identical shared prefix plus one compact block per candidate. Section 7</span></td><td>Daily 18:35</td><td><code>candidate_set</code>, <code>headline</code>, <code>researcher_memory</code>, calibration, <code>market_context_daily</code></td><td class="mono">dossier</td></tr>
+<tr><td class="mono"><b>C16</b></td><td>ResearcherClient <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Runs twice with different model config: Opus 5 via the Batch API with a one-hour cache for Research: Opus 5, DeepSeek V4 Pro synchronously for Research: V4 Pro. Extended thinking off. Records model_id on every proposal</span></td><td>Daily 18:40, completing by 09:00</td><td><code>dossier</code></td><td class="mono">proposal, cost_ledger</td></tr>
+<tr><td class="mono"><b>C17</b></td><td>ProposalValidator<br><span class="muted" style="font-size:12.5px">Schema check, then every figure checked back against the dossier</span></td><td>Daily 18:45</td><td><code>proposal</code>, <code>dossier</code></td><td class="mono">proposal.status</td></tr>
+<tr><td class="mono"><b>C18</b></td><td>RiskGate <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Sizing, caps, stops, bucket cap, and the arbitration rule. Section 10</span></td><td>Daily 18:50</td><td><code>proposal</code>, <code>position</code>, equity, <code>indicator_daily</code></td><td class="mono">order</td></tr>
+<tr><td class="mono"><b>C19</b></td><td>PaperBroker<br><span class="muted" style="font-size:12.5px">Fills at next open with size-aware slippage</span></td><td>Next day 09:35</td><td><code>order</code>, next open price</td><td class="mono">fill, position</td></tr>
+<tr><td class="mono"><b>C20</b></td><td>PositionManager<br><span class="muted" style="font-size:12.5px">Stops and targets fire from code alone</span></td><td>Daily 18:10</td><td><code>position</code>, <code>price_daily</code></td><td class="mono">trade_outcome, position</td></tr>
+<tr><td class="mono"><b>C25</b></td><td>PortfolioRunner<br><span class="muted" style="font-size:12.5px">Runs every active portfolio off one candidate set. Iterates the registry rather than assuming a fixed set</span></td><td>Daily 18:50</td><td><code>portfolio</code>, <code>candidate_set</code>, <code>proposal</code>, <code>screen_score_daily</code></td><td class="mono">order</td></tr>
+<tr><td class="mono"><b>C21</b></td><td>ForwardReturnFiller <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Fills 5, 21 and 63 day returns three ways as dates mature. Section 13</span></td><td>Daily 18:10</td><td><code>attribution</code>, <code>price_daily</code>, <code>security</code></td><td class="mono">attribution</td></tr>
+<tr><td class="mono"><b>C22</b></td><td>ScreenTuner<br><span class="muted" style="font-size:12.5px">Reallocates the 40 slots between screens on peer-relative hit rate and alpha, shrunk, floor 4 and cap 12</span></td><td>Monthly</td><td><code>attribution</code></td><td class="mono">config_rows</td></tr>
+<tr><td class="mono"><b>C23</b></td><td>LessonWriter<br><span class="muted" style="font-size:12.5px">One AI call on aggregate statistics, never on raw trades</span></td><td>Monthly</td><td><code>attribution</code> aggregates</td><td class="mono">researcher_memory</td></tr>
+<tr><td class="mono"><b>C24</b></td><td>CalibrationReporter <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Brier score and reliability diagram of stated probability against realised outcome, per screen</span></td><td>Monthly</td><td><code>attribution</code>, <code>proposal</code></td><td class="mono">calibration</td></tr>
+<tr><td class="mono"><b>C30</b></td><td>QueryApi <span class="tag new">NEW</span><br><span class="muted" style="font-size:12.5px">ASP.NET Core minimal API. Read-only. The only thing the UI talks to</span></td><td>Always</td><td>Read models and stores</td><td class="mono">nothing</td></tr>
+<tr><td class="mono"><b>C31</b></td><td>ReadModelBuilder <span class="tag new">NEW</span><br><span class="muted" style="font-size:12.5px">Materialises equity curves and rollups after each run so the UI never recomputes them</span></td><td>Daily 19:00</td><td><code>trade_outcome</code>, <code>position</code>, <code>attribution</code></td><td class="mono">read models</td></tr>
+<tr><td class="mono"><b>C26</b></td><td>CostLedger</td><td>Per call</td><td>API responses</td><td class="mono">cost_ledger</td></tr>
+<tr><td class="mono"><b>C27</b></td><td>RunLog</td><td>Per stage</td><td>Stage results</td><td class="mono">run_log</td></tr>
+<tr><td class="mono"><b>C28</b></td><td>ConcentrationMonitor</td><td>Daily 19:00</td><td><code>candidate_set</code>, <code>position</code>, <code>security</code></td><td class="mono">alert</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">04</span><h2>The nightly flow</h2></div>
+<p>One pass, roughly 17:30 to 19:00 Eastern. Every arrow is a table write rather than a function call, so any stage can be re-run against an earlier night without side effects.</p>
+
+<div class="board">
+<p class="cap">Figure 2 — evening pipeline, ingest through order</p>
+<div class="flow">
+  <div class="row">
+    <div class="node n-ingest"><span class="id">C02 · 17:30</span><div class="nm">PriceIngestor</div><div class="rl">Bulk EOD, whole US market</div></div>
+    <div class="node n-ingest"><span class="id">C03 C05 C06 · 17:45</span><div class="nm">Fundamentals · Flow · Events</div><div class="rl">Rotation plus event triggers</div></div>
+    <div class="node n-ingest"><span class="id">C04 · 18:00</span><div class="nm">SentimentIngestor</div><div class="rl">Whole universe, no pre-selection</div></div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="node n-hot" style="max-width:460px"><span class="id">C07 · 17:40</span><div class="nm">FreshnessGuard</div><div class="rl">The latest price date must equal today and the row count must be within tolerance. On failure the run aborts and no orders are produced.</div></div>
+  <div class="arrow">↓</div>
+  <div class="row">
+    <div class="node n-compute"><span class="id">C08</span><div class="nm">IndicatorEngine</div><div class="rl">~40 technical columns per name</div></div>
+    <div class="node n-compute"><span class="id">C09</span><div class="nm">ValuationEngine</div><div class="rl">Ratios against sector and own history</div></div>
+    <div class="node n-compute"><span class="id">C10</span><div class="nm">MarketContextEngine</div><div class="rl">Breadth, VIX, regime, sector strength</div></div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="node n-compute" style="max-width:460px"><span class="id">C11 · 18:15</span><div class="nm">PercentileEngine</div><div class="rl">Every metric becomes a percentile inside its size and sector cell. Each screen then draws whichever columns it needs.</div></div>
+  <div class="arrow">↓</div>
+  <div class="row">
+    <div class="node n-select"><span class="id">C12 · 18:20</span><div class="nm">GateEngine</div><div class="rl">Earnings blackout, gap, halt, held, cooldown</div></div>
+    <div class="node n-select"><span class="id">C13 · 18:25</span><div class="nm">ScreenEngine</div><div class="rl">Five screens, each with its own ranking and its own floor</div></div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="node n-select" style="max-width:460px"><span class="id">C14 · 18:30</span><div class="nm">CandidateAllocator</div><div class="rl">Up to 8 per screen under a 2/3/3 size quota, deduplicated. Typically 26 to 30 names. Writes one attribution row per candidate with scores frozen as they stand tonight.</div></div>
+  <div class="arrow">↓</div>
+  <div class="node n-ingest" style="max-width:460px"><span class="id">C29 · 18:32</span><div class="nm">HeadlineIngestor</div><div class="rl">The one ingest step that runs inside the select layer, because the candidates it fetches for do not exist until the allocator has run.</div></div>
+  <div class="arrow">↓</div>
+  <div class="node n-select" style="max-width:460px"><span class="id">C33 · 18:33 · LOCAL MODEL</span><div class="nm">NewsDigester</div><div class="rl">Each candidate's recent articles condensed to ~150 tokens on the local GPU. Free at the margin, so full article text never reaches Opus. Records which local model produced each digest.</div></div>
+  <div class="arrow">↓</div>
+  <div class="node n-select" style="max-width:460px"><span class="id">C15 · 18:35</span><div class="nm">DossierBuilder</div><div class="rl">Shared prefix of ~4,600 tokens carrying all five rubrics, lessons, calibration and market context, plus one ~800 token block per candidate.</div></div>
+  <div class="arrow">↓</div>
+  <div class="row">
+    <div class="node n-decide"><span class="id">C16 · 18:40</span><div class="nm">ResearcherClient</div><div class="rl">~31 calls, prefix cached after the first</div></div>
+    <div class="harrow">→</div>
+    <div class="node n-decide"><span class="id">C17 · 18:45</span><div class="nm">ProposalValidator</div><div class="rl">Schema, then every figure checked back against the dossier</div></div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="node n-execute" style="max-width:460px"><span class="id">C18 C25 · 18:50</span><div class="nm">RiskGate and PortfolioRunner</div><div class="rl">Arbitration for the researcher portfolio, then sizing and caps applied identically to all three. Entry count matched.</div></div>
+  <div class="arrow">↓</div>
+  <div class="row">
+    <div class="store"><b>order</b>queued for tomorrow's open</div>
+    <div class="node n-present" style="min-width:200px"><span class="id">C31 · 19:00</span><div class="nm">ReadModelBuilder</div><div class="rl">Rollups for the UI</div></div>
+  </div>
+</div>
+</div>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">05</span><h2>C13 ScreenEngine, opened up</h2></div>
+<p>Five screens, each with its own metric set, each blind to the others. Definitions live in <code>config_rows</code> under the <code>screens.*</code> keys, as data rather than code, so a sixth screen is a config row and not a deployment.</p>
+
+<div class="board">
+<p class="cap">Figure 3 — five screens running in parallel off one percentile store</p>
+<div class="flow">
+  <div class="store" style="min-width:360px"><b>percentile columns</b>~2,000 names ranked within size and sector cells</div>
+  <div class="arrow">↓</div>
+  <div class="row">
+    <div class="node n-select" style="min-width:176px;max-width:186px"><span class="id">S1</span><div class="nm">Quality at a fair price</div><div class="rl">FCF yield, EV/EBIT against own 5y, ROIC and margin change</div></div>
+    <div class="node n-select" style="min-width:176px;max-width:186px"><span class="id">S2</span><div class="nm">Trend</div><div class="rl">Change in relative strength, base breakout, ADX</div></div>
+    <div class="node n-select" style="min-width:176px;max-width:186px"><span class="id">S3</span><div class="nm">Sentiment inflection</div><div class="rl">Article count z against own 90-day baseline, 7d vs 30d delta</div></div>
+    <div class="node n-select" style="min-width:176px;max-width:186px"><span class="id">S4</span><div class="nm">Flow</div><div class="rl">Insider net buying, distinct buyers, short interest change</div></div>
+    <div class="node n-select" style="min-width:176px;max-width:186px"><span class="id">S5</span><div class="nm">Mean reversion</div><div class="rl">Quality names beaten down, now with a stabilisation gate</div></div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="node n-select" style="max-width:470px"><span class="id">FLOOR, APPLIED PER SCREEN</span><div class="nm">98th percentile of that screen's own trailing 250-day score distribution</div><div class="rl">Self-referential rather than fixed, so it adapts to dispersion instead of going dark in a quiet market. A screen returns nothing when nothing clears it, which is expected rather than an error.</div></div>
+  <div class="arrow">↓</div>
+  <div class="store"><b>screen_score_daily</b>ticker × screen × day</div>
+</div>
+</div>
+
+<table>
+<thead><tr><th class="mono">ID</th><th>Screen</th><th>Ranks on</th><th>Size tilt</th><th>Typical fill</th></tr></thead>
+<tbody>
+<tr><td class="mono"><b>S1</b></td><td>Quality at a fair price</td><td class="wrapmono">fcf_yield · ev_ebit_vs_own_5y · roic_4q_change · gross_margin_4q_change · net_debt_ebitda_inv · accruals_inv · share_count_change_inv</td><td>Regime dependent</td><td>8</td></tr>
+<tr><td class="mono"><b>S2</b></td><td>Trend</td><td class="wrapmono">rs_21d_63d_change · dist_200dma · adx14 · ma50_200_slope · dist_52w_high_20d_change · base_breakout_flag</td><td>Tilts large</td><td>8</td></tr>
+<tr><td class="mono"><b>S3</b></td><td>Sentiment inflection</td><td class="wrapmono">article_count_z_own_90d · sentiment_delta_7v30 · sentiment_7d_level</td><td>Tilts small</td><td>0 to 8, median 5</td></tr>
+<tr><td class="mono"><b>S4</b></td><td>Flow</td><td class="wrapmono">insider_net_90d_usd · distinct_buyer_count · short_interest_change · inst_ownership_change</td><td>Tilts small and mid</td><td>2 to 8, median 5</td></tr>
+<tr><td class="mono"><b>S5</b></td><td>Mean reversion</td><td class="wrapmono">gate: S1 top quintile AND technical bottom quintile AND stabilising · rank: distance below 200dma</td><td>Regime dependent</td><td>0 to 5, median 3</td></tr>
+</tbody>
+</table>
+
+<h3>The mean reversion stabilisation gate</h3>
+<p>Without it the screen gates on quality and then ranks by whichever surviving name has fallen furthest, which is the falling-knife instinct reintroduced one level below where it was removed. It matters more here than usual because fundamentals are quarterly and keyed on filing date, so the screen's view of a company can be four months stale while the price is current.</p>
+<table>
+<thead><tr><th>Condition</th><th class="mono">Test</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td>Price stabilisation</td><td class="mono">close > 20dma OR rs_20d_slope > 0</td><td>Buy the turn rather than the fall</td></tr>
+<tr><td>News cycle burnout</td><td class="mono">article_count_z_own_90d < 1.0</td><td>The storm has passed rather than still raging</td></tr>
+<tr><td>Sentiment not deteriorating</td><td class="mono">sentiment_delta_7v30 ≥ 0</td><td>No fresh bad news arriving</td></tr>
+</tbody>
+</table>
+<div class="note"><b>The two news conditions fail open.</b> When the 7-day article count is below three the sentiment tests are treated as satisfied rather than failed. Thinly covered names are exactly what this screen's small slots exist to find, and failing closed would delete them and reintroduce the megacap tilt through the back door. The cost is that thinly covered names get a weaker gate than well covered ones, which is deliberate rather than accidental.</div>
+<p>Cause classification happens later, not here. A screen computes numbers and cannot read. The researcher receives headlines for mean reversion candidates and its rubric requires it to name the cause of the decline and pass when the cause is structural or unresolved.</p>
+
+<div class="note"><b>S1 and S5 are the megacap risk, and they are correlated.</b> Both are valuation-anchored, and in a drawdown megacaps get cheap against their own history at the same moment they land in the bottom technical quintile. That is a correlated failure arriving exactly when exposure is highest, which is why the quota in section 6 is a hard constraint rather than a tendency, and why the backfill needs a real drawdown in its window.</div>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">06</span><h2>C14 CandidateAllocator, opened up</h2></div>
+
+<div class="board">
+<p class="cap">Figure 4 — slot allocation, quota and deduplication</p>
+<div class="flow">
+  <div class="store" style="min-width:340px"><b>screen_score_daily</b>five ranked lists, floors already applied</div>
+  <div class="arrow">↓</div>
+  <div class="node n-select" style="max-width:460px"><span class="id">CEILING</span><div class="nm">8 slots per screen</div><div class="rl">A ceiling, never a target. If only three names clear a screen's floor, that screen returns three.</div></div>
+  <div class="arrow">↓</div>
+  <div class="row">
+    <div class="node n-select" style="min-width:186px"><span class="id">2 SLOTS</span><div class="nm">Large and above</div><div class="rl">$10B or more</div></div>
+    <div class="node n-select" style="min-width:186px"><span class="id">3 SLOTS</span><div class="nm">Mid</div><div class="rl">$2B to $10B</div></div>
+    <div class="node n-select" style="min-width:186px"><span class="id">3 SLOTS</span><div class="nm">Small</div><div class="rl">$300M to $2B</div></div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="node n-select" style="max-width:460px"><span class="id">NO BACKFILL</span><div class="nm">An unfillable slot stays empty</div><div class="rl">If nothing small clears a screen's floor, that screen sends fewer names. Backfilling from a larger bucket is how the guarantee leaks back out.</div></div>
+  <div class="arrow">↓</div>
+  <div class="node n-select" style="max-width:460px"><span class="id">DEDUPLICATE</span><div class="nm">Union across the five screens</div><div class="rl">A name surfaced twice appears once, tagged with both. Overlap runs 10 to 15 percent normally and higher in a drawdown.</div></div>
+  <div class="arrow">↓</div>
+  <div class="row">
+    <div class="store"><b>candidate_set</b>26 to 30 typical</div>
+    <div class="store"><b>attribution</b>one row each, scores frozen, returns empty</div>
+  </div>
+</div>
+</div>
+
+<div class="split">
+<div class="card"><h4>Megacap bound</h4><p>Two large slots across five screens is 10 of a possible 40, or 25 percent. Close to the megacap share of total US market capitalisation, so the bound is defensible rather than arbitrary.</p></div>
+<div class="card"><h4>Small cap floor</h4><p>Three small slots across five screens is up to 15 guaranteed places for names between $300M and $2B, subject only to clearing each screen's own floor.</p></div>
+<div class="card"><h4>Attribution grain</h4><p>Around 7,000 rows a year, each tagged with its screen. Roughly 1,400 per screen, which is enough to say something about each within a year.</p></div>
+</div>
+
+<div class="note"><b>The attribution write happens here, not later.</b> One row per candidate per night holding that candidate's screen scores exactly as they stood, which screens surfaced it, size bucket, regime and gate state. Forward return columns start empty and C21 fills them as dates arrive. Written at any later point these rows cannot be reconstructed honestly, because by then screen definitions and slot allocations will have moved.</div>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">07</span><h2>What the researcher is given</h2></div>
+<p>The model is a judge. It never searches, never computes a ratio, and never sees a raw price series. Everything arrives precomputed.</p>
+
+<div class="note"><b>Prefix tokens and candidate tokens do not cost the same, and the gap decides the design.</b> A token in the shared prefix is written once a night and read thirty times at the cached rate, costing around half a cent a year. A token in a candidate block is fresh input paid thirty separate times at full rate, costing closer to four cents. Candidate tokens are roughly seven times more expensive, so everything shared belongs in the prefix and the candidate block carries numbers and nothing else.</div>
+
+<h3>The shared prefix, ~4,600 tokens, cached</h3>
+<p>Five screen rubrics at roughly 600 tokens each, the field key so candidate blocks can send bare values without labels, active lessons with their sample sizes, the calibration table from the last monthly report, and tonight's market context including regime and sector relative strength. One prefix rather than five, so there is a single cache entry.</p>
+
+<h3>The five rubrics</h3>
+<p>These are where the strategy actually lives. Everything else in the system decides what the model sees. The rubrics decide what it does with it, and without them the model applies generic equity intuition to your data rather than your strategy to your data. They belong in the prefix, where a token costs roughly a seventh of what it costs in the candidate block.</p>
+
+<table>
+<thead><tr><th class="mono">Screen</th><th>The thesis it encodes</th><th>Disqualifying regardless of everything else</th><th>Failure mode to guard against</th></tr></thead>
+<tbody>
+<tr><td class="mono"><b>S1</b><br>Quality at a fair price</td><td>A good business whose price has not kept up with its improving economics. Not a cheap business, and not a good business at any price.</td><td>Accruals in the top quintile, since the earnings are not cash. Net debt to EBITDA above 4 for a small cap. Share count rising more than 5 percent a year. Revenue declining while margins improve, which is cost cutting inside a shrinking business.</td><td>Value traps. The test is whether the improvement is visible in the operating numbers or only in the multiple.</td></tr>
+<tr><td class="mono"><b>S2</b><br>Trend</td><td>A name whose relative strength is improving. Not a name that is already strong.</td><td>Within 2 percent of the 52-week high, which leaves no room. ADX below 15, meaning drift rather than trend. Volume declining on the advance, meaning the move lacks participation.</td><td>Buying extension. Trend screens are late by construction, so the question is whether a defined entry level exists rather than whether the chart looks good.</td></tr>
+<tr><td class="mono"><b>S3</b><br>Sentiment inflection</td><td>A change in the amount and tone of attention a company receives, measured against its own baseline and never against other companies.</td><td>The digest reveals promotional coverage rather than reporting. A single wire release with no independent coverage. Coverage driven by litigation, investigation or dilution rather than by the business.</td><td>The screen most exposed to noise and manipulation, particularly in small caps. Default to PASS when the digest cannot name a cause.</td></tr>
+<tr><td class="mono"><b>S4</b><br>Flow</td><td>Informed participants changing position, with weight on how many rather than how much.</td><td>A single buyer. Purchases that look like scheduled plan activity or option exercises. Insider buying alongside a large dilutive offering, where the company sold shares while an officer bought a few.</td><td>Insiders carry information but not timing, and are often early by quarters. Requires the technical picture not to be actively deteriorating.</td></tr>
+<tr><td class="mono"><b>S5</b><br>Mean reversion</td><td>A good business that fell for a reason now resolved, or for a reason that was never about the business.</td><td>The digest names an unresolved or structural cause: accounting investigation, going concern, secular demand decline, management exodus. Also no digest available while the decline exceeds 35 percent, because at that magnitude the absence of information is itself the reason to pass.</td><td>Quarterly fundamentals lag by up to four months, so a pristine trailing picture on a name down 40 percent often means the ugly quarter has not been reported yet.</td></tr>
+</tbody>
+</table>
+
+<div class="note"><b>Two weighting principles that apply across all five.</b> Change beats level, everywhere. A company at 12 percent return on capital rising from 8 is more interesting than one flat at 15, because levels favour incumbents permanently while changes are earned. And cause quality dominates magnitude wherever a digest exists: a coverage spike of six standard deviations driven by promotion is worth nothing, while one of two and a half driven by a named contract win is real.</div>
+
+<h3>The candidate block, ~800 tokens, fresh per call</h3>
+<p>A fixed core of around 350 tokens sent for every candidate, then a screen-specific block of around 300 for whichever screen surfaced it. Every metric arrives twice, as the raw value and as its percentile within its size and sector peer group, because the percentile makes it comparable and the raw value gives it magnitude.</p>
+
+<div class="note"><b>Five fields chosen because each can flip a verdict rather than nudge it.</b> Revenue growth trend, because improving margins on shrinking revenue is a different company from improving margins on growing revenue and nothing else distinguishes them. The last two earnings surprises, because for a beaten-down name that is usually the cause and it is the most direct evidence that the quarterly fundamentals are about to turn. Relative strength against its own sector, because down 30 percent while the sector is down 28 is a sector story and down 30 while the sector is flat is a company story. Volume against its 50-day average, which separates a decline on heavy distribution from one on apathy and therefore says whether stabilisation is real. And cash against burn rate for small and mid caps, because a company burning cash will dilute and the share count change field only reports dilution that has already happened.</div>
+
+<div class="note"><b>The harder ceiling is not tokens.</b> The output is BUY or PASS, a conviction integer from one to five, a stop and a target. That is a low-bandwidth decision, and past some point extra evidence moves an internal judgment from 3.4 to 3.6 while the recorded answer stays 3. The coarseness of what is asked for caps the usefulness of what is supplied. If richer input is ever wanted, the thing to widen is the conviction scale, not the block. The calibration screen answers this empirically: a conviction profile that steps upward means the evidence is sufficient, and a flat one means it is not.</div>
+
+<table>
+<thead><tr><th>Group</th><th>Fields in the fixed core</th></tr></thead>
+<tbody>
+<tr><td class="mono">Identity</td><td class="wrapmono">ticker · sector · size_bucket · market_cap · price · median_dollar_volume_20d</td></tr>
+<tr><td class="mono">Timing</td><td class="wrapmono">days_to_next_earnings</td></tr>
+<tr><td class="mono">Valuation</td><td class="wrapmono">fcf_yield · ev_ebit_vs_own_5y</td></tr>
+<tr><td class="mono">Quality</td><td class="wrapmono">roic · roic_4q_change · gross_margin_4q_change · net_debt_ebitda · accruals · share_count_change · <b>revenue_growth_4q_trend</b></td></tr>
+<tr><td class="mono">Earnings history</td><td class="wrapmono"><b>last_two_earnings_surprises</b></td></tr>
+<tr><td class="mono">Technical</td><td class="wrapmono">dist_200dma · dist_52w_high · rs_change_21d · rs_change_63d · atr_pct · adx14 · <b>rs_change_vs_sector</b> · <b>volume_vs_50d_avg</b></td></tr>
+<tr><td class="mono">Balance sheet</td><td class="wrapmono"><b>cash_on_hand · quarterly_burn_rate</b> &nbsp;<span class="muted">(small and mid buckets only)</span></td></tr>
+<tr><td class="mono">Sentiment</td><td class="wrapmono">article_count_z_own_90d · sentiment_delta_7v30 &nbsp;<span class="muted">(both nullable)</span></td></tr>
+<tr><td class="mono">Flow</td><td class="wrapmono">insider_net_90d_usd · short_interest_pct_float · short_interest_change</td></tr>
+<tr><td class="mono">News digest</td><td class="wrapmono"><b>news_digest_150t</b> &nbsp;<span class="muted">(local model, stored, nullable)</span></td></tr>
+<tr><td class="mono">Provenance</td><td class="wrapmono">screens_surfacing · score_within_each</td></tr>
+</tbody>
+</table>
+
+<table>
+<thead><tr><th>Surfaced by</th><th>Additional block</th></tr></thead>
+<tbody>
+<tr><td class="mono">S1 Quality</td><td>Sector-relative valuation detail, revenue growth trend</td></tr>
+<tr><td class="mono">S2 Trend</td><td>Breakout level, moving average slopes, distance from the base</td></tr>
+<tr><td class="mono">S3 Sentiment</td><td>Article count breakdown against baseline, three headlines</td></tr>
+<tr><td class="mono">S4 Flow</td><td>Distinct insider buyer count, largest transaction, ownership change</td></tr>
+<tr><td class="mono">S5 Mean reversion</td><td>Peak-to-trough decline, days since peak, all three stabilisation test results, three headlines for cause classification</td></tr>
+</tbody>
+</table>
+
+<div class="split">
+<div class="card"><h4>Why ATR is in the core</h4><p>The model suggests a stop, the risk layer takes the wider of that and twice ATR. A model that cannot see volatility suggests stops that are silently discarded every night.</p></div>
+<div class="card"><h4>Why days to earnings is in the core</h4><p>A 40 percent decline three days before a report is a different proposition from the same decline three weeks after one, and no other field carries that.</p></div>
+<div class="card"><h4>The comparability cost</h4><p>Screen blocks mean candidates do not see identical evidence. It survives because calibration is reported per screen rather than pooled, so the comparison that matters is within a screen where evidence is uniform.</p></div>
+</div>
+
+<h3>Local enrichment</h3>
+<p>Article text is where the qualitative gap sits, and full articles run five to eight hundred tokens each. Three per candidate sent straight to Opus would cost around $64 a year and take the total past $137. A local model on the GPU condenses them to roughly 150 tokens first, which costs nothing at the margin, so the year stays near $78.</p>
+
+<table>
+<thead><tr><th>Field</th><th class="mono">Written</th><th>What it holds</th></tr></thead>
+<tbody>
+<tr><td>News digest</td><td class="mono">Nightly, per candidate</td><td>What happened recently, the apparent cause of any move, and any red flags. Around 150 tokens.</td></tr>
+<tr><td>Company one-liner</td><td class="mono">Quarterly, small and mid only</td><td>What the business actually does. Closes the gap where the model has no background on a $500M company. Around 30 tokens.</td></tr>
+</tbody>
+</table>
+
+<div class="note"><b>Boundary one: the local model transforms evidence and never judges.</b> It summarises, extracts and classifies. It never scores a candidate, never expresses a view on it, and never filters the candidate set. The moment it does any of those, a research portfolio stops measuring its own model and becomes that model plus a second one, and the comparison against the screens portfolio no longer answers the question it was built to answer.</div>
+
+<div class="note"><b>Boundary two: which model produced each digest is recorded.</b> Swapping the loaded local model, or falling through to the secondary provider, changes the evidence the researchers receive. Without <code>digest_provider</code> and the model name stored alongside every digest, a later shift in results has two explanations and no way to separate them.</div>
+
+<h3>The digest provider chain</h3>
+<p>The digest source is an ordered chain rather than one provider with a fallback bolted on. Each link has a health check, the first healthy one answers, and which one answered is recorded per digest. There is no special-case failure branch, so failover works in both directions without anything in the code knowing which link is meant to be preferred.</p>
+<table>
+<thead><tr><th class="mono">Order</th><th>Provider</th><th>Why here</th></tr></thead>
+<tbody>
+<tr><td class="mono">1</td><td>Local, LM Studio on the GPU</td><td>Primary by choice rather than by cost. Nothing leaves the machine, and an application on your own desk is a stronger bet than a hosted service in public beta.</td></tr>
+<tr><td class="mono">2</td><td>Haiku 4.5</td><td>Deliberately a different provider from the second research portfolio, so a single vendor outage cannot take out both the digest fallback and a portfolio at once. Already integrated for the main researcher, so no new credentials.</td></tr>
+</tbody>
+</table>
+
+<div class="note"><b>The chain is a hard gate on the researcher.</b> If no link is healthy, the run halts before any researcher call is made and no orders are produced for any portfolio. A night without digests is not comparable to a night with them, and skipping a night is free while quietly thinner evidence enters the record looking identical to everything around it.</div>
+
+<div class="note"><b>Two candidates a night always go to the secondary, chosen by the date seed, regardless of whether the primary is healthy.</b> A path that only executes during an outage is broken most of the time and you discover it on the night you needed it. Routing a fixed pair through the second link every night means it cannot rot. It also earns its place twice, because it builds a paired sample where the same nights ran through both providers, so after a quarter you can ask directly whether the digest source changes anything. If it does not, the comparability concern dissolves and either link can be used freely. The rotation costs about $1.30 a year, and a full year of running entirely on the secondary would add roughly $18, taking the total to about $68 and still leaving headroom.</div>
+
+<p><b>Excluded deliberately.</b> Raw price series, full article text, and business descriptions for large caps since the model already knows them. Article text reaches Opus only as a digest, never in full.</p>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">08</span><h2>C16 ResearcherClient, opened up</h2></div>
+<p>Independent judgment means separate contexts. Putting thirty candidates in one context and instructing the model to judge them separately does not produce independence, because it anchors on the first strong name and grades the rest against it.</p>
+
+<div class="board">
+<p class="cap">Figure 5 — one prefix, N calls</p>
+<div class="flow">
+  <div class="node n-decide" style="max-width:470px"><span class="id">SHARED PREFIX · ~4,600 TOKENS · BYTE IDENTICAL</span><div class="nm">Five rubrics · field key · lessons · calibration · market context</div><div class="rl">Written to cache on the first call of the night, read on every call after.</div></div>
+  <div class="arrow">↓</div>
+  <div class="row">
+    <div class="node n-decide" style="min-width:146px;max-width:156px"><span class="id">CALL 1</span><div class="nm">Candidate 1</div><div class="rl">Prefix written to cache</div></div>
+    <div class="node n-decide" style="min-width:146px;max-width:156px"><span class="id">CALLS 2–28</span><div class="nm">Candidates 2–28</div><div class="rl">Prefix read from cache</div></div>
+    <div class="node n-decide" style="min-width:146px;max-width:156px"><span class="id">CALL 29</span><div class="nm">Open positions</div><div class="rl">All together, not competing</div></div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="node n-decide" style="max-width:470px"><span class="id">OUTPUT PER CANDIDATE · HARD max_tokens</span><div class="nm">BUY or PASS · <b>p_target_before_stop</b> · thesis ≤ 60 words · <b>counter-argument ≤ 20 words</b> · primary driver · stop % · target % · horizon</div><div class="rl">Extended thinking off, because thinking tokens bill at output rates and output is the line that cannot move.</div></div>
+  <div class="arrow">↓</div>
+  <div class="store"><b>proposal</b>one row per candidate per night</div>
+</div>
+</div>
+
+<div class="note"><b>Run the calls promptly.</b> Twenty-nine sequential calls at a few seconds each is two to four minutes and the cache entry lives about five minutes. Run them back to back or in a few concurrent lanes. Spreading them across the evening loses the cache and roughly triples the input bill.</div>
+
+<h3>Why a probability rather than a conviction score</h3>
+<p>The model returns the probability that the trade reaches its target before its stop, as a percentage, in place of an integer from one to five. Three things follow.</p>
+<p>The absolute bar acquires a defined value. A trade with a 12 percent target and a 6 percent stop breaks even at a probability of 6 divided by 18, or 33 percent. The rubric can therefore say to buy when the stated probability exceeds the breakeven implied by the reward-to-risk ratio by a set margin, which turns judging against an absolute bar from a disposition into arithmetic. It also forces internal consistency, since the model's own stop and target suggestions now determine the bar its own probability must clear.</p>
+<p>Calibration becomes properly scoreable. An integer scale supports little more than checking whether higher numbers win more often. A probability supports a Brier score and a reliability diagram, so the monthly report can state that trades called at 60 percent won 43 percent of the time, which is both a measurement and an instruction.</p>
+<p>And ties become rare. A five-point scale over 28 candidates produces ties constantly, which is why the arbitration coin flip was expected to fire often. A percentage has enough resolution that the flip becomes a genuine edge case rather than a routine event.</p>
+<div class="note"><b>Change this before go-live, not after.</b> Switching scales later invalidates every accumulated proposal and the calibration history built on it. Nothing has been run yet, so the cost is zero now and rises with every night of operation. Expect the model to cluster at round numbers early on, which is a known weakness and precisely what the calibration loop exists to measure and correct.</div>
+
+<h3>The counter-argument field</h3>
+<p>Twenty words stating the strongest case against the verdict it just gave. It costs around $4 a year and does two things: it measurably improves judgment quality by forcing the model past its first conclusion, and it gives the candidate detail screen the one field worth reading when a decision later looks wrong.</p>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">09</span><h2>C17 ProposalValidator</h2></div>
+<p>The gate between what the model said and what the system acts on. Nothing becomes an order without passing it, and it exercises no judgment of its own: every check is arithmetic or string matching against something already on disk.</p>
+
+<div class="board">
+<p class="cap">Figure 6 — three checks, all mechanical</p>
+<div class="flow">
+  <div class="store" style="min-width:340px"><b>proposal</b>one per candidate per model, straight from the API</div>
+  <div class="arrow">↓</div>
+  <div class="node n-decide" style="max-width:470px"><span class="id">CHECK 1 · STRUCTURAL</span><div class="nm">Is it well formed</div><div class="rl">Valid JSON, every required field present, values in range. Probability between 0 and 100, stop and target positive, verdict one of two allowed values, thesis inside its word limit.</div></div>
+  <div class="arrow">↓</div>
+  <div class="node n-decide" style="max-width:470px"><span class="id">CHECK 2 · FIGURES AGAINST THE DOSSIER</span><div class="nm">Did it make anything up</div><div class="rl">Every number cited in the thesis is matched back against the dossier the model was handed. A thesis resting on a free cash flow yield of 8.2 percent when the dossier said 6.2 is resting on a figure that does not exist.</div></div>
+  <div class="arrow">↓</div>
+  <div class="node n-decide" style="max-width:470px"><span class="id">CHECK 3 · INTERNAL CONSISTENCY</span><div class="nm">Does it contradict itself</div><div class="rl">The model's own stop and target imply a breakeven probability. A BUY stated at 25 percent against a stop and target implying a 33 percent breakeven is incoherent on its own terms, and catching it needs no view on the company at all.</div></div>
+  <div class="arrow">↓</div>
+  <div class="row">
+    <div class="store"><b>accepted</b>passes to the RiskGate</div>
+    <div class="store"><b>rejected</b>logged with reason, never traded</div>
+  </div>
+</div>
+</div>
+
+<div class="note"><b>Check 2 is the reason the dossier is a stored artefact rather than a string assembled in memory.</b> Verifying a citation requires having the exact text the model was given, byte for byte, after the fact. Building the dossier in memory and discarding it would save a table and cost the only defence the system has against a confidently invented number.</div>
+
+<h3>Failure behaviour</h3>
+<table>
+<thead><tr><th>Condition</th><th>Response</th></tr></thead>
+<tbody>
+<tr><td>Malformed or unparseable output</td><td>Retry that candidate once, then record it as PASS. An unreadable answer is not a reason to trade.</td></tr>
+<tr><td>Cited figure absent from the dossier</td><td>Reject that proposal, log the cited value alongside the true one, continue with the rest of the night.</td></tr>
+<tr><td>Probability contradicts the stated stop and target</td><td>Reject and log. Do not attempt to repair it by substituting the breakeven value.</td></tr>
+<tr><td>Rejection rate above 5 percent on a night</td><td>Alert. At that level something has changed in the prompt, the schema or the model, and the proposals reaching the risk layer are no longer a fair sample.</td></tr>
+</tbody>
+</table>
+
+<div class="note"><b>The rejection rate is a measurement, not just plumbing.</b> With two research portfolios running the same dossiers through different models, this yields a per-model rate of invented figures that is completely independent of trading results. If the cheaper model fabricates several times more often, you will know within weeks rather than waiting a year for equity curves to separate. Record it per model in the cost ledger alongside spend.</div>
+
+<div class="note"><b>What it cannot do.</b> It checks numbers. The thesis prose, the counter-argument and the news digest are unverifiable by machine and pass through untouched. And it confirms the probability is a well-formed number, never that it is a well-calibrated one, which is the calibration report's job and takes months rather than milliseconds.</div>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">10</span><h2>Arbitration</h2></div>
+<p>The researcher returns a variable number of BUYs against a fixed cap of two new entries a day. Something has to choose, and where that choosing happens has to be exact, because a biased rule would contaminate the very comparison the three portfolios exist to make.</p>
+
+<div class="board">
+<p class="cap">Figure 7 — one candidate set, four picking methods, arbitration in the research lanes only</p>
+<div class="flow">
+  <div class="store" style="min-width:420px"><b>candidate_set</b>the same names visible to all three portfolios, in full</div>
+  <div class="arrow">↓ ↓ ↓</div>
+  <div class="row">
+    <div class="lane hot" style="min-width:210px">
+      <div class="lanehd">RESEARCH: OPUS 5</div>
+      <div class="step"><b>Opus 5 judges each</b><span>BUY or PASS with a stated probability</span></div>
+      <div class="count">↓ say 6 come back BUY</div>
+      <div class="step" style="border-color:var(--hot);background:#FDF4F3"><b>ARBITRATION HERE</b><span>6 BUYs, 2 entry slots</span></div>
+      <div class="count">↓ 2 chosen</div>
+    </div>
+    <div class="lane hot" style="min-width:210px">
+      <div class="lanehd">RESEARCH: V4 PRO</div>
+      <div class="step"><b>DeepSeek V4 Pro judges each</b><span>Identical dossier, identical rubrics</span></div>
+      <div class="count">↓ its own BUY count</div>
+      <div class="step" style="border-color:var(--hot);background:#FDF4F3"><b>ARBITRATION HERE</b><span>Same four steps, same seed</span></div>
+      <div class="count">↓ 2 chosen</div>
+    </div>
+    <div class="lane" style="min-width:210px">
+      <div class="lanehd">SCREENS</div>
+      <div class="step"><b>Fixed rotation</b><span>Each screen's top-ranked name, rotating so all five get equal turns</span></div>
+      <div class="count">↓ order already fixed</div>
+      <div class="step" style="border-style:dashed"><span class="muted">Nothing to arbitrate</span></div>
+      <div class="count">↓ 2 chosen</div>
+    </div>
+    <div class="lane" style="min-width:210px">
+      <div class="lanehd">RANDOM</div>
+      <div class="step"><b>Draw at random</b><span>From the full candidate set, seeded by date</span></div>
+      <div class="count">↓ chance already decided</div>
+      <div class="step" style="border-style:dashed"><span class="muted">Nothing to arbitrate</span></div>
+      <div class="count">↓ 2 chosen</div>
+    </div>
+  </div>
+  <div class="arrow">↓ ↓ ↓ ↓</div>
+  <div class="node n-execute" style="max-width:520px"><span class="id">C18 RISKGATE · SHARED BY EVERY PORTFOLIO</span><div class="nm">Sizing · stops · sector cap · single-position cap · cash floor · bucket cap</div><div class="rl">Applied identically to all of them. If these differed the portfolios would stop being comparable and the experiment would be void.</div></div>
+  <div class="arrow">↓</div>
+  <div class="store" style="min-width:420px"><b>order</b>tagged by portfolio</div>
+</div>
+</div>
+
+<div class="board">
+<p class="cap">Figure 8 — the funnel inside the researcher portfolio</p>
+<div class="flow">
+  <div class="fbar" style="width:500px"><div class="n">~30</div><div class="l">candidates arrive from the allocator</div></div>
+  <div class="arrow">↓ &nbsp;judged independently, one call each</div>
+  <div class="fbar" style="width:410px"><div class="n">6 BUY · 22 PASS</div><div class="l">each BUY carries a stated probability of reaching target before stop</div></div>
+  <div class="arrow">↓ &nbsp;<b>STEP 1</b> · drop anything the risk caps would block anyway</div>
+  <div class="fbar" style="width:330px"><div class="n">5</div><div class="l">one BUY breached the large-bucket cap</div></div>
+  <div class="arrow">↓ &nbsp;<b>STEP 2</b> · sort survivors by probability, highest first</div>
+  <div class="fbar" style="width:280px"><div class="n">64 · 58 · 58 · 47 · 41</div><div class="l">ranked</div></div>
+  <div class="arrow">↓ &nbsp;<b>STEP 3</b> · fill the two entry slots from the top</div>
+  <div class="fbar hot" style="width:240px"><div class="n">1 clear + 1 tied</div><div class="l">two names both at 58 want the last slot, now an uncommon case rather than a nightly one</div></div>
+  <div class="arrow">↓ &nbsp;<b>STEP 4</b> · date-seeded coin flip</div>
+  <div class="fbar" style="width:180px"><div class="n">2</div><div class="l">orders written</div></div>
+</div>
+</div>
+
+<h3>A worked night</h3>
+<p>Holdings before the run: three large, two mid, one small. Two entry slots free. Placeholder tickers.</p>
+<table>
+<thead><tr><th class="mono">Ticker</th><th class="mono">P(target first)</th><th class="mono">Bucket</th><th>What happens</th></tr></thead>
+<tbody>
+<tr class="taken"><td class="mono"><b>ACME</b></td><td class="mono">64%</td><td class="mono">Large</td><td><b>Taken.</b> Highest probability, no tie. This is the fourth large position, so the bucket cap is now reached.</td></tr>
+<tr><td class="mono"><b>BOLT</b></td><td class="mono">61%</td><td class="mono">Large</td><td><b>Removed at step 1.</b> The bucket cap is full after ACME, so it never reaches the sort despite ranking second.</td></tr>
+<tr class="taken"><td class="mono"><b>CREST</b></td><td class="mono">58%</td><td class="mono">Small</td><td><b>Taken.</b> Tied with DELTA for the last slot. The coin flip landed here.</td></tr>
+<tr><td class="mono"><b>DELTA</b></td><td class="mono">58%</td><td class="mono">Mid</td><td>Lost the flip, and is logged in attribution with its probability so you can check later whether it beat CREST.</td></tr>
+<tr><td class="mono"><b>EMBER</b></td><td class="mono">47%</td><td class="mono">Small</td><td>Never in contention. Both slots filled by higher probability first.</td></tr>
+</tbody>
+</table>
+
+<h3>Why the neutral tie-break</h3>
+<p>Breaking ties by screen rank would import the screens' opinion into the researcher's portfolio, which means the researcher-against-screens comparison is no longer clean. It is also incoherent, since rank 1 in one screen and rank 1 in another are positions in unrelated distributions and comparing them requires normalising onto one scale, which is a composite ranker rebuilt at the last step. Breaking ties by thinnest size bucket imports a diversity preference instead, which is better but still puts a consistent thumb on the scale.</p>
+<p>The coin flip carries no opinion, which is what makes the rule measurable later. Every rejected BUY is logged with its conviction, so after a year you can compare what the flip took against what it skipped. Those two groups differ by nothing but chance, so any gap is real. Under either alternative the taken group would be systematically different and the comparison would measure the bias rather than the rule.</p>
+
+<div class="note"><b>Two things that are easy to confuse.</b> The bucket cap, at most four of eight open positions in large-and-above, is a risk constraint and applies to all three portfolios. The coin flip applies to the researcher portfolio only. And nothing is divided between the portfolios: all candidates go to all three in full, and they can hold the same stock at the same time.</div>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">11</span><h2>Risk, sizing and execution</h2></div>
+
+<table>
+<thead><tr><th>Rule</th><th class="mono">Value</th><th>Effect at $100,000</th></tr></thead>
+<tbody>
+<tr><td>Starting equity</td><td class="mono">$100,000</td><td>Identical for all three portfolios</td></tr>
+<tr><td>Risk per trade</td><td class="mono">0.5%</td><td>$500 at risk per position</td></tr>
+<tr><td>Position size</td><td class="mono">risk ÷ stop distance</td><td>A 6% stop gives ~$8,300, a 12% stop gives ~$4,200</td></tr>
+<tr><td>Stop placement</td><td class="mono">wider of 2×ATR(14) and model suggestion, capped at 12%</td><td>The cap sets the minimum position size</td></tr>
+<tr><td>Max open positions</td><td class="mono">8</td><td>Roughly $50k to $65k invested at typical sizing</td></tr>
+<tr><td>Max new entries per day</td><td class="mono">2</td><td>The constraint that creates arbitration</td></tr>
+<tr><td>Cash floor</td><td class="mono">10%</td><td>$10,000 never deployed</td></tr>
+<tr><td>Single position cap</td><td class="mono">20%</td><td>$20,000, binds only on very tight stops</td></tr>
+<tr><td>Sector cap</td><td class="mono">30%</td><td>At most 2 or 3 positions in one sector</td></tr>
+<tr><td>Large bucket cap <span class="tag new">NEW</span></td><td class="mono">4 of 8</td><td>Portfolio-level counterpart to the candidate quota</td></tr>
+<tr><td>Participation limit</td><td class="mono">1% of 20-day median dollar volume</td><td>$20,000 ceiling at the universe floor, so typical positions clear</td></tr>
+<tr><td>Slippage</td><td class="mono">base + 25 × participation</td><td>Base 5bp large, 10bp mid, 20bp small</td></tr>
+</tbody>
+</table>
+
+<div class="board">
+<p class="cap">Figure 9 — morning execution and position management</p>
+<div class="flow">
+  <div class="store"><b>order</b>queued 18:50 yesterday for all three portfolios</div>
+  <div class="arrow">↓</div>
+  <div class="node n-execute" style="max-width:450px"><span class="id">C19 · 09:35</span><div class="nm">PaperBroker</div><div class="rl">Fill at today's open with size-aware slippage. Any order above the participation limit is rejected rather than assumed filled.</div></div>
+  <div class="arrow">↓</div>
+  <div class="row"><div class="store"><b>fill</b></div><div class="store"><b>position</b></div></div>
+  <div class="arrow">↓</div>
+  <div class="node n-execute" style="max-width:450px"><span class="id">C20 · 18:10 daily</span><div class="nm">PositionManager</div><div class="rl">Marks every open position, then applies exits in order: stop hit, target hit, 40-day time stop. These fire from code alone. The researcher gets a vote on thesis-change exits only and is never argued out of a stop.</div></div>
+  <div class="arrow">↓</div>
+  <div class="store"><b>trade_outcome</b>pnl, alpha, MFE, MAE, exit_reason, portfolio</div>
+</div>
+</div>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">12</span><h2>The portfolios</h2></div>
+<p>Four at launch: <b>Research: Opus 5</b>, <b>Research: V4 Pro</b>, <b>Screens</b> and <b>Random</b>. All run off the same candidate set with the same gates, sizing, stops, slippage and starting equity. Only the selection function differs.</p>
+
+<table>
+<thead><tr><th>Comparison</th><th>Answers</th></tr></thead>
+<tbody>
+<tr><td class="mono"><b>Research vs Screens</b></td><td>Whether the researcher adds judgment the screens do not already contain. This is the question the project exists to answer.</td></tr>
+<tr><td class="mono"><b>Research vs Research</b></td><td>Whether the judgment has to come from a frontier model. Every variable except the model is held identical, including the dossier, the rubrics, the arbitration steps and the random seed. If the cheaper one keeps pace, this task is rubric-following rather than hard reasoning and the annual cost drops to single digits with evidence behind it.</td></tr>
+<tr><td class="mono"><b>Screens vs Random</b></td><td>Whether the ranking inside each screen carries information, or whether the membership test does all the work and the ordering is noise.</td></tr>
+<tr><td class="mono"><b>Random vs SPY</b></td><td>Whether the filters and screens together beat plain market exposure. If they do not, nothing downstream matters. SPY is a reference line, not a portfolio.</td></tr>
+</tbody>
+</table>
+
+<div class="note"><b>Exposure matching applies to Screens and Random only.</b> They do not judge, so without matching they would stay permanently invested and outperform in any rising market for reasons that have nothing to do with selection. Both follow the entry count of whichever research portfolio is designated primary. A research portfolio abstains on its own terms, so the two research portfolios are never matched to each other, and the difference in how often each stands down is itself part of what the comparison measures.</div>
+
+<h3>The research portfolios are configuration, not code</h3>
+<p>Screens and Random are fixed. They have no model and nothing to swap, so making them configurable would be machinery with no purpose. The modularity is entirely on the research side, because that is where you will eventually want to turn one off, or point it at a model that does not exist yet.</p>
+<table>
+<thead><tr><th class="mono">Column</th><th>Holds</th></tr></thead>
+<tbody>
+<tr><td class="mono">name</td><td>Display name, for example <code>Research: Opus 5</code>. The UI reads this, so a model swap renames the line on every chart with no code change.</td></tr>
+<tr><td class="mono">provider · model_id</td><td>Which endpoint and which model. The entire difference between one research portfolio and another.</td></tr>
+<tr><td class="mono">use_batch</td><td>Whether this one submits through a batch endpoint and completes asynchronously, or runs inline. Opus 5 is batched, V4 Pro is not.</td></tr>
+<tr><td class="mono">is_primary</td><td>Exactly one research portfolio carries this. Screens and Random match their entry count to whichever it is, so retiring the primary means designating another rather than touching any code.</td></tr>
+<tr><td class="mono">state</td><td>active, winding_down or retired. Winding down stops new entries while open positions run to their natural exit, so retirement never distorts the trade record by force-closing anything.</td></tr>
+</tbody>
+</table>
+<p>Everything downstream keys on portfolio id: proposals, orders, fills, positions, trade outcomes and the cost ledger. The PortfolioRunner iterates the registry rather than assuming a fixed set, and the UI charts whatever is active, so adding a third research portfolio or dropping to one changes nothing but a row.</p>
+
+<div class="note"><b>Only the research portfolios are candidates for retirement on performance.</b> They are competitors, judging the same candidates by different means, so the one that loses over a long enough run has answered its question and can go. Screens and Random are controls and must never be cut for underperforming, because their underperformance is the measurement. If Random were to beat Research after a year, retiring it would be deleting the most important result the system had produced.</div>
+
+<div class="note"><b>Abstention is measured from attribution, not from a portfolio.</b> Exposure matching means A's decision to stand down is never tested by B or C, and it does not need to be. Every candidate on a full-pass night still has an attribution row with forward returns, so you can ask directly whether the nights A stood down were worth standing down.</div>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">13</span><h2>The learning loops</h2></div>
+<p>None of these changes the model, because you cannot train it. What changes is which candidates reach it and how its output is weighted.</p>
+
+<div class="board">
+<p class="cap">Figure 10 — feedback paths and where each one lands</p>
+<div class="flow">
+  <div class="store" style="min-width:380px"><b>attribution</b>~7,000 rows a year, each tagged with its screen</div>
+  <div class="arrow">↓</div>
+  <div class="row">
+    <div class="node n-learn" style="min-width:196px"><span class="id">C21 · DAILY</span><div class="nm">ForwardReturnFiller</div><div class="rl">Fills 5, 21 and 63 day returns three ways as each date matures</div></div>
+    <div class="node n-learn" style="min-width:196px"><span class="id">C22 · MONTHLY</span><div class="nm">ScreenTuner</div><div class="rl">Reallocates the 40 slots on peer-relative hit rate and alpha, shrunk 0.8 old and 0.2 implied, floor 4 and cap 12</div></div>
+    <div class="node n-learn" style="min-width:196px"><span class="id">C23 · MONTHLY</span><div class="nm">LessonWriter</div><div class="rl">One AI call on aggregate statistics. A lesson needs n ≥ 30 and expires after 6 months unless reconfirmed</div></div>
+    <div class="node n-learn" style="min-width:196px"><span class="id">C24 · MONTHLY</span><div class="nm">CalibrationReporter</div><div class="rl">Conviction against realised hit rate, per screen, shown back in the next prefix</div></div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="row">
+    <div class="store"><b>config_rows</b>→ C13, C14</div>
+    <div class="store"><b>researcher_memory</b>→ C15</div>
+    <div class="store"><b>calibration</b>→ C15</div>
+  </div>
+</div>
+</div>
+
+<h3>Three benchmarks, and which loop reads which</h3>
+<table>
+<thead><tr><th class="mono">Column</th><th>Benchmark</th><th>Read by</th></tr></thead>
+<tbody>
+<tr><td class="mono">return_raw</td><td>None</td><td>Reference and display only</td></tr>
+<tr><td class="mono">return_vs_spy</td><td>SPY over the same window</td><td>Portfolio-level comparisons, the random portfolio against the index</td></tr>
+<tr><td class="mono">return_vs_peers</td><td>Equal-weighted median of that name's size and sector cell</td><td><b>ScreenTuner and CalibrationReporter</b></td></tr>
+</tbody>
+</table>
+
+<div class="note"><b>Why the learning loops cannot read the SPY column.</b> The universe runs to $300M and the quotas guarantee up to fifteen of forty slots to small caps. Measured against a large-cap index in a large-led market, every small-cap candidate posts negative alpha regardless of how well it was chosen. The sentiment and flow screens are the two that structurally tilt small and the two doing the most to keep this system off megacaps, and the tuner would cut both to the floor of four slots while the trend screen collected the same effect as a reward. It would spend a year quietly dismantling the anti-megacap protection the whole design was built around, and every number on its monthly report would look defensible. The peer benchmark needs no ETF, since the percentile engine already groups the universe into cells and daily prices exist for every name in them.</div>
+
+<div class="note"><b>Why slot reallocation rather than weight tuning.</b> Under a single composite the tuner could only report that a weight moved from 0.40 to 0.43, which is neither interpretable nor actionable. Per screen it reports that the sentiment sleeve ran a 41 percent hit rate over 90 observations while the flow sleeve ran 58 over 80, and the action follows. The floor of 4 slots stops a screen being switched off before it has produced enough observations to judge, and the cap of 12 stops the system collapsing back into one screen.</div>
+
+<h3>Three rules the filler needs from day one</h3>
+<p>Acquisitions need an explicit rule, because a candidate bought out three weeks in has no 63-day return in the ordinary sense and dropping those rows deletes a chunk of your winners. Delistings and bankruptcies need the same treatment in the other direction, or survivorship bias enters your own attribution table. And rows never complete until 63 trading days have passed, so every analysis carries a three month blind spot at the recent end.</p>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">14</span><h2>Stack and runtime</h2></div>
+<div class="split">
+<div class="card"><h4>C# THROUGHOUT</h4><p>.NET across ingest, compute, select, decide, execute and learn. The data provider maintains Python and Node clients but not C#, so a thin typed HTTP client is written here. Doing it directly is what keeps the point-in-time discipline under your control rather than inside someone else's model binding.</p></div>
+<div class="card"><h4>POSTGRES</h4><p>Chosen for concurrent writers during backfill rebuilds rather than for size. Twelve million screen score rows recompute every time a screen definition changes during development, and Npgsql binary COPY turns that from a long insert loop into a short job. The nightly run would have been fine on SQLite.</p></div>
+<div class="card"><h4>API AND UI</h4><p>ASP.NET Core minimal API, read-only, as the single surface the Blazor client talks to. Keeping it read-only means no UI action can ever alter a run, and the pipeline stays the only writer.</p></div>
+</div>
+
+<h3>Backfill</h3>
+<p>Five years before go-live, not two. The screens' floors need 250 days of history before they mean anything, and the tuner and calibration report need populated attribution to work from month one rather than month six. The deeper reason for five is that the window must contain a real drawdown, because that is the only condition under which the quality and mean reversion screens converge on the same megacaps, and you want to see that happen in history rather than discover it live.</p>
+<table>
+<thead><tr><th>Hazard</th><th>What goes wrong</th><th>Guard</th></tr></thead>
+<tbody>
+<tr><td>Lookahead on fundamentals</td><td>Keying on period end rather than filing date hands you quarterly numbers five weeks before they were published, applied to every fundamental in the set. S1 and S5 look excellent in backfill and ordinary live.</td><td class="mono">Every fundamental read keys on filing_date</td></tr>
+<tr><td>Survivorship</td><td>Building the historical universe from symbols listed today deletes everything that went bankrupt, delisted or was acquired, which is disproportionately the losers.</td><td class="mono">Reconstruct membership per date from the full symbol list including delisted tickers</td></tr>
+<tr><td>Short interest timing</td><td>Settlement date precedes publication by days, so using it reads data before it existed.</td><td class="mono">Key on publication date</td></tr>
+</tbody>
+</table>
+<p class="muted" style="font-size:13.5px">The backfill produces screen history, populated attribution, and a free sanity check on whether the screens surface anything sensible before a dollar is spent on the model. What it is not is a backtest of the researcher, since judgment cannot be backfilled without paying for it and running the model over a period it has already read about would be contaminated anyway.</p>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">15</span><h2>Presentation layer</h2></div>
+<p>Six screens. The API is read-only and the read models are built once per night, so nothing in the UI recomputes an equity curve on page load.</p>
+
+<div class="board">
+<p class="cap">Figure 11 — read path</p>
+<div class="flow">
+  <div class="row">
+    <div class="store"><b>trade_outcome</b></div><div class="store"><b>position</b></div><div class="store"><b>attribution</b></div><div class="store"><b>proposal</b></div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="node n-present" style="max-width:450px"><span class="id">C31 · 19:00</span><div class="nm">ReadModelBuilder</div><div class="rl">Equity curves per portfolio, screen rollups, calibration buckets, run summaries. Materialised so the UI reads rows rather than computing joins.</div></div>
+  <div class="arrow">↓</div>
+  <div class="node n-present" style="max-width:450px"><span class="id">C30</span><div class="nm">QueryApi</div><div class="rl">ASP.NET Core minimal API, read-only. No endpoint can write, so no UI action can alter a run.</div></div>
+  <div class="arrow">↓</div>
+  <div class="node n-present" style="max-width:450px"><span class="id">BLAZOR CLIENT</span><div class="nm">Six screens</div><div class="rl">Desktop-first, dense, no state of its own</div></div>
+</div>
+</div>
+
+<table>
+<thead><tr><th class="mono">ID</th><th>Screen</th><th>Shows</th><th class="mono">Reads</th></tr></thead>
+<tbody>
+<tr><td class="mono"><b>U1</b></td><td>Tonight's run<br><span class="muted" style="font-size:12.5px">The landing view</span></td><td>All candidates with screen tags, and both research models' verdicts side by side so agreement and disagreement are visible at a glance. Stated probability, thesis, counter-argument. The night's funnel from candidates to BUYs to orders. Regime label, run cost, validator rejections.</td><td class="mono">candidate_set, proposal, order</td></tr>
+<tr><td class="mono"><b>U2</b></td><td>Candidate detail</td><td>Every metric as raw value beside its peer percentile. The news digest and which local model wrote it. The exact dossier text each model was given. Both verdicts with probability, thesis, counter-argument, stop and target, and the breakeven their own stop and target imply. Price chart with the 20 and 200 day averages. Forward returns three ways once matured.</td><td class="mono">all metric stores, dossier, news_digest, proposal, attribution</td></tr>
+<tr><td class="mono"><b>U3</b></td><td>Portfolios</td><td>Equity curves for every active portfolio with SPY as reference. Open positions with unrealised P&L and stop distance. Hit rate, average win and loss, max drawdown. Exposure by bucket and sector with the caps drawn in. Closed trades with exit reasons. <b>Closed trade count per portfolio shown beside the curves, with the comparison marked underpowered until it reaches the threshold in VALIDITY.md §3.</b></td><td class="mono">read models, position, trade_outcome</td></tr>
+<tr><td class="mono"><b>U4</b></td><td>Screens</td><td>The five screens with current slot allocation, fill rate, hit rate, mean peer-relative alpha and current floor. History of how the tuner has moved slots. Recent candidates per screen and how they went.</td><td class="mono">config_rows, screen_history, attribution</td></tr>
+<tr><td class="mono"><b>U5</b></td><td>Calibration</td><td>A reliability diagram plotting stated probability against realised outcome, per screen, with the 45-degree line drawn so systematic over- or under-confidence is immediately visible. Brier score and its trend. Active lessons with sample sizes and expiry dates.</td><td class="mono">calibration, researcher_memory</td></tr>
+<tr><td class="mono"><b>U7</b></td><td>Primary claim <span class="tag new">NEW</span></td><td>The one view that tests what this system was built to answer, and the first one to read. Peer-relative forward return at 5, 21 and 63 days for candidates the researcher said BUY against those it said PASS, with the observation count on each side and the pre-registered threshold from VALIDITY.md §4 drawn on the chart. Broken out per model and per screen. Also the abstention question: on nights the researcher stood down entirely, what did the candidates it declined go on to do.</td><td class="mono">attribution, proposal</td></tr>
+<tr><td class="mono"><b>U6</b></td><td>Run health</td><td>Pipeline stages as a timeline with status, duration and row counts. Data freshness per source. Cost per night with a running annual total against budget. Cache hit rate. <b>Local model panel: connected state, endpoint, currently loaded model name, last successful digest run, mean latency, and a test button.</b> Concentration alerts and recent failures.</td><td class="mono">run_log, cost_ledger, alert, local_model_config</td></tr>
+</tbody>
+</table>
+
+<div class="note"><b>Density is correct, and it only works if every number carries its own interpretation.</b> A trading terminal can be dense because price and volume explain themselves. Almost nothing here does: peer-relative alpha, slot fill, floor, Brier, an article count z-scored against a ticker's own baseline are all inventions of this project, and a bare figure for any of them is unreadable. The answer is not help text, which adds clutter to screens that are already full. Five rules instead.
+
+<b>One.</b> No number appears without its comparison and its sample size. Not "alpha 2.4%" but "+2.4% vs peers, n=340". The comparison is what makes it mean something and the count is what says whether to believe it.
+
+<b>Two.</b> Every threshold the system already knows is drawn rather than remembered. The screen floor, the position caps, the breakeven implied by a stop and target, the pre-registered threshold. If the line is on the chart nobody has to recall its value.
+
+<b>Three.</b> Every screen opens with one sentence stating what it currently says, generated from the data rather than written. "Both models agreed on 24 of 27 tonight and passed on all of them." "The sentiment screen has filled under half its slots for three weeks." The table below is the evidence for that sentence.
+
+<b>Four.</b> Definitions arrive on demand from <code>GLOSSARY.md</code> rather than being written into the interface, so a term cannot drift from the document that defines it.
+
+<b>Five.</b> Insufficient data is shown as insufficient. For the first months most of these views cannot support a conclusion, and the honest display is the observation count against what is needed, not a chart that looks finished.</div>
+
+<div class="note"><b>The visual hierarchy has to fight the reading order, and the interface should help rather than hinder.</b> Equity curves are the most compelling thing here and the least informative for the first two years, because each portfolio produces only 125 to 250 closed trades a year against the roughly 400 per arm needed to separate them. The attribution table carries around 7,000 observations a year and answers the primary question in one. So the primary claim view is first in the navigation and the portfolios view carries its own trade count and an underpowered marker, rather than leaving a reader to remember a caveat written in another document [VALIDITY.md §3].</div>
+
+<div class="note"><b>The local model status is persistent chrome, not a panel on one screen.</b> A digest silently missing because the inference server was not running is the most likely operational failure in this system, and it is invisible in the output: the run completes, the proposals look normal, and the evidence was simply thinner that night. So the chain state sits in the application frame on every screen, showing which link is currently answering rather than a bare up or down, and a readiness check runs shortly before the evening window rather than at the moment of use, so a failure is reported while there is still time to start the local server. Running on the secondary is a visible state rather than a silent one. The run health screen holds the detail and the reconnect control.</div>
+
+<div class="note"><b>One deliberate exception to the read-only API.</b> Connecting to and configuring the local model is the only write the UI can make, and it is scoped to <code>local_model_config</code> alone. No endpoint can touch run data, so the property that matters is preserved: nothing a user does in the interface can alter a completed run or the record of one. The exception is worth naming because it is the seam where that guarantee would erode if more writes were added later.</div>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">16</span><h2>Data stores and size</h2></div>
+
+<table>
+<thead><tr><th class="mono">Store</th><th>Grain</th><th class="mono">Written by</th><th class="mono">Read by</th><th class="mono">After backfill</th></tr></thead>
+<tbody>
+<tr><td class="mono"><b>security</b></td><td>one per ticker</td><td class="mono">C01</td><td class="mono">C08 C11 C12 C14 C21 C28</td><td class="mono">2 MB</td></tr>
+<tr><td class="mono"><b>price_daily</b></td><td>ticker × day</td><td class="mono">C02</td><td class="mono">C07 C08 C09 C12 C19 C20 C21</td><td class="mono">400 MB</td></tr>
+<tr><td class="mono"><b>fundamental_snapshot</b></td><td>ticker × quarter</td><td class="mono">C03</td><td class="mono">C09 C11</td><td class="mono">60 MB</td></tr>
+<tr><td class="mono"><b>indicator_daily</b></td><td>ticker × day</td><td class="mono">C08</td><td class="mono">C10 C11 C18</td><td class="mono">1.2 GB</td></tr>
+<tr><td class="mono"><b>valuation_daily</b></td><td>ticker × day</td><td class="mono">C09</td><td class="mono">C11</td><td class="mono">540 MB</td></tr>
+<tr><td class="mono"><b>sentiment_daily</b></td><td>ticker × day</td><td class="mono">C04</td><td class="mono">C11</td><td class="mono">380 MB</td></tr>
+<tr><td class="mono"><b>headline</b> <span class="tag new">NEW</span></td><td>candidate × day</td><td class="mono">C29</td><td class="mono">C15</td><td class="mono">small</td></tr>
+<tr><td class="mono"><b>flow_daily</b></td><td>ticker × week</td><td class="mono">C05</td><td class="mono">C11</td><td class="mono">52 MB</td></tr>
+<tr><td class="mono"><b>events</b></td><td>ticker × event</td><td class="mono">C06</td><td class="mono">C03 C12 C15</td><td class="mono">small</td></tr>
+<tr><td class="mono"><b>market_context_daily</b></td><td>one per day</td><td class="mono">C10</td><td class="mono">C15 C22 C23</td><td class="mono">small</td></tr>
+<tr><td class="mono"><b>gate_result</b></td><td>ticker × day</td><td class="mono">C12</td><td class="mono">C14</td><td class="mono">120 MB</td></tr>
+<tr><td class="mono"><b>screen_score_daily</b></td><td>ticker × screen × day</td><td class="mono">C13</td><td class="mono">C14 C25</td><td class="mono"><b>1.4 GB</b></td></tr>
+<tr><td class="mono"><b>screen_history</b></td><td>screen × day</td><td class="mono">C13</td><td class="mono">C13</td><td class="mono">small</td></tr>
+<tr><td class="mono"><b>config_rows</b></td><td>key by version</td><td class="mono">C22, configuration</td><td class="mono">C13 C14 C18 C25</td><td class="mono">tiny</td></tr>
+<tr><td class="mono"><b>news_digest</b> <span class="tag new">NEW</span></td><td>ticker × day</td><td class="mono">C33</td><td class="mono">C15</td><td class="mono">grows 10 MB/yr</td></tr>
+<tr><td class="mono"><b>calibration</b></td><td>model × screen × report</td><td class="mono">C24</td><td class="mono">C15 C30</td><td class="mono">small</td></tr>
+<tr><td class="mono"><b>local_model_config</b> <span class="tag new">NEW</span></td><td>per chain link</td><td class="mono">the UI, via the one permitted write</td><td class="mono">C32 C33</td><td class="mono">tiny</td></tr>
+<tr><td class="mono"><b>candidate_set</b></td><td>ticker × day</td><td class="mono">C14</td><td class="mono">C15 C25 C28 C29</td><td class="mono">9 MB</td></tr>
+<tr><td class="mono"><b>dossier</b></td><td>prefix + per candidate</td><td class="mono">C15</td><td class="mono">C16 C17</td><td class="mono">grows 40 MB/yr</td></tr>
+<tr><td class="mono"><b>proposal</b></td><td>ticker × day × model</td><td class="mono">C16 C17</td><td class="mono">C18 C24 C25</td><td class="mono">grows 30 MB/yr</td></tr>
+<tr><td class="mono"><b>portfolio</b> <span class="tag new">NEW</span></td><td>one row per portfolio</td><td class="mono">config</td><td class="mono">C16 C18 C25 C31</td><td class="mono">tiny</td></tr>
+<tr><td class="mono"><b>order / fill / position</b></td><td>per event, tagged by portfolio</td><td class="mono">C18 C19 C25</td><td class="mono">C19 C20 C12</td><td class="mono">small</td></tr>
+<tr><td class="mono"><b>trade_outcome</b></td><td>per closed trade</td><td class="mono">C20</td><td class="mono">C12 C22 C23 C24 C31</td><td class="mono">small</td></tr>
+<tr><td class="mono"><b>attribution</b></td><td>ticker × day surfaced</td><td class="mono">C14 C21</td><td class="mono">C22 C23 C24 C31</td><td class="mono">9 MB</td></tr>
+<tr><td class="mono"><b>researcher_memory</b></td><td>per revision</td><td class="mono">C23</td><td class="mono">C15</td><td class="mono">small</td></tr>
+<tr><td class="mono"><b>alert</b> <span class="tag new">NEW</span></td><td>per alert</td><td class="mono">C28</td><td class="mono">C30</td><td class="mono">small</td></tr>
+<tr><td class="mono"><b>cost_ledger / run_log</b></td><td>per call / per stage</td><td class="mono">C26 C27</td><td class="mono">C30</td><td class="mono">small</td></tr>
+</tbody>
+<tfoot><tr><td>Total</td><td colspan="3">Roughly 5 GB after a five-year backfill, growing about 700 MB a year</td><td class="mono">~5 GB</td></tr></tfoot>
+</table>
+
+<div class="note"><b>The screen score table is the sleeper, and it is larger than the price data it derives from.</b> Every ticker is scored by all five screens every day, because the floor is the 98th percentile of that screen's own trailing distribution and you cannot know the distribution without scoring everyone. That is five rows per ticker per day rather than one. Persisting only the names that clear some lower threshold would cut it to a few hundred megabytes, but keeping everything is the right call, because the point of the project is being able to ask questions of history later and a gigabyte is a poor reason to close off questions you have not thought of yet. Storing indicator columns as 32-bit rather than 64-bit floats halves the largest table and costs nothing, since no technical indicator needs fifteen significant figures.</div>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">17</span><h2>Cost</h2></div>
+<p>Two model runs a night over the same dossiers. Research: Opus 5 goes through the Batch API, which halves every line, with the one-hour cache rather than the five-minute one so batch timing cannot cause a cache miss. Research: V4 Pro runs synchronously, since DeepSeek has no batch tier and does not need one.</p>
+
+<table>
+<thead><tr><th>Line</th><th class="mono">Annual tokens</th><th class="mono">Opus 5, batch</th><th class="mono">V4 Pro</th></tr></thead>
+<tbody>
+<tr><td>Cache writes, one per night</td><td class="mono">1.16M</td><td class="mono">$5.80</td><td class="mono">$0.50</td></tr>
+<tr><td>Fresh input, the candidate blocks</td><td class="mono">5.85M</td><td class="mono">$14.63</td><td class="mono">$2.54</td></tr>
+<tr><td>Cache reads, twenty-eight per night</td><td class="mono">32.5M</td><td class="mono">$8.12</td><td class="mono">$0.12</td></tr>
+<tr><td>Output, including the counter-argument</td><td class="mono">1.10M</td><td class="mono">$13.70</td><td class="mono">$0.95</td></tr>
+<tr><td>Lesson calls and validation retries</td><td class="mono">—</td><td class="mono">$3.00</td><td class="mono">$1.00</td></tr>
+</tbody>
+<tfoot><tr><td>Combined, against a $100 budget</td><td class="mono"></td><td class="mono">~$45</td><td class="mono">~$5</td></tr></tfoot>
+</table>
+
+<div class="note"><b>Batch is worth half the bill and costs nothing in quality.</b> Nothing waits on this run: it starts at 18:40 and the orders do not fill until 09:35 the next morning. The one detail that matters is the cache window. The standard cache lives five minutes, so if the batch processor spreads the calls the prefix becomes a miss on every one and the year lands near $112, which is worse than not batching. The one-hour cache costs 2x on writes instead of 1.25x and removes that exposure entirely. The cache hit rate already on the run health screen will confirm it inside a week.</div>
+
+<div class="note"><b>Total is $50 against $100, and the design is now closed.</b> The remaining headroom is deliberately unspent. Every further enrichment considered from here should wait for the calibration report and the A against D result, because both will say more about what is worth adding than any argument made before a single night has run.</div>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">18</span><h2>Failure behaviour</h2></div>
+<p>The system fails closed at every stage. Skipping a night costs nothing. Trading on bad data costs a position and poisons the attribution rows that everything downstream learns from.</p>
+<table>
+<thead><tr><th>Condition</th><th class="mono">Detected by</th><th>Behaviour</th></tr></thead>
+<tbody>
+<tr><td>EOD file stale or short</td><td class="mono">C07</td><td>Abort the run. No orders. Log and alert.</td></tr>
+<tr><td>A screen returns zero names</td><td class="mono">C13</td><td>Expected, not an error. The candidate set is smaller tonight.</td></tr>
+<tr><td>All five screens return zero</td><td class="mono">C13</td><td>Halt before the model is called. Alert, since this indicates a data fault rather than a quiet market.</td></tr>
+<tr><td>A screen cannot fill a size slot</td><td class="mono">C14</td><td>Leave it empty. Never backfill from a larger bucket.</td></tr>
+<tr><td>Sentiment data missing for a name</td><td class="mono">C13</td><td>Mean reversion news gates pass. Sentiment screen simply cannot rank it.</td></tr>
+<tr><td>Megacap share above a third over 20 days</td><td class="mono">C28</td><td>Alert. Treat as a bug in a screen definition rather than a market condition.</td></tr>
+<tr><td>Distinct tickers over 60 days below 250</td><td class="mono">C28</td><td>Alert. The system is converging and the quotas are not holding.</td></tr>
+<tr><td>Primary digest provider unreachable</td><td class="mono">C33</td><td>Fall through to the next healthy link in the chain. The run continues and the provider that answered is recorded against every digest it produced.</td></tr>
+<tr><td>No digest provider healthy</td><td class="mono">C33</td><td>Halt before any researcher call. No orders for any portfolio. This is the gate, and skipping the night is the cheap outcome.</td></tr>
+<tr><td>A provider returns malformed or over-long output</td><td class="mono">C33</td><td>Retry once on that provider, then fall through to the next link. Never truncate silently, since a half-sentence digest is worse than none.</td></tr>
+<tr><td>Loaded local model changed since last run</td><td class="mono">C32</td><td>Record the new name against every digest from tonight and flag it on the run health screen, so a later shift in results has a visible cause.</td></tr>
+<tr><td>Batch results not returned by 09:00</td><td class="mono">C16</td><td>Skip the night entirely. No orders for any portfolio, since exposure matching requires the primary research portfolio to have decided. Alert.</td></tr>
+<tr><td>Model returns invalid JSON</td><td class="mono">C17</td><td>Retry that candidate once, then record it as PASS.</td></tr>
+<tr><td>Model cites a figure not in the dossier</td><td class="mono">C17</td><td>Reject that proposal, log it, continue with the rest.</td></tr>
+<tr><td>Cache miss rate above 20 percent</td><td class="mono">C26</td><td>Alert. Usually the prefix is not byte-identical or the calls are too spread out.</td></tr>
+<tr><td>Trailing cost run rate above target</td><td class="mono">C26</td><td>Drop to the cheaper model tier and log the switch.</td></tr>
+<tr><td>Order exceeds the participation limit</td><td class="mono">C19</td><td>Reject rather than assume an unrealistic fill.</td></tr>
+<tr><td>A stage produces zero rows</td><td class="mono">C27</td><td>Halt remaining stages. A partial run is worse than none.</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">19</span><h2>Parallelism</h2></div>
+<p>The pipeline has two natural partition keys and they are not interchangeable. Getting this wrong is the difference between a backfill that finishes in minutes and one that finishes overnight, and it is also the way subtle correctness bugs get in.</p>
+
+<table>
+<thead><tr><th>Stage</th><th class="mono">Partition key</th><th>How</th></tr></thead>
+<tbody>
+<tr><td>Historical price and fundamentals ingest</td><td class="mono">Ticker</td><td>Embarrassingly parallel. Bounded <code>Parallel.ForEachAsync</code>, each worker writing through its own Npgsql binary COPY stream.</td></tr>
+<tr><td>Indicator computation</td><td class="mono">Ticker</td><td>Every indicator is a function of one ticker's own series, so no worker needs to see another's data.</td></tr>
+<tr><td>Valuation computation</td><td class="mono">Ticker</td><td>Same. Price and that ticker's own filings.</td></tr>
+<tr><td>Percentile computation</td><td class="mono">Date</td><td><b>Cannot partition by ticker.</b> A percentile on a given day needs every name in the cell on that day. Expressed as a single window function with <code>PARTITION BY size_bucket, sector</code>, so Postgres parallelises it and no application-side threading is involved.</td></tr>
+<tr><td>Screen scoring</td><td class="mono">Date</td><td>Same reason and same shape. Set-based, one statement per screen.</td></tr>
+<tr><td>Screen floors</td><td class="mono">Second pass</td><td>See below. The 250-day trailing dependency is removed rather than parallelised.</td></tr>
+<tr><td>Researcher calls</td><td class="mono">Candidate</td><td>Bounded to three or four lanes, deliberately not more. Rate limits apply and the prefix cache lives about five minutes, so the goal is finishing inside that window rather than maximum throughput.</td></tr>
+<tr><td>Learning loops, including calibration</td><td class="mono">None</td><td>Not parallelised. See the note below.</td></tr>
+</tbody>
+</table>
+
+<div class="note"><b>The two-pass backfill.</b> Each screen's floor is the 98th percentile of its own trailing 250-day score distribution, which reads like a sequential dependency where day D cannot be computed until days D-250 through D-1 exist. It is not. Pass one computes raw screen scores for every ticker on every date with no dependency on any other date, fully date-parallel. Pass two computes floors and applies them in a single window function over the now-complete score table. A dependency that would have forced 1,260 sequential steps becomes a parallel job plus one query.</div>
+
+<div class="note"><b>Calibration does not need parallelism, and adding it would be a mistake.</b> The calibration report is an aggregation over the attribution table, bucketing conviction against realised peer-relative return, grouped by screen. That is roughly 7,000 rows a year and about 35,000 after the full backfill. It is one <code>GROUP BY</code> and it finishes in well under a second. The same is true of the screen tuner and the lesson writer, which run monthly over the same table. Parallelising any of them would add concurrency bugs to a job that is already instant. The stages that genuinely need it are the backfill and the nightly compute layer, and those are specified above.</div>
+
+<div class="note"><b>What stays strictly sequential.</b> The stages themselves. Ingest completes before compute begins, compute before select, select before decide, decide before execute. Parallelism lives inside a stage and never across stages, because the freshness guard and the zero-row halt both depend on a stage being finished before the next one reads it. A partial run is worse than no run.</div>
+</section>
+
+<section>
+<div class="sechead"><span class="secno">20</span><h2>Where convergence kept trying to reappear</h2></div>
+<p>The single risk this design exists to manage is that everything quietly collapses onto the same hundred well-known large caps. It surfaced in four different places during scoping, each time in a component that looked unrelated to selection. Worth recording, because it will try again.</p>
+<table>
+<thead><tr><th>Where</th><th>How it got in</th><th>What closed it</th></tr></thead>
+<tbody>
+<tr><td>The ranker</td><td>A single composite score ranked the universe and took the top twelve, which meant one metric set decided everything and the same names won nightly.</td><td>Five independent screens with their own floors, deduplicated</td></tr>
+<tr><td>The news ingest</td><td>Sentiment was pulled only for the top 400 by prior screen score, so a thinly covered name having the exact coverage spike the sentiment screen exists to catch had no data and could never be found.</td><td>Whole-universe sentiment, headlines for candidates only</td></tr>
+<tr><td>The benchmark</td><td>Forward returns measured against SPY made every small cap look bad in a large-led market, so the tuner would have cut the two screens that tilt small.</td><td>Peer-relative returns for the learning loops</td></tr>
+<tr><td>The tie-break</td><td>Breaking conviction ties by screen rank would have reinstated a cross-screen ranker at the final step, and favoured large caps every night.</td><td>Neutral date-seeded coin flip, plus a portfolio bucket cap</td></tr>
+</tbody>
+</table>
+<p class="muted" style="font-size:13.5px">C28 exists because these were caught by argument rather than by measurement. It counts distinct tickers over sixty days and the megacap share of recent candidates, so the next one is found by the system rather than by noticing.</p>
+</section>
+
+</div></div>

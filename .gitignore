@@ -1,0 +1,24 @@
+# Secrets. Nothing here ever enters the repository.
+# Wildcards cover both casings, since gitignore is case-sensitive on Linux and
+# CI even though Windows is not. The convention is appsettings.Secrets.json.
+*.Secrets.json
+*.secrets.json
+!*.Secrets.example.json
+.env
+.env.*
+**/probe-output/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# Rider / VS Code
+.idea/
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store

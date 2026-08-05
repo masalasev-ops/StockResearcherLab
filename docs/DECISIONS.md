@@ -1,0 +1,382 @@
+# DECISIONS.md
+
+The register. One entry per decision, each with the reason it was made. Reasons
+are the point: they are what stops a later session re-litigating something already
+settled, and what tells you whether a new circumstance actually invalidates the
+decision or merely feels uncomfortable.
+
+Numbers are never reused and never renumbered. A superseded entry keeps its number
+and gains a status line pointing at its replacement.
+
+Status values: `ACTIVE`, `SUPERSEDED BY D-n`, `OPEN`.
+
+All entries below were settled during scoping on 2026-08-04 and 2026-08-05, before
+any code existed. Entries carry no measurement behind them unless stated.
+
+---
+
+## Scope and universe
+
+**D-1 The universe is the entire US market, not an index.** `ACTIVE`
+Restricting to the S&P 500 or Russell 2000 would predetermine the answer to the
+question the system exists to ask, since index membership is itself a selection
+rule someone else made.
+
+**D-2 Stocks only. ETFs are out of scope.** `ACTIVE`
+Three of the five screens need company fundamentals a fund does not have, so ETFs
+would enter through essentially one screen and distort both slot allocation and
+per-screen attribution. The sector and position caps also compute on positions
+rather than look-through exposure, so holding a stock and a fund containing it
+would read as diversification. A separate tool will cover ETFs.
+
+**D-3 Long only.** `ACTIVE`
+Of five screens only trend inverts cleanly. Insider selling carries almost no
+signal, expensive junk is not a timing signal, and shorting strength is how people
+get destroyed. Borrow availability and cost are not in the data source, so a paper
+short book would show returns on positions that could not have been opened. Net
+exposure would also become a free variable dominating returns and confounding the
+selection comparison.
+
+**D-4 Universe criteria are absolute, not relative.** `ACTIVE`
+Common stock and ADRs, excluding funds, trusts and SPACs. Market cap at or above
+$300M. Price at or above $5. Twenty-day median dollar volume at or above $2M.
+At least 250 trading days of history. The dollar volume floor was raised from $1M
+because the participation cap would otherwise reject a typical $8,300 position.
+
+**D-5 Absolute filters live only in the universe definition.** `ACTIVE`
+No component downstream narrows by rank, score or count. Raised after the news
+ingest was found limiting itself to the top 400 names by prior screen score, which
+made the sentiment screen structurally unable to discover anything it had not
+already found. See INVARIANT 1.
+
+---
+
+## Candidate generation
+
+**D-6 Five independent screens replace a single composite ranker.** `ACTIVE`
+A single composite score ranking the universe converges on roughly the same
+hundred well-known large caps every night, because one metric set decides
+everything. Five screens each picking on their own logic, deduplicated, produce a
+varied set by construction rather than by hope.
+
+**D-7 Slot ceiling of eight per screen under a 2/3/3 size quota.** `ACTIVE`
+Two large-and-above, three mid, three small. Caps megacaps at ten of forty, close
+to their share of total US market capitalisation, and guarantees up to fifteen
+small-cap places. The ceiling is a ceiling and never a target.
+
+**D-8 An unfilled size slot stays empty.** `ACTIVE`
+Backfilling from a larger bucket is how the diversity guarantee leaks back out.
+See INVARIANT 3.
+
+**D-9 Each screen's floor is the 98th percentile of its own trailing 250-day score
+distribution.** `ACTIVE`
+Self-referential rather than fixed, so it adapts to dispersion instead of going
+dark in a quiet market. A screen returning nothing is expected behaviour.
+
+**D-10 Percentiles are computed within size bucket by sector cells.** `ACTIVE`
+Falling back to size bucket alone when a cell has fewer than fifteen members. A
+$1B name should be scored against its peers, not against megacaps.
+
+**D-11 Metrics favour change over level.** `ACTIVE`
+Levels permanently favour incumbents. A company at 12 percent return on capital
+rising from 8 is more interesting than one flat at 15.
+
+**D-12 Sentiment article counts are z-scored against the ticker's own history,
+never cross-sectionally.** `ACTIVE`
+A cross-sectional count measures analyst coverage, which is a size proxy. Against
+its own baseline it measures change in attention, which is the actual signal, and
+is structurally anti-megacap.
+
+**D-13 Mean reversion requires a stabilisation gate.** `ACTIVE`
+Without it the screen gates on quality then ranks by whichever survivor fell
+furthest, which is the falling-knife instinct one level below where it was
+removed. Three conditions: price back above the 20-day average or 20-day relative
+strength turning up, article count z-score back within 1.0 of baseline, and
+7-day against 30-day sentiment not negative.
+
+**D-14 The two news conditions in D-13 fail open below three articles in seven
+days.** `ACTIVE`
+Failing closed would delete the small-cap slots this screen exists to fill.
+Thinly covered names therefore get a weaker gate, which is deliberate.
+
+---
+
+## The researcher
+
+**D-15 The researcher judges each candidate independently against an absolute bar.**
+`ACTIVE`
+Not ranking a set and picking from it. Keeps stated probabilities comparable
+across nights and gives the calibration loop something real to measure. Requires
+one context per candidate, since a shared context anchors on the first strong name.
+
+**D-16 The model is a judge, not a calculator.** `ACTIVE`
+It never searches, never computes a ratio, and never sees a raw price series.
+Everything arrives precomputed. See INVARIANT 9.
+
+**D-17 Opus 5 is the primary research model.** `ACTIVE`
+Chosen when the alternative was Sonnet at $40 against $64. Batch pricing later
+took Opus to roughly $45, removing the cost pressure that made the choice close.
+
+**D-18 The output is a probability, not an integer conviction score.** `ACTIVE`
+Specifically the probability that the trade reaches its target before its stop.
+Three consequences: the absolute bar acquires a defined value, since the model's
+own stop and target imply a breakeven it must clear; calibration becomes scoreable
+with a Brier score and a reliability diagram; and ties at the arbitration cutoff
+become rare rather than routine. Made before go-live because switching scales later
+invalidates accumulated history.
+
+**D-19 The output carries a counter-argument of twenty words.** `ACTIVE`
+Forces the model past its first conclusion, and gives the candidate detail screen
+the one field worth reading when a decision later looks wrong. Roughly $4 a year.
+
+**D-20 The five screen rubrics live in the cached prefix.** `ACTIVE`
+A prefix token costs roughly a seventh of a candidate-block token, because the
+prefix is cached and read many times while each block is fresh input paid once per
+candidate. Everything shared belongs in the prefix; the candidate block carries
+bare numbers with short keys and no explanatory text.
+
+**D-21 Extended thinking is off.** `ACTIVE`
+Thinking tokens bill at output rates, and output is the cost line that cannot be
+compressed.
+
+**D-22 Opus 5 runs through the Batch API with the one-hour cache.** `ACTIVE`
+Nothing waits on the evening run, since orders do not fill until the next morning.
+Batch halves every line. The one-hour cache is used rather than the five-minute one
+because batch timing could otherwise spread the calls past the cache window, which
+would cost more than not batching at all.
+
+---
+
+## Evidence given to the researcher
+
+**D-23 Sentiment is pulled for the whole universe; headlines only for candidates.**
+`ACTIVE`
+Sentiment feeds the sentiment screen's ranking, so it must cover everything or the
+screen is blind. Headlines exist only for the dossier, and only candidates reach
+the dossier.
+
+**D-24 News is condensed to a digest by a separate cheap model before reaching the
+researcher.** `ACTIVE`
+Full articles run five to eight hundred tokens each, so three per candidate sent to
+Opus would cost around $64 a year and take the total past $137.
+
+**D-25 The digest source is an ordered provider chain: local model primary, Haiku
+4.5 secondary.** `ACTIVE`
+Local is primary by choice rather than by cost, for independence from a hosted
+service and because nothing leaves the machine. Haiku rather than DeepSeek Flash so
+that a single vendor outage cannot take out both the digest fallback and a research
+portfolio. Built as a chain rather than a primary with a fallback branch, so
+failover works in both directions with no rarely-executed code path.
+
+**D-26 The chain is a hard gate on the researcher.** `ACTIVE`
+If no link is healthy the run halts before any researcher call and no orders are
+produced. A night without digests is not comparable to a night with them, and
+skipping a night is free. See INVARIANT 15.
+
+**D-27 Two candidates a night always route to the secondary provider, chosen by the
+date seed.** `ACTIVE`
+A path that only executes during an outage is broken most of the time and is
+discovered on the night it was needed. The rotation also builds a paired sample, so
+after a quarter the question of whether digest source matters can be answered from
+data. Roughly $1.30 a year.
+
+**D-28 The local model transforms evidence and never judges.** `ACTIVE`
+See INVARIANT 7. Crossing this line looks like an improvement, which is why it is
+written down.
+
+**D-29 Which model produced each digest is recorded.** `ACTIVE`
+Both the provider and the loaded model name. Without it, a later shift in results
+has two explanations and no way to separate them.
+
+---
+
+## Risk and execution
+
+**D-30 Starting equity $100,000, risk 0.5 percent per trade.** `ACTIVE`
+Gives positions near $8,300 at a typical 6 percent stop, which clears the
+participation cap at the universe liquidity floor with room.
+
+**D-31 Position size is risk divided by stop distance. Stop is the wider of twice
+ATR(14) and the model suggestion, capped at 12 percent.** `ACTIVE`
+
+**D-32 Caps: 8 open positions, 2 new entries per day, 10 percent cash floor, 20
+percent single position, 30 percent sector, 4 of 8 in the large-and-above bucket.**
+`ACTIVE`
+The bucket cap is the portfolio-level counterpart to the candidate-level size
+quota, and exists because the quota guarantees diversity in the candidate set and
+nothing about what actually gets held.
+
+**D-33 Arbitration when BUYs exceed the entry cap: drop anything the caps would
+block, sort by stated probability, fill from the top, break ties with a date-seeded
+coin flip.** `ACTIVE`
+Screen rank was rejected because rank in one screen and rank in another are
+positions in unrelated distributions, so comparing them requires a normalisation
+that is a composite ranker rebuilt at the last step, and because it would import
+the screens' opinion into the researcher's portfolio and contaminate the comparison
+between them. A thinnest-bucket tiebreak was rejected because the diversity concern
+belongs in the risk layer as a visible cap rather than buried in a tiebreak. The
+neutral flip is what leaves a clean sample for evaluating the rule later.
+
+**D-34 Exits are deterministic and fire from code.** `ACTIVE`
+Stop, target, 40-day time stop, in that order. The researcher votes on
+thesis-change exits only and is never argued out of a stop.
+
+**D-35 Fills are at the next open with size-aware slippage, and orders above 1
+percent of 20-day median dollar volume are rejected.** `ACTIVE`
+Base slippage 5bp large, 10bp mid, 20bp small, plus 25 times participation.
+
+---
+
+## Portfolios and measurement
+
+**D-36 Four portfolios on the identical candidate set: Research: Opus 5, Research:
+V4 Pro, Screens, Random.** `ACTIVE`
+Identical gates, sizing, stops and starting equity, so any difference between them
+is selection. SPY is a reference line, not a portfolio.
+Supersedes an earlier decision to run three. The economics changed: batch pricing
+freed roughly $40 and the second research portfolio costs about $5, so the
+comparison of frontier model against cheap model became close to free.
+
+**D-37 Exposure matching applies to Screens and Random only.** `ACTIVE`
+They do not judge, so unmatched they would stay permanently invested and win in any
+rising market for reasons unrelated to selection. A research portfolio abstains on
+its own terms, so the two are never matched to each other and the difference in
+abstention is itself part of the measurement.
+
+**D-38 Modularity applies to research portfolios only.** `ACTIVE`
+Screens and Random have no model and nothing to swap. The research registry carries
+name, provider, model id, whether it batches, whether it is primary, and state.
+Exactly one research portfolio is primary and the controls match their entry count
+to it, so retiring the primary is a flag move rather than a code change.
+
+**D-39 Only research portfolios are candidates for retirement on performance.**
+`ACTIVE`
+Screens and Random are controls, and their underperformance is the measurement. If
+Random beat the research portfolios after a year, retiring it would be deleting the
+most important result the system had produced.
+
+**D-40 Attribution is written at shortlist time for every candidate, with scores
+frozen.** `ACTIVE`
+Roughly 7,000 rows a year against about 250 trades, which is the difference between
+a measurable per-screen sample and noise. It also records the counterfactual, which
+is what makes abstention and arbitration evaluable at all. Cannot be reconstructed
+later because screen definitions and slot allocations drift.
+
+**D-41 Forward returns are stored three ways: raw, against SPY, and against the
+name's size-and-sector peer cell.** `ACTIVE`
+
+**D-42 The learning loops read the peer-relative column, never SPY.** `ACTIVE`
+Measured against a large-cap index in a large-led market, every small-cap candidate
+posts negative alpha regardless of how well it was chosen. The tuner would cut the
+sentiment and flow screens, which are the two that structurally tilt small and the
+two doing most to keep the system off megacaps, while the trend screen collected the
+same effect as a reward. See INVARIANT 5.
+
+---
+
+## Learning
+
+**D-43 The tuner reallocates slots between screens and touches nothing else.**
+`ACTIVE`
+Monthly, on peer-relative hit rate and alpha, shrunk 0.8 old to 0.2 implied, with a
+floor of four slots and a cap of twelve. Slot reallocation was chosen over weight
+tuning because per-screen results are interpretable and actionable while a weight
+moving from 0.40 to 0.43 is neither. The floor stops a screen being switched off
+before it has enough observations to judge; the cap stops collapse back into one
+screen. Risk caps are operator configuration and are never tuned. See INVARIANT 14.
+
+**D-44 Lessons require n of at least 30 and expire after six months unless
+reconfirmed.** `ACTIVE`
+Written monthly by one AI call over aggregate statistics, never over raw trades.
+Maximum ten active.
+
+**D-45 Calibration is reported per screen rather than pooled.** `ACTIVE`
+Candidates surfaced by different screens receive different screen-specific evidence
+blocks, so the comparison that holds evidence constant is within a screen.
+
+---
+
+## Data and infrastructure
+
+**D-46 Every fundamental read keys on filing date, never period end.** `ACTIVE`
+Period end hands you quarterly numbers roughly five weeks before they were
+published, applied to every fundamental in the set. The quality and mean reversion
+screens would look excellent in backfill and ordinary live. See INVARIANT 12.
+
+**D-47 Five years of backfill before go-live.** `ACTIVE`
+Screen floors need 250 days of history to mean anything, and the tuner and
+calibration report need populated attribution from month one. Five rather than two
+because the window must contain a real drawdown, which is the only condition under
+which the quality and mean reversion screens converge on the same megacaps.
+
+**D-48 The historical universe is reconstructed per date including delisted
+tickers.** `ACTIVE`
+Building it from symbols listed today deletes everything that went bankrupt,
+delisted or was acquired, which is disproportionately the losers.
+
+**D-49 Postgres, not SQLite.** `ACTIVE`
+Not for size. Twelve million screen score rows recompute every time a screen
+definition changes during development, and that job wants concurrent writers and
+bulk loading. The nightly run would have been fine on either.
+
+**D-50 C# throughout, with a read-only API and a Blazor front end.** `ACTIVE`
+No maintained C# client exists for the data provider, so a thin typed HTTP client is
+written here, which also keeps point-in-time discipline under direct control.
+
+**D-51 The only write the UI can make is the local model connection config.**
+`ACTIVE`
+A deliberate exception to the read-only API, named so that the seam is visible if
+more writes are proposed later.
+
+**D-52 The project is named StockResearcherLab.** `ACTIVE`
+An earlier candidate named fundamentals, which describes one screen of five and
+would have pulled an agent toward treating fundamental metrics as primary.
+
+---
+
+**D-55 Secrets live in `appsettings.Secrets.json` beside the project that needs
+them.** `ACTIVE`
+A standard .NET configuration overlay, excluded from version control, requiring no
+tooling beyond the configuration builder already in use. The casing is exact:
+lowercase `appsettings`, capital `Secrets`. `appsettings.Secrets.example.json` is
+committed as the template and is the only such file that may be tracked.
+
+The tradeoff being accepted: the file sits inside the working tree, so a gitignore
+rule is the only thing between it and a commit, whereas `dotnet user-secrets` stores
+outside the repository and cannot be committed at all. The mitigation is a wildcard
+ignore rather than a per-file entry, a re-include for the example, and a grep over
+staged content before the first commit of any new project.
+
+The ignore is a wildcard rather than a literal filename because gitignore is
+case-sensitive on Linux and CI while Windows is not, and a literal would silently
+stop matching if the casing ever drifted. Both `*.Secrets.json` and `*.secrets.json`
+are listed for the same reason.
+
+**D-56 Six source projects, with layers as folders rather than assemblies.**
+`ACTIVE`
+`Core` holds domain types, the stage abstraction, the clock and as-of config
+resolution, and has no project references. `Data` holds Postgres access and every
+store. `Pipeline` holds all stages in folders named for the layers, plus the stage
+registry. `Worker` hosts the nightly run and the backfill. `Api` is read-only. `Ui` is
+Blazor.
+
+Layers are folders because the boundary that actually matters in this design is the
+stage contract and one-writer-per-table, both enforced by the registry test. Separate
+assemblies per layer would add build ceremony without adding enforcement.
+
+**`Api` references `Core` and `Data` and never `Pipeline`.** That is the structural
+form of D-51, and it is what stops the read-only guarantee eroding the first time a UI
+feature would be easier with a stage call. If one appears to need it, the answer is a
+read model.
+
+---
+
+## Open
+
+**D-53 Whether the local digest model stays local once measured.** `OPEN`
+The rotation in D-27 will produce a paired sample. If digest source proves not to
+matter, the chain can be simplified. Do not act before a quarter of data exists.
+
+**D-54 Whether both research portfolios are kept.** `OPEN`
+Decide from the A against D comparison after at least a year, and from the
+validator rejection rate per model, which is available much sooner.

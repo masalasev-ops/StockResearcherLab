@@ -1,0 +1,150 @@
+# CONFIG_REFERENCE.md
+
+Every configuration key, its default, and the component that actually consumes it.
+
+**The Consumer column means someone read the composition code and confirmed the
+binding.** Not the assumed consumer, not the one the name implies. An unverified
+entry is worse than an absent one, because it lets an audit conclude a value is wired
+up when nothing reads it.
+
+Config rows are append-only and versioned. Current is `MAX(version)` for a key. A
+change inserts version + 1. Anything reading config for a simulated date resolves as
+of that date, never as-now [INVARIANT 13].
+
+**No magic numbers at call sites.** A value that could plausibly be tuned is a key
+here, not a literal in a constructor [CLAUDE.md §8].
+
+Verified column values: `unverified`, `verified <date>`, or `NOT BOUND`.
+
+---
+
+## Universe
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `universe.min_market_cap` | 300000000 | D-4 | UniverseBuilder | unverified |
+| `universe.min_price` | 5 | D-4 | UniverseBuilder | unverified |
+| `universe.min_adv_20d` | 2000000 | D-4 | UniverseBuilder | unverified |
+| `universe.min_history_days` | 250 | D-4 | UniverseBuilder | unverified |
+| `universe.bucket_large_floor` | 10000000000 | D-4 | UniverseBuilder | unverified |
+| `universe.bucket_mid_floor` | 2000000000 | D-4 | UniverseBuilder | unverified |
+
+## Percentiles
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `percentile.cell_min_members` | 15 | D-10 | PercentileEngine | unverified |
+
+## Screens
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `screens.slot_ceiling` | 8 | D-7 | CandidateAllocator | unverified |
+| `screens.quota_large` | 2 | D-7 | CandidateAllocator | unverified |
+| `screens.quota_mid` | 3 | D-7 | CandidateAllocator | unverified |
+| `screens.quota_small` | 3 | D-7 | CandidateAllocator | unverified |
+| `screens.floor_percentile` | 98 | D-9 | ScreenEngine | unverified |
+| `screens.floor_lookback_days` | 250 | D-9 | ScreenEngine | unverified |
+| `screens.<id>.metrics` | per screen | D-6 | ScreenEngine | unverified |
+| `screens.<id>.slots` | 8 each at start | D-43 | CandidateAllocator | unverified |
+
+Screen definitions are rows rather than code, so a sixth screen is an insert and not
+a deployment.
+
+## Mean reversion stabilisation
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `s5.stabilisation_z_max` | 1.0 | D-13 | ScreenEngine | unverified |
+| `s5.sentiment_delta_min` | 0 | D-13 | ScreenEngine | unverified |
+| `s5.news_gate_min_articles` | 3 | D-14 | ScreenEngine | unverified |
+
+The last one is the fail-open threshold. Below three articles in seven days the two
+news conditions are treated as satisfied rather than failed.
+
+## Risk
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `risk.starting_equity` | 100000 | D-30 | PortfolioRunner | unverified |
+| `risk.per_trade_pct` | 0.005 | D-30 | RiskGate | unverified |
+| `risk.max_open_positions` | 8 | D-32 | RiskGate | unverified |
+| `risk.max_new_entries_per_day` | 2 | D-32 | RiskGate | unverified |
+| `risk.cash_floor_pct` | 0.10 | D-32 | RiskGate | unverified |
+| `risk.single_position_cap_pct` | 0.20 | D-32 | RiskGate | unverified |
+| `risk.sector_cap_pct` | 0.30 | D-32 | RiskGate | unverified |
+| `risk.large_bucket_cap` | 4 | D-32 | RiskGate | unverified |
+| `risk.stop_atr_multiple` | 2 | D-31 | RiskGate | unverified |
+| `risk.stop_cap_pct` | 0.12 | D-31 | RiskGate | unverified |
+| `risk.time_stop_days` | 40 | D-34 | PositionManager | unverified |
+
+**These are operator configuration and the tuner never writes them** [D-43,
+INVARIANT 14]. If anything in the learning layer acquires a write path to a
+`risk.*` key, that is a defect regardless of how the value moved.
+
+## Broker
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `broker.participation_cap_pct` | 0.01 | D-35 | PaperBroker | unverified |
+| `broker.slippage_base_bp_large` | 5 | D-35 | PaperBroker | unverified |
+| `broker.slippage_base_bp_mid` | 10 | D-35 | PaperBroker | unverified |
+| `broker.slippage_base_bp_small` | 20 | D-35 | PaperBroker | unverified |
+| `broker.slippage_participation_mult` | 25 | D-35 | PaperBroker | unverified |
+
+## Researcher
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `researcher.probability_margin_pp` | 8 | D-18 | rubric prefix | unverified |
+| `researcher.thesis_max_words` | 60 | D-19 | rubric prefix | unverified |
+| `researcher.counter_arg_max_words` | 20 | D-19 | rubric prefix | unverified |
+| `researcher.max_tokens` | derived | D-21 | ResearcherClient | unverified |
+| `researcher.batch_deadline_et` | 09:00 | D-22 | ResearcherClient | unverified |
+| `researcher.cache_ttl` | 1h | D-22 | ResearcherClient | unverified |
+| `researcher.concurrency` | 4 | — | ResearcherClient | unverified |
+
+The word limits appear in the rubric and the token cap is enforced on the call. Both
+exist: the rubric statement is for quality, the token cap is what protects the
+budget.
+
+## Digest chain
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `digest.chain` | local, haiku | D-25 | NewsDigester | unverified |
+| `digest.rotation_count` | 2 | D-27 | NewsDigester | unverified |
+| `digest.max_tokens` | 150 | D-24 | NewsDigester | unverified |
+| `digest.health_timeout_ms` | 5000 | — | LocalModelClient | unverified |
+| `digest.readiness_check_et` | 15:30 | — | LocalModelClient | unverified |
+
+The chain is an ordered list, so adding a third link is an insert.
+
+## Learning
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `tuner.shrinkage_old` | 0.8 | D-43 | ScreenTuner | unverified |
+| `tuner.slot_floor` | 4 | D-43 | ScreenTuner | unverified |
+| `tuner.slot_cap` | 12 | D-43 | ScreenTuner | unverified |
+| `tuner.benchmark_column` | vs_peers | D-42 | ScreenTuner | unverified |
+| `lessons.min_sample` | 30 | D-44 | LessonWriter | unverified |
+| `lessons.expiry_months` | 6 | D-44 | LessonWriter | unverified |
+| `lessons.max_active` | 10 | D-44 | LessonWriter | unverified |
+
+`tuner.benchmark_column` is a key rather than a literal so that a test can assert its
+value, but changing it to `vs_spy` is a defect and not a tuning option [INVARIANT 5].
+
+## Alerts and budget
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `validator.rejection_rate_alert` | 0.05 | — | ProposalValidator | unverified |
+| `monitor.megacap_share_max` | 0.333 | D-7 | ConcentrationMonitor | unverified |
+| `monitor.distinct_tickers_60d_min` | 250 | — | ConcentrationMonitor | unverified |
+| `monitor.cache_hit_rate_min` | 0.80 | — | CostLedger | unverified |
+| `cost.annual_budget` | 100 | — | CostLedger | unverified |
+| `freshness.row_count_tolerance` | from probe | — | FreshnessGuard | unverified |
+
+The freshness tolerance has no default until phase P measures a real bulk end-of-day
+row count.

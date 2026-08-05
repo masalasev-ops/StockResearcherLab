@@ -14,7 +14,7 @@ Corpus version: 0.1 (2026-08-05, initial document set)
 
 | Phase | Status | HEAD | Notes |
 |---|---|---|---|
-| P Data probe | NOT STARTED | | |
+| P Data probe | IN PROGRESS | 8a48990 | Built and run on branch `phase-p`. All five checkpoints landed and all six findings measured. Not signed off: steps 2 to 5 of the sign-off procedure are outstanding, starting with a conformance pass in a fresh session |
 | 0 Rails | NOT STARTED | | |
 | 1 Ingest and universe | NOT STARTED | | |
 | 2 Compute | NOT STARTED | | |
@@ -90,6 +90,54 @@ Reconciliation: spent prompt against plan detail
 Measured figures moved from estimate
   <figure>  <estimate>  <measured>
 ```
+
+### Phase P, not signed off, built on branch `phase-p` at 8a48990
+
+Recorded now rather than at sign-off because the divergences are evidence about
+what was asked, and the session that produced them is the one that knows why.
+Steps 2 to 5 of the sign-off procedure have not happened.
+
+Reconciliation: spent prompt against what the design needs
+
+  The archive at `prompts/spent/phase-P-data-probe.md` was stale against the text
+  actually issued. It read "section 1 and section 5" and "per CLAUDE.md section 1",
+  and lacked the commit-per-checkpoint paragraph and the AFTER block. The issued
+  text says sections 7 and 10, which is correct against the current CLAUDE.md, where
+  section 7 is claims about the code and section 10 is git and secrets. The archive
+  header records an amendment for "CLAUDE.md section renumbering", so that amendment
+  had been applied incompletely. Corrected to the issued text before P.1, with a
+  `Corrected` header line. The body is otherwise untouched.
+
+  Eight items where the prompt asked for less than the design needs. None was written
+  into the prompt body, which is spent from the moment a session works from it.
+
+  full D-4 filter on the sample          defect   price and volume floors applied, not the cap band alone
+  institutional ownership measured       defect   S4 ranks on four inputs; the prompt measured neither this nor its dating
+  sentiment over five years not 180 days defect   180 days cannot see whether S3 is backfillable over the five years D-47 requires
+  ADRs admitted, type read off the feed  defect   D-4 admits common stock and ADRs; the feed carries no separate ADR type
+  bulk EOD over five days not one        more     a tolerance is a band; one day gives only a level, and it caught the accretion below
+  account plan and quota printed         more     endpoint availability is a tier answer and the quota is finite
+  news 90-day density alongside 5 years  more     digests are forward-only, so density is the figure a decision rests on
+  SharesShortPriorMonth captured         more     the only backfillable form of short_interest_change if no series exists
+
+Observations that bear on later phases
+
+  The dollar volume proxy does not survive into phase 1. The bulk feed carries 14, 50
+  and 200-day average share volume and no median dollar volume, so selection used
+  `avgvol_50d * adjusted_close` for `universe.min_adv_20d`. Average volume is
+  unadjusted while `adjusted_close` is adjusted, so the product understates dollar
+  volume for any name that split inside the window. Adequate for picking six sample
+  names, not for the universe filter, which must compute the metric from the price
+  series. Recommended as a carried obligation from P to phase 1.
+
+  The D-4 funnel on 2026-08-03 gave 50,029 rows, 17,497 common stock, 2,940 in the
+  $300M-$2B band, 2,046 clearing the $5 price floor and 977 clearing the volume proxy.
+  977 is the small bucket only, not the universe size, and is not comparable to the
+  ~2,000 estimate in the Measured figures table above.
+
+  The megacap control earned its place. It caught two defects that every small cap
+  would have hidden: an insider endpoint whose data lags by months returning a
+  plausible-looking zero, and a selection pool drawn from a part-settled trading day.
 
 ---
 

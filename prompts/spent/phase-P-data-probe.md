@@ -5,8 +5,9 @@
     Amended:   2026-08-05, before being run, for D-55 secrets handling and
                CLAUDE.md section renumbering
     Corrected: 2026-08-05, working copy predated the third amendment
-    Status:    ISSUED
-    Produced:  (fill on completion)
+    Status:    SPENT
+    Produced:  tools/probe, six findings in PROGRESS.md, branch phase-p.
+               SPENT means executed, not signed off.
 
 Record of what was asked. Never edited once run.
 

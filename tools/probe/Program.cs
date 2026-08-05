@@ -175,21 +175,92 @@ Say("");
 Say("  Endpoint availability on this subscription is itself a finding: a 403 is");
 Say("  a tier answer. Each measurement below prints its own status.");
 
+// ===================================================== BULK EOD ROW COUNT ==
+// Runs before selection, because the count decides which day the selection
+// pool is drawn from. The last available day is routinely still accreting
+// rows, and a pool drawn from a part-settled day is biased toward names that
+// happened to have printed a trade by the time the probe ran.
+
+Rule("BULK END-OF-DAY ROW COUNT");
+Say("  Five consecutive recent US trading days. One day gives a level; the");
+Say("  freshness guard needs a band, and freshness.row_count_tolerance has no");
+Say("  default until this measures one.");
+Say("");
+Say($"    {"requested",-12} {"payload date",-13} rows");
+
+var bulkDays = new List<(string Date, int Rows)>();
+var bulkAvailable = false;
+var lastAvailable = today;
+
+using (var doc = await Get("eod-bulk-last-day/US", false))
+{
+    if (doc is not null)
+    {
+        bulkAvailable = true;
+        var n = doc.RootElement.GetArrayLength();
+        var d = n > 0 ? Str(doc.RootElement[0], "date") ?? "" : "";
+        if (DateOnly.TryParse(d, inv, out var parsed)) lastAvailable = parsed;
+        bulkDays.Add((d, n));
+        Say($"    {"(last)",-12} {d,-13} {I(n)}");
+    }
+}
+
+var walked = 0;
+var stepBack = 1;
+while (bulkAvailable && walked < 4 && stepBack < 15)
+{
+    var d = lastAvailable.AddDays(-stepBack);
+    stepBack++;
+    if (d.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) continue;
+
+    using var doc = await Get("eod-bulk-last-day/US", true, ("date", d.ToString("yyyy-MM-dd", inv)));
+    if (doc is null) { Say($"    {d.ToString("yyyy-MM-dd", inv),-12} {"(failed)",-13} -"); walked++; continue; }
+    var n = doc.RootElement.GetArrayLength();
+    var payloadDate = n > 0 ? Str(doc.RootElement[0], "date") ?? "" : "(empty)";
+    bulkDays.Add((payloadDate, n));
+    Say($"    {d.ToString("yyyy-MM-dd", inv),-12} {payloadDate,-13} {I(n)}");
+    walked++;
+}
+
+if (!bulkAvailable)
+{
+    Say("    NOT MEASURED. The bulk end-of-day endpoint returns 403 on this");
+    Say("    subscription, so no row count exists and freshness.row_count_tolerance");
+    Say("    keeps its 'from probe' placeholder.");
+}
+
+// The selection pool is drawn from the most recent day that looks settled,
+// meaning within 10 percent of the largest count seen.
+var maxRows = bulkDays.Count == 0 ? 0 : bulkDays.Max(b => b.Rows);
+var settled = bulkDays.Where(b => b.Rows >= maxRows * 0.9 && b.Date.Length == 10)
+                      .OrderByDescending(b => b.Date, StringComparer.Ordinal)
+                      .ToList();
+var selectionDate = settled.Count > 0 ? settled[0].Date : "";
+
+if (bulkDays.Count > 0)
+{
+    Say("");
+    Say($"  spread across the settled days: {I(bulkDays.Where(b => b.Rows >= maxRows * 0.9).Min(b => b.Rows))}"
+        + $" to {I(maxRows)}");
+    Say($"  most recent day still accreting: {(bulkDays[0].Rows < maxRows * 0.9 ? "yes, " + I(bulkDays[0].Rows) + " rows" : "no")}");
+    Say($"  selection pool will be drawn from {(selectionDate.Length > 0 ? selectionDate : "(none settled)")}");
+}
+
 // =========================================================== P.3 SAMPLE ===
 
 Rule("P.3  SAMPLE SELECTION");
 
-// One bulk extended call is both the selection pool and the first of the bulk
-// end-of-day row counts below. If the price feed is not on the subscription it
-// is neither, and a degraded symbol-list path takes over so that a 403 on one
-// measurement cannot abort the others.
+// One bulk extended call on the settled day chosen above. If the price feed is
+// not on the subscription a degraded symbol-list path takes over, so that a 403
+// on one measurement cannot abort the others.
 var pool = new List<(string Code, string Name, string Type, double Cap, double Close, double Vol50)>();
 var typeCounts = new SortedDictionary<string, int>(StringComparer.Ordinal);
 var bulkPrimaryDate = "";
 var bulkPrimaryRows = 0;
-var bulkAvailable = false;
 
-using (var doc = await Get("eod-bulk-last-day/US", false, ("filter", "extended")))
+using (var doc = selectionDate.Length > 0
+    ? await Get("eod-bulk-last-day/US", false, ("filter", "extended"), ("date", selectionDate))
+    : await Get("eod-bulk-last-day/US", false, ("filter", "extended")))
 {
     if (doc is not null)
     {
@@ -573,32 +644,108 @@ foreach (var ticker in tickers)
     Say($"  {ticker}");
 
     // --- insider transactions, last 90 days -------------------------------
+    // Two endpoints, both measured, because they do not agree. The legacy flat
+    // endpoint is documented as obsolete and its data lags by months; the
+    // form4 endpoint is current. Reporting only the legacy one would record a
+    // coverage finding that is really a staleness finding.
+    var cutoff = today.AddDays(-90);
+
     using (var doc = await Get("insider-transactions", true,
         ("code", ticker),
-        ("from", today.AddDays(-90).ToString("yyyy-MM-dd", inv)),
+        ("from", cutoff.ToString("yyyy-MM-dd", inv)),
         ("to", todayStr),
         ("limit", "1000")))
     {
-        if (doc is null) Say("    insider transactions: endpoint returned no result");
+        if (doc is null) Say("    legacy insider-transactions: no result");
         else
         {
             var owners = new HashSet<string>(StringComparer.Ordinal);
-            var byCode = new SortedDictionary<string, int>(StringComparer.Ordinal);
             var n = doc.RootElement.GetArrayLength();
             foreach (var t in doc.RootElement.EnumerateArray())
             {
                 var o = Str(t, "ownerName");
                 if (o is not null) owners.Add(o);
-                var c = Str(t, "transactionCode") ?? "(null)";
-                byCode[c] = byCode.TryGetValue(c, out var v) ? v + 1 : 1;
             }
-            Say($"    insider transactions 90d   {I(n)}");
-            Say($"    distinct insiders          {I(owners.Count)}");
-            Say($"    by transactionCode         "
-                + (byCode.Count == 0 ? "(none)" : string.Join("  ", byCode.Select(k => $"{k.Key}={I(k.Value)}"))));
-            Say("      the breakdown matters: the S4 rubric disqualifies option exercises");
-            Say("      and scheduled plan activity, so a bare count can overstate coverage.");
+            Say($"    legacy endpoint 90d        {I(n)} transactions, {I(owners.Count)} distinct insiders");
         }
+    }
+
+    // form4, paged newest-first until past the 90-day cutoff.
+    {
+        var owners = new HashSet<string>(StringComparer.Ordinal);
+        var byCode = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        var txns = 0;
+        var filings = 0;
+        double netPurchaseUsd = 0;
+        var buyers = new HashSet<string>(StringComparer.Ordinal);
+        string? newestFiled = null;
+        var total = 0;
+        var offset = 0;
+        var done = false;
+
+        while (!done && offset < 400)
+        {
+            using var doc = await Get($"sec-filings/{ticker}/form4", true,
+                ("page[limit]", "100"), ("page[offset]", offset.ToString(inv)));
+            if (doc is null) break;
+            if (doc.RootElement.TryGetProperty("meta", out var meta)
+                && meta.TryGetProperty("total", out var tot) && tot.ValueKind == JsonValueKind.Number)
+            {
+                total = tot.GetInt32();
+            }
+            if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array) break;
+            if (data.GetArrayLength() == 0) break;
+
+            foreach (var filing in data.EnumerateArray())
+            {
+                var filed = Str(filing, "filed_at");
+                if (filed is not null && (newestFiled is null || string.CompareOrdinal(filed, newestFiled) > 0))
+                {
+                    newestFiled = filed;
+                }
+                filings++;
+
+                foreach (var section in new[] { "non_derivative", "derivative" })
+                {
+                    if (!filing.TryGetProperty(section, out var arr) || arr.ValueKind != JsonValueKind.Array) continue;
+                    foreach (var t in arr.EnumerateArray())
+                    {
+                        var td = Str(t, "transaction_date");
+                        if (td is null || td.Length < 10) continue;
+                        if (!DateOnly.TryParse(td[..10], inv, out var d)) continue;
+                        if (d < cutoff) { done = true; continue; }
+
+                        txns++;
+                        var owner = Str(t, "reporting_owner_name");
+                        if (owner is not null) owners.Add(owner);
+                        var code = Str(t, "transaction_code") ?? "(null)";
+                        byCode[code] = byCode.TryGetValue(code, out var v) ? v + 1 : 1;
+
+                        // P is an open-market purchase. The S4 rubric weighs those
+                        // and disqualifies option exercises and plan activity.
+                        if (code == "P")
+                        {
+                            var val = Num(t, "total_value")
+                                      ?? (Num(t, "shares_amount") ?? 0) * (Num(t, "price_per_share") ?? 0);
+                            netPurchaseUsd += val;
+                            if (owner is not null) buyers.Add(owner);
+                        }
+                    }
+                }
+            }
+            offset += 100;
+            if (total > 0 && offset >= total) break;
+        }
+
+        Say($"    form4 filings scanned      {I(filings)} of {I(total)} total, newest filed {newestFiled ?? "none"}");
+        Say($"    form4 transactions 90d     {I(txns)}");
+        Say($"    distinct insiders 90d      {I(owners.Count)}");
+        Say($"    by transaction_code        "
+            + (byCode.Count == 0 ? "(none)" : string.Join("  ", byCode.Select(k => $"{k.Key}={I(k.Value)}"))));
+        Say($"    open-market buyers (P)     {I(buyers.Count)}, net purchase USD {ShowInt(netPurchaseUsd)}");
+        Say("      the code breakdown matters: the S4 rubric disqualifies option");
+        Say("      exercises and scheduled plan activity, so a bare transaction count");
+        Say("      overstates what distinct_buyer_count would actually see.");
     }
 
     // --- short interest ---------------------------------------------------
@@ -756,46 +903,6 @@ foreach (var ticker in tickers)
         + (disagree == 0 ? "filing dates agree" : $"{I(disagree)} DISAGREE with balance sheet"));
 }
 
-// ===================================================== BULK EOD ROW COUNT ==
-
-Rule("BULK END-OF-DAY ROW COUNT");
-Say("  Five consecutive recent US trading days. One day gives a level; the");
-Say("  freshness guard needs a band, and freshness.row_count_tolerance has no");
-Say("  default until this measures one.");
-Say("");
-
-if (!bulkAvailable)
-{
-    Say("  NOT MEASURED. The bulk end-of-day endpoint returns 403 on this");
-    Say("  subscription, so no row count exists to record and");
-    Say("  freshness.row_count_tolerance keeps its 'from probe' placeholder.");
-    Say("  This is a subscription state, not a provider limitation: the same");
-    Say("  endpoint returned 44,665 rows for 2026-08-04 earlier the same day,");
-    Say("  before the plan was changed.");
-}
-
-Say($"    {"requested",-12} {"payload date",-13} rows");
-if (bulkAvailable)
-{
-    Say($"    {"(last)",-12} {bulkPrimaryDate,-13} {I(bulkPrimaryRows)}   <- filter=extended, also the selection pool");
-}
-
-var probeDay = DateOnly.TryParse(bulkPrimaryDate, inv, out var lastDay) ? lastDay : today;
-var taken = 0;
-var back = 1;
-while (bulkAvailable && taken < 4 && back < 15)
-{
-    var d = probeDay.AddDays(-back);
-    back++;
-    if (d.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) continue;
-
-    using var doc = await Get("eod-bulk-last-day/US", true, ("date", d.ToString("yyyy-MM-dd", inv)));
-    if (doc is null) { Say($"    {d.ToString("yyyy-MM-dd", inv),-12} {"(failed)",-13} -"); taken++; continue; }
-    var n = doc.RootElement.GetArrayLength();
-    var payloadDate = n > 0 ? Str(doc.RootElement[0], "date") ?? "" : "(empty)";
-    Say($"    {d.ToString("yyyy-MM-dd", inv),-12} {payloadDate,-13} {I(n)}");
-    taken++;
-}
 
 // ----------------------------------------------------------------- close ---
 

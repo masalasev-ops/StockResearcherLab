@@ -68,6 +68,8 @@ const double MinPrice = 5;                    // universe.min_price
 const double MinAdv20d = 2_000_000;           // universe.min_adv_20d
 
 const int SampleSize = 6;        // six in band, per P.3
+const int BacklookYears = 5;     // D-47, five years of backfill
+const int NewsPageCap = 20;      // 20 x 1000 articles per window. Printed when it binds.
 
 // ------------------------------------------------------------------ http ---
 
@@ -135,6 +137,7 @@ static double? Num(JsonElement e, string name)
     return null;
 }
 
+string Show(double? d) => d is null ? "null" : d.Value.ToString("0.######", inv);
 string ShowInt(double? d) => d is null ? "null" : ((long)d.Value).ToString("N0", inv);
 string I(int n) => n.ToString("N0", inv);
 
@@ -409,6 +412,390 @@ Say($"  D-4 price and volume floors applied: {(priceFilterApplied ? "yes" : "NO,
 
 var tickers = chosen.Select(c => c.Ticker).ToList();
 if (controlTicker.Length > 0) tickers.Add(controlTicker);
+
+// Calendar-year windows covering the five-year backfill window [D-47].
+var fromFive = today.AddYears(-BacklookYears);
+var years = new List<(int Year, DateOnly From, DateOnly To, bool Partial)>();
+for (var y = fromFive.Year; y <= today.Year; y++)
+{
+    var f = y == fromFive.Year ? fromFive : new DateOnly(y, 1, 1);
+    var t = y == today.Year ? today : new DateOnly(y, 12, 31);
+    years.Add((y, f, t, y == fromFive.Year || y == today.Year));
+}
+
+// ============================================================ P.4.1 NEWS ==
+
+Rule("P.4.1  NEWS ARCHIVE DEPTH");
+Say($"  Five-year sweep from {fromFive.ToString("yyyy-MM-dd", inv)}, paged at limit=1000 per calendar year.");
+Say("  Digests are forward-only, so the 90-day density at the foot of each block");
+Say("  is the figure a decision rests on. s5.news_gate_min_articles is 3 articles");
+Say("  in 7 days, which is the scale that gate operates at.");
+
+foreach (var ticker in tickers)
+{
+    Say("");
+    Say($"  {ticker}");
+    string? earliest = null;
+    var total = 0;
+    var capBound = false;
+
+    foreach (var (year, wFrom, wTo, partial) in years)
+    {
+        var count = 0;
+        var page = 0;
+        while (page < NewsPageCap)
+        {
+            using var doc = await Get("news", true,
+                ("s", ticker),
+                ("from", wFrom.ToString("yyyy-MM-dd", inv)),
+                ("to", wTo.ToString("yyyy-MM-dd", inv)),
+                ("limit", "1000"),
+                ("offset", (page * 1000).ToString(inv)));
+            if (doc is null) break;
+
+            var n = doc.RootElement.GetArrayLength();
+            count += n;
+            foreach (var a in doc.RootElement.EnumerateArray())
+            {
+                var d = Str(a, "date");
+                if (d is null) continue;
+                var day = d.Length >= 10 ? d[..10] : d;
+                if (earliest is null || string.CompareOrdinal(day, earliest) < 0) earliest = day;
+            }
+            page++;
+            if (n < 1000) break;
+            if (page == NewsPageCap) capBound = true;
+        }
+        total += count;
+        Say($"    {year.ToString(inv)}{(partial ? " (partial)" : "         ")}  articles {I(count)}"
+            + (capBound ? "   PAGE CAP BOUND, count is a floor not a total" : ""));
+        capBound = false;
+    }
+
+    var d90 = 0;
+    using (var doc = await Get("news", true,
+        ("s", ticker),
+        ("from", today.AddDays(-90).ToString("yyyy-MM-dd", inv)),
+        ("to", todayStr),
+        ("limit", "1000")))
+    {
+        if (doc is not null) d90 = doc.RootElement.GetArrayLength();
+    }
+
+    Say($"    earliest article date  {earliest ?? "none returned"}");
+    Say($"    total over five years  {I(total)}");
+    Say($"    last 90 days           {I(d90)}   <- forward-only digest density");
+}
+
+// ======================================================= P.4.2 SENTIMENT ==
+
+Rule("P.4.2  SENTIMENT DEPTH AND COVERAGE");
+Say("  Five years windowed by calendar year, because S3 ranks on an article count");
+Say("  z-scored against the ticker's own 90-day baseline and D-47 backfills five");
+Say("  years. A series shorter than that cannot be backfilled, so its floor has no");
+Say("  trailing distribution and the screen is inert at go-live.");
+Say("  Days with no news are omitted from the response, so rows returned is the");
+Say("  coverage count and a row carrying count 0 is the distinct empty case.");
+
+foreach (var ticker in tickers)
+{
+    Say("");
+    Say($"  {ticker}");
+    string? earliest = null;
+    var total = 0;
+
+    foreach (var (year, wFrom, wTo, partial) in years)
+    {
+        var rows = 0;
+        using var doc = await Get("sentiments", true,
+            ("s", ticker),
+            ("from", wFrom.ToString("yyyy-MM-dd", inv)),
+            ("to", wTo.ToString("yyyy-MM-dd", inv)));
+        if (doc is not null && doc.RootElement.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Value.ValueKind != JsonValueKind.Array) continue;
+                rows += prop.Value.GetArrayLength();
+                foreach (var r in prop.Value.EnumerateArray())
+                {
+                    var d = Str(r, "date");
+                    if (d is null) continue;
+                    if (earliest is null || string.CompareOrdinal(d, earliest) < 0) earliest = d;
+                }
+            }
+        }
+        total += rows;
+        Say($"    {year.ToString(inv)}{(partial ? " (partial)" : "         ")}  rows {I(rows)}");
+    }
+
+    // The 180-day detail the prompt asks for, reported separately.
+    int rows180 = 0, nonZero = 0, maxCount = 0;
+    double sum = 0;
+    using (var doc = await Get("sentiments", true,
+        ("s", ticker),
+        ("from", today.AddDays(-180).ToString("yyyy-MM-dd", inv)),
+        ("to", todayStr)))
+    {
+        if (doc is not null && doc.RootElement.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Value.ValueKind != JsonValueKind.Array) continue;
+                foreach (var r in prop.Value.EnumerateArray())
+                {
+                    rows180++;
+                    var c = Num(r, "count");
+                    if (c is null) continue;
+                    if (c.Value > 0) nonZero++;
+                    sum += c.Value;
+                    if (c.Value > maxCount) maxCount = (int)c.Value;
+                }
+            }
+        }
+    }
+
+    Say($"    earliest date with a row   {earliest ?? "none returned"}");
+    Say($"    total rows over five years {I(total)}");
+    Say($"    last 180 days: days with a row {I(rows180)}, days with non-zero count {I(nonZero)}, "
+        + $"mean count {(rows180 == 0 ? "n/a" : (sum / rows180).ToString("0.##", inv))}, max count {I(maxCount)}");
+}
+
+// ============================================================ P.4.3 FLOW ==
+
+Rule("P.4.3  FLOW COVERAGE");
+Say("  S4 ranks on insider_net_90d_usd, distinct_buyer_count, short_interest_change");
+Say("  and inst_ownership_change. All four are measured here.");
+
+foreach (var ticker in tickers)
+{
+    Say("");
+    Say($"  {ticker}");
+
+    // --- insider transactions, last 90 days -------------------------------
+    using (var doc = await Get("insider-transactions", true,
+        ("code", ticker),
+        ("from", today.AddDays(-90).ToString("yyyy-MM-dd", inv)),
+        ("to", todayStr),
+        ("limit", "1000")))
+    {
+        if (doc is null) Say("    insider transactions: endpoint returned no result");
+        else
+        {
+            var owners = new HashSet<string>(StringComparer.Ordinal);
+            var byCode = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            var n = doc.RootElement.GetArrayLength();
+            foreach (var t in doc.RootElement.EnumerateArray())
+            {
+                var o = Str(t, "ownerName");
+                if (o is not null) owners.Add(o);
+                var c = Str(t, "transactionCode") ?? "(null)";
+                byCode[c] = byCode.TryGetValue(c, out var v) ? v + 1 : 1;
+            }
+            Say($"    insider transactions 90d   {I(n)}");
+            Say($"    distinct insiders          {I(owners.Count)}");
+            Say($"    by transactionCode         "
+                + (byCode.Count == 0 ? "(none)" : string.Join("  ", byCode.Select(k => $"{k.Key}={I(k.Value)}"))));
+            Say("      the breakdown matters: the S4 rubric disqualifies option exercises");
+            Say("      and scheduled plan activity, so a bare count can overstate coverage.");
+        }
+    }
+
+    // --- short interest ---------------------------------------------------
+    using (var doc = await Get($"fundamentals/{ticker}", true, ("filter", "Technicals,SharesStats")))
+    {
+        if (doc is null) Say("    short interest: fundamentals returned no result");
+        else
+        {
+            var r = doc.RootElement;
+            var tech = r.TryGetProperty("Technicals", out var te) ? te : default;
+            var ss = r.TryGetProperty("SharesStats", out var se) ? se : default;
+
+            Say($"    Technicals.SharesShort            {ShowInt(Num(tech, "SharesShort"))}");
+            Say($"    Technicals.SharesShortPriorMonth  {ShowInt(Num(tech, "SharesShortPriorMonth"))}");
+            Say($"    Technicals.ShortPercent           {Show(Num(tech, "ShortPercent"))}");
+            Say($"    Technicals.ShortRatio             {Show(Num(tech, "ShortRatio"))}");
+            Say($"    SharesStats.SharesShort           {ShowInt(Num(ss, "SharesShort"))}");
+            Say($"    SharesStats.ShortPercentFloat     {Show(Num(ss, "ShortPercentFloat"))}");
+
+            var now = Num(tech, "SharesShort");
+            var prior = Num(tech, "SharesShortPriorMonth");
+            Say($"    one-month change computable       {(now is not null && prior is not null ? "yes" : "no")}");
+
+            var hasDate = false;
+            if (tech.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var p in tech.EnumerateObject())
+                {
+                    if (p.Name.Contains("Date", StringComparison.OrdinalIgnoreCase)) hasDate = true;
+                }
+            }
+            Say($"    any as-of date on short interest  {(hasDate ? "yes" : "no")}");
+        }
+    }
+
+    // Does a historical form exist at all? Tested rather than inferred.
+    using (var doc = await Get($"fundamentals/{ticker}", true,
+        ("filter", "Technicals"), ("historical", "1"),
+        ("from", today.AddDays(-180).ToString("yyyy-MM-dd", inv)), ("to", todayStr)))
+    {
+        if (doc is null) Say("    short interest history: request failed");
+        else
+        {
+            var kind = doc.RootElement.ValueKind;
+            var n = kind == JsonValueKind.Array ? doc.RootElement.GetArrayLength()
+                  : kind == JsonValueKind.Object ? doc.RootElement.EnumerateObject().Count()
+                  : 0;
+            var isSeries = kind == JsonValueKind.Array
+                || (kind == JsonValueKind.Object && doc.RootElement.EnumerateObject()
+                        .Any(p => p.Name.Length == 10 && p.Name[4] == '-'));
+            Say($"    historical=1 returns              {kind}, {I(n)} members, "
+                + $"date-keyed series: {(isSeries ? "yes" : "no")}");
+            Say($"    short interest observations 180d  {(isSeries ? I(n) : "0 (snapshot only, no series)")}");
+        }
+    }
+
+    // --- institutional ownership -----------------------------------------
+    using (var doc = await Get($"fundamentals/{ticker}", true,
+        ("filter", "SharesStats::PercentInstitutions,SharesStats::PercentInsiders")))
+    {
+        if (doc is null) Say("    ownership percentages: no result");
+        else
+        {
+            var r = doc.RootElement;
+            Say($"    SharesStats.PercentInstitutions   {Show(Num(r, "SharesStats::PercentInstitutions"))}");
+            Say($"    SharesStats.PercentInsiders       {Show(Num(r, "SharesStats::PercentInsiders"))}");
+        }
+    }
+
+    using (var doc = await Get($"fundamentals/{ticker}", true, ("filter", "Holders::Institutions")))
+    {
+        if (doc is null) Say("    Holders::Institutions: no result");
+        else
+        {
+            var entries = 0;
+            string? newest = null;
+            var hasChange = false;
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var p in doc.RootElement.EnumerateObject())
+                {
+                    entries++;
+                    var d = Str(p.Value, "date");
+                    if (d is not null && (newest is null || string.CompareOrdinal(d, newest) > 0)) newest = d;
+                    if (p.Value.ValueKind == JsonValueKind.Object && p.Value.TryGetProperty("change", out _)) hasChange = true;
+                }
+            }
+            Say($"    Holders::Institutions entries     {I(entries)}");
+            Say($"    newest date on any entry          {newest ?? "null"}");
+            Say($"    entries carry a change field      {(hasChange ? "yes" : "no")}");
+            Say("      the date is the point: inst_ownership_change needs a change, so");
+            Say("      whether anything dates the payload decides whether it is backfillable.");
+        }
+    }
+}
+
+// =================================================== P.4.4 FILING DATES ===
+
+Rule("P.4.4  FILING DATES");
+Say("  D-46 and ARCH section 14 both assume a period-end to filing gap of about");
+Say("  five weeks. Absent, null and equal-to-period-end are printed as distinct");
+Say("  states rather than folded together.");
+
+foreach (var ticker in tickers)
+{
+    Say("");
+    Say($"  {ticker}");
+
+    async Task<List<(string Period, string? Date, string? Filing)>> Quarters(string statement)
+    {
+        var outp = new List<(string, string?, string?)>();
+        using var doc = await Get($"fundamentals/{ticker}", true,
+            ("filter", $"Financials::{statement}::quarterly"));
+        if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Object) return outp;
+        foreach (var p in doc.RootElement.EnumerateObject()
+                     .OrderByDescending(p => p.Name, StringComparer.Ordinal).Take(8))
+        {
+            outp.Add((p.Name, Str(p.Value, "date"), Str(p.Value, "filing_date")));
+        }
+        return outp;
+    }
+
+    var bs = await Quarters("Balance_Sheet");
+    var isx = await Quarters("Income_Statement");
+
+    if (bs.Count == 0) Say("    Balance_Sheet quarterly: nothing returned");
+    else
+    {
+        Say($"    {"period_end",-12} {"filing_date",-12} {"gap days",-9} state");
+        foreach (var (period, date, filing) in bs)
+        {
+            var pe = date ?? period;
+            string gap, state;
+            if (filing is null) { gap = "-"; state = "FILING DATE ABSENT OR NULL"; }
+            else if (string.Equals(filing, pe, StringComparison.Ordinal)) { gap = "0"; state = "EQUAL TO PERIOD END"; }
+            else if (DateOnly.TryParse(pe, inv, out var p1) && DateOnly.TryParse(filing, inv, out var f1))
+            {
+                gap = (f1.DayNumber - p1.DayNumber).ToString(inv);
+                state = "ok";
+            }
+            else { gap = "?"; state = "UNPARSEABLE"; }
+            Say($"    {pe,-12} {filing ?? "null",-12} {gap,-9} {state}");
+        }
+    }
+
+    // Cross-check: the income statement must agree, or one of them is wrong.
+    var disagree = 0;
+    foreach (var (period, _, filing) in bs)
+    {
+        var other = isx.FirstOrDefault(x => x.Period == period);
+        if (other.Period is null) continue;
+        if (!string.Equals(other.Filing, filing, StringComparison.Ordinal)) disagree++;
+    }
+    Say($"    income statement cross-check: {I(isx.Count)} periods, "
+        + (disagree == 0 ? "filing dates agree" : $"{I(disagree)} DISAGREE with balance sheet"));
+}
+
+// ===================================================== BULK EOD ROW COUNT ==
+
+Rule("BULK END-OF-DAY ROW COUNT");
+Say("  Five consecutive recent US trading days. One day gives a level; the");
+Say("  freshness guard needs a band, and freshness.row_count_tolerance has no");
+Say("  default until this measures one.");
+Say("");
+
+if (!bulkAvailable)
+{
+    Say("  NOT MEASURED. The bulk end-of-day endpoint returns 403 on this");
+    Say("  subscription, so no row count exists to record and");
+    Say("  freshness.row_count_tolerance keeps its 'from probe' placeholder.");
+    Say("  This is a subscription state, not a provider limitation: the same");
+    Say("  endpoint returned 44,665 rows for 2026-08-04 earlier the same day,");
+    Say("  before the plan was changed.");
+}
+
+Say($"    {"requested",-12} {"payload date",-13} rows");
+if (bulkAvailable)
+{
+    Say($"    {"(last)",-12} {bulkPrimaryDate,-13} {I(bulkPrimaryRows)}   <- filter=extended, also the selection pool");
+}
+
+var probeDay = DateOnly.TryParse(bulkPrimaryDate, inv, out var lastDay) ? lastDay : today;
+var taken = 0;
+var back = 1;
+while (bulkAvailable && taken < 4 && back < 15)
+{
+    var d = probeDay.AddDays(-back);
+    back++;
+    if (d.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) continue;
+
+    using var doc = await Get("eod-bulk-last-day/US", true, ("date", d.ToString("yyyy-MM-dd", inv)));
+    if (doc is null) { Say($"    {d.ToString("yyyy-MM-dd", inv),-12} {"(failed)",-13} -"); taken++; continue; }
+    var n = doc.RootElement.GetArrayLength();
+    var payloadDate = n > 0 ? Str(doc.RootElement[0], "date") ?? "" : "(empty)";
+    Say($"    {d.ToString("yyyy-MM-dd", inv),-12} {payloadDate,-13} {I(n)}");
+    taken++;
+}
 
 // ----------------------------------------------------------------- close ---
 

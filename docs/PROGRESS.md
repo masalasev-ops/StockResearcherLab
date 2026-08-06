@@ -40,7 +40,7 @@ decisions assume answers that have not been measured.
 | Sentiment series coverage, $300M-$2B | Exists and is never empty where present, so the "series exists but is empty" failure did not occur. It is sparse: rows appear only on days that carry news | Days with a row in the last 180: 4, 7, 17, 34, 63, 122 of 180. Days with a non-zero count identical to days with a row on all 7, so no empty rows. Mean count 1.18 to 2.55, max 2 to 23. Five-year rows 16, 115, 159, 170, 604, 1,112. Control 181 days, mean 190.9, max 392, 1,797 rows. Earliest row equals earliest article date on all 7. 6 small caps plus control, 2026-08-05 |
 | Insider transaction counts, $300M-$2B | The documented endpoint is unusable and its replacement is thin for what S4 needs. No open-market purchase appeared on any name, so distinct_buyer_count had nothing to rank on in this window | `/insider-transactions` returned 0 over 90 days for all 7 including the control; ~~its newest market-wide transactionDate was 2026-04-24 against a 2026-08-05 run~~ [struck, H.2] no market-wide call was ever made and no version of the probe prints `transactionDate`. The staleness reading stands on the per-ticker counts, which trace: the two endpoints disagree over the same seven names and the same 90 days, the legacy one returning 0 transactions for every name including the control while form4 returns 26 for the control with its newest filing dated 2026-07-06. `/sec-filings/{t}/form4` is current: 0, 3, 6, 12, 48, 64 transactions and 0, 3, 4, 6, 8, 12 distinct insiders, control 26 and 15. Codes seen A, D, F, G, M, S. Code P, open-market purchase, was 0 on all 7. 90 days to 2026-08-05 |
 | Short interest population, $300M-$2B | Populated on all 7 but as an undated snapshot with no history. A one-month change is computable; a series is not, so `flow_daily`'s weekly grain and its `publication_date` are not achievable from this source | `Technicals.SharesShort` and `SharesShortPriorMonth` non-null on all 7, so a one-month change is computable on all 7. `SharesStats.SharesShort` null on all 7 while `SharesStats.ShortPercentFloat` is populated. No key matching Date anywhere in `Technicals`. `historical=1` with from and to returns a 9-member object, not a date-keyed series: 0 observations over 180 days. 6 small caps plus control, 2026-08-05 |
-| Filing date present and sane on small caps | Present and never null everywhere tested, but silently equal to `period_end` on some names. D-46 is achievable from this source only if that case is detected, because the field is populated rather than absent | Sample of 6 plus control: 56 of 56 quarters distinct from `period_end`, gaps 19 to 65 days. Per name CCS 23-30, AI 35-55, NWPX 30-58, KBDC 41-62, PHAT 30-65, BXC 29-55, NVDA 19-28. Income statement agreed with balance sheet on all 7. Separately, in-band RJET.US ~~returns `filing_date` equal to `period_end` in 35 of 73 periods and in 11 of the newest 12, with 0 nulls~~ [pending H.4]. The probe took the newest 8 quarters, so no figure over 73 periods can have come from it. What the 20:24 transcript shows for RJET is 7 of the newest 8 equal to `period_end` with 0 nulls. H.4 re-measures every quarter the provider returns. 8 quarters per name, 2026-08-05 |
+| Filing date present and sane on small caps | Present and ~~never null everywhere tested~~ [corrected, H.4] null in 7 of 538 periods once every quarter is read, but silently equal to `period_end` on some names. D-46 is achievable from this source only if that case is detected, because the field is populated rather than absent | Sample of 6 plus control: 56 of 56 quarters distinct from `period_end`, gaps 19 to 65 days. Per name CCS 23-30, AI 35-55, NWPX 30-58, KBDC 41-62, PHAT 30-65, BXC 29-55, NVDA 19-28. Income statement agreed with balance sheet on all 7. Separately, in-band RJET.US returns `filing_date` equal to `period_end` in 35 of 73 periods and in 11 of the newest 12, with 0 nulls [confirmed by H.4]. When written this figure was unevidenced rather than wrong: the probe took the newest 8 quarters and could not have produced it, and the 20:24 transcript shows only 7 of the newest 8. H.4 read every quarter and reproduced 35 of 73 and 11 of 12 exactly. Everything above this sentence is 8 quarters per name, 2026-08-05; the wider read and what it changes are in the H.4 block below |
 | Bulk EOD row count, one US day | About 50,000 rows on a settled US day. The most recent day is still accreting during the evening and is not a valid freshness reference. Accretion outlives that status: 08-04 was still gaining rows through the evening of 08-05, after it had stopped being the most recent day [H.2] | 2026-07-30 50,204; 07-31 50,148; 08-03 50,029. 08-04 ~~44,708~~ [corrected, H.2] read three times across the evening of 08-05 at 44,665 (19:10 UTC, `filter=extended`, when it was still the last available day), 44,686 (20:24) and 44,708 (20:42), so it is a part-settled day and not a settled one. The two request forms agree where both were used: 08-03 returns 50,029 plain and extended. 08-05 still in progress: 9,072 at 20:42 UTC against 3,544 at ~~19:24~~ [corrected, H.2] 20:24 UTC the same evening, that being the transcript's start time. Settled-day spread over the three settled days 50,029 to 50,204, about 0.35 percent, unchanged by the correction because 08-04 was never in the settled set under the probe's own 90 percent rule. Measured 2026-08-05 |
 
 ---
@@ -297,6 +297,72 @@ quoted directly beneath it, which is §14, and the spent prompt cites §14 corre
 layer, which is §15. Every `D-<n>` reference in the corpus was checked the same
 way: D-1 to D-61 all resolve, and the only apparent miss, D-250, is arithmetic in
 the two-pass backfill note.
+
+---
+
+## Corrective pass H, 2026-08-06
+
+Follows the phase P conformance finding above. Phase P is not signed off by this
+pass and the conformance pass re-runs after it, in a session with no involvement
+in either. Evidence is `tools/probe/probe-output/`, tracked from H.1 onward.
+
+### Filing dates re-measured over every quarter returned [H.4]
+
+The one measurement this pass was authorised to make. `Quarters()` dropped its
+eight-quarter bound and the measurement re-ran over the seven names in the
+recorded sample plus RJET.US, which is not among them and which the disputed
+clause exists to settle. 16 calls. Transcript
+`probe-output/probe-filing-dates-20260806-133038.txt`.
+
+| Ticker | Periods | Equal to `period_end` | Null | Equal in newest 12 | Clean gaps | Min | Max | Median | Above 65 |
+|---|---|---|---|---|---|---|---|---|---|
+| CCS.US | 55 | 7 | 0 | 0 of 12 | 48 | 23 | 65 | 33 | 0 |
+| AI.US | 28 | 6 | 0 | 0 of 12 | 22 | 29 | 56 | 38 | 0 |
+| NWPX.US | 130 | 9 | 5 | 0 of 12 | 116 | 30 | 210 | 39 | 23 |
+| KBDC.US | 19 | 8 | 0 | 1 of 12 | 11 | 39 | 62 | 44 | 0 |
+| PHAT.US | 34 | 6 | 0 | 0 of 12 | 28 | 30 | 89 | 40 | 3 |
+| BXC.US | 90 | 1 | 2 | 0 of 12 | 87 | 28 | 88 | 37 | 4 |
+| NVDA.US | 109 | 5 | 0 | 0 of 12 | 104 | -4 | 86 | 24 | 2 |
+| RJET.US | 73 | 35 | 0 | 11 of 12 | 38 | -16 | 88 | 39 | 6 |
+| All | 538 | 77 | 7 | | 454 | -16 | 210 | | 38 |
+
+**The RJET claim is confirmed exactly.** 73 periods, 35 equal, 11 of the newest
+12, 0 nulls. It was unevidenced rather than wrong, and those are different
+defects. Only the wider read could tell them apart, which is the argument for
+H.1 stated as a result rather than as a principle.
+
+**Equality is not one bad name.** It appears on all eight, from 1 of 90 on BXC
+to 35 of 73 on RJET. It concentrates in older history: six of the eight show 0
+of the newest 12. So a rate measured on recent quarters understates what a
+five-year backfill meets, and D-57's detection has to run over the whole
+backfill rather than over the live window.
+
+Three states the eight-quarter window hid. All are reported and none is acted
+on, per H.4.
+
+**1 The 65 day substitution is too narrow.** D-57 sets it from a range of 19 to
+65 across 56 clean quarters. Over 454 clean quarters the range is -16 to 210 and
+38 gaps exceed 65, which is 8.4 percent. The widest is NWPX.US 2011-09-30 filed
+2012-04-27, 210 days. NWPX alone has 23 above 65. A substitution of 65 would
+read 38 of these quarters before they were public, which is the failure
+invariant 12 exists to prevent, arriving through the rule meant to prevent it.
+Widening it is an authored amendment and is not this pass's to make.
+
+**2 Filing dates earlier than their own period end exist.** NVDA.US 2006-07-31
+filed 2006-07-30 and 2002-01-31 filed 2002-01-27, RJET.US 2007-03-31 filed
+2007-03-15. D-57 treats equality as unknown and says nothing about a negative
+gap, so these pass every check as ordinary rows and are read up to 16 days
+before the quarter closed. Three in 454 is rare and it is the same class of
+defect as the one the decision exists for.
+
+**3 Nulls exist.** 5 on NWPX.US and 2 on BXC.US. The recorded finding of never
+null was true of the newest eight quarters and is false over the full history.
+Null is the state the design already handles correctly, so this narrows the
+recorded answer rather than opening anything new.
+
+Also, the income statement agreed with the balance sheet on seven of the eight
+names and disagreed with it on NVDA.US in 2 of 109 periods. The recorded finding
+of agreement on all 7 held only within the eight-quarter window.
 
 ---
 

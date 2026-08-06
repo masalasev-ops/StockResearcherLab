@@ -160,6 +160,60 @@ Note on the supersession convention and how far back it reaches
   re-insertions as licence to rework every prior deletion in the corpus, which would
   turn a convention about design history into an excuse to rewrite it.
 
+Limits of the evidence set [K.5]
+
+  Three things the second conformance pass surfaced by tracing every figure to the
+  call that produced it. All three are limits on what the recorded numbers cover
+  rather than faults in them, and nothing here moves into or out of the Measured
+  column.
+
+  **Which run each figure came from.** The phase measured two different samples on
+  2026-08-05 and the table names neither. The 20:24 run drew CCS, ALNT, IMTX, RJET,
+  MFIC and OOMA from 2026-08-05 itself, which was part-settled at 3,544 rows.
+  `52b64ba` then moved selection to the most recent day within 10 percent of the
+  largest count seen, and the 20:42 run drew CCS, AI, NWPX, KBDC, PHAT and BXC from
+  2026-08-03 at 50,029 rows.
+
+  Every figure in all six rows comes from `probe-20260805-204226.txt`, the 20:42 run,
+  with three exceptions that the cells already label: the three 08-04 bulk readings
+  are one each from the 19:10, 20:24 and 20:42 transcripts; the 08-05 pair of 3,544
+  and 9,072 is one each from the 20:24 and 20:42 transcripts; and the RJET and
+  full-history filing date figures come from
+  `probe-filing-dates-20260806-133038.txt` at H.4. The 20:24 run's own measurements
+  over its own six names are recorded nowhere. They were displaced by the
+  settled-day selection rather than corrected, and that run is why RJET was in the
+  probe's reach at all.
+
+  **The committed transcripts do not account for the run date's API consumption.**
+  The provider's weighted call counter reads 110 at the scaffold's open and 220 at
+  its close, 1,883 at the 20:24 open and 3,733 at its close, and 3,813 at the 20:42
+  open. That leaves roughly 1,663 weighted calls between the scaffold and the 20:24
+  run, and 80 more between the 20:24 and 20:42 runs, with no committed transcript
+  accounting for either.
+
+  Stated as an inference and not a measurement. 1,663 is the scale of one full probe
+  run, and every version from P.2 onward wrote a transcript, so the most likely
+  reading is a run whose output was lost with `bin/` before H.1 moved the directory
+  out of it. Provider-side counter lag and non-probe use of the same token would
+  also move the counter and neither can be excluded from the repository.
+
+  This bounds what H.1 achieved. What it committed is the evidence that survived,
+  not everything the phase produced, and the mechanism it fixed is the reason the
+  difference exists. Nothing recorded in the Probe findings table depends on the
+  missing runs: every figure there traces to a transcript that is present.
+
+  **Three readings the measurement supports without establishing.** The sentiment
+  answer states that rows appear only on days that carry news. What was measured is
+  that the earliest row equals the earliest article on all seven names and that row
+  counts sit below article counts throughout, which is consistent with that reading
+  and does not establish it. The form4 scan stops paging at the first transaction
+  older than the cutoff and caps at 400 filings, which is correct only if the
+  provider returns filings newest first; the code assumes that ordering and does not
+  test it, and on these names it cannot bite because none carries 100 filings inside
+  90 days. And the insider row's `unusable` is a fair reading of a zero return
+  across seven names, but the word stale remains an inference from the disagreement
+  between the two endpoints rather than a measurement of either.
+
 ---
 
 ## Conformance passes

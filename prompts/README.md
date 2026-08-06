@@ -24,7 +24,7 @@ later decision means the request was wrong, that belongs in `DECISIONS.md` and
 in the next prompt. Correcting the archive destroys the only evidence of why the
 code came out the way it did.
 
-The reconciliation question in `CLAUDE.md` §13 is the test:
+The reconciliation question in `CLAUDE.md` §14 is the test:
 
 > Does this decision change a phase prompt that has not been run yet?
 

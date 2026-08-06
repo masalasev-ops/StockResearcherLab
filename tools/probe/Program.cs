@@ -147,6 +147,23 @@ var startedUtc = DateTime.UtcNow;
 var today = DateOnly.FromDateTime(startedUtc);
 var todayStr = today.ToString("yyyy-MM-dd", inv);
 
+// H.4 re-run mode: `probe filing-dates TICKER,TICKER,...` runs P.4.4 alone over
+// an explicit list. The sample was already selected and recorded, so this
+// re-measures the named names rather than reselecting a new set, and it costs a
+// handful of calls rather than the two thousand a full run weighs.
+if (args.Length >= 2 && string.Equals(args[0], "filing-dates", StringComparison.Ordinal))
+{
+    var only = args[1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    Say("Phase P data probe, H.4 re-run");
+    Say($"Run date (UTC): {todayStr}");
+    Say($"P.4.4 only, over an explicit list of {I(only.Length)}: {string.Join(", ", only)}");
+    await FilingDates(only);
+    Rule("RUN SUMMARY");
+    Say($"  http requests issued  {I(httpRequests)}");
+    Console.WriteLine($"\ntranscript written to {SaveTranscript("probe-filing-dates")}");
+    return 0;
+}
+
 Say("Phase P data probe");
 Say($"Run date (UTC): {todayStr}");
 
@@ -844,64 +861,105 @@ foreach (var ticker in tickers)
 
 // =================================================== P.4.4 FILING DATES ===
 
-Rule("P.4.4  FILING DATES");
-Say("  D-46 and ARCH section 14 both assume a period-end to filing gap of about");
-Say("  five weeks. Absent, null and equal-to-period-end are printed as distinct");
-Say("  states rather than folded together.");
-
-foreach (var ticker in tickers)
+async Task FilingDates(IReadOnlyList<string> tickerList)
 {
-    Say("");
-    Say($"  {ticker}");
+    Rule("P.4.4  FILING DATES");
+    Say("  D-46 and ARCH section 14 both assume a period-end to filing gap of about");
+    Say("  five weeks. Absent, null and equal-to-period-end are printed as distinct");
+    Say("  states rather than folded together.");
+    Say("  Every quarter the provider returns, not the newest eight [H.4]. The eight");
+    Say("  quarter bound is what put the RJET claim beyond this tool's reach and what");
+    Say("  left D-57's 65 day substitution resting on 56 quarters.");
 
-    async Task<List<(string Period, string? Date, string? Filing)>> Quarters(string statement)
+    foreach (var ticker in tickerList)
     {
-        var outp = new List<(string, string?, string?)>();
-        using var doc = await Get($"fundamentals/{ticker}", true,
-            ("filter", $"Financials::{statement}::quarterly"));
-        if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Object) return outp;
-        foreach (var p in doc.RootElement.EnumerateObject()
-                     .OrderByDescending(p => p.Name, StringComparer.Ordinal).Take(8))
-        {
-            outp.Add((p.Name, Str(p.Value, "date"), Str(p.Value, "filing_date")));
-        }
-        return outp;
-    }
+        Say("");
+        Say($"  {ticker}");
 
-    var bs = await Quarters("Balance_Sheet");
-    var isx = await Quarters("Income_Statement");
-
-    if (bs.Count == 0) Say("    Balance_Sheet quarterly: nothing returned");
-    else
-    {
-        Say($"    {"period_end",-12} {"filing_date",-12} {"gap days",-9} state");
-        foreach (var (period, date, filing) in bs)
+        async Task<List<(string Period, string? Date, string? Filing)>> Quarters(string statement)
         {
-            var pe = date ?? period;
-            string gap, state;
-            if (filing is null) { gap = "-"; state = "FILING DATE ABSENT OR NULL"; }
-            else if (string.Equals(filing, pe, StringComparison.Ordinal)) { gap = "0"; state = "EQUAL TO PERIOD END"; }
-            else if (DateOnly.TryParse(pe, inv, out var p1) && DateOnly.TryParse(filing, inv, out var f1))
+            var outp = new List<(string, string?, string?)>();
+            using var doc = await Get($"fundamentals/{ticker}", true,
+                ("filter", $"Financials::{statement}::quarterly"));
+            if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Object) return outp;
+            foreach (var p in doc.RootElement.EnumerateObject()
+                         .OrderByDescending(p => p.Name, StringComparer.Ordinal))
             {
-                gap = (f1.DayNumber - p1.DayNumber).ToString(inv);
-                state = "ok";
+                outp.Add((p.Name, Str(p.Value, "date"), Str(p.Value, "filing_date")));
             }
-            else { gap = "?"; state = "UNPARSEABLE"; }
-            Say($"    {pe,-12} {filing ?? "null",-12} {gap,-9} {state}");
+            return outp;
         }
-    }
 
-    // Cross-check: the income statement must agree, or one of them is wrong.
-    var disagree = 0;
-    foreach (var (period, _, filing) in bs)
-    {
-        var other = isx.FirstOrDefault(x => x.Period == period);
-        if (other.Period is null) continue;
-        if (!string.Equals(other.Filing, filing, StringComparison.Ordinal)) disagree++;
+        var bs = await Quarters("Balance_Sheet");
+        var isx = await Quarters("Income_Statement");
+
+        var gaps = new List<int>();
+        int equal = 0, nulls = 0, unparseable = 0, equalIn12 = 0;
+
+        if (bs.Count == 0) Say("    Balance_Sheet quarterly: nothing returned");
+        else
+        {
+            Say($"    {"period_end",-12} {"filing_date",-12} {"gap days",-9} state");
+            var idx = 0;
+            foreach (var (period, date, filing) in bs)
+            {
+                var pe = date ?? period;
+                string gap, state;
+                if (filing is null) { gap = "-"; state = "FILING DATE ABSENT OR NULL"; nulls++; }
+                else if (string.Equals(filing, pe, StringComparison.Ordinal))
+                {
+                    gap = "0"; state = "EQUAL TO PERIOD END"; equal++;
+                    if (idx < 12) equalIn12++;
+                }
+                else if (DateOnly.TryParse(pe, inv, out var p1) && DateOnly.TryParse(filing, inv, out var f1))
+                {
+                    var g = f1.DayNumber - p1.DayNumber;
+                    gaps.Add(g);
+                    gap = g.ToString(inv);
+                    // 65 is D-57's substitution constant. A wider gap anywhere is a
+                    // finding to report, never a number for a build to adjust.
+                    state = g > 65 ? "ok, GAP EXCEEDS 65" : "ok";
+                }
+                else { gap = "?"; state = "UNPARSEABLE"; unparseable++; }
+                Say($"    {pe,-12} {filing ?? "null",-12} {gap,-9} {state}");
+                idx++;
+            }
+
+            Say("");
+            Say($"    total periods                    {I(bs.Count)}");
+            Say($"    filing_date equal to period_end  {I(equal)}");
+            Say($"    filing_date null or absent       {I(nulls)}");
+            Say($"    unparseable                      {I(unparseable)}");
+            Say($"    equal within the newest 12       {I(equalIn12)} of {I(Math.Min(12, bs.Count))}");
+
+            if (gaps.Count > 0)
+            {
+                gaps.Sort();
+                Say($"    clean gaps                       {I(gaps.Count)}, min {I(gaps[0])}, "
+                    + $"max {I(gaps[^1])}, median {I(gaps[gaps.Count / 2])}");
+                Say($"    clean gaps above 65              {I(gaps.Count(g => g > 65))}");
+                var hist = new SortedDictionary<int, int>();
+                foreach (var g in gaps) hist[g] = hist.TryGetValue(g, out var c) ? c + 1 : 1;
+                Say("    full gap distribution, days=count:");
+                Say("      " + string.Join("  ", hist.Select(kv => $"{I(kv.Key)}={I(kv.Value)}")));
+            }
+            else Say("    clean gaps                       none");
+        }
+
+        // Cross-check: the income statement must agree, or one of them is wrong.
+        var disagree = 0;
+        foreach (var (period, _, filing) in bs)
+        {
+            var other = isx.FirstOrDefault(x => x.Period == period);
+            if (other.Period is null) continue;
+            if (!string.Equals(other.Filing, filing, StringComparison.Ordinal)) disagree++;
+        }
+        Say($"    income statement cross-check: {I(isx.Count)} periods, "
+            + (disagree == 0 ? "filing dates agree" : $"{I(disagree)} DISAGREE with balance sheet"));
     }
-    Say($"    income statement cross-check: {I(isx.Count)} periods, "
-        + (disagree == 0 ? "filing dates agree" : $"{I(disagree)} DISAGREE with balance sheet"));
 }
+
+await FilingDates(tickers);
 
 
 // ----------------------------------------------------------------- close ---
@@ -921,10 +979,29 @@ using (var doc = await Get("user", true))
     }
 }
 
-var outDir = Path.Combine(AppContext.BaseDirectory, "probe-output");
-Directory.CreateDirectory(outDir);
-var outPath = Path.Combine(outDir, $"probe-{startedUtc.ToString("yyyyMMdd-HHmmss", inv)}.txt");
-await File.WriteAllTextAsync(outPath, Redact(transcript.ToString()));
-Console.WriteLine($"\ntranscript written to {outPath}");
+Console.WriteLine($"\ntranscript written to {SaveTranscript("probe")}");
 
 return 0;
+
+// Transcripts are repository evidence rather than build output, so they are
+// written beside the project instead of under bin/, where .gitignore excludes
+// them and the numbers in PROGRESS.md end up with nothing behind them [H.1].
+static string ProjectDir()
+{
+    var d = new DirectoryInfo(AppContext.BaseDirectory);
+    while (d is not null)
+    {
+        if (File.Exists(Path.Combine(d.FullName, "probe.csproj"))) return d.FullName;
+        d = d.Parent;
+    }
+    return AppContext.BaseDirectory;
+}
+
+string SaveTranscript(string prefix)
+{
+    var outDir = Path.Combine(ProjectDir(), "probe-output");
+    Directory.CreateDirectory(outDir);
+    var outPath = Path.Combine(outDir, $"{prefix}-{startedUtc.ToString("yyyyMMdd-HHmmss", inv)}.txt");
+    File.WriteAllText(outPath, Redact(transcript.ToString()));
+    return outPath;
+}

@@ -372,16 +372,31 @@ read model.
 **D-57 A filing date equal to its period end is treated as unknown, and the
 row becomes readable only after period end plus 65 days.** `ACTIVE`
 The probe found names returning `filing_date == period_end` in 35 of 73
-periods and 11 of the newest 12, with no nulls. The field is populated, so
-nothing errors, and reading it as a filing date hands you the quarter's
-numbers on the day the quarter closed. That is the silent-failure class
-invariant 12 exists to prevent.
+periods and 11 of the newest 12, with no nulls. [struck as unevidenced by H.3,
+reinstated by H.4] H.3 struck this clause because the probe read the newest
+eight quarters per name and could not have produced a figure spanning 73
+periods, and H.3's replacement text then claimed the observed rate was higher
+than 35 of 73, which was wrong. H.4 re-read every quarter and reproduced the
+original exactly: RJET.US, 73 periods, 35 equal to `period_end`, 11 of the
+newest 12, 0 nulls. The figure was unevidenced when written rather than
+incorrect, and it now has a committed transcript behind it. The field is
+populated, so nothing errors, and reading it as a filing date hands you the
+quarter's numbers on the day the quarter closed. That is the silent-failure
+class invariant 12 exists to prevent.
 
 Imputing a plausible date would be fabricating a point in time, so the rule
 substitutes the widest gap the probe actually observed, being 65 days across
 56 clean quarters where the range was 19 to 65. The maximum is used rather
 than the mean because being late costs freshness while being early costs
 correctness, and point-in-time discipline is a promise never to be early.
+
+Those 56 quarters were the newest eight per name. H.4 read every quarter the
+provider returns and found 454 clean gaps ranging from -16 to 210 days, 38 of
+them above 65 [PROGRESS.md, corrective pass H]. The constant stays at 65 here
+because widening it is an authored amendment rather than a corrective pass's
+to make. As the rule stands, the substitution is narrower than the observed
+distribution and would read those 38 quarters before they were public, and the
+negative gaps are a case this entry does not address at all.
 
 The substitution is recorded on the row rather than applied invisibly, so
 the rate is measurable and a provider change that made equality universal

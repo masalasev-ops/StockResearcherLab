@@ -1,0 +1,529 @@
+Phase P data probe
+Run date (UTC): 2026-08-05
+
+==============================================================================
+ACCOUNT AND QUOTA
+==============================================================================
+  GET https://eodhd.com/api/user?fmt=json&api_token=***
+  subscriptionType  monthly
+  subscriptionMode  paid
+  apiRequests       1,883
+  apiRequestsDate   2026-08-05
+  dailyRateLimit    100,000
+  extraLimit        500
+
+  Endpoint availability on this subscription is itself a finding: a 403 is
+  a tier answer. Each measurement below prints its own status.
+
+==============================================================================
+P.3  SAMPLE SELECTION
+==============================================================================
+  GET https://eodhd.com/api/eod-bulk-last-day/US?filter=extended&fmt=json&api_token=***
+  bulk rows 3,544 for date 2026-08-05
+
+  distinct `type` values present, read off the feed rather than assumed:
+    Common Stock           3,284
+    Preferred Stock        125
+    FUND                   107
+    Notes                  21
+    ETF                    5
+    Warrant                2
+
+  admitted `type` values: Common Stock
+  D-4 admits common stock and ADRs. The feed carries no separate ADR type,
+  so admitting Common Stock is the closest the feed permits and ADRs are
+  not separable from it here.
+
+  D-4 universe funnel, small bucket:
+    rows with cap, close and avgvol_50d present   3,544
+    type admitted                                 3,284
+    market cap in [300M, 2B)                      1,130
+    adjusted_close >= 5                           977
+    avgvol_50d * adjusted_close >= 2M             843
+
+  The last line is a PROXY. D-4 asks for 20-day median dollar volume and
+  the feed offers 14, 50 and 200-day average share volume and no median.
+  Average volume is unadjusted while adjusted_close is adjusted, so the
+  product understates dollar volume for any name that split inside the
+  window. Adequate for picking six sample names, not for the phase 1
+  universe filter, which must compute the metric from the price series.
+
+  resolving sectors (one fundamentals call per candidate):
+    CCS      Real Estate              bulk cap    1,999,970,048   fundamentals cap 1,999,970,048
+    ALNT     Technology               bulk cap    1,607,190,144   fundamentals cap 1,607,190,144
+    IMTX     Healthcare               bulk cap    1,281,994,368   fundamentals cap 1,281,994,368
+    RJET     Industrials              bulk cap    1,030,028,992   fundamentals cap 1,030,028,992
+    MITK     Technology               bulk cap      800,214,848   fundamentals cap 800,214,848
+    MFIC     Financial Services       bulk cap      799,014,464   fundamentals cap 799,014,464
+    OOMA     Technology               bulk cap      591,807,744   fundamentals cap 591,807,744
+
+  SELECTED SET
+    ticker           market cap  sector                     name
+    CCS.US        1,999,970,048  Real Estate                Century Communities Inc
+    ALNT.US       1,607,190,144  Technology                 Allient Inc.
+    IMTX.US       1,281,994,368  Healthcare                 Immatics NV
+    RJET.US       1,030,028,992  Industrials                Republic Airways Holdings Inc
+    MFIC.US         799,014,464  Financial Services         MidCap Financial Investment Corp
+    OOMA.US         591,807,744  Technology                 Ooma Inc
+    NVDA.US    5,133,398,704,128  Technology                 NVIDIA Corporation   <- CONTROL
+
+  in band: 6   distinct sectors: 5   (P.3 asks for 6 across 4 or more)
+  D-4 price and volume floors applied: yes
+
+==============================================================================
+P.4.1  NEWS ARCHIVE DEPTH
+==============================================================================
+  Five-year sweep from 2021-08-05, paged at limit=1000 per calendar year.
+  Digests are forward-only, so the 90-day density at the foot of each block
+  is the figure a decision rests on. s5.news_gate_min_articles is 3 articles
+  in 7 days, which is the scale that gate operates at.
+
+  CCS.US
+    2021 (partial)  articles 96
+    2022           articles 181
+    2023           articles 128
+    2024           articles 214
+    2025           articles 187
+    2026 (partial)  articles 118
+    earliest article date  2021-08-05
+    total over five years  924
+    last 90 days           44   <- forward-only digest density
+
+  ALNT.US
+    2021 (partial)  articles 0
+    2022           articles 0
+    2023           articles 7
+    2024           articles 16
+    2025           articles 68
+    2026 (partial)  articles 48
+    earliest article date  2023-09-25
+    total over five years  139
+    last 90 days           25   <- forward-only digest density
+
+  IMTX.US
+    2021 (partial)  articles 16
+    2022           articles 34
+    2023           articles 32
+    2024           articles 4
+    2025           articles 16
+    2026 (partial)  articles 12
+    earliest article date  2021-08-10
+    total over five years  114
+    last 90 days           6   <- forward-only digest density
+
+  RJET.US
+    2021 (partial)  articles 0
+    2022           articles 0
+    2023           articles 0
+    2024           articles 0
+    2025           articles 4
+    2026 (partial)  articles 21
+    earliest article date  2025-11-21
+    total over five years  25
+    last 90 days           8   <- forward-only digest density
+
+  MFIC.US
+    2021 (partial)  articles 0
+    2022           articles 4
+    2023           articles 15
+    2024           articles 1
+    2025           articles 23
+    2026 (partial)  articles 22
+    earliest article date  2022-10-06
+    total over five years  65
+    last 90 days           12   <- forward-only digest density
+
+  OOMA.US
+    2021 (partial)  articles 37
+    2022           articles 52
+    2023           articles 31
+    2024           articles 0
+    2025           articles 46
+    2026 (partial)  articles 29
+    earliest article date  2021-08-09
+    total over five years  195
+    last 90 days           17   <- forward-only digest density
+
+  NVDA.US
+    2021 (partial)  articles 1,503
+    2022           articles 3,609
+    2023           articles 7,621
+    2024           articles 9,770
+    2025           articles 20,000   PAGE CAP BOUND, count is a floor not a total
+    2026 (partial)  articles 20,000   PAGE CAP BOUND, count is a floor not a total
+    earliest article date  2021-08-05
+    total over five years  62,503
+    last 90 days           1,000   <- forward-only digest density
+
+==============================================================================
+P.4.2  SENTIMENT DEPTH AND COVERAGE
+==============================================================================
+  Five years windowed by calendar year, because S3 ranks on an article count
+  z-scored against the ticker's own 90-day baseline and D-47 backfills five
+  years. A series shorter than that cannot be backfilled, so its floor has no
+  trailing distribution and the screen is inert at go-live.
+  Days with no news are omitted from the response, so rows returned is the
+  coverage count and a row carrying count 0 is the distinct empty case.
+
+  CCS.US
+    2021 (partial)  rows 59
+    2022           rows 134
+    2023           rows 93
+    2024           rows 118
+    2025           rows 122
+    2026 (partial)  rows 78
+    earliest date with a row   2021-08-05
+    total rows over five years 604
+    last 180 days: days with a row 63, days with non-zero count 63, mean count 1.41, max count 5
+
+  ALNT.US
+    2021 (partial)  rows 0
+    2022           rows 0
+    2023           rows 6
+    2024           rows 16
+    2025           rows 59
+    2026 (partial)  rows 40
+    earliest date with a row   2023-09-25
+    total rows over five years 121
+    last 180 days: days with a row 36, days with non-zero count 36, mean count 1.22, max count 6
+
+  IMTX.US
+    2021 (partial)  rows 10
+    2022           rows 18
+    2023           rows 19
+    2024           rows 4
+    2025           rows 13
+    2026 (partial)  rows 10
+    earliest date with a row   2021-08-10
+    total rows over five years 74
+    last 180 days: days with a row 9, days with non-zero count 9, mean count 1.22, max count 3
+
+  RJET.US
+    2021 (partial)  rows 0
+    2022           rows 0
+    2023           rows 0
+    2024           rows 0
+    2025           rows 3
+    2026 (partial)  rows 17
+    earliest date with a row   2025-11-21
+    total rows over five years 20
+    last 180 days: days with a row 17, days with non-zero count 17, mean count 1.24, max count 2
+
+  MFIC.US
+    2021 (partial)  rows 0
+    2022           rows 4
+    2023           rows 13
+    2024           rows 1
+    2025           rows 17
+    2026 (partial)  rows 14
+    earliest date with a row   2022-10-06
+    total rows over five years 49
+    last 180 days: days with a row 12, days with non-zero count 12, mean count 1.67, max count 4
+
+  OOMA.US
+    2021 (partial)  rows 28
+    2022           rows 42
+    2023           rows 22
+    2024           rows 0
+    2025           rows 20
+    2026 (partial)  rows 19
+    earliest date with a row   2021-08-09
+    total rows over five years 131
+    last 180 days: days with a row 15, days with non-zero count 15, mean count 1.6, max count 7
+
+  NVDA.US
+    2021 (partial)  rows 140
+    2022           rows 353
+    2023           rows 356
+    2024           rows 366
+    2025           rows 365
+    2026 (partial)  rows 217
+    earliest date with a row   2021-08-05
+    total rows over five years 1,797
+    last 180 days: days with a row 181, days with non-zero count 181, mean count 190.9, max count 392
+
+==============================================================================
+P.4.3  FLOW COVERAGE
+==============================================================================
+  S4 ranks on insider_net_90d_usd, distinct_buyer_count, short_interest_change
+  and inst_ownership_change. All four are measured here.
+
+  CCS.US
+    insider transactions 90d   0
+    distinct insiders          0
+    by transactionCode         (none)
+      the breakdown matters: the S4 rubric disqualifies option exercises
+      and scheduled plan activity, so a bare count can overstate coverage.
+    Technicals.SharesShort            1,915,407
+    Technicals.SharesShortPriorMonth  1,898,633
+    Technicals.ShortPercent           0.0953
+    Technicals.ShortRatio             5.38
+    SharesStats.SharesShort           null
+    SharesStats.ShortPercentFloat     0.0953
+    one-month change computable       yes
+    any as-of date on short interest  no
+    historical=1 returns              Object, 9 members, date-keyed series: no
+    short interest observations 180d  0 (snapshot only, no series)
+    SharesStats.PercentInstitutions   95.147
+    SharesStats.PercentInsiders       14.052
+    Holders::Institutions entries     20
+    newest date on any entry          2026-03-31
+    entries carry a change field      yes
+      the date is the point: inst_ownership_change needs a change, so
+      whether anything dates the payload decides whether it is backfillable.
+
+  ALNT.US
+    insider transactions 90d   0
+    distinct insiders          0
+    by transactionCode         (none)
+      the breakdown matters: the S4 rubric disqualifies option exercises
+      and scheduled plan activity, so a bare count can overstate coverage.
+    Technicals.SharesShort            629,738
+    Technicals.SharesShortPriorMonth  615,475
+    Technicals.ShortPercent           0.0516
+    Technicals.ShortRatio             1.93
+    SharesStats.SharesShort           null
+    SharesStats.ShortPercentFloat     0.0516
+    one-month change computable       yes
+    any as-of date on short interest  no
+    historical=1 returns              Object, 9 members, date-keyed series: no
+    short interest observations 180d  0 (snapshot only, no series)
+    SharesStats.PercentInstitutions   81.04
+    SharesStats.PercentInsiders       14.819
+    Holders::Institutions entries     20
+    newest date on any entry          2026-03-31
+    entries carry a change field      yes
+      the date is the point: inst_ownership_change needs a change, so
+      whether anything dates the payload decides whether it is backfillable.
+
+  IMTX.US
+    insider transactions 90d   0
+    distinct insiders          0
+    by transactionCode         (none)
+      the breakdown matters: the S4 rubric disqualifies option exercises
+      and scheduled plan activity, so a bare count can overstate coverage.
+    Technicals.SharesShort            5,047,260
+    Technicals.SharesShortPriorMonth  5,408,927
+    Technicals.ShortPercent           0.0535
+    Technicals.ShortRatio             13.12
+    SharesStats.SharesShort           null
+    SharesStats.ShortPercentFloat     0.0535
+    one-month change computable       yes
+    any as-of date on short interest  no
+    historical=1 returns              Object, 9 members, date-keyed series: no
+    short interest observations 180d  0 (snapshot only, no series)
+    SharesStats.PercentInstitutions   79.609
+    SharesStats.PercentInsiders       17.581
+    Holders::Institutions entries     20
+    newest date on any entry          2026-03-31
+    entries carry a change field      yes
+      the date is the point: inst_ownership_change needs a change, so
+      whether anything dates the payload decides whether it is backfillable.
+
+  RJET.US
+    insider transactions 90d   0
+    distinct insiders          0
+    by transactionCode         (none)
+      the breakdown matters: the S4 rubric disqualifies option exercises
+      and scheduled plan activity, so a bare count can overstate coverage.
+    Technicals.SharesShort            752,322
+    Technicals.SharesShortPriorMonth  751,191
+    Technicals.ShortPercent           0.0408
+    Technicals.ShortRatio             4.02
+    SharesStats.SharesShort           null
+    SharesStats.ShortPercentFloat     0.0408
+    one-month change computable       yes
+    any as-of date on short interest  no
+    historical=1 returns              Object, 9 members, date-keyed series: no
+    short interest observations 180d  0 (snapshot only, no series)
+    SharesStats.PercentInstitutions   82.341
+    SharesStats.PercentInsiders       12.359
+    Holders::Institutions entries     20
+    newest date on any entry          2026-03-31
+    entries carry a change field      yes
+      the date is the point: inst_ownership_change needs a change, so
+      whether anything dates the payload decides whether it is backfillable.
+
+  MFIC.US
+    insider transactions 90d   0
+    distinct insiders          0
+    by transactionCode         (none)
+      the breakdown matters: the S4 rubric disqualifies option exercises
+      and scheduled plan activity, so a bare count can overstate coverage.
+    Technicals.SharesShort            2,923,094
+    Technicals.SharesShortPriorMonth  3,275,236
+    Technicals.ShortPercent           0.0358
+    Technicals.ShortRatio             5.17
+    SharesStats.SharesShort           null
+    SharesStats.ShortPercentFloat     0.0358
+    one-month change computable       yes
+    any as-of date on short interest  no
+    historical=1 returns              Object, 9 members, date-keyed series: no
+    short interest observations 180d  0 (snapshot only, no series)
+    SharesStats.PercentInstitutions   41.256
+    SharesStats.PercentInsiders       0.91
+    Holders::Institutions entries     20
+    newest date on any entry          2026-06-30
+    entries carry a change field      yes
+      the date is the point: inst_ownership_change needs a change, so
+      whether anything dates the payload decides whether it is backfillable.
+
+  OOMA.US
+    insider transactions 90d   0
+    distinct insiders          0
+    by transactionCode         (none)
+      the breakdown matters: the S4 rubric disqualifies option exercises
+      and scheduled plan activity, so a bare count can overstate coverage.
+    Technicals.SharesShort            1,158,352
+    Technicals.SharesShortPriorMonth  955,875
+    Technicals.ShortPercent           0.046
+    Technicals.ShortRatio             3.32
+    SharesStats.SharesShort           null
+    SharesStats.ShortPercentFloat     0.046
+    one-month change computable       yes
+    any as-of date on short interest  no
+    historical=1 returns              Object, 9 members, date-keyed series: no
+    short interest observations 180d  0 (snapshot only, no series)
+    SharesStats.PercentInstitutions   70.79
+    SharesStats.PercentInsiders       8.473
+    Holders::Institutions entries     20
+    newest date on any entry          2026-06-30
+    entries carry a change field      yes
+      the date is the point: inst_ownership_change needs a change, so
+      whether anything dates the payload decides whether it is backfillable.
+
+  NVDA.US
+    insider transactions 90d   0
+    distinct insiders          0
+    by transactionCode         (none)
+      the breakdown matters: the S4 rubric disqualifies option exercises
+      and scheduled plan activity, so a bare count can overstate coverage.
+    Technicals.SharesShort            324,052,767
+    Technicals.SharesShortPriorMonth  310,126,785
+    Technicals.ShortPercent           0.0139
+    Technicals.ShortRatio             2.24
+    SharesStats.SharesShort           null
+    SharesStats.ShortPercentFloat     0.0139
+    one-month change computable       yes
+    any as-of date on short interest  no
+    historical=1 returns              Object, 9 members, date-keyed series: no
+    short interest observations 180d  0 (snapshot only, no series)
+    SharesStats.PercentInstitutions   70.483
+    SharesStats.PercentInsiders       3.991
+    Holders::Institutions entries     20
+    newest date on any entry          2026-03-31
+    entries carry a change field      yes
+      the date is the point: inst_ownership_change needs a change, so
+      whether anything dates the payload decides whether it is backfillable.
+
+==============================================================================
+P.4.4  FILING DATES
+==============================================================================
+  D-46 and ARCH section 14 both assume a period-end to filing gap of about
+  five weeks. Absent, null and equal-to-period-end are printed as distinct
+  states rather than folded together.
+
+  CCS.US
+    period_end   filing_date  gap days  state
+    2026-06-30   2026-07-23   23        ok
+    2026-03-31   2026-04-23   23        ok
+    2025-12-31   2026-01-29   29        ok
+    2025-09-30   2025-10-23   23        ok
+    2025-06-30   2025-07-24   24        ok
+    2025-03-31   2025-04-24   24        ok
+    2024-12-31   2025-01-30   30        ok
+    2024-09-30   2024-10-24   24        ok
+    income statement cross-check: 8 periods, filing dates agree
+
+  ALNT.US
+    period_end   filing_date  gap days  state
+    2026-03-31   2026-05-06   36        ok
+    2025-12-31   2026-03-05   64        ok
+    2025-09-30   2025-11-05   36        ok
+    2025-06-30   2025-08-06   37        ok
+    2025-03-31   2025-05-07   37        ok
+    2024-12-31   2025-03-05   64        ok
+    2024-09-30   2024-11-06   37        ok
+    2024-06-30   2024-08-07   38        ok
+    income statement cross-check: 8 periods, filing dates agree
+
+  IMTX.US
+    period_end   filing_date  gap days  state
+    2026-03-31   2026-05-12   42        ok
+    2025-12-31   2026-03-05   64        ok
+    2025-09-30   2025-11-17   48        ok
+    2025-06-30   2025-08-13   44        ok
+    2025-03-31   2025-05-13   43        ok
+    2024-12-31   2025-03-27   86        ok
+    2024-09-30   2024-11-18   49        ok
+    2024-06-30   2024-08-13   44        ok
+    income statement cross-check: 8 periods, filing dates agree
+
+  RJET.US
+    period_end   filing_date  gap days  state
+    2026-06-30   2026-06-30   0         EQUAL TO PERIOD END
+    2026-03-31   2026-05-01   31        ok
+    2025-12-31   2025-12-31   0         EQUAL TO PERIOD END
+    2025-09-30   2025-09-30   0         EQUAL TO PERIOD END
+    2025-06-30   2025-06-30   0         EQUAL TO PERIOD END
+    2025-03-31   2025-03-31   0         EQUAL TO PERIOD END
+    2024-12-31   2024-12-31   0         EQUAL TO PERIOD END
+    2024-09-30   2024-09-30   0         EQUAL TO PERIOD END
+    income statement cross-check: 8 periods, filing dates agree
+
+  MFIC.US
+    period_end   filing_date  gap days  state
+    2026-03-31   2026-05-06   36        ok
+    2025-12-31   2026-02-26   57        ok
+    2025-09-30   2025-11-06   37        ok
+    2025-06-30   2025-08-11   42        ok
+    2025-03-31   2025-05-12   42        ok
+    2024-12-31   2025-02-25   56        ok
+    2024-09-30   2024-11-07   38        ok
+    2024-06-30   2024-08-07   38        ok
+    income statement cross-check: 8 periods, filing dates agree
+
+  OOMA.US
+    period_end   filing_date  gap days  state
+    2026-04-30   2026-06-05   36        ok
+    2026-01-31   2026-04-03   62        ok
+    2025-10-31   2025-12-09   39        ok
+    2025-07-31   2025-09-05   36        ok
+    2025-04-30   2025-06-09   40        ok
+    2025-01-31   2025-04-01   60        ok
+    2024-10-31   2024-12-10   40        ok
+    2024-07-31   2024-09-06   37        ok
+    income statement cross-check: 8 periods, filing dates agree
+
+  NVDA.US
+    period_end   filing_date  gap days  state
+    2026-04-30   2026-05-20   20        ok
+    2026-01-31   2026-02-25   25        ok
+    2025-10-31   2025-11-19   19        ok
+    2025-07-31   2025-08-27   27        ok
+    2025-04-30   2025-05-28   28        ok
+    2025-01-31   2025-02-26   26        ok
+    2024-10-31   2024-11-20   20        ok
+    2024-07-31   2024-08-28   28        ok
+    income statement cross-check: 8 periods, filing dates agree
+
+==============================================================================
+BULK END-OF-DAY ROW COUNT
+==============================================================================
+  Five consecutive recent US trading days. One day gives a level; the
+  freshness guard needs a band, and freshness.row_count_tolerance has no
+  default until this measures one.
+
+    requested    payload date  rows
+    (last)       2026-08-05    3,544   <- filter=extended, also the selection pool
+    2026-08-04   2026-08-04    44,686
+    2026-08-03   2026-08-03    50,029
+    2026-07-31   2026-07-31    50,148
+    2026-07-30   2026-07-30    50,204
+
+==============================================================================
+RUN SUMMARY
+==============================================================================
+  http requests issued  219
+  weighted api calls    1,883 -> 3,733   consumed 1,850
+  dailyRateLimit        100,000

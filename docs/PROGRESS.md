@@ -99,6 +99,13 @@ Steps 2 to 5 of the sign-off procedure have not happened.
 
 Reconciliation: spent prompt against what the design needs
 
+  [superseded by H.5, which compares the prompt against `BUILD_PLAN.md`'s phase P
+  detail as step 3 requires. Kept rather than replaced because it is the build
+  session's own account of what it found. Two things to read it with: the eight
+  items are classified against the design rather than against the plan, and the
+  sentence introducing all eight as the prompt asking for less is contradicted by
+  the four of them labelled `more`.]
+
   The archive at `prompts/spent/phase-P-data-probe.md` was stale against the text
   actually issued. It read "section 1 and section 5" and "per CLAUDE.md section 1",
   and lacked the commit-per-checkpoint paragraph and the AFTER block. The issued
@@ -363,6 +370,56 @@ recorded answer rather than opening anything new.
 Also, the income statement agreed with the balance sheet on seven of the eight
 names and disagreed with it on NVDA.US in 2 of 109 periods. The recorded finding
 of agreement on all 7 held only within the eight-quarter window.
+
+### Reconciliation redone against plan detail [H.5]
+
+Step 3 compares the spent prompt against `BUILD_PLAN.md`'s phase P detail. The
+record above compares it against what the design needs, which is a different
+question, and it also folded three separate comparisons into one list. They are
+separated here.
+
+**The prompt against the plan.** Every divergence, classified in the plan's own
+three forms.
+
+  filing dates bounded to eight quarters   less   the plan says "per quarter"; the prompt says "the last eight quarters"
+  sentiment bounded to 180 days           less   the plan puts no window on it; the build ignored the bound and read five years
+  news across all tickers, not one name   more   the plan says "request news for a small cap"
+  news totals and per-year counts         more   the plan asks for the earliest article returned and nothing else
+  sentiment rows split from non-zero rows more   the plan asks for days returned and counts per day; the split is what made "exists but empty" testable
+  distinct insiders, 180d short interest  more   the plan asks for transaction counts and whether short interest is populated
+  git status --ignored and a staged grep  more   the plan says only "check the gitignore before the first commit"
+  P.5 byte-identical rest of the file     more   the plan's checkpoint says "editing the existing table in place"
+  the provider's OpenAPI spec named       more   not in the plan at all
+  DECISIONS.md entries                    different  the plan's definition of done requires an entry for anything that came back badly; the prompt says "Do not open DECISIONS.md" and report instead
+  six names, not five or six              different  the plan's narrative says five or six and its own checkpoint table says six, so the prompt matches the checkpoint and diverges from the prose
+
+The eight-quarter bound is the one that cost something. It is the same defect as
+the RJET figure seen from the other side: the bound is why the tool could not
+produce the number recorded against it, and H.4 shows the same bound hid the gap
+distribution D-57's constant rests on. A prompt narrowing a plan's "per quarter"
+to eight looks like a detail and reached a decision.
+
+The DECISIONS.md divergence is the interesting one, which is what the plan says
+the *different* class usually is. Both instructions are right and one session
+cannot execute both: the prompt is right on authorship, and the plan is right
+that the phase is not done without the entries. What the plan is missing is a
+sign-off step that authors them, and the C and E passes are that step arriving
+without having been planned.
+
+**The build against both.** Recorded separately because the list above folded
+these in as though the prompt had diverged. The plan and the prompt agree on all
+four; it is the build that went further.
+
+  bulk EOD over five days              plan and prompt both say one day
+  institutional ownership measured     in neither
+  D-4 price and volume floors applied  in neither; both ask only for the cap band
+  account plan and quota printed       in neither
+
+**Gaps in the plan itself**, where the plan and the prompt agree and are both
+wrong. Neither required the probe's printed output to be committed, and
+`.gitignore` excluded it, so a phase whose entire deliverable is measurement
+recorded its numbers with the evidence outside the repository. H.1 fixes the
+mechanism. The plan clause that would have caught it does not exist.
 
 ---
 

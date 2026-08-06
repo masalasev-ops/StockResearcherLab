@@ -53,7 +53,7 @@ on, because missed nights are silent and the run log is the only place they appe
 | Condition | Detected by | Behaviour | What to do |
 |---|---|---|---|
 | End-of-day file stale or short | FreshnessGuard | Abort. No orders | Check the provider. Rerun when fresh. A skipped night costs nothing |
-| Filing date substitution rate above `fundamentals.substitution_rate_alert` | FundamentalsIngestor | Alert | The provider's date handling has changed. Investigate before the next backfill, since every substituted row reads 65 days late and the rate going up widens that silently |
+| Filing date substitution rate above `fundamentals.substitution_rate_alert`, or any ticker whose widest clean gap exceeds 180 days | FundamentalsIngestor | Alert | The provider's date handling has changed. Investigate before the next backfill, since every substituted row reads late by that ticker's own widest gap and the rate going up widens that silently. A widest gap above 180 days is a filer whose fundamentals reach a screen too late to be worth much, and the universe should be told rather than left to carry it [D-62] |
 | A screen returns zero names | ScreenEngine | Normal. Smaller candidate set | Nothing |
 | All five screens return zero | ScreenEngine | Halt before the researcher | Data fault, not a quiet market. Investigate |
 | A screen cannot fill a size slot | CandidateAllocator | Slot stays empty | Nothing. This is the guarantee working |

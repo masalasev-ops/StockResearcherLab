@@ -370,7 +370,7 @@ feature would be easier with a stage call. If one appears to need it, the answer
 read model.
 
 **D-57 A filing date equal to its period end is treated as unknown, and the
-row becomes readable only after period end plus 65 days.** `ACTIVE`
+row becomes readable only after period end plus 65 days.** `SUPERSEDED BY D-62`
 The probe found names returning `filing_date == period_end` in 35 of 73
 periods and 11 of the newest 12, with no nulls. [struck as unevidenced by H.3,
 reinstated by H.4] H.3 struck this clause because the probe read the newest
@@ -472,6 +472,37 @@ is ingested and indicator_daily is derived from it. Ingest grain follows the
 source; consumption grain follows the screen.
 
 Supersedes flow_daily's ticker-by-week declaration in SCHEMA.md.
+
+**D-62 A filing date is unknown when it is null, equal to its period end, or
+not at least one day after it. An unknown row becomes readable at period end
+plus that ticker's own widest clean gap observed to date.** `ACTIVE`
+Supersedes D-57, whose 65-day constant came from 56 gaps across the newest
+eight quarters of seven names. Across 454 gaps the range is -16 to 210 days
+and 38 exceed 65, so the rule as written would have read those 38 quarters
+before they were public. That is the failure invariant 12 exists to prevent,
+arriving through the rule written to prevent it.
+
+A universal constant cannot work. Set to the observed maximum it makes every
+well-behaved name wait seven months; set anywhere lower it is early on some
+name. The distribution clusters: one ticker accounts for 23 of the 38
+breaches. So the substitution is per ticker, drawn from that ticker's own
+filing behaviour, which is the same self-referential grammar the screen
+floors already use.
+
+Only gaps observable before the read date count toward a ticker's widest.
+Using its full history would decide today's readability from filing
+behaviour that has not happened yet, which is lookahead wearing the costume
+of a fix for lookahead.
+
+A ticker with fewer than four clean gaps observed is excluded from the
+universe rather than assigned a guess. Four is a floor for having any view
+of a name's filing behaviour, not a claim about its sufficiency.
+
+Three cases the eight-quarter window hid, all now covered by the same rule.
+Nulls exist and were absent only from the newest quarters. Negative gaps
+exist, being filing dates before their own period end, which is impossible
+in fact and so is unknown rather than early. And equality remains what it
+always was.
 
 ---
 

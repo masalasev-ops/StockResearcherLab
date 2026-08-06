@@ -14,7 +14,7 @@ Corpus version: 0.1.0 (2026-08-05, initial document set)
 
 | Phase | Status | HEAD | Notes |
 |---|---|---|---|
-| P Data probe | IN PROGRESS | 7a0e8b1 | All five checkpoints landed and all six findings recorded. D-57 to D-61 applied with their consequent edits. Sign-off step 2 has run and phase P did not pass it: four figures had no measurement behind them and the evidence was excluded from the repository. Corrective pass H answers the finding, and step 2 re-runs after it in a session with no involvement in either. Steps 3 to 5 outstanding |
+| P Data probe | IN PROGRESS | 7a0e8b1 | All five checkpoints landed and all six findings recorded. D-57 to D-61 applied with their consequent edits. Sign-off step 2 has run and phase P did not pass it: four figures had no measurement behind them and the evidence was excluded from the repository. Corrective pass H answers the finding and corrective pass J carries its findings into authored amendments, D-57 superseded by D-62. Step 2 re-runs after both, in a session with no involvement in phase P or in passes H or J. Steps 3 to 5 outstanding |
 | 0 Rails | NOT STARTED | | |
 | 1 Ingest and universe | NOT STARTED | | |
 | 2 Compute | NOT STARTED | | |
@@ -345,7 +345,10 @@ five-year backfill meets, and D-57's detection has to run over the whole
 backfill rather than over the live window.
 
 Three states the eight-quarter window hid. All are reported and none is acted
-on, per H.4.
+on, per H.4. **All three are answered by D-62**, which supersedes D-57 in
+corrective pass J: the substitution becomes each ticker's own widest clean gap
+observed to date rather than a universal 65, and unknown widens to cover null
+and negative alongside equality.
 
 **1 The 65 day substitution is too narrow.** D-57 sets it from a range of 19 to
 65 across 56 clean quarters. Over 454 clean quarters the range is -16 to 210 and
@@ -447,11 +450,16 @@ the tier, and neither state can be reproduced from the account endpoint. If
 phase 1 needs to know what a given subscription reaches, the answer is a probe
 of each endpoint, not a field.
 
-The screener conclusion is stale and applies to the earlier state only. It was
-called once, at 19:10, returned 403, and was recorded as not available on this
-plan. Nothing retested it after the upgrade, because selection moved to the bulk
-endpoint and no later run calls it. Whether the screener is reachable now is
-unmeasured, and this pass is not authorised to find out.
+The screener conclusion is struck [J.3]. ~~The screener is not available on this
+plan.~~ It was called once, at 19:10, returned 403, and the conclusion was drawn
+from that single pre-upgrade call. Nothing retested it afterwards, because
+selection moved to the bulk endpoint and no later run calls it.
+
+It is struck rather than re-tested. Selection uses the bulk endpoint by design,
+so whether the screener is reachable now changes nothing that is built on it, and
+an unmeasured conclusion left standing as a measured one is worse than an open
+question. Its state since the upgrade is unmeasured, and no call was made to find
+out.
 
 ---
 

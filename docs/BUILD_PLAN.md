@@ -74,6 +74,13 @@ pasting it and the checks drifted between passes.
 disqualified, including a commit correcting a finding of an earlier pass. Checking
 your own correction is checking your own build one step removed.
 
+**This step is attested rather than evidenced.** Git carries no session identity, so
+that the checking session was fresh is an operator attestation and no repository can
+hold that fact. Every other step in this procedure produces something checkable from
+the repository alone; this one does not, and treating the attestation as evidence is
+the way the whole procedure fails quietly. The sign-off block records the attestation
+as an attestation.
+
 **It derives its own commit sets from the log** rather than adopting a range it was
 handed. Every pass prefixes its commits with its letter, so the sets are recoverable
 from the messages alone. A boundary taken on trust is how a pass examines the wrong
@@ -129,7 +136,8 @@ separate pass with its own numbered checkpoints, and it does not run the checks.
 
 ## Phase P — Data probe
 
-**Status:** `NOT STARTED`
+**Status:** `DONE`, signed off 2026-08-06. Produced D-57 to D-63 and four committed
+transcripts. Sign-off block in `PROGRESS.md`.
 **Runs before phase 0, because its answers change the schema.**
 
 A scratch tool under `tools/probe`. A measuring instrument, not a component. Print

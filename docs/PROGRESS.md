@@ -6,7 +6,7 @@ What has actually been built, as opposed to what is designed.
 measured timings and row counts are observations and belong to whoever ran them.
 Correct them directly. Do not record intentions here.
 
-Corpus version: 0.1.0 (2026-08-05, initial document set)
+Corpus version: 0.2.0 (2026-08-06, phase P signed off)
 
 ---
 
@@ -14,7 +14,7 @@ Corpus version: 0.1.0 (2026-08-05, initial document set)
 
 | Phase | Status | HEAD | Notes |
 |---|---|---|---|
-| P Data probe | IN PROGRESS | 1b4ba65 | All five checkpoints landed and all six findings recorded. D-57 to D-61 applied with their consequent edits. Sign-off step 2 has run and phase P did not pass it: four figures had no measurement behind them and the evidence was excluded from the repository. Corrective pass H answers the finding and corrective pass J carries its findings into authored amendments, D-57 superseded by D-62. Step 2 re-runs after both, in a session with no involvement in phase P or in passes H or J. Steps 3 to 5 outstanding |
+| P Data probe | DONE | 3099e66 | All five checkpoints landed and all six findings recorded. D-57 to D-63 produced. Step 2 ran twice: the first pass failed the phase, corrective pass H answered it and pass J carried its findings into authored amendments; the second pass found every recorded figure tracing to committed evidence and left six divergences, all corrected in pass K. All five sign-off steps recorded in the block below. Three P.1 done lines were asserted rather than evidenced by the phase and were evidenced independently at sign-off |
 | 0 Rails | NOT STARTED | | |
 | 1 Ingest and universe | NOT STARTED | | |
 | 2 Compute | NOT STARTED | | |
@@ -91,11 +91,116 @@ Measured figures moved from estimate
   <figure>  <estimate>  <measured>
 ```
 
-### Phase P, not signed off, built on branch `phase-p` at 8a48990
+### Phase P, signed off 2026-08-06, HEAD `3099e66`
 
-Recorded now rather than at sign-off because the divergences are evidence about
-what was asked, and the session that produced them is the one that knows why.
-Steps 2 to 5 of the sign-off procedure have not happened.
+~~Phase P, not signed off, built on branch `phase-p` at 8a48990. Steps 2 to 5 of
+the sign-off procedure have not happened.~~ [superseded by this block, K.10]
+
+`3099e66` is the HEAD this block was written against, not the merge that carries
+it. Everything below the five steps is the build session's own account, written
+before steps 2 to 5 happened and kept as written, because the divergences are
+evidence about what was asked and the session that produced them is the one that
+knows why.
+
+```
+Definition of done      every line run, results below
+Conformance pass        two passes, 2026-08-06, findings below. Attested, not evidenced
+Reconciliation          prompt against plan detail, redone at H.5, patched at K.6
+Next phase authored     checkpoints 1.1 .. 1.10 added to BUILD_PLAN at K.9
+Corpus version          bumped to 0.2.0, CHANGELOG entry added
+```
+
+Definition of done
+
+  Both plan lines, the plan's secrets clause, and the prompt's line per
+  checkpoint. Met means an observable result exists and the repository records
+  it. Asserted means the line is true and nothing records it.
+
+  all four questions have numeric answers in PROGRESS.md
+      met. Six rows filled at `8a48990`, six lines changed and nothing else in
+      the file. Every figure traced to the call that produced it at the second
+      conformance pass.
+  any that came back badly has an entry in DECISIONS.md
+      met at HEAD by D-57 to D-62, and not met when the phase ended. The prompt
+      forbade opening `DECISIONS.md`, so the C, E and J passes authored every
+      entry afterwards. The line is closed and the phase did not close it.
+  no API key enters the repository
+      met. 87 blobs in the object database scanned, reaching the one unreachable
+      commit and the dangling blob. No literal anywhere, both secrets files
+      ignored rather than untracked.
+  P.1 solution builds
+      asserted by the phase, evidenced at the second conformance pass. `dotnet
+      build StockResearcherLab.slnx` on .NET 10.0.301, 0 warnings, 0 errors.
+      Nothing in the repository records the phase itself having run it.
+  P.1 git status --ignored shows the secrets file ignored, not untracked
+      asserted. Re-established independently at the second conformance pass,
+      `git check-ignore -v` attributing both paths to `.gitignore:5`.
+  P.1 a grep of everything staged finds no token-shaped string
+      asserted. Re-established independently over every blob, not only the
+      staged set.
+  P.2 runs end to end on one ticker, printing every measurement including failures
+      met. `probe-20260805-191003.txt`, nine endpoints, five 403s printed with
+      status code and body.
+  P.3 the printed set shows six names in band across four or more sectors
+      met. `probe-20260805-204226.txt`, `in band: 6   distinct sectors: 6`.
+  P.4 all four measurements produce numbers for all seven tickers
+      met. Same transcript, plus the bulk row count over five days.
+  P.5 the table is filled and the rest of PROGRESS.md is byte-identical
+      met. `8a48990` changed six lines in one file and nothing else.
+
+  Three of the ten are asserted, all in P.1, and all three are true. The phase
+  recorded none of them, which is the distinction this line exists to draw.
+
+Conformance finding
+
+  Two passes ran, both on 2026-08-06.
+
+  The first, at HEAD `2802e75`, failed the phase. Four figures inside the
+  answers traced to no probe call, and the evidence behind every figure was
+  excluded from the repository by `.gitignore`, so nothing recorded here was
+  checkable without the build machine. Corrective pass H answered it and
+  corrective pass J carried its findings into authored amendments, D-57
+  superseded by D-62.
+
+  The second, at HEAD `5afcd52`, found every figure in the Measured column
+  tracing to a committed call or transcript. It left six divergences, every one
+  corrected in pass K and none by the pass that found them: three P.1 lines
+  asserted rather than evidenced, an evidence set that does not account for the
+  run date's API consumption, two divergences dropped by the H.5 rewrite, a code
+  comment asserting a measurement that exists only in a commit message, two
+  executable references to a superseded decision, and one cross-reference in
+  `CLAUDE.md` that had never resolved since the baseline commit.
+
+  Both findings are under Conformance passes below, with their methods.
+
+  **Step 2 is attested rather than evidenced.** That a checking session had no
+  involvement in the build or in any correction to it is an operator
+  attestation. Git carries no session identity and no repository can hold that
+  fact. Attested for both passes: the first had no involvement in the build or
+  in the C, E or G passes, the second none in any of those nor in H, J or the
+  first pass.
+
+Reconciliation: spent prompt against plan detail
+
+  Redone at H.5 against this plan's phase P detail, which is what step 3 asks
+  for, and patched at K.6 with three divergences it had dropped. Twelve items
+  against the plan and six recording the build going past both documents, all
+  in the H.5 block below rather than repeated here.
+
+  The one that cost something: the prompt narrowed the plan's *per quarter* to
+  the newest eight, which is *less*, and that bound is why the tool could not
+  produce the figure recorded against it and why D-57's constant rested on 56
+  quarters instead of 454. The one that was structural: the plan's definition of
+  done requires `DECISIONS.md` entries and the prompt forbids opening that file,
+  which is *different*, and both are right. What the plan was missing is a
+  sign-off step that authors them.
+
+Measured figures moved from estimate
+
+  None. Nothing in the Measured figures table above is answerable from a probe
+  over seven names, and the D-4 funnel's 977 is the small bucket on one day
+  rather than a universe size. The figures phase P did measure are provider
+  behaviour and live in the Probe findings table, not that one.
 
 Reconciliation: spent prompt against what the design needs
 

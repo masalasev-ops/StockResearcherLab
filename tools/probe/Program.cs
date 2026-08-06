@@ -71,6 +71,10 @@ const int SampleSize = 6;        // six in band, per P.3
 const int BacklookYears = 5;     // D-47, five years of backfill
 const int NewsPageCap = 20;      // 20 x 1000 articles per window. Printed when it binds.
 
+// fundamentals.min_clean_gaps_for_substitution, set by D-62. Below this a ticker
+// has no view of its own filing behaviour and is excluded rather than guessed at.
+const int MinCleanGapsForSubstitution = 4;
+
 // ------------------------------------------------------------------ http ---
 
 using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
@@ -661,10 +665,12 @@ foreach (var ticker in tickers)
     Say($"  {ticker}");
 
     // --- insider transactions, last 90 days -------------------------------
-    // Two endpoints, both measured, because they do not agree. The legacy flat
-    // endpoint is documented as obsolete and its data lags by months; the
-    // form4 endpoint is current. Reporting only the legacy one would record a
-    // coverage finding that is really a staleness finding.
+    // Two endpoints, both measured, because they do not agree. Over the same
+    // seven names and the same 90 days the legacy flat endpoint returned 0
+    // transactions for every one of them including the megacap control, while
+    // form4 returned 0 to 64. Reporting only the legacy one would record that
+    // disagreement as a coverage finding. Which endpoint is wrong, and why, is
+    // not something this probe measured [K.2].
     var cutoff = today.AddDays(-90);
 
     using (var doc = await Get("insider-transactions", true,
@@ -869,7 +875,10 @@ async Task FilingDates(IReadOnlyList<string> tickerList)
     Say("  states rather than folded together.");
     Say("  Every quarter the provider returns, not the newest eight [H.4]. The eight");
     Say("  quarter bound is what put the RJET claim beyond this tool's reach and what");
-    Say("  left D-57's 65 day substitution resting on 56 quarters.");
+    Say("  left the 65 day constant resting on 56 quarters that D-62 superseded.");
+    Say("  D-62 substitutes each ticker's own widest clean gap observed to date and");
+    Say("  excludes a ticker with fewer than four clean gaps, so both are reported per");
+    Say("  ticker below and no universal threshold is tested [K.2].");
 
     foreach (var ticker in tickerList)
     {
@@ -916,9 +925,13 @@ async Task FilingDates(IReadOnlyList<string> tickerList)
                     var g = f1.DayNumber - p1.DayNumber;
                     gaps.Add(g);
                     gap = g.ToString(inv);
-                    // 65 is D-57's substitution constant. A wider gap anywhere is a
-                    // finding to report, never a number for a build to adjust.
-                    state = g > 65 ? "ok, GAP EXCEEDS 65" : "ok";
+                    // D-62 replaced D-57's universal constant with each ticker's own
+                    // widest clean gap, so there is no fixed threshold for a row to
+                    // exceed and none is tested. A gap under one day is unknown under
+                    // D-62 rather than early. The gap list is left exactly as measured
+                    // so the recorded H.4 aggregates still reproduce: classifying is
+                    // the ingestor's job at 1.4, not this instrument's [K.2].
+                    state = g < 1 ? "ok, UNDER ONE DAY, UNKNOWN UNDER D-62" : "ok";
                 }
                 else { gap = "?"; state = "UNPARSEABLE"; unparseable++; }
                 Say($"    {pe,-12} {filing ?? "null",-12} {gap,-9} {state}");
@@ -937,7 +950,13 @@ async Task FilingDates(IReadOnlyList<string> tickerList)
                 gaps.Sort();
                 Say($"    clean gaps                       {I(gaps.Count)}, min {I(gaps[0])}, "
                     + $"max {I(gaps[^1])}, median {I(gaps[gaps.Count / 2])}");
-                Say($"    clean gaps above 65              {I(gaps.Count(g => g > 65))}");
+                Say($"    D-62 substitution, widest gap    {I(gaps[^1])}"
+                    + (gaps.Count < MinCleanGapsForSubstitution
+                        ? $"   TICKER EXCLUDED, under {I(MinCleanGapsForSubstitution)} clean gaps"
+                        : ""));
+                Say("      full history, not point in time. D-62 counts only gaps");
+                Say("      observable before the read date, which the ingestor applies");
+                Say("      at 1.4 and this instrument does not.");
                 var hist = new SortedDictionary<int, int>();
                 foreach (var g in gaps) hist[g] = hist.TryGetValue(g, out var c) ? c + 1 : 1;
                 Say("    full gap distribution, days=count:");

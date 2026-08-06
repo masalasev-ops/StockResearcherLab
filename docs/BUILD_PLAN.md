@@ -112,8 +112,12 @@ count, since that number is the basis of the freshness guard tolerance.
 **Done when:** all four questions have numeric answers recorded in `PROGRESS.md`,
 and any that came back badly has a corresponding entry in `DECISIONS.md`.
 
-**No API key enters the repository.** Environment variable or user secrets. Check
-the gitignore before the first commit.
+**No API key enters the repository.** ~~Environment variable or user secrets.~~
+[superseded, D-55] Secrets live in `appsettings.Secrets.json` beside the project that
+needs them, excluded by wildcard, with `appsettings.Secrets.example.json` as the
+committed template. D-55 replaced the older mechanism before this phase ran, and the
+phase was executed against the corrected instruction. Check the gitignore before the
+first commit.
 
 ---
 

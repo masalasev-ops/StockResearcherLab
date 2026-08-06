@@ -70,9 +70,15 @@ a deployment.
 | `s5.stabilisation_z_max` | 1.0 | D-13 | ScreenEngine | unverified |
 | `s5.sentiment_delta_min` | 0 | D-13 | ScreenEngine | unverified |
 | `s5.news_gate_min_articles` | 3 | D-14 | ScreenEngine | unverified |
+| `s5.no_digest_disqualifier_min_articles_90d` | 12 | D-60 | rubric prefix | unverified |
 
-The last one is the fail-open threshold. Below three articles in seven days the two
-news conditions are treated as satisfied rather than failed.
+`s5.news_gate_min_articles` is the fail-open threshold. Below three articles in seven
+days the two news conditions are treated as satisfied rather than failed.
+
+`s5.no_digest_disqualifier_min_articles_90d` is the same asymmetry applied at the
+rubric rather than the gate. The no-digest disqualifier only bites where the ticker
+carried at least twelve articles in ninety days, roughly one a week, because below
+that an absence of news is the ordinary state rather than a signal [D-60].
 
 ## Risk
 
@@ -156,7 +162,16 @@ value, but changing it to `vs_spy` is a defect and not a tuning option [INVARIAN
 | `monitor.distinct_tickers_60d_min` | 250 | — | ConcentrationMonitor | unverified |
 | `monitor.cache_hit_rate_min` | 0.80 | — | CostLedger | unverified |
 | `cost.annual_budget` | 100 | — | CostLedger | unverified |
-| `freshness.row_count_tolerance` | from probe | — | FreshnessGuard | unverified |
+| ~~`freshness.row_count_tolerance`~~ | ~~from probe~~ | — | FreshnessGuard | [removed, D-59] |
+| `freshness.row_count_abort_below` | 40000 | D-59 | FreshnessGuard | unverified |
+| `freshness.row_count_alert_below` | 45000 | D-59 | FreshnessGuard | unverified |
 
-The freshness tolerance has no default until phase P measures a real bulk end-of-day
-row count.
+~~The freshness tolerance has no default until phase P measures a real bulk end-of-day
+row count.~~ [removed, D-59]
+
+Phase P measured it: about 50,000 rows on a settled day, one settled day 11 percent
+below its neighbours, and part-settled sessions an order of magnitude lower. A single
+tolerance was replaced by a floor and an alert because the two populations are far
+enough apart that a wide floor separates them with no false positives, while a tight
+band would fire on the 11 percent day and teach the operator to ignore it. There is no
+upper bound: no failure mode produces too many rows.

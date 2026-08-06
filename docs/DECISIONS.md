@@ -406,6 +406,58 @@ and live is worth more than a fourth input.
 Institutional ownership survives and compensates partly: Holders entries are
 dated and carry change, so it is backfillable at quarterly grain.
 
+**D-59 The freshness guard aborts below 40,000 rows and alerts between
+40,000 and 45,000.** `ACTIVE`
+The probe measured about 50,000 rows on settled days with a 0.35 percent
+spread across three of them, one settled day 11 percent below its
+neighbours, and part-settled sessions at 3,544 and 9,072 rows.
+
+The two populations are an order of magnitude apart, so a wide floor
+separates them with no false positives while a tight tolerance would fire on
+the 11 percent day and teach you to ignore the alarm. The guard exists to
+catch a part-settled or truncated file, not to detect listing churn.
+
+The upper bound is deliberately absent. No failure mode produces too many
+rows, and a band would add a second way to abort for no gain.
+
+Supersedes the `from probe` placeholder in CONFIG_REFERENCE.md, which was
+the only key in that document with no decision behind it.
+
+**D-60 The mean reversion no-digest disqualifier applies only where coverage
+existed to have been informative.** `ACTIVE`
+The rubric disqualified a candidate when no digest was available and the
+decline exceeded 35 percent. The probe found small caps carrying 2 to 44
+articles in 90 days, so having no material news is the ordinary state rather
+than a signal, and the clause as written would systematically reject the
+names the screen's three small slots exist to fill.
+
+The disqualifier now requires the ticker's trailing 90-day article count to
+be at least 12, roughly one a week. Above that, silence after a large
+decline is informative and disqualifies. Below it, absence carries no
+information and the candidate is judged on its other evidence.
+
+This is the same asymmetry D-14 accepted at the screen gate, applied at the
+rubric. Thinly covered names get a weaker test, deliberately, because the
+alternative is not testing them at all.
+
+**D-61 Flow is ingested at each source's natural grain and consumed as
+derived daily metrics.** `ACTIVE`
+flow_daily declared a ticker-by-week grain when its remaining fields have
+different natural ones. Insider transactions are per-event and dated;
+institutional ownership is quarterly and dated. Neither is weekly and no
+single grain fits both.
+
+Two source tables at natural grain, insider_transaction and
+institutional_holding, with the compute layer deriving insider_net_90d_usd,
+distinct_buyer_count and inst_ownership_change into flow_daily at
+ticker-by-day.
+
+This mirrors what the design already does everywhere else, where price_daily
+is ingested and indicator_daily is derived from it. Ingest grain follows the
+source; consumption grain follows the screen.
+
+Supersedes flow_daily's ticker-by-week declaration in SCHEMA.md.
+
 ---
 
 ## Open

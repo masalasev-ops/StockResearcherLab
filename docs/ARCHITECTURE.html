@@ -182,7 +182,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 <tr><td class="mono"><b>C02</b></td><td>PriceIngestor<br><span class="muted" style="font-size:12.5px">One bulk call, entire US market</span></td><td>Daily 17:30</td><td>Bulk EOD endpoint</td><td class="mono">price_daily</td></tr>
 <tr><td class="mono"><b>C03</b></td><td>FundamentalsIngestor<br><span class="muted" style="font-size:12.5px">Rolling rotation, earnings jump the queue. Keyed on filing date, never period end</span></td><td>Daily 17:45</td><td>Fundamentals endpoint, <code>events</code></td><td class="mono">fundamental_snapshot</td></tr>
 <tr><td class="mono"><b>C04</b></td><td>SentimentIngestor <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Whole universe, no pre-selection. Feeds the sentiment screen's ranking</span></td><td>Daily 18:00</td><td>Sentiment endpoint</td><td class="mono">sentiment_daily</td></tr>
-<tr><td class="mono"><b>C05</b></td><td>FlowIngestor<br><span class="muted" style="font-size:12.5px">Short interest keyed on publication date, not settlement date</span></td><td>Weekly</td><td>Insider, short interest, ownership</td><td class="mono">flow_daily</td></tr>
+<tr><td class="mono"><b>C05</b></td><td>FlowIngestor<br><span class="muted" style="font-size:12.5px"><s>Short interest keyed on publication date, not settlement date</s> <span class="tag">D-58</span></span></td><td>Weekly</td><td>Insider, <s>short interest,</s> <span class="tag">D-58</span> ownership</td><td class="mono">insider_transaction, institutional_holding <s>flow_daily</s> <span class="tag">D-61</span></td></tr>
 <tr><td class="mono"><b>C06</b></td><td>EventsIngestor</td><td>Daily 17:45</td><td>Calendar, splits, dividends</td><td class="mono">events</td></tr>
 <tr><td class="mono"><b>C07</b></td><td>FreshnessGuard<br><span class="muted" style="font-size:12.5px">Aborts the run rather than trading stale bars</span></td><td>Daily 17:40</td><td><code>price_daily</code>, <code>run_log</code></td><td class="mono">run_log</td></tr>
 <tr><td class="mono"><b>C29</b></td><td>HeadlineIngestor <span class="tag new">NEW</span><br><span class="muted" style="font-size:12.5px">Headline strings for the ~28 candidates only. Runs inside the select layer because candidates do not exist until then</span></td><td>Daily 18:32</td><td>News endpoint, <code>candidate_set</code></td><td class="mono">headline</td></tr>
@@ -280,7 +280,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
     <div class="node n-select" style="min-width:176px;max-width:186px"><span class="id">S1</span><div class="nm">Quality at a fair price</div><div class="rl">FCF yield, EV/EBIT against own 5y, ROIC and margin change</div></div>
     <div class="node n-select" style="min-width:176px;max-width:186px"><span class="id">S2</span><div class="nm">Trend</div><div class="rl">Change in relative strength, base breakout, ADX</div></div>
     <div class="node n-select" style="min-width:176px;max-width:186px"><span class="id">S3</span><div class="nm">Sentiment inflection</div><div class="rl">Article count z against own 90-day baseline, 7d vs 30d delta</div></div>
-    <div class="node n-select" style="min-width:176px;max-width:186px"><span class="id">S4</span><div class="nm">Flow</div><div class="rl">Insider net buying, distinct buyers, institutional ownership change</div></div>
+    <div class="node n-select" style="min-width:176px;max-width:186px"><span class="id">S4</span><div class="nm">Flow</div><div class="rl">Insider net buying, distinct buyers, <s>short interest change</s> <span class="tag">D-58</span>, institutional ownership change</div></div>
     <div class="node n-select" style="min-width:176px;max-width:186px"><span class="id">S5</span><div class="nm">Mean reversion</div><div class="rl">Quality names beaten down, now with a stabilisation gate</div></div>
   </div>
   <div class="arrow">↓</div>
@@ -296,7 +296,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 <tr><td class="mono"><b>S1</b></td><td>Quality at a fair price</td><td class="wrapmono">fcf_yield · ev_ebit_vs_own_5y · roic_4q_change · gross_margin_4q_change · net_debt_ebitda_inv · accruals_inv · share_count_change_inv</td><td>Regime dependent</td><td>8</td></tr>
 <tr><td class="mono"><b>S2</b></td><td>Trend</td><td class="wrapmono">rs_21d_63d_change · dist_200dma · adx14 · ma50_200_slope · dist_52w_high_20d_change · base_breakout_flag</td><td>Tilts large</td><td>8</td></tr>
 <tr><td class="mono"><b>S3</b></td><td>Sentiment inflection</td><td class="wrapmono">article_count_z_own_90d · sentiment_delta_7v30 · sentiment_7d_level</td><td>Tilts small</td><td>0 to 8, median 5</td></tr>
-<tr><td class="mono"><b>S4</b></td><td>Flow</td><td class="wrapmono">insider_net_90d_usd · distinct_buyer_count · inst_ownership_change</td><td>Tilts small and mid</td><td>2 to 8, median 5</td></tr>
+<tr><td class="mono"><b>S4</b></td><td>Flow</td><td class="wrapmono">insider_net_90d_usd · distinct_buyer_count · <s>short_interest_change</s> <span class="tag">D-58</span> · inst_ownership_change</td><td>Tilts small and mid</td><td>2 to 8, median 5</td></tr>
 <tr><td class="mono"><b>S5</b></td><td>Mean reversion</td><td class="wrapmono">gate: S1 top quintile AND technical bottom quintile AND stabilising · rank: distance below 200dma</td><td>Regime dependent</td><td>0 to 5, median 3</td></tr>
 </tbody>
 </table>
@@ -396,7 +396,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 <tr><td class="mono">Technical</td><td class="wrapmono">dist_200dma · dist_52w_high · rs_change_21d · rs_change_63d · atr_pct · adx14 · <b>rs_change_vs_sector</b> · <b>volume_vs_50d_avg</b></td></tr>
 <tr><td class="mono">Balance sheet</td><td class="wrapmono"><b>cash_on_hand · quarterly_burn_rate</b> &nbsp;<span class="muted">(small and mid buckets only)</span></td></tr>
 <tr><td class="mono">Sentiment</td><td class="wrapmono">article_count_z_own_90d · sentiment_delta_7v30 &nbsp;<span class="muted">(both nullable)</span></td></tr>
-<tr><td class="mono">Flow</td><td class="wrapmono">insider_net_90d_usd · short_interest_pct_float · short_interest_change</td></tr>
+<tr><td class="mono">Flow</td><td class="wrapmono">insider_net_90d_usd · <s>short_interest_pct_float · short_interest_change</s> <span class="tag">D-58</span> · inst_ownership_change</td></tr>
 <tr><td class="mono">News digest</td><td class="wrapmono"><b>news_digest_150t</b> &nbsp;<span class="muted">(local model, stored, nullable)</span></td></tr>
 <tr><td class="mono">Provenance</td><td class="wrapmono">screens_surfacing · score_within_each</td></tr>
 </tbody>
@@ -737,7 +737,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 <tbody>
 <tr><td>Lookahead on fundamentals</td><td>Keying on period end rather than filing date hands you quarterly numbers five weeks before they were published, applied to every fundamental in the set. S1 and S5 look excellent in backfill and ordinary live.</td><td class="mono">Every fundamental read keys on filing_date</td></tr>
 <tr><td>Survivorship</td><td>Building the historical universe from symbols listed today deletes everything that went bankrupt, delisted or was acquired, which is disproportionately the losers.</td><td class="mono">Reconstruct membership per date from the full symbol list including delisted tickers</td></tr>
-<tr><td>Short interest timing</td><td>Settlement date precedes publication by days, so using it reads data before it existed.</td><td class="mono">Key on publication date</td></tr>
+<tr><td><s>Short interest timing</s> <span class="tag">D-58</span></td><td><s>Settlement date precedes publication by days, so using it reads data before it existed.</s></td><td class="mono"><s>Key on publication date</s></td></tr>
 </tbody>
 </table>
 <p class="muted" style="font-size:13.5px">The backfill produces screen history, populated attribution, and a free sanity check on whether the screens surface anything sensible before a dollar is spent on the model. What it is not is a backtest of the researcher, since judgment cannot be backfilled without paying for it and running the model over a period it has already read about would be contaminated anyway.</p>

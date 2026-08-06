@@ -193,8 +193,10 @@ to this company, or an earnings miss on an issue management has addressed.
 **Disqualifying regardless of everything else.**
 - The digest names an unresolved or structural cause. Accounting investigation, going
   concern language, secular demand decline, management exodus, regulatory action.
-- No digest available while the decline exceeds 35 percent. At that magnitude the
-  absence of information is itself the reason to pass.
+- No digest available while the decline exceeds 35 percent, on a name that carried at
+  least twelve articles in the last ninety days. Where a name is covered that heavily,
+  silence after a decline that large is itself the reason to pass. Below twelve,
+  absence carries no information and is not held against the candidate.
 - The most recent earnings surprise was a miss and the next report is within 10 days.
   You are buying directly into the event that caused the decline.
 

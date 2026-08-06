@@ -121,6 +121,16 @@ and a build that quietly resolves a contradiction leaves no trace that one exist
 When something is merely wrong, missing or awkward without contradicting an authored
 document, note it and continue. Section 15 covers what to raise and what to file.
 
+**A build session never adds a measurement to its own scope.** If work appears to need
+one before it can proceed, that is a finding to report and a human to decide on, not a
+task to take on. Phase P is the only phase whose deliverable is measurement, and it
+exists because nothing else did yet.
+
+A question deferred to a later phase is answered by reading what that phase produced,
+not by measuring anything extra. The coverage of a table is a query against it once
+populated. The base rate of a field is a query against it once ingested. Both are read
+at sign-off by whoever writes the decision.
+
 ### Finishing
 
 The definition of done in `BUILD_PLAN.md` is a checklist rather than a description.
@@ -464,8 +474,12 @@ security. Doubt about one quoted price excludes that quote.
   narrative.
 - **Never renumber a decision.** A superseded entry keeps its number and gains a status
   pointing at its replacement.
-- **Supersede visibly.** A corrected figure is struck and the correction stated, not
-  quietly overwritten.
+- **Supersede visibly, never silently.** A fact removed from an authored document is
+  struck and pointed at whatever replaced it, not deleted. A superseded decision keeps
+  its number and gains a status naming its replacement. A corrected figure is struck
+  with the correction stated. The runtime prompts in `prompts/` are the sole
+  exception: the model reads them at execution time and cannot tell struck text from
+  live, so removals there are clean deletions and the record lives in `DECISIONS.md`.
 
 ### Who writes what
 

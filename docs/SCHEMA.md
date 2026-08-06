@@ -66,23 +66,44 @@ Grain: candidate by day. **Writer: HeadlineIngestor.** Small.
 Only for names that reached the candidate set, since headlines exist for the dossier
 and only candidates reach the dossier [D-23].
 
+### insider_transaction
+Grain: ticker by filing by transaction, the source's own. **Writer: FlowIngestor.**
+Small.
+
+`ticker`, `filed_at`, `transaction_date`, `reporting_owner_name`,
+`transaction_code`, `shares_amount`, `price_per_share`, `total_value`,
+`acquired_or_disposed`.
+
+`transaction_code` is not optional. The S4 rubric disqualifies option exercises and
+scheduled plan activity, so a count that cannot separate an open-market purchase from
+an award is not the count the screen needs [D-61].
+
+### institutional_holding
+Grain: ticker by holder by report date, the source's own. **Writer: FlowIngestor.**
+Small.
+
+`ticker`, `report_date`, `holder_name`, `shares`, `change`, `change_pct`.
+
+Quarterly, because that is the grain the filings arrive at. `report_date` is what
+makes this backfillable, and it is the field short interest turned out not to have.
+
 ### flow_daily
-Grain: ticker by week. **Writer: FlowIngestor.** ~52 MB.
+Grain: ticker by day, ~~ticker by week~~ [superseded, D-61]. **Writer: FlowEngine, a
+compute stage, not the ingest.** ~52 MB.
 
-`ticker`, `week_end`, `publication_date`, `insider_net_usd_90d`,
-`distinct_buyer_count`, `inst_ownership_change`.
+`ticker`, `date`, `insider_net_usd_90d`, `distinct_buyer_count`,
+`inst_ownership_change`,
+~~`week_end`, `publication_date`, `short_interest_pct_float`,
+`short_interest_change`~~ [removed, D-58 and D-61].
 
-Short interest is gone. This provider has no series and no as-of date for it, so it
-is not backfillable and the screen ranks on the three fields above [D-58].
+Derived rather than ingested. The two source tables above land at their own grain and
+this table is computed from them, exactly as `indicator_daily` is computed from
+`price_daily`. Ingest grain follows the source; consumption grain follows the screen
+[D-61].
 
-**The declared grain is now unsettled and phase 1 must settle it.** The remaining
-fields have different natural grains: insider activity is per transaction and
-arrives whenever a filing lands, while institutional ownership is quarterly and
-dated to the quarter end. Neither is weekly. A ticker-by-week row therefore carries
-one field that changes several times a week and another that changes four times a
-year, and `publication_date` no longer has the field it was named for. Flagged here
-rather than resolved, because the choice belongs with the phase that builds the
-ingest.
+Short interest is gone: this provider has no series and no as-of date for it, so it is
+not backfillable and the screen ranks on the three fields above [D-58].
+`publication_date` went with it, having been named for the field it keyed.
 
 ### events
 Grain: ticker by event. **Writer: EventsIngestor.** Small.

@@ -685,7 +685,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 
 <div class="note"><b>Only the research portfolios are candidates for retirement on performance.</b> They are competitors, judging the same candidates by different means, so the one that loses over a long enough run has answered its question and can go. Screens and Random are controls and must never be cut for underperforming, because their underperformance is the measurement. If Random were to beat Research after a year, retiring it would be deleting the most important result the system had produced.</div>
 
-<div class="note"><b>Abstention is measured from attribution, not from a portfolio.</b> Exposure matching means the primary research portfolio's decision to stand down is never tested by Screens or Random, and it does not need to be. Every candidate on a full-pass night still has an attribution row with forward returns, so you can ask directly whether the nights A stood down were worth standing down.</div>
+<div class="note"><b>Abstention is measured from attribution, not from a portfolio.</b> Exposure matching means the primary research portfolio's decision to stand down is never tested by Screens or Random, and it does not need to be. Every candidate on a full-pass night still has an attribution row with forward returns, so you can ask directly whether the nights it stood down were worth standing down.</div>
 </section>
 
 <section>
@@ -929,7 +929,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 <tr><td>The ranker</td><td>A single composite score ranked the universe and took the top twelve, which meant one metric set decided everything and the same names won nightly.</td><td>Five independent screens with their own floors, deduplicated</td></tr>
 <tr><td>The news ingest</td><td>Sentiment was pulled only for the top 400 by prior screen score, so a thinly covered name having the exact coverage spike the sentiment screen exists to catch had no data and could never be found.</td><td>Whole-universe sentiment, headlines for candidates only</td></tr>
 <tr><td>The benchmark</td><td>Forward returns measured against SPY made every small cap look bad in a large-led market, so the tuner would have cut the two screens that tilt small.</td><td>Peer-relative returns for the learning loops</td></tr>
-<tr><td>The tie-break</td><td>Breaking conviction ties by screen rank would have reinstated a cross-screen ranker at the final step, and favoured large caps every night.</td><td>Neutral date-seeded coin flip, plus a portfolio bucket cap</td></tr>
+<tr><td>The tie-break</td><td>Breaking probability ties by screen rank would have reinstated a cross-screen ranker at the final step, and favoured large caps every night.</td><td>Neutral date-seeded coin flip, plus a portfolio bucket cap</td></tr>
 </tbody>
 </table>
 <p class="muted" style="font-size:13.5px">C28 exists because these were caught by argument rather than by measurement. It counts distinct tickers over sixty days and the megacap share of recent candidates, so the next one is found by the system rather than by noticing.</p>

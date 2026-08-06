@@ -41,7 +41,8 @@ Run in order. A phase is not done until all five have happened.
    checklist, not a description.
 2. **Conformance pass**, in a session that did not build the phase. Reads the
    architecture sections implemented and the invariants named for that phase. Writes a
-   finding to `PROGRESS.md`.
+   finding to `PROGRESS.md`. It is not a code review. It answers one question: does
+   what was built match what was authored. Its checks are below.
 3. **Reconciliation.** Compare the spent prompt against this plan's detail for the
    phase. They will diverge, because a prompt is written before the work and the plan is
    what was intended. Record the divergence in `PROGRESS.md` under that phase, in one of
@@ -59,10 +60,70 @@ Run in order. A phase is not done until all five have happened.
    changed in the documents.
 
 **The prompt issued for each phase is archived verbatim in `prompts/spent/` as
-`phase-<n>-<slug>.md` and is never edited afterwards.** This plan says what a phase
-should do; the archive says what was actually asked of it. Where the two diverge,
-the divergence is the finding, and it goes in `PROGRESS.md` rather than being
-tidied away in either file.
+`phase-<n>-<slug>.md` and is corrected afterwards only to match the text actually
+issued [D-63].** This plan says what a phase should do; the archive says what was
+actually asked of it. Where the two diverge, the divergence is the finding, and it
+goes in `PROGRESS.md` rather than being tidied away in either file.
+
+### The conformance pass, step 2 in full
+
+Written here because it had existed only in chat, so every run waited on someone
+pasting it and the checks drifted between passes.
+
+**Who may run it.** A session that has made any commit in this repository is
+disqualified, including a commit correcting a finding of an earlier pass. Checking
+your own correction is checking your own build one step removed.
+
+**It derives its own commit sets from the log** rather than adopting a range it was
+handed. Every pass prefixes its commits with its letter, so the sets are recoverable
+from the messages alone. A boundary taken on trust is how a pass examines the wrong
+commits and reports a clean result that means nothing. `A..B` range notation excludes
+`A`, which silently drops the opening commit of every set.
+
+**Eight checks. Each produces a written finding, including the ones that pass.**
+
+1. **Definition of done, line by line.** For each line, did it produce an observable
+   result, and is that result recorded in the repository. Name every line that is
+   asserted rather than evidenced. A line that is true and unrecorded is still
+   asserted.
+2. **The recorded numbers against what produced them.** Follow every value from the
+   call, query or run that produced it to the row that records it, reading the code
+   and the committed evidence rather than any summary of them. A row filled from a
+   plausible number rather than from a measurement is the failure this check exists
+   for, and it is the most important one here.
+3. **Authorship boundaries** [`CLAUDE.md` §13]. The build session writes `PROGRESS.md`
+   and never `DECISIONS.md`, `BUILD_PLAN.md`, `ARCHITECTURE.html`, `SCHEMA.md`,
+   `VALIDITY.md` or `CLAUDE.md`. Later passes that applied authored decisions under
+   instruction are outside the check and are not reported as violations. Also every
+   commit that wrote to `prompts/spent/`, what it changed, and whether the corpus
+   authorises that kind of edit, distinguishing a header change from a body change
+   [D-63].
+4. **Secrets** [`CLAUDE.md` §10]. No token-shaped string in any blob ever committed,
+   reachable or not. Both secrets files ignored rather than untracked. State the
+   method used, not only the result.
+5. **The reconciliation record.** Is every divergence between the spent prompt and
+   this plan's detail recorded, and is each classified as the prompt asking for less,
+   for more, or for something different. A rewritten reconciliation is checked against
+   the one it superseded, because the failure seen here is a correction narrower than
+   the record it replaced.
+6. **Measured against inferred.** Anything recorded as measured that is actually
+   inferred, and anything recorded as a limitation of the provider or the system that
+   is actually a limitation of the instrument [`CLAUDE.md` §7].
+7. **Consistency with superseded decisions.** Anywhere the code, its comments, its
+   output strings or its committed evidence still asserts what a later decision
+   replaced. Say of each whether it is a defect or an accurate record of what a past
+   run measured against. An executable reference to a superseded rule is a defect; a
+   transcript written while that rule was live is a record and is never edited.
+8. **Cross-reference integrity across the corpus.** Every reference from one document
+   to a numbered section of another resolves to the section it names. Match on the
+   section token alone so backticks, brackets, markdown links and abbreviations are
+   all caught, and establish the target by reading each hit rather than by matching a
+   filename first. State the pattern so the coverage is checkable. The pattern in
+   current use is recorded in `PROGRESS.md` under Corpus consistency passes.
+
+**The pass states divergences and does not correct them.** A conformance pass that
+fixes what it finds destroys the evidence that it was found. Corrections are a
+separate pass with its own numbered checkpoints, and it does not run the checks.
 
 ---
 

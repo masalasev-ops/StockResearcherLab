@@ -302,7 +302,7 @@ whole date, not loops issuing a query per ticker. That is what makes them
 date-partitioned and correct, and the speed is a side effect.
 
 Opening a connection inside a loop over tickers usually means the partition key is
-wrong. See section 3.
+wrong. See section 5.
 
 ### Fail closed
 

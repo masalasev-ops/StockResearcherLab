@@ -724,6 +724,24 @@ root, `prompts/` is its own directory, and `tools/` carries section references i
 code comments. `ARCHITECTURE.html` numbers its sections in `<span class="secno">`,
 so references into it resolve by reading rather than by counting headings.
 
+### 2026-08-06, corrective pass K, cross-references
+
+One reference did not resolve. Present in the baseline commit `b1a0095`, untouched
+by phase P, and corrected in place [K.3].
+
+| # | Defect | Correction |
+|---|---|---|
+| 1 | `CLAUDE.md` §6 closed the set-based rule with "See section 3" for the partition-key rule | Corrected to §5, The stage pattern, which is where `Parallelism has two partition keys and they are not interchangeable` is stated. §3 is Workflow |
+
+The H.6 sweep ran this exact pattern and matched this line, so the miss was in the
+reading rather than in the pattern. Worth knowing about a sweep whose whole argument
+is that the target is established by reading every hit: the pattern only guarantees
+the hit is seen, not that it is resolved.
+
+The full sweep at K.3 returned 74 hits across 12 files. Every other section reference
+resolves, and every `D-<n>` reference from D-1 to D-63 resolves. The only apparent
+miss, D-250, is arithmetic in the two-pass backfill note.
+
 ### 2026-08-06, corrective pass H, cross-references
 
 Three references did not resolve. All three were present in the baseline commit

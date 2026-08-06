@@ -25,9 +25,9 @@ nobody wins on market exposure. SPY is a reference line, not a portfolio.
 
 ## Documents
 
-`CHANGELOG.md` carries the version history and `PROGRESS.md` carries the
-present build state and the current corpus version. This file states neither,
-which is why no version number appears above.
+`PROGRESS.md` carries the present build state. `CHANGELOG.md` is a closed record
+of corpus versioning, which stopped at D-67. This file states no version, and
+there is no longer one to state.
 
 Read these three, in order, to understand the lab:
 
@@ -55,7 +55,7 @@ These track state and are appended to, never rewritten:
 | File | What it is |
 |---|---|
 | `docs/PROGRESS.md` | What has actually been built |
-| `docs/CHANGELOG.md` | Corpus versions |
+| `docs/CHANGELOG.md` | Corpus versions, a closed record since D-67 |
 
 The architecture and the invariants exist to constrain the code. If the code
 disagrees with them, the code is wrong.

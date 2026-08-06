@@ -6,8 +6,6 @@ What has actually been built, as opposed to what is designed.
 measured timings and row counts are observations and belong to whoever ran them.
 Correct them directly. Do not record intentions here.
 
-Corpus version: 0.3.0 (2026-08-06, phase 0 rails)
-
 ---
 
 ## Phase status

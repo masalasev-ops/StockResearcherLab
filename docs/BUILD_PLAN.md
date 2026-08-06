@@ -150,7 +150,7 @@ component.
 | 0.5 | The `Api` must not reference `Pipeline` test |
 | 0.6 | Bare run viewer: stages, durations, row counts. Not the run health screen |
 | 0.7 | One no-op stage end to end, proving the rails |
-| 0.8 | Open `FIXTURES.md` and `CHANGELOG.md`, first corpus version bump |
+| 0.8 | Open `FIXTURES.md` and `CHANGELOG.md`, ~~first corpus version bump~~ [retired, D-67] |
 
 **Done when:** a no-op stage runs, logs, and appears in the viewer; the
 write-ownership test reads the registry and passes; migrations run clean from empty.

@@ -67,7 +67,9 @@ Roughly 150 tokens from the digest chain, with the provider recorded on the row 
 not sent to the model. The model is not told which summariser wrote it, because that
 should not influence how it reads it.
 
-Absent only if the run reached here without a digest, which INVARIANT 15 prevents.
+Absent when the name carried no articles in the window. For a thinly covered small
+cap that is the ordinary state rather than a fault, and the S5 rubric holds it
+against a candidate only above twelve articles in ninety days [D-60].
 
 ## Screen blocks
 

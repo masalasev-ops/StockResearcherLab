@@ -40,8 +40,20 @@ selection comparison.
 **D-4 Universe criteria are absolute, not relative.** `ACTIVE`
 Common stock and ADRs, excluding funds, trusts and SPACs. Market cap at or above
 $300M. Price at or above $5. Twenty-day median dollar volume at or above $2M.
-At least 250 trading days of history. The dollar volume floor was raised from $1M
-because the participation cap would otherwise reject a typical $8,300 position.
+At least 250 trading days of history. At least four clean filing-date gaps observed
+[added, D-62]. The dollar volume floor was raised from $1M because the participation
+cap would otherwise reject a typical $8,300 position.
+
+The filing-gap criterion arrived with D-62 rather than at scoping, and the list above
+was complete only until then. It belongs here rather than in the fundamentals path
+because it is an absolute filter, and INVARIANT 1 puts absolute filters in the
+universe definition and nowhere else. UniverseBuilder computes the count for the date
+it is building, from rows in `fundamental_snapshot` whose unknown reason is `none` and
+whose effective filing date is at or before that date, and applies the exclusion
+alongside market cap, price and volume. It is computed rather than stored because a
+ticker has more clean gaps now than it had three years ago, and a stored total read
+during backfill would admit names a live system on that date would have excluded
+[M.1].
 
 **D-5 Absolute filters live only in the universe definition.** `ACTIVE`
 No component downstream narrows by rank, score or count. Raised after the news
@@ -504,6 +516,23 @@ exist, being filing dates before their own period end, which is impossible
 in fact and so is unknown rather than early. And equality remains what it
 always was.
 
+**Stated limitation: `filing_date_effective` is itself as-of, and is accepted
+that way** [M.2]. It is computed at ingest from the ticker's widest clean gap
+known at that moment. A backfill reading a row dated three years ago therefore
+uses a window derived partly from filing behaviour that had not happened yet.
+
+The direction is what makes this acceptable. A widest gap only grows, so a
+window computed later is at least as wide as the one that would have been
+computed then, and the affected rows become readable later than they truly
+would have been rather than earlier. That is the conservative direction, and
+this whole decision exists to prevent the other one. Recomputing the window at
+read time would remove the effect and costs more than the distortion, on a
+field every fundamental read filters on.
+
+The universe exclusion is not affected: its count is computed against the date
+being built rather than stored [M.1]. This limitation is confined to the width
+of the substituted window on rows that have one.
+
 **D-63 A spent prompt's body may be corrected to match the text actually
 issued, and may never be changed for any other reason.** `ACTIVE`
 Commit 2901ab2 rewrote four passages of an archived prompt four minutes
@@ -535,5 +564,8 @@ The rotation in D-27 will produce a paired sample. If digest source proves not t
 matter, the chain can be simplified. Do not act before a quarter of data exists.
 
 **D-54 Whether both research portfolios are kept.** `OPEN`
-Decide from the A against D comparison after at least a year, and from the
-validator rejection rate per model, which is available much sooner.
+Decide from the ~~A against D~~ [superseded, D-36] `Research: Opus 5` against
+`Research: V4 Pro` comparison after at least a year, and from the validator
+rejection rate per model, which is available much sooner. The letters were the
+naming in use before D-36 set the four portfolio names, and they survived the
+rename here [M.3].

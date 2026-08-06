@@ -161,6 +161,142 @@ Summary index. The detail lives in the sign-off block above.
 
 | Phase | Date | Invariants checked | Finding |
 |---|---|---|---|
+| P | 2026-08-06 | None named for phase P. `CLAUDE.md` §7 and §10, which the prompt scoped in | Four questions carry numeric answers. Four figures inside those answers trace to no probe call. Reconciliation compares the prompt against the design rather than against plan detail and omits three divergences. Authorship clean, no secret in any blob. Three cross-reference defects, all older than the phase |
+
+### Phase P conformance finding, 2026-08-06, read at HEAD `2802e75`
+
+A session with no involvement in the build and none in the C, E or G document
+passes. Divergences are stated and not corrected.
+
+**1 Definition of done.** The plan states two lines plus a secrets clause. *All
+four questions have numeric answers recorded in `PROGRESS.md`*: met at `8a48990`,
+six rows filled, six lines changed and nothing else in the file touched. *Any that
+came back badly has a corresponding entry in `DECISIONS.md`*: met at HEAD by D-57
+to D-61, none written by the build, which is correct under section 13 and means
+the line was closed by a later authored pass rather than by the phase. *No API key
+enters the repository*: verified independently under check 4. The prompt's
+per-checkpoint lines are a different matter. P.2, P.3 and P.4 each define done as
+something the probe prints, and the printed artifact is the transcript under
+`probe-output/`, which `.gitignore` excludes by `**/probe-output/`. Three
+transcripts exist on the build machine and were read for this pass; nothing in the
+repository evidences them. P.1's *solution builds* is likewise asserted rather than
+recorded. No line is false, but four are evidenced only outside the repository.
+
+**2 Probe findings against the probe.** Every value in the six rows was traced
+against `tools/probe/Program.cs`, every earlier committed version of it, and the
+three run transcripts. The sentiment and short interest rows trace completely.
+Four figures do not correspond to anything the probe measures.
+
+  `IPO 2024-05-22`, and the answer clause *the sixth listed in 2024*. No version of
+  the probe requests a listing or IPO date. What it measured is KBDC's earliest
+  article, 2025-06-13.
+
+  *its newest market-wide transactionDate was 2026-04-24*. Every call to
+  `/insider-transactions` passes `code={ticker}`, so no market-wide call exists,
+  and no version prints `transactionDate`. Not in any transcript. Commit `52b64ba`
+  records a related but different observation: NVDA over two years, newest
+  `transactionDate` 2026-03-25.
+
+  *RJET.US ... 35 of 73 periods and ... 11 of the newest 12*. `Quarters()` takes
+  the newest eight in every committed version. The surviving RJET transcript, from
+  the 20:24 run whose sample included that name, shows seven of eight equal with
+  zero nulls. 73 periods cannot come from this tool. D-57 carries the same figure
+  as its justification.
+
+  *3,544 at 19:24 UTC*. The value is real and appears twice in
+  `probe-20260805-202454.txt`, whose start time is 20:24:54 UTC and whose bulk
+  section ran later still. The three transcripts start at 19:10, 20:24 and 20:42
+  UTC. No run at 19:24 exists.
+
+Separately, the control's *1,000 in 90 days* is the `limit=1000` request cap rather
+than a count, since the 90-day news call does not page. The cell marks the
+five-year total as a floor and does not mark this one.
+
+**3 Authorship boundaries.** The set is cleanly identifiable as
+`git rev-list b1a0095..phase-p` less the three C commits: `2901ab2`, `fd64f51`,
+`92ff200`, `7c04769`, `2f754ce`, `52b64ba`, `8a48990`, `1d05300`, `189e3d9`. Across
+all nine the files written are `Directory.Build.props`, `Directory.Packages.props`,
+`StockResearcherLab.slnx`, `docs/PROGRESS.md`,
+`prompts/spent/phase-P-data-probe.md`, `tools/probe/Program.cs` and
+`tools/probe/probe.csproj`. None of the six forbidden documents, and `.gitignore`
+untouched as P.1 required. `prompts/spent/` was written twice. `189e3d9` is header
+only, `ISSUED` to `SPENT` with `Produced` filled, which `prompts/README.md`
+authorises where it names the header fields and the three status values. `2901ab2`
+changed the header and the body: a `Corrected:` line added, and four body changes,
+"section 1 and section 5" to "Sections 7 and 10", "per CLAUDE.md section 1" to
+"section 7", a new commit-per-checkpoint paragraph and a new AFTER block. It was
+made before P.1 while the header read `ISSUED`. The corpus authorises amending an
+unrun prompt when a decision changes it; this edit is not decision-driven, it
+asserts that the archive did not match the text actually issued. No corpus rule
+covers that case, and no evidence of the issued text exists outside the build
+session's own account. Disclosed in the header and in the reconciliation block.
+
+**4 Secrets.** Method: enumerated every object in the object database with
+`git cat-file --batch-all-objects --batch-check`, 60 blobs, which reaches
+unreachable objects as well as reachable ones. `git fsck` reports one dangling
+blob and one dangling commit; both were inspected, the blob is a `.claude`
+permissions file and the commit is a rewritten form of the baseline. Every blob was
+scanned for `api_token=` followed by anything but a placeholder, the provider's
+hex-dot-digits token shape, `sk-` keys, and any run of 32 or more token characters.
+The only hits are `api_token={Uri.EscapeDataString(token)}` in four versions of
+`Program.cs`, comment rules of dashes, and one config key name. No literal
+anywhere. `git status --ignored` shows both `appsettings.Secrets.json` and
+`tools/probe/appsettings.Secrets.json` as ignored rather than untracked, and
+`git check-ignore -v` attributes both to `.gitignore:5`. The only tracked
+secrets-shaped path is `appsettings.Secrets.example.json`, which is what D-55
+permits. Redaction is a single helper inside the request function and the
+transcripts confirm every printed URL carries `api_token=***`.
+
+**5 Reconciliation.** The block is headed *spent prompt against what the design
+needs*. Step 3 and `CLAUDE.md` §3 ask for the prompt against `BUILD_PLAN.md`'s
+detail, so the comparand differs and divergences against the plan are not reached.
+Its own sentence introduces "Eight items where the prompt asked for less than the
+design needs" and then labels four of the eight `more`. Four carry `defect`, which
+is not one of the three prescribed forms, though it reads as "asked for less".
+Three divergences against plan detail are not recorded: the prompt bounded P.4.4 to
+the last eight quarters where the plan says "per quarter", which is the bound that
+put the RJET figure out of the probe's reach and is *less*; the prompt required
+per-year news counts, distinct insider counts and 180-day short interest
+observations that the plan does not ask for, which is *more*; and the plan's
+definition of done requires a `DECISIONS.md` entry for anything that came back
+badly while the prompt instructs "Do not open DECISIONS.md", which is *different*
+and was resolved by the later passes rather than recorded. No divergence of the
+*different* class appears at all. The archive correction is recorded with its
+cause, which is the right treatment of it.
+
+**6 Measured against inferred.** The four figures in check 2 sit in the Measured
+column and are not probe measurements. The short interest row is the model of how
+to do this correctly: it names the call, `historical=1` with from and to returning
+a nine-member object, so a reader can see what was tried and judge whether the
+limitation is the provider's. The insider row's answer that the documented endpoint
+is unusable is a fair reading, but the probe alone establishes only that it
+returned zero rows for all seven names over ninety days; the staleness claim rests
+on the unevidenced figure. Two further points of uncertainty are not recorded:
+2026-08-04 was read three times through the evening at 44,665, 44,686 and 44,708
+rows, only the last is recorded, and nothing notes the day was still accreting a
+day later, though the probe's own 90 percent rule and the recorded spread both
+exclude it from the settled set; and the P.2 scaffold run at 19:10 UTC took 403 on
+fundamentals, form4, insider transactions and the screener while the 20:24 run took
+none, so what the subscription returned changed during the session and no record
+says so.
+
+**7 Cross-references.** Pattern:
+`grep -rnoiE "(§[[:space:]]*[0-9]+([.][0-9]+)?|sections?[[:space:]]+[0-9]+([.][0-9]+)?)" --include=*.md --include=*.html --include=*.cs .`
+It anchors on the section token alone and requires nothing before it, so backticks,
+brackets, markdown link syntax and abbreviations such as "ARCH section 14" are all
+caught and the target file is established by reading each hit rather than by
+matching a filename first. 48 hits across 12 files, including `prompts/README.md`,
+which sits outside `docs/`. `ARCHITECTURE.html` numbers its sections in
+`<span class="secno">`, so references into it are checkable. Three do not resolve,
+all present in the baseline commit `b1a0095` and none touched by phase P.
+`docs/BUILD_PLAN.md:242` cites `CLAUDE.md` §8 for the rule against tuning screens
+on forward returns, which is §11, and `docs/VALIDITY.md:158` cites §11 for the same
+rule. `prompts/README.md:27` cites `CLAUDE.md` §13 for the reconciliation question
+quoted directly beneath it, which is §14, and the spent prompt cites §14 correctly.
+`docs/ARCHITECTURE.html:134` sends a reader to "section 14" for the presentation
+layer, which is §15. Every `D-<n>` reference in the corpus was checked the same
+way: D-1 to D-61 all resolve, and the only apparent miss, D-250, is arithmetic in
+the two-pass backfill note.
 
 ---
 

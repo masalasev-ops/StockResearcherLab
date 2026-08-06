@@ -675,6 +675,7 @@ three forms.
 
   filing dates bounded to eight quarters   less   the plan says "per quarter"; the prompt says "the last eight quarters"
   sentiment bounded to 180 days           less   the plan puts no window on it; the build ignored the bound and read five years
+  bulk full-day confirmation dropped      less   the plan says "confirm the bulk end-of-day endpoint returns a full US day and report the row count"; the prompt keeps only the row count [added K.6]
   news across all tickers, not one name   more   the plan says "request news for a small cap"
   news totals and per-year counts         more   the plan asks for the earliest article returned and nothing else
   sentiment rows split from non-zero rows more   the plan asks for days returned and counts per day; the split is what made "exists but empty" testable
@@ -706,6 +707,28 @@ four; it is the build that went further.
   institutional ownership measured     in neither
   D-4 price and volume floors applied  in neither; both ask only for the cap band
   account plan and quota printed       in neither
+  news 90-day density                  in neither; the plan asks for the earliest article and the prompt for earliest, total and per-year. D-60's 12-article threshold rests on it [added K.6]
+  SharesShortPriorMonth captured       in neither; the prompt asks only whether short interest is populated and how many 180-day observations exist. D-58's one-month change rests on it [added K.6]
+
+The last two were in the build session's own list and this one dropped them when
+it was rewritten. Both are the reason an authored decision has a number in it, so
+a reconciliation that omits them leaves D-60's threshold and D-58's surviving
+input looking like they came from the plan when they came from the build going
+past it. A rewrite narrower than the record it supersedes is the failure mode to
+watch for here, and it is the second time on this phase that a correction lost
+something the thing it corrected had.
+
+The bulk clause is the near miss. Neither list had it, and it is the one line in
+the plan that would have caught the accretion by construction rather than by the
+build happening to read five days instead of one. Recorded against the prompt
+because the prompt is what dropped it.
+
+**Count.** Twelve items against the plan and six against both, eighteen in all.
+K.6 called for thirteen. The difference is placement rather than coverage: the
+90-day density and `SharesShortPriorMonth` are the build exceeding both documents
+rather than the prompt diverging from the plan, so they belong in the second list,
+and putting them in the first would classify the prompt for something it did not
+do. All three items K.6 named are present.
 
 **Gaps in the plan itself**, where the plan and the prompt agree and are both
 wrong. Neither required the probe's printed output to be committed, and

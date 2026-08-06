@@ -54,18 +54,30 @@ public readonly record struct StageResult(long RowsWritten)
 /// that needs the time takes an <see cref="IClock"/>; nothing reads system time
 /// directly [INVARIANT 11].
 /// </summary>
-public interface IStage
+public interface IStage : IWriteOwner
+{
+    /// <summary>Tables this stage may read. Reaching outside it is an error, not a warning.</summary>
+    IReadOnlyList<string> ReadSet { get; }
+
+    Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default);
+}
+
+/// <summary>
+/// Anything that owns a write. Most are stages, and a few are not: RunLog,
+/// CostLedger and ConcentrationMonitor sit outside the layers in
+/// ARCHITECTURE.html section 3 and still own a table each.
+///
+/// The split exists so the conformance test sees every writer rather than only
+/// the runnable ones. A writer the registry cannot see is a writer INVARIANT 10
+/// is not enforced against, which is the whole failure mode.
+/// </summary>
+public interface IWriteOwner
 {
     /// <summary>The component name as ARCHITECTURE.html section 3 gives it, for example UniverseBuilder.</summary>
     string Name { get; }
 
-    /// <summary>Tables this stage may read. Reaching outside it is an error, not a warning.</summary>
-    IReadOnlyList<string> ReadSet { get; }
-
-    /// <summary>Writes this stage owns, per operation.</summary>
+    /// <summary>Writes this component owns, per operation.</summary>
     IReadOnlyList<TableWrite> WriteSet { get; }
-
-    Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default);
 }
 
 /// <summary>

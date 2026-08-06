@@ -14,40 +14,43 @@ namespace StockResearcherLab.Pipeline;
 /// </summary>
 public sealed class StageRegistry
 {
-    private readonly List<IStage> _stages;
+    private readonly List<IWriteOwner> _owners;
 
-    public StageRegistry(IEnumerable<IStage> stages)
+    public StageRegistry(IEnumerable<IWriteOwner> owners)
     {
         // Ordinal sort by name. Registry order must not depend on the order the
         // caller happened to construct things in, or on a locale
         // [CLAUDE.md section 6].
-        _stages = stages.OrderBy(s => s.Name, StringComparer.Ordinal).ToList();
+        _owners = owners.OrderBy(s => s.Name, StringComparer.Ordinal).ToList();
 
-        var duplicate = _stages.GroupBy(s => s.Name, StringComparer.Ordinal)
+        var duplicate = _owners.GroupBy(s => s.Name, StringComparer.Ordinal)
             .FirstOrDefault(g => g.Count() > 1);
 
         if (duplicate is not null)
         {
             throw new InvalidOperationException(
-                $"Two stages are registered as '{duplicate.Key}'. A component name is how the " +
+                $"Two components are registered as '{duplicate.Key}'. A component name is how the " +
                 "registry, SCHEMA.md and ARCHITECTURE.html section 3 refer to the same thing, so " +
                 "it has to be unique here.");
         }
     }
 
-    /// <summary>Every registered stage, ordinal by name.</summary>
-    public IReadOnlyList<IStage> Stages => _stages;
+    /// <summary>Every registered write owner, ordinal by name. Includes the components that are not stages.</summary>
+    public IReadOnlyList<IWriteOwner> Owners => _owners;
 
-    /// <summary>Every declared write across every stage, as component, table, operation triples.</summary>
+    /// <summary>The runnable subset. RunLog and the other non-stage owners are not here.</summary>
+    public IReadOnlyList<IStage> Stages => _owners.OfType<IStage>().ToList();
+
+    /// <summary>Every declared write across every component, as component, table, operation triples.</summary>
     public IReadOnlyList<(string Component, TableWrite Write)> AllWrites()
-        => _stages.SelectMany(s => s.WriteSet.Select(w => (s.Name, w)))
+        => _owners.SelectMany(s => s.WriteSet.Select(w => (s.Name, w)))
             .OrderBy(x => x.Name, StringComparer.Ordinal)
             .ThenBy(x => x.w.Table, StringComparer.Ordinal)
             .ThenBy(x => x.w.Operation)
             .ToList();
 
-    public IStage? Find(string name)
-        => _stages.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.Ordinal));
+    public IWriteOwner? Find(string name)
+        => _owners.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.Ordinal));
 
     /// <summary>The declared sets for a stage, which is what <see cref="IStageData"/> is constructed against.</summary>
     public DeclaredAccess AccessFor(IStage stage) => new(stage);

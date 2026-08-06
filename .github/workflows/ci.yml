@@ -1,0 +1,99 @@
+name: CI
+
+# CLAUDE.md section 10: CI green before merge.
+#
+# The tests assert against a real schema rather than a mock, so this job stands
+# up a Postgres, migrates it, and runs against it. A suite that skipped its
+# database-backed tests would report green while asserting nothing, which is the
+# failure this repository keeps finding in other forms.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          # trust rather than a password. No credential belongs in this file
+          # [CLAUDE.md section 10], and an ephemeral container reachable only
+          # from this job's network needs none.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+
+    env:
+      # The configuration builder reads appsettings.Secrets.json first and
+      # environment variables last, so this wins over any file [D-55]. The
+      # secrets files themselves are never committed and are absent here.
+      ConnectionStrings__Postgres: "Host=localhost;Port=5432;Database=stockresearcherlab;Username=postgres"
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore StockResearcherLab.slnx
+
+      - name: Build
+        # TreatWarningsAsErrors is on in Directory.Build.props, so a warning
+        # fails here rather than accumulating.
+        run: dotnet build StockResearcherLab.slnx --no-restore --configuration Debug
+
+      - name: Confirm no secrets file is present
+        # The tests must pass on the environment variable alone. If a secrets
+        # file were ever committed this step fails before anything reads it, and
+        # the run below would otherwise have proved nothing about the CI path.
+        run: |
+          found=$(find . -name '*.Secrets.json' -not -name '*.Secrets.example.json' -not -path './**/bin/*' -not -path './**/obj/*')
+          if [ -n "$found" ]; then
+            echo "A secrets file is present in the checkout:"
+            echo "$found"
+            exit 1
+          fi
+          echo "none, as expected"
+
+      - name: Migrate, from an empty server
+        run: dotnet run --project src/StockResearcherLab.Worker --no-build --no-launch-profile -- migrate
+
+      - name: Migrate again, asserting idempotence
+        # A second run must change nothing. Checked here rather than trusted,
+        # because "idempotent" is the kind of claim that stays true until it
+        # quietly does not.
+        run: |
+          output=$(dotnet run --project src/StockResearcherLab.Worker --no-build --no-launch-profile -- migrate)
+          echo "$output"
+          echo "$output" | grep -q "nothing to apply" || {
+            echo "The second migrate run applied something. It is not idempotent."
+            exit 1
+          }
+
+      - name: Test
+        run: dotnet test StockResearcherLab.slnx --no-build --verbosity quiet
+
+      - name: Guards
+        # The greps for the invariants that are grep-checkable. A stub at 0.1
+        # that exits zero and says so.
+        shell: pwsh
+        run: ./guards.ps1

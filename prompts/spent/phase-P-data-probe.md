@@ -4,8 +4,10 @@
     Issued:    2026-08-05
     Amended:   2026-08-05, before being run, for D-55 secrets handling and
                CLAUDE.md section renumbering
-    Status:    ISSUED
-    Produced:  (fill on completion)
+    Corrected: 2026-08-05, working copy predated the third amendment
+    Status:    SPENT
+    Produced:  tools/probe, six findings in PROGRESS.md, branch phase-p.
+               SPENT means executed, not signed off.
 
 Record of what was asked. Never edited once run.
 
@@ -17,7 +19,11 @@ supplied after this prompt was written and before it was issued to a session.
 
 Phase P, the data probe. See docs/BUILD_PLAN.md for scope and definition of done.
 Read CLAUDE.md first. Section 2 invariants do not apply to this phase because no
-pipeline code is being written, but section 1 and section 5 do.
+pipeline code is being written. Sections 7 and 10 do, being claims about the code
+and git and secrets.
+
+Commit per checkpoint, message opening with the checkpoint number, so `P.2 probe
+scaffold`. Checkpoints are the five below and match docs/BUILD_PLAN.md.
 
 This phase exists because four assumptions in the architecture were designed around
 and never measured. Its output is numbers, not a component.
@@ -101,7 +107,7 @@ P.5  RECORDING
      Write the results to docs/PROGRESS.md by editing the existing "Probe
      findings" table in place. Do not replace the file and do not restructure it.
      Fill the Answer and Measured columns only.
-     State uncertainty as uncertainty, per CLAUDE.md section 1. If a number came
+     State uncertainty as uncertainty, per CLAUDE.md section 7. If a number came
      from one ticker rather than six, say so in the cell.
      Do not open DECISIONS.md. If a finding contradicts a decision, report it in
      your summary and stop. Decisions are authored, not build-written, per
@@ -109,3 +115,8 @@ P.5  RECORDING
      DoD: the table is filled, the rest of PROGRESS.md is byte-identical, and
      any contradiction with an existing decision is reported rather than acted
      on.
+
+AFTER
+     Do not sign the phase off yourself. Sign-off is the five steps in
+     docs/BUILD_PLAN.md and step two is a conformance pass in a session that did
+     not build the phase. Report what you found and stop.

@@ -1,0 +1,24 @@
+<Project>
+
+  <!-- Shared MSBuild properties for every project in the repository. Kept minimal:
+       phase P adds only what tools/probe needs to build. The full set is phase 0's
+       decision, per BUILD_PLAN checkpoint 0.1. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- CLAUDE.md section 6: nullable reference types on, warnings as errors.
+         Null means unknown here, never zero, and the compiler is the cheapest
+         place that distinction is enforced. -->
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- CLAUDE.md section 6: a decimal comma reaching a file, a prompt or the
+         database breaks things silently. Call sites still pass
+         CultureInfo.InvariantCulture explicitly; this is the backstop. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>

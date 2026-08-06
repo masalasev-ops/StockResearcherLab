@@ -1,0 +1,17 @@
+<Project>
+
+  <!-- Central package management. A PackageReference anywhere in the repository
+       carries no Version attribute; the version is declared once here. -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- tools/probe reads Eodhd:ApiToken through the standard configuration
+         builder, with appsettings.Secrets.json added as an optional source [D-55]. -->
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.10" />
+  </ItemGroup>
+
+</Project>

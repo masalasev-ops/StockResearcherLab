@@ -14,7 +14,7 @@ Corpus version: 0.1.0 (2026-08-05, initial document set)
 
 | Phase | Status | HEAD | Notes |
 |---|---|---|---|
-| P Data probe | IN PROGRESS | d58bea9 | All five checkpoints landed and all six findings measured. D-57 to D-61 applied with their consequent edits. Not signed off: steps 2 to 5 of the sign-off procedure are outstanding, starting with a conformance pass in a fresh session |
+| P Data probe | IN PROGRESS | 7a0e8b1 | All five checkpoints landed and all six findings recorded. D-57 to D-61 applied with their consequent edits. Sign-off step 2 has run and phase P did not pass it: four figures had no measurement behind them and the evidence was excluded from the repository. Corrective pass H answers the finding, and step 2 re-runs after it in a session with no involvement in either. Steps 3 to 5 outstanding |
 | 0 Rails | NOT STARTED | | |
 | 1 Ingest and universe | NOT STARTED | | |
 | 2 Compute | NOT STARTED | | |

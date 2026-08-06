@@ -205,7 +205,7 @@ src/
   StockResearcherLab.Worker     the host that runs the nightly pipeline and the
                                 backfill. References Pipeline.
   StockResearcherLab.Api        read-only query API. References Core and Data.
-  StockResearcherLab.Ui         Blazor. References Api contracts only.
+  StockResearcherLab.Ui         Blazor. References Api. [amended, O.3]
   StockResearcherLab.Tests
 
 tools/

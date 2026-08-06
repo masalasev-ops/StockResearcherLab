@@ -1,9 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
-  <!-- Blazor. References the Api project for its contract types and nothing else
-       [CLAUDE.md section 4]. It reaches data only by calling the Api over HTTP,
-       which is what makes the read-only guarantee hold from this end: there is no
-       reference to Data and none to Pipeline, so there is nothing here to call.
+  <!-- Blazor. References the Api project for its contract types [CLAUDE.md
+       section 4]. It reaches data only by calling the Api over HTTP.
+
+       That reference is the whole Api, not a contracts assembly, so Data and
+       Npgsql are in this project's compiled closure even though nothing here
+       uses them. Pipeline is not, so no stage is reachable from here. A
+       contracts assembly is the fix and it is carried from phase 0 to phase 9
+       in BUILD_PLAN rather than built for a UI that does not exist yet [O.3].
 
        Blazor Server rather than WebAssembly. A WebAssembly Ui cannot carry a
        project reference to the Api at all: the Api carries a FrameworkReference

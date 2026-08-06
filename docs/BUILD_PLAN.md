@@ -462,5 +462,6 @@ in a phase prompt.
 | P | 1 | The dollar volume proxy does not survive into phase 1. Sample selection used `avgvol_50d * adjusted_close` because the bulk feed carries no median dollar volume, and average volume is unadjusted while `adjusted_close` is adjusted, so the product understates for any name that split inside the window. **Closed by 1.5**, which computes the metric from `price_daily`. Recommended by the build session at P.5 and never entered here until K.9 |
 | P | 4 | The S4 open-market purchase base rate is unknown. Transaction code P was 0 on all seven names over 90 days, so `distinct_buyer_count` had nothing to rank on in that window, and six small caps plus a control cannot say whether that is the market or the sample. It is a query against `insider_transaction` once 1.7 has ingested, read at phase 1 sign-off, not a task for any phase |
 | 0 | all | The write-ownership test must be extended as each phase adds tables |
+| 0 | 9 | The Ui references the Api project, so Data and Npgsql are in its compiled closure. A contracts assembly is the fix and is worth doing when the real UI is built, not before |
 | 4 | 8 | Config version must be stamped on attribution rows from the first write, or the tuner cannot segment history |
 | 6 | 10 | Cost ledger recording per model before the first full night |

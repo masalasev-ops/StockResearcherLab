@@ -421,6 +421,38 @@ wrong. Neither required the probe's printed output to be committed, and
 recorded its numbers with the evidence outside the repository. H.1 fixes the
 mechanism. The plan clause that would have caught it does not exist.
 
+### The subscription changed mid-phase [H.7]
+
+The account was upgraded between the scaffold run and the first full run, and
+nothing recorded it. Both states are in committed transcripts.
+
+**2026-08-05 19:10:03 UTC**, `probe-20260805-191003.txt`, the P.2 scaffold run
+against AAPL.US. Five endpoints returned HTTP 403: `insider-transactions`,
+`sec-filings/{t}/form4`, `fundamentals` filtered to `Technicals`, `fundamentals`
+filtered to `Financials::Balance_Sheet::quarterly`, and `screener`. Four
+returned data: `user`, `news`, `sentiments`, and `eod-bulk-last-day/US` at
+44,665 rows for 2026-08-04.
+
+**2026-08-05 20:24:54 UTC**, `probe-20260805-202454.txt`, and again at 20:42:26.
+No 403 anywhere. Fundamentals, form4 and the short interest fields all returned
+data, and every P.4 measurement in the record comes from this state.
+
+Two things follow that a reader needs.
+
+The `user` endpoint does not show the change. It reported `subscriptionType`
+monthly, `subscriptionMode` paid, `dailyRateLimit` 100,000 and `extraLimit` 500
+on both sides, identically. Only `apiRequests` moved, 110 then 1,883, which is
+consumption rather than entitlement. So nothing in the payload dates or names
+the tier, and neither state can be reproduced from the account endpoint. If
+phase 1 needs to know what a given subscription reaches, the answer is a probe
+of each endpoint, not a field.
+
+The screener conclusion is stale and applies to the earlier state only. It was
+called once, at 19:10, returned 403, and was recorded as not available on this
+plan. Nothing retested it after the upgrade, because selection moved to the bulk
+endpoint and no later run calls it. Whether the screener is reachable now is
+unmeasured, and this pass is not authorised to find out.
+
 ---
 
 ## Corpus consistency passes

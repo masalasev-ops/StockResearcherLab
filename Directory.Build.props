@@ -1,8 +1,8 @@
 <Project>
 
-  <!-- Shared MSBuild properties for every project in the repository. Kept minimal:
-       phase P adds only what tools/probe needs to build. The full set is phase 0's
-       decision, per BUILD_PLAN checkpoint 0.1. -->
+  <!-- Shared MSBuild properties for every project in the repository. Phase 0
+       checkpoint 0.1 sets the full set; phase P carried only what tools/probe
+       needed, and that project is gone. -->
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -14,11 +14,18 @@
          place that distinction is enforced. -->
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
 
     <!-- CLAUDE.md section 6: a decimal comma reaching a file, a prompt or the
          database breaks things silently. Call sites still pass
          CultureInfo.InvariantCulture explicitly; this is the backstop. -->
     <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Deterministic output. Two builds of the same source produce the same
+         bytes, which is the build-level form of the property section 6 asks of
+         every stage. -->
+    <Deterministic>true</Deterministic>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
 </Project>

@@ -8,10 +8,27 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- tools/probe reads Eodhd:ApiToken through the standard configuration
-         builder, with appsettings.Secrets.json added as an optional source [D-55]. -->
+    <!-- Configuration, including appsettings.Secrets.json as an optional source [D-55]. -->
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Postgres, chosen for concurrent writers during backfill rebuilds [D-49].
+         Npgsql binary COPY is what turns a screen-score rebuild from an insert
+         loop into a short job. -->
+    <PackageVersion Include="Npgsql" Version="9.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit.v3" Version="3.1.0" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
   </ItemGroup>
 
 </Project>

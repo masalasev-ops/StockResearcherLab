@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Blazor. References the Api project for its contract types and nothing else
+       [CLAUDE.md section 4]. It reaches data only by calling the Api over HTTP,
+       which is what makes the read-only guarantee hold from this end: there is no
+       reference to Data and none to Pipeline, so there is nothing here to call.
+
+       Blazor Server rather than WebAssembly. A WebAssembly Ui cannot carry a
+       project reference to the Api at all: the Api carries a FrameworkReference
+       to Microsoft.AspNetCore.App, which has no browser-wasm runtime pack, and
+       the build fails with NETSDK1082. Reported in the 0.1 commit body. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\StockResearcherLab.Api\StockResearcherLab.Api.csproj" />
+  </ItemGroup>
+
+</Project>

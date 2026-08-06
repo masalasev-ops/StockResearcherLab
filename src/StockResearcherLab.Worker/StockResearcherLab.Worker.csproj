@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The host that runs the nightly pipeline and the backfill. References
+       Pipeline [CLAUDE.md section 4, D-56]. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>StockResearcherLab.Worker</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\StockResearcherLab.Pipeline\StockResearcherLab.Pipeline.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Never committed. Copied beside the binary so the configuration builder
+         finds it at run time [D-55]. -->
+    <None Update="appsettings.Secrets.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('appsettings.Secrets.json')" />
+  </ItemGroup>
+
+</Project>

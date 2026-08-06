@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\StockResearcherLab.Core\StockResearcherLab.Core.csproj" />
+    <ProjectReference Include="..\..\src\StockResearcherLab.Data\StockResearcherLab.Data.csproj" />
+    <ProjectReference Include="..\..\src\StockResearcherLab.Pipeline\StockResearcherLab.Pipeline.csproj" />
+  </ItemGroup>
+
+</Project>

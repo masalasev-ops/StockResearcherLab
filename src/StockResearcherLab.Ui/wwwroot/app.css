@@ -1,0 +1,13 @@
+:root { color-scheme: light dark; }
+body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+       margin: 0; padding: 28px 32px; font-size: 13.5px; line-height: 1.5; }
+h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; letter-spacing: .01em; }
+.sub { opacity: .62; margin: 0 0 22px; }
+table { border-collapse: collapse; width: 100%; max-width: 1080px; }
+th { text-align: left; font-weight: 600; font-size: 11.5px; letter-spacing: .08em;
+     text-transform: uppercase; opacity: .55; padding: 0 14px 7px 0; }
+td { padding: 5px 14px 5px 0; border-top: 1px solid rgba(128,128,128,.22);
+     vertical-align: top; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ok { color: #1a7f4b; } .fail { color: #b3261e; } .run { opacity: .6; }
+.empty { opacity: .55; padding: 18px 0; }

@@ -428,6 +428,45 @@ mechanism. The plan clause that would have caught it does not exist.
 Run over the documents themselves rather than over code. Records what was found so a
 later reader can tell a settled figure from one that drifted and was corrected.
 
+**The sweep pattern**, adopted at H.6 in place of any filename-anchored one:
+
+```
+grep -rnoiE "(§[[:space:]]*[0-9]+([.][0-9]+)?|sections?[[:space:]]+[0-9]+([.][0-9]+)?)" \
+  --include=*.md --include=*.html --include=*.cs .
+```
+
+It anchors on the section token alone and requires nothing before it, so backticks,
+brackets, markdown link syntax and abbreviations such as "ARCH section 14" all match,
+and the target document is established by reading each hit rather than by matching a
+filename first. That is the difference that matters: the 2026-08-05 sweep used a
+filename-anchored pattern, found six defects all inside `ARCHITECTURE.html`, and
+silently missed `prompts/README.md`, which sits outside `docs/` and carries one of
+the three below. A pattern that starts from the filename can only find files it
+already thought to look at.
+
+Run it over the whole tree, not over `docs/`. `CLAUDE.md` and `README.md` are at the
+root, `prompts/` is its own directory, and `tools/` carries section references in
+code comments. `ARCHITECTURE.html` numbers its sections in `<span class="secno">`,
+so references into it resolve by reading rather than by counting headings.
+
+### 2026-08-06, corrective pass H, cross-references
+
+Three references did not resolve. All three were present in the baseline commit
+`b1a0095`, none was touched by phase P, and all three are corrected in place [H.6].
+
+| # | Defect | Correction |
+|---|---|---|
+| 1 | `BUILD_PLAN.md` cited `CLAUDE.md` §8, Configuration, for the rule against tuning screens on forward returns | Corrected to §11, Decisions and evidence, which is where the rule is and which `VALIDITY.md` already cited for it |
+| 2 | `prompts/README.md` cited `CLAUDE.md` §13, Documents, for the reconciliation question quoted directly beneath it | Corrected to §14, Prompts. The spent phase P prompt already cited §14 |
+| 3 | `ARCHITECTURE.html` sent a reader to section 14 for the presentation layer | Corrected to section 15. Section 14 is Stack and runtime |
+
+Defect 2 is the one that mattered, because it is the rule about not editing spent
+prompts pointing at the wrong section of the file that states it, in the document
+whose whole job is to say which prompts may be edited.
+
+Every `D-<n>` reference was checked the same way at the same time. D-1 to D-61 all
+resolve. The only apparent miss, D-250, is arithmetic in the two-pass backfill note.
+
 ### 2026-08-05, corpus v0.1.0, before any code
 
 Six inconsistencies found and corrected, all in `ARCHITECTURE.html`, which had been

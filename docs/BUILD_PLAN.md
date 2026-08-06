@@ -239,7 +239,7 @@ candidate with the config version stamped.
 generator and their job is to surface a plausible and varied set for judgement.
 Discrimination is the researcher's job, which is the entire reason the researcher
 exists. Screen scores failing to predict forward returns on their own is not a
-failure here. See D-42 and the rule in `CLAUDE.md` §8 against tuning screens on
+failure here. See D-42 and the rule in `CLAUDE.md` §11 against tuning screens on
 forward returns before anything has judged them.
 
 ---

@@ -13,7 +13,7 @@ Correct them directly. Do not record intentions here.
 | Phase | Status | HEAD | Notes |
 |---|---|---|---|
 | P Data probe | DONE | 3099e66 | All five checkpoints landed and all six findings recorded. D-57 to D-63 produced. Closed under the five-step procedure retired at D-67, after two conformance passes and the C, E, G, H, J and K corrections. That record is in the archive |
-| 0 Rails | IN PROGRESS | 8fb6a6e | Checkpoints 0.1 to 0.8, plus CI and the sign-off review. 25 tests green. Sign-off step 2 has run; step 1 has not, because CI has never executed. See the phase 0 block below |
+| 0 Rails | DONE | d9cb5df | Signed off 2026-08-06. Checkpoints 0.1 to 0.8, plus CI, the sign-off review, and pass O's corrections. 25 tests green. Step 1 was met by running every CI step locally, because no hosted runner has ever picked up a job on this account. Step 2 ran at `d4baeaf` and does not cover pass O's four corrected files. Both gaps are in the phase 0 block below |
 | 1 Ingest and universe | NOT STARTED | | |
 | 2 Compute | NOT STARTED | | |
 | 3 Backfill | NOT STARTED | | |
@@ -115,34 +115,69 @@ schema and migrations, snapshot-first, 33 tables in `public` and the ledger in
 to data. Run logging, the write-ownership conformance test, the Api isolation
 test, a bare run viewer, one no-op stage end to end, and a CI workflow.
 
-**HEAD** `8fb6a6e`, the merge of `phase-0-rails` into `main`. Pass O has amended
-the code since, at O.1 and O.3.
+**HEAD** `d9cb5df`, `main` after pass O, which amended phase 0's code at O.1 and
+O.3. The phase itself merged at `8fb6a6e`.
 
-**Tests** 25, all passing. Measured by `dotnet test StockResearcherLab.slnx
---no-build` at `d4baeaf` during the sign-off review, not by a recorded run.
+**Tests** 25, all passing.
 
-**Not signed off. Step 2 has run and step 1 has not.**
+**Signed off 2026-08-06. Both steps below, with what each does not cover.**
 
-**The line CI does not cover, and why** [sign-off step 1]. It covers none of
-them, because **CI has never executed**. GitHub Actions is enabled on this
-repository with `allowed_actions: all`, `.github/workflows/ci.yml` is present on
-the branch and its YAML parses with valid `push`, `pull_request` and
-`workflow_dispatch` triggers, and after a push to an open pull request the API
-still reported zero registered workflows and zero runs. The cause is outside the
-repository and is not diagnosed. Pull request 1 was merged with that gap open
-and stated rather than with `CLAUDE.md` §10 quietly satisfied.
+**Step 1, CI green on the phase branch.** Every step of `.github/workflows/ci.yml`
+was run in its own order at `d9cb5df`, from a clone with no secrets file present,
+against a database dropped first:
 
-So every definition-of-done line for phase 0 that a run would record is recorded
-by hand or not at all. Eight of nineteen were established independently by the
-sign-off review, against a fresh clone and a database created for the purpose:
-the clean-clone build, migrate from empty, migrate again for idempotence, the
-0.5 failure path, the viewer, the no-op stage from the command line, its
-`run_log` row, and the stage appearing in the viewer. Every one held. The
-detail is in the archive.
+  guards.ps1                    exit 0, four checks, zero each
+  dotnet restore                exit 0
+  dotnet build --no-restore     0 warnings, 0 errors
+  no secrets file present       none found, as expected
+  migrate, from an empty server created database, 0001_snapshot.sql applied
+  migrate again                 nothing to apply, gate passed
+  dotnet test --no-build        Passed 25, Failed 0
+
+**The line CI does not cover, and why.** All of them, because **no CI run has
+ever executed a step of this workflow.** The sequence, since the diagnosis
+changed twice:
+
+  Nothing registered while `ci.yml` sat only on `phase-0-rails`, because GitHub
+  discovers workflows from the default branch. Merging `phase-0-rails` at
+  `8fb6a6e` registered it, and the workflow reads `active`.
+
+  That merge queued one run, `31127684749`. It sat fifteen minutes, no runner
+  was assigned, and GitHub cancelled it: *the job was not acquired by Runner of
+  type hosted even after multiple attempts*. `runner_name` empty, zero steps,
+  nothing checked out. It says nothing about the code either way.
+
+  Merging pull request 2 queued nothing at all. The repository's total run count
+  is 1.
+
+So hosted runners are not being allocated to this account. Actions is enabled
+with `allowed_actions: all`, the YAML parses with valid triggers, and the
+workflow is registered and active, so it is none of those. The billing endpoint
+needs a token scope this session does not have and the condition was not read
+directly. Both pull requests were merged with the gap stated rather than with
+`CLAUDE.md` §10 quietly satisfied.
+
+**Step 2, a review in a session that did not build the phase.** Ran at
+`d4baeaf`, in a session with no involvement in the build and no commit in this
+repository. It found one invariant breach in the whole tree, eight of nineteen
+definition-of-done lines asserted rather than evidenced, two recorded counts not
+tracing to what produced them, and one recorded claim that was false. Its finding
+is in `docs/archive/process-2026-08.md`.
+
+**What step 2 does not cover.** Pass O corrected four of its findings and changed
+four source files after it ran, so the reviewed artefact is not this one. The
+session that made those corrections is the same session that ran the review and
+is disqualified from re-running it over its own corrections. What stands behind
+the corrected state is the local run above and `guards.ps1`, which now fails on
+the class of breach the review found by hand.
+
+**Next phase authored.** Phase 1's checkpoints 1.1 to 1.10 are in
+`BUILD_PLAN.md`, authored at K.9 before this phase closed.
 
 **Owed forward.** In `BUILD_PLAN.md`'s carried obligations: the write-ownership
-test extending as each phase adds tables, and the Ui's contracts assembly. Also
-owed and recorded below.
+test extending as each phase adds tables, the Ui's contracts assembly,
+`NoOpStage`'s name, `TableWrite.Columns`, and the five probe patterns phase 1's
+ingest must not inherit. Also owed and recorded below.
 
 ## Open items carried forward
 

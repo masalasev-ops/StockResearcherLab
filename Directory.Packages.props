@@ -11,6 +11,8 @@
     <!-- Configuration, including appsettings.Secrets.json as an optional source [D-55]. -->
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>

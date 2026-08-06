@@ -359,6 +359,8 @@ in a phase prompt.
 |---|---|---|
 | P | 1 | Whatever the probe finds about news depth, sentiment and flow coverage constrains what phase 1 can promise |
 | P | 4 | If filing dates are absent on small caps, D-46 needs revisiting before screens are built |
+| P | 1 | Entitlement is per endpoint and invisible in the account payload, which showed identical fields on both sides of the mid-phase upgrade. Phase 1 determines what a subscription reaches by sweeping endpoints, never by reading a field |
+| P | 1 | The base rate of unknown filing dates across the whole universe is unknown, and seven names is a hint rather than an answer. It is a query against `fundamental_snapshot` once 1.4 has ingested, read at phase 1 sign-off, and it decides whether D-62's exclusion rule removes a handful of names or a meaningful slice |
 | 0 | all | The write-ownership test must be extended as each phase adds tables |
 | 4 | 8 | Config version must be stamped on attribution rows from the first write, or the tuner cannot segment history |
 | 6 | 10 | Cost ledger recording per model before the first full night |

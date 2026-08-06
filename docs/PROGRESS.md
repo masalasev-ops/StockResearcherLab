@@ -450,11 +450,16 @@ the tier, and neither state can be reproduced from the account endpoint. If
 phase 1 needs to know what a given subscription reaches, the answer is a probe
 of each endpoint, not a field.
 
-The screener conclusion is stale and applies to the earlier state only. It was
-called once, at 19:10, returned 403, and was recorded as not available on this
-plan. Nothing retested it after the upgrade, because selection moved to the bulk
-endpoint and no later run calls it. Whether the screener is reachable now is
-unmeasured, and this pass is not authorised to find out.
+The screener conclusion is struck [J.3]. ~~The screener is not available on this
+plan.~~ It was called once, at 19:10, returned 403, and the conclusion was drawn
+from that single pre-upgrade call. Nothing retested it afterwards, because
+selection moved to the bulk endpoint and no later run calls it.
+
+It is struck rather than re-tested. Selection uses the bulk endpoint by design,
+so whether the screener is reachable now changes nothing that is built on it, and
+an unmeasured conclusion left standing as a measured one is worse than an open
+question. Its state since the upgrade is unmeasured, and no call was made to find
+out.
 
 ---
 

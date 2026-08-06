@@ -110,10 +110,12 @@ learned things, and it stops being a record of what was asked.
 Work checkpoint by checkpoint and commit per checkpoint, not per phase. A phase that
 lands as one commit cannot be bisected and cannot be partially reverted.
 
-**A commit message opens with its checkpoint number**, so `4.3 candidate allocator
-quota enforcement`. Checkpoints are numbered in `BUILD_PLAN.md`. Churn commits carry no
-number and say what they are. A commit spanning two checkpoints means the checkpoints
-were drawn wrong, so split it rather than the message.
+**A commit message opens with its phase and its checkpoint**, so `Phase 4 / 4.3 -
+candidate allocator quota enforcement`. Checkpoints are numbered in `BUILD_PLAN.md`.
+Churn commits put `chore` where the checkpoint number goes and say what they are, so
+`Phase 4 / chore - line endings`. A correction pass uses its letter as the phase, so
+`Phase O / O.1 - the clock read`. A commit spanning two checkpoints means the
+checkpoints were drawn wrong, so split it rather than the message.
 
 Run the invariant tests continuously rather than at the end. They are cheap and they
 are the only thing standing between a plausible-looking run and a worthless one.
@@ -195,10 +197,12 @@ src/
   StockResearcherLab.Api        read-only query API. References Core and Data.
   StockResearcherLab.Ui         Blazor. References Api. [amended, O.3]
   StockResearcherLab.Tests
-
-tools/
-  probe                         phase P only, deleted or rewritten afterwards
 ```
+
+Phase P's scratch probe was deleted at checkpoint 0.1, as its own scope said it
+would be. Its transcripts are kept at `docs/evidence/phase-P/`, because four
+decisions cite them and nothing recorded in `PROGRESS.md` is checkable without
+them [O.9].
 
 **The Api never references Pipeline, and that is load-bearing rather than tidy.** It is
 what structurally prevents the interface from invoking a stage, which is how the

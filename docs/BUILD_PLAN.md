@@ -17,12 +17,14 @@ lives, and it is the only place [D-66]. This document holds what is decided.
 ## Checkpoints, commits and sign-off
 
 **A phase is divided into numbered checkpoints and a commit maps to exactly one.**
-Checkpoint `4.3` is committed as `4.3 <what it did>`. That is the whole convention, and
-it exists so that a commit can be traced to the plan clause that asked for it without
-anyone remembering what was happening that week.
+Checkpoint `4.3` is committed as `Phase 4 / 4.3 - <what it did>`. That is the whole
+convention, and it exists so that a commit can be traced to the plan clause that asked
+for it without anyone remembering what was happening that week.
 
-Churn commits carry no checkpoint number and say what they are: `chore: line endings`.
-A commit that spans two checkpoints means the checkpoints were drawn wrong; split it.
+Churn commits put `chore` where the checkpoint number goes: `Phase 4 / chore - line
+endings`. A correction pass uses its letter as the phase: `Phase O / O.1 - <what it
+did>`. A commit that spans two checkpoints means the checkpoints were drawn wrong;
+split it.
 
 **Detail is authored one phase ahead, not eleven.** Phases below carry scope and a
 definition of done from the outset, because those are decisions. Numbered checkpoints
@@ -364,5 +366,8 @@ in a phase prompt.
 | P | 4 | The S4 open-market purchase base rate is unknown. Transaction code P was 0 on all seven names over 90 days, so `distinct_buyer_count` had nothing to rank on in that window, and six small caps plus a control cannot say whether that is the market or the sample. It is a query against `insider_transaction` once 1.7 has ingested, read at phase 1 sign-off, not a task for any phase |
 | 0 | all | The write-ownership test must be extended as each phase adds tables |
 | 0 | 9 | The Ui references the Api project, so Data and Npgsql are in its compiled closure. A contracts assembly is the fix and is worth doing when the real UI is built, not before |
+| 0 | 1 | `NoOpStage` is a registered component name `ARCHITECTURE.html` §3 does not have. It proved the rails and must not survive the first real stage |
+| 0 | 1 | `TableWrite.Columns` is declared and asserted by nothing. Column-level write ownership is unenforced until a component declares a partial write, which C21 ForwardReturnFiller is the first to need |
+| 0 | 1 | Five patterns in the phase P probe that phase 1's ingest must not inherit. All five were read in the deleted source before it went: an unguarded `.First()` selecting the control ticker, which throws mid-run and loses a transcript written only at the end; `?? 0` on `shares_amount` and `price_per_share` feeding a dollar total, so an absent price contributes zero to money [`CLAUDE.md` §6]; a superseded constant surviving in executable code, D-57's 65 days classifying gaps after D-62 replaced it, corrected at K.2 and found by a conformance pass rather than by a test; a clean-gap list built before the `g < 1` test, so gaps D-62 calls unknown counted toward the widest gap and toward the floor of four; and a paged endpoint read with one `limit=1000` call and no offset loop, which silently returns a cap rather than a count |
 | 4 | 8 | Config version must be stamped on attribution rows from the first write, or the tuner cannot segment history |
 | 6 | 10 | Cost ledger recording per model before the first full night |

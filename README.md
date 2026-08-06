@@ -42,7 +42,7 @@ Read these when you need them:
 | `CLAUDE.md` | Rules for agents. Section 2 is the invariants | Human only |
 | `docs/DECISIONS.md` | The numbered register. Looked up, not read through | Human only |
 | `docs/BUILD_PLAN.md` | Phases, definitions of done, carried obligations | Human only |
-| `docs/SCHEMA.md` | Tables, grain, and single-writer ownership | Human only |
+| `docs/SCHEMA.md` | Tables, grain, and write ownership per operation | Human only |
 | `docs/CONFIG_REFERENCE.md` | Every config key and its verified consumer | Mixed |
 | `docs/GLOSSARY.md` | Terms with a specific meaning here | Human only |
 | `docs/FIXTURES.md` | The single registry of test fixtures | Mixed |
@@ -92,5 +92,5 @@ unspent until the calibration report and the model comparison have real data.
 
 ## Where to start
 
-`docs/BUILD_PLAN.md`, phase P. It runs before anything else because its answers
-change the schema.
+`docs/PROGRESS.md`, for which phase is current and what is built, then that phase
+in `docs/BUILD_PLAN.md` [D-66].

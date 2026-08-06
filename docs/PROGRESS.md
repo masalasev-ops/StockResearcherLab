@@ -151,15 +151,13 @@ them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
-| 1 | `README.md` line 45 calls `SCHEMA.md` "single-writer ownership". INVARIANT 10 has been per operation since L.3 and phase 0 built the per-operation registry, so shipped code now contradicts it | The next edit to `README.md` |
-| 2 | `README.md`'s "Where to start" sends a reader to `BUILD_PLAN.md` phase P, which is done | The next edit to `README.md` |
-| 3 | `equity` is a read target with no store. `ARCHITECTURE.html` §3 lists C18 reading it and `SCHEMA.md` declares no such table | Phase 7, which builds the risk layer |
-| 4 | `FIXTURES.md`'s filing-date entry says "before the filing date" where D-62 makes it the effective filing date | Phase 1, checkpoint 1.10 |
-| 5 | `CLAUDE.md` §9 carries the same wording | The next authored amendment to §9 |
-| 6 | Checkpoint 1.8's events-ingest half is not reachable from phase 1's definition of done | Phase 1 sign-off |
-| 7 | Checkpoint 1.1 is reachable from phase 1's definition of done only through "one night lands", which exercises the HTTP client without asserting the token auth, the explicit `fmt`, the encoded filter form or the rate limit | Phase 1 sign-off |
-| 8 | `ARCHITECTURE.html` states writes three times over, in its own Written-by column, in the §3 catalogue and in `SCHEMA.md`. Every write-column defect in passes K through N came from that duplication. Its stated trigger, phase 0 proving the registry and its test, has fired | An authored change to `ARCHITECTURE.html` |
-| 9 | The 0.4 conformance test asserts the registry against `SCHEMA.md`'s table list and against a hardcoded list of the three permitted splits, not against `SCHEMA.md`'s own writer declarations, which are stated in prose that varies in form | Phase 1, when real components make the check worth something |
-| 10 | 0.5 has no permanent fixture for its failure path, and no test exercises `/api/runs` or renders the viewer. Both are code and belong to a phase rather than to a correction pass | Phase 9, or the next phase touching either |
-| 11 | `TheCompiledApiCarriesNoPipelineDependency` reads `deps.json` from disk. Its stale-artifact defect was closed by having the test project reference the Api, which holds only while the build succeeds: after a failed build, `dotnet test --no-build` reads the previous artifact and the assertion passes against it. CI is not exposed, because its Build step gates Test | Phase 9, with item 10 |
-| 12 | The Api's `appsettings.Secrets.json` flows into the test output directory through the 0.5 project reference, so a local test run can take its connection string from a file other than the test project's own. All four are byte identical today | Whenever the two need to differ |
+| 1 | `equity` is a read target with no store. `ARCHITECTURE.html` §3 lists C18 reading it and `SCHEMA.md` declares no such table | Phase 7, which builds the risk layer |
+| 2 | `FIXTURES.md`'s filing-date entry says "before the filing date" where D-62 makes it the effective filing date | Phase 1, checkpoint 1.10 |
+| 3 | `CLAUDE.md` §9 carries the same wording | The next authored amendment to §9 |
+| 4 | Checkpoint 1.8's events-ingest half is not reachable from phase 1's definition of done | Phase 1 sign-off |
+| 5 | Checkpoint 1.1 is reachable from phase 1's definition of done only through "one night lands", which exercises the HTTP client without asserting the token auth, the explicit `fmt`, the encoded filter form or the rate limit | Phase 1 sign-off |
+| 6 | `ARCHITECTURE.html` states writes three times over, in its own Written-by column, in the §3 catalogue and in `SCHEMA.md`. Every write-column defect in passes K through N came from that duplication. Its stated trigger, phase 0 proving the registry and its test, has fired | An authored change to `ARCHITECTURE.html` |
+| 7 | The 0.4 conformance test asserts the registry against `SCHEMA.md`'s table list and against a hardcoded list of the three permitted splits, not against `SCHEMA.md`'s own writer declarations, which are stated in prose that varies in form | Phase 1, when real components make the check worth something |
+| 8 | 0.5 has no permanent fixture for its failure path, and no test exercises `/api/runs` or renders the viewer. Both are code and belong to a phase rather than to a correction pass | Phase 9, or the next phase touching either |
+| 9 | `TheCompiledApiCarriesNoPipelineDependency` reads `deps.json` from disk. Its stale-artifact defect was closed by having the test project reference the Api, which holds only while the build succeeds: after a failed build, `dotnet test --no-build` reads the previous artifact and the assertion passes against it. CI is not exposed, because its Build step gates Test | Phase 9, with item 10 |
+| 10 | The Api's `appsettings.Secrets.json` flows into the test output directory through the 0.5 project reference, so a local test run can take its connection string from a file other than the test project's own. All four are byte identical today | Whenever the two need to differ |

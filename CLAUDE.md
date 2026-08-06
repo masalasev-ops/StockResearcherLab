@@ -348,6 +348,11 @@ confident statement about it. That is the specific risk here.
 grep, which tells you a string exists somewhere but not what the code does with it. Not
 from memory of a read earlier in the session.
 
+**A grep used as verification must be whitespace-tolerant, and the pattern is stated
+alongside the result** [N.11]. Prose in this corpus is hard-wrapped, so a phrase that
+breaks across a line will not match a line-anchored pattern. That failure is silent: the
+sweep reports no hit and reads as a pass.
+
 **Print the HEAD sha and recent commits before analysing a branch.** Analysis against a
 stale checkout produces findings that were fixed already.
 

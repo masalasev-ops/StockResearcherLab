@@ -906,6 +906,24 @@ root, `prompts/` is its own directory, and `tools/` carries section references i
 code comments. `ARCHITECTURE.html` numbers its sections in `<span class="secno">`,
 so references into it resolve by reading rather than by counting headings.
 
+**It is line-anchored, and that is a second way to miss silently** [N.11]. `grep` matches
+within a line, so `[[:space:]]` never crosses a newline, and prose here is hard-wrapped.
+A reference written as `section` at the end of one line and `5` at the start of the next
+produces no hit and the sweep reads as a pass. The whitespace-tolerant form, run over the
+same file set:
+
+```
+python -c "import re,io,glob; rx=re.compile(r'(?:§|[Ss]ections?)[\s]*[0-9]+(?:\.[0-9]+)?')"
+```
+
+Run at N.11 over every `.md`, `.html` and `.cs` file in the tree: **100 section
+references, none wrapped**, so the line-anchored sweeps at H.6 and K.3 were not false
+passes. The same re-audit covered the `D-<n>` references and every done-condition grep
+in passes L, M and N, twelve patterns in all. Exactly one hit in the corpus breaks
+across a line, `CLAUDE.md:403`, and N.10 had already found it by accident rather than by
+pattern. That is the whole argument for the rule: the miss rate was one, and nothing
+about the method would have told us if it had been ten.
+
 ### 2026-08-06, corrective pass K, cross-references
 
 One reference did not resolve. Present in the baseline commit `b1a0095`, untouched

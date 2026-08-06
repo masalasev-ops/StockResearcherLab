@@ -125,8 +125,9 @@ commits and reports a clean result that means nothing. `A..B` range notation exc
    to a numbered section of another resolves to the section it names. Match on the
    section token alone so backticks, brackets, markdown links and abbreviations are
    all caught, and establish the target by reading each hit rather than by matching a
-   filename first. State the pattern so the coverage is checkable. The pattern in
-   current use is recorded in `PROGRESS.md` under Corpus consistency passes.
+   filename first. State the pattern so the coverage is checkable, and make it
+   whitespace-tolerant [`CLAUDE.md` §7]. The pattern in current use is recorded in
+   `PROGRESS.md` under Corpus consistency passes.
 
 **The pass states divergences and does not correct them.** A conformance pass that
 fixes what it finds destroys the evidence that it was found. Corrections are a

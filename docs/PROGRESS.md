@@ -345,7 +345,10 @@ five-year backfill meets, and D-57's detection has to run over the whole
 backfill rather than over the live window.
 
 Three states the eight-quarter window hid. All are reported and none is acted
-on, per H.4.
+on, per H.4. **All three are answered by D-62**, which supersedes D-57 in
+corrective pass J: the substitution becomes each ticker's own widest clean gap
+observed to date rather than a universal 65, and unknown widens to cover null
+and negative alongside equality.
 
 **1 The 65 day substitution is too narrow.** D-57 sets it from a range of 19 to
 65 across 56 clean quarters. Over 454 clean quarters the range is -16 to 210 and

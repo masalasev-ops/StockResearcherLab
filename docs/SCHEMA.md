@@ -38,20 +38,27 @@ Grain: ticker by day. **Writer: PriceIngestor.** ~400 MB.
 Grain: ticker by fiscal period. **Writer: FundamentalsIngestor.** ~60 MB.
 
 `ticker`, `period_end`, `filing_date`, `filing_date_effective`,
-`filing_date_substituted`, `period_type`, plus the statement fields.
+`filing_date_unknown_reason`, `period_type`, plus the statement fields.
 
 **`filing_date_effective` is the key every read filters on, never `period_end` and
-never the raw `filing_date`** [D-46, D-57, INVARIANT 12]. `period_end` and the raw
+never the raw `filing_date`** [D-46, D-62, INVARIANT 12]. `period_end` and the raw
 `filing_date` are both stored so the gap is inspectable, but no query joins on
 either.
 
-`filing_date_effective` equals `filing_date` where the provider supplied a real one.
-Where `filing_date` came back equal to `period_end` the provider has supplied no
-filing date at all, and the row is instead readable from `period_end` plus
-`fundamentals.filing_date_substitution_days` [D-57]. `filing_date_substituted` is
-true on exactly those rows, so the substitution rate is measurable rather than
-invisible, and a provider change that made equality universal would show up rather
-than silently widening every read.
+`filing_date_effective` equals `filing_date` where the provider supplied a real one,
+meaning a date at least one day after `period_end`. Where it is null, equal to
+`period_end`, or earlier than it, the provider has supplied no usable filing date,
+and the row is instead readable from `period_end` plus that ticker's own widest
+clean gap observed before the read date [D-62]. A ticker with fewer than
+`fundamentals.min_clean_gaps_for_substitution` clean gaps observed is excluded from
+the universe rather than given a substituted date.
+
+`filing_date_unknown_reason` records which case fired, one of `null`, `equal`,
+`negative` or `none`. Four distinguishable states rather than a boolean, because
+which one fired is diagnostic: a rise in `null` is the provider dropping the field,
+a rise in `equal` is its date handling changing, and `negative` is a date that
+cannot exist and should never appear at all. The substitution rate stays measurable
+rather than invisible.
 
 ### sentiment_daily
 Grain: ticker by day, whole universe. **Writer: SentimentIngestor.** ~380 MB.
@@ -136,7 +143,7 @@ Grain: ticker by day. **Writer: ValuationEngine.** ~540 MB.
 `last_two_earnings_surprises`.
 
 Recomputed daily because price moves. Every fundamental input resolved as of
-`filing_date_effective` [D-57].
+`filing_date_effective` [D-62].
 
 ### market_context_daily
 Grain: one row per day. **Writer: MarketContextEngine.** Small.

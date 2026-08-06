@@ -33,13 +33,23 @@ Verified column values: `unverified`, `verified <date>`, or `NOT BOUND`.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `fundamentals.filing_date_substitution_days` | 65 | D-57 | FundamentalsIngestor | unverified |
+| ~~`fundamentals.filing_date_substitution_days`~~ | ~~65~~ | ~~D-57~~ | ~~FundamentalsIngestor~~ | [superseded, D-62] |
+| `fundamentals.min_clean_gaps_for_substitution` | 4 | D-62 | FundamentalsIngestor | unverified |
 | `fundamentals.substitution_rate_alert` | 0.25 | D-57 | FundamentalsIngestor | unverified |
 
-The substitution window is the widest gap the probe observed, not a mean, because
-being late costs freshness while being early costs correctness. The alert exists so
-that a provider change making equality universal is visible rather than silently
-widening every read.
+The substitution window is ~~the widest gap the probe observed, not a mean, because
+being late costs freshness while being early costs correctness~~ [superseded, D-62]
+each ticker's own widest clean gap observed before the read date. There is no
+universal constant left to configure: the per-ticker value is derived from that
+ticker's filing history rather than set here, so it gets no key. What is
+configurable is the floor beneath which no substitution is attempted at all. Below
+`fundamentals.min_clean_gaps_for_substitution` observed clean gaps the name leaves
+the universe rather than being assigned a guess.
+
+The alert exists so that a provider change making equality universal is visible
+rather than silently widening every read. It survives D-62 unchanged, and its
+Set by column still names D-57 because that is the entry that set it and a
+superseded entry keeps its number.
 
 ## Percentiles
 

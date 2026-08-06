@@ -25,8 +25,9 @@ nobody wins on market exposure. SPY is a reference line, not a portfolio.
 
 ## Documents
 
-Corpus version 0.1.0. `CHANGELOG.md` carries the version history and
-`PROGRESS.md` carries the present build state. This file states neither.
+`CHANGELOG.md` carries the version history and `PROGRESS.md` carries the
+present build state and the current corpus version. This file states neither,
+which is why no version number appears above.
 
 Read these three, in order, to understand the lab:
 

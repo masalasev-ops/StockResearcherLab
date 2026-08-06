@@ -205,8 +205,6 @@ src/
                                 backfill. References Pipeline.
   StockResearcherLab.Api        read-only query API. References Core and Data.
   StockResearcherLab.Ui         Blazor. References Api contracts only.
-
-tests/
   StockResearcherLab.Tests
 
 tools/

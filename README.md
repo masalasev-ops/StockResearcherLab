@@ -66,7 +66,7 @@ The repository root holds `README.md` and `CLAUDE.md` only. Every other document
 lives in `docs/`. One rule, so anything resolving a document path needs to know one
 thing rather than a list of exceptions.
 
-Code lives in `src/` and `tests/`. Runtime prompts and spent prompts live in
+Code lives in `src/`. Runtime prompts and spent prompts live in
 `prompts/`, which has its own README explaining why those two things sit side by
 side under opposite rules. Neither is a document and neither belongs in `docs/`.
 

@@ -6,7 +6,7 @@ What has actually been built, as opposed to what is designed.
 measured timings and row counts are observations and belong to whoever ran them.
 Correct them directly. Do not record intentions here.
 
-Corpus version: 0.2.0 (2026-08-06, phase P signed off)
+Corpus version: 0.2.1 (2026-08-06, architecture and ownership corrections)
 
 ---
 
@@ -960,3 +960,75 @@ Defect 2 was the one that mattered. A component instructed to read `screen_confi
 and a schema declaring `config_rows` would have produced two tables and a
 one-writer-per-table violation that the registry test could not have caught, because
 both would have had exactly one writer.
+
+---
+
+## Corrective passes L, M and N, 2026-08-06
+
+**L and M ran after the 0.2.0 entry was written**, which happened at K.10 as sign-off
+step 5. That entry names phase P's documents and cannot name theirs, because they did
+not exist yet. `CHANGELOG.md` is appended to and never rewritten, so 0.2.1 carries
+them rather than 0.2.0 being corrected.
+
+### Pass L, the architecture absorbs D-57 to D-63
+
+Changed `ARCHITECTURE.html`, `SCHEMA.md`, `CLAUDE.md`, `BUILD_PLAN.md`,
+`CONFIG_REFERENCE.md`, `DECISIONS.md` and `prompts/candidate-block.md`.
+
+What it settled. D-61 had no component: `SCHEMA.md` already named `FlowEngine` as
+`flow_daily`'s writer and no such thing existed in the architecture, so C34 was added
+with the two source tables that were also missing from the store matrix. D-62's
+exclusion went into the universe definition, where INVARIANT 1 requires absolute
+filters to live. INVARIANT 10 was restated as one writer per table per operation,
+after its exception count turned out wrong in both directions. And the rest of the
+drift: a conviction integer in section 7 against D-18, calibration described as
+bucketing conviction, nine three-portfolio references, a call count of 31 against a
+figure and a cost table that both said 29, D-60's coverage condition that the runtime
+rubric carried and the architecture did not.
+
+The candidate block told the model a missing digest cannot happen because INVARIANT 15
+prevents it, while D-60 is built on exactly that case. A runtime prompt, so a clean
+deletion rather than a strike [`CLAUDE.md` §13].
+
+### Pass M, one reversal and one limitation
+
+Changed `SCHEMA.md`, `ARCHITECTURE.html`, `DECISIONS.md` and `CONFIG_REFERENCE.md`.
+
+Reversed L's `security.clean_gap_count` column and the per-operation split it carried.
+The count is as-of: a ticker has more clean gaps now than three years ago, so a stored
+scalar read during backfill admits names a live system would have excluded, which is
+the permissive direction and puts backfilled screen scores on a different population
+than live ones. UniverseBuilder computes it for the date being built instead. The
+split count went back to three.
+
+Stated the limitation that survives the reversal, inside D-62 rather than as a new
+decision. `filing_date_effective` is computed at ingest from the widest clean gap
+known then, so a backfill reading an older row uses a window derived partly from
+filing behaviour that had not happened yet. A widest gap only grows, so affected rows
+become readable later than they truly would have been rather than earlier. Accepted
+rather than corrected, and it does not reach the universe exclusion.
+
+Struck D-54's portfolio letters, the last authored decision naming a portfolio by
+letter.
+
+### Pass N, eight places two documents disagreed
+
+Changed `ARCHITECTURE.html`, `SCHEMA.md`, `BUILD_PLAN.md`, `FIXTURES.md`, `README.md`,
+`CHANGELOG.md` and this file.
+
+What it settled. `order` has one writer: RiskGate for all four portfolios, with
+PortfolioRunner persisting to a new `portfolio_selection` store rather than writing
+orders, which is the structural form of INVARIANT 8 and left figure 7 unchanged. The
+clean-gap exclusion moved from checkpoint 1.4 to 1.5, matching the five documents
+that already placed it in UniverseBuilder. Three write-column mismatches between
+sections 3 and 16 resolved toward the store matrix. Phase 1's definition of done
+extended from four of its ten checkpoints toward all of them. `FIXTURES.md` caught up
+with the fixtures checkpoint 1.10 had been enumerating in its place.
+
+Two things pass N found and did not correct, because each sits outside the clause that
+found it. `README.md` describes `SCHEMA.md` as single-writer ownership, which
+INVARIANT 10 no longer is. And `equity` appears in C18's Reads column with no `equity`
+table declared anywhere, which is a read-side question phase 7 has to settle: whether
+portfolio equity is a store or is derived from fills and positions at read time. Both
+are recorded here so that a later reader can tell a line nobody looked at from one
+that was looked at and left.

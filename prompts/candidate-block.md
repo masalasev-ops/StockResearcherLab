@@ -50,7 +50,7 @@ comparable within a screen. Each as raw value followed by peer percentile.
 | Earnings | `surp1`, `surp2` |
 | Technical | `d200`, `d52wh`, `drs21`, `drs63`, `drssec`, `atrp`, `adx14`, `vol50` |
 | Sentiment | `artz90`, `dsent730` (both nullable) |
-| Flow | `insnet90`, `instown` |
+| Flow | `insnet90` |
 | Balance sheet | `cash`, `burn` (small and mid only) |
 
 `atrp` is in the core rather than a screen block because the risk layer takes the

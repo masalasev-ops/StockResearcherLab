@@ -6,7 +6,7 @@ What has actually been built, as opposed to what is designed.
 measured timings and row counts are observations and belong to whoever ran them.
 Correct them directly. Do not record intentions here.
 
-Corpus version: 0.1 (2026-08-05, initial document set)
+Corpus version: 0.1.0 (2026-08-05, initial document set)
 
 ---
 
@@ -138,6 +138,20 @@ Observations that bear on later phases
   The megacap control earned its place. It caught two defects that every small cap
   would have hidden: an insider endpoint whose data lags by months returning a
   plausible-looking zero, and a selection pool drawn from a part-settled trading day.
+
+Note on the supersession convention and how far back it reaches
+
+  Two short interest facts were removed by plain deletion before the supersession
+  rule existed, then re-inserted and struck once it did. They were restated because
+  they were consequences of D-58, the same decision that drove the change being
+  applied. That is the boundary: the convention applies from D-58 forward.
+
+  Removals made under earlier decisions stay as they are. The corpus history is not
+  retroactively marked up.
+
+  Recorded because without a stated boundary a later session reads those
+  re-insertions as licence to rework every prior deletion in the corpus, which would
+  turn a convention about design history into an excuse to rewrite it.
 
 ---
 

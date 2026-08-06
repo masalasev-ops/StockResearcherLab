@@ -15,9 +15,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\StockResearcherLab.Core\StockResearcherLab.Core.csproj" />
-    <ProjectReference Include="..\..\src\StockResearcherLab.Data\StockResearcherLab.Data.csproj" />
-    <ProjectReference Include="..\..\src\StockResearcherLab.Pipeline\StockResearcherLab.Pipeline.csproj" />
+    <ProjectReference Include="..\StockResearcherLab.Core\StockResearcherLab.Core.csproj" />
+    <ProjectReference Include="..\StockResearcherLab.Data\StockResearcherLab.Data.csproj" />
+    <ProjectReference Include="..\StockResearcherLab.Pipeline\StockResearcherLab.Pipeline.csproj" />
   </ItemGroup>
 
   <ItemGroup>

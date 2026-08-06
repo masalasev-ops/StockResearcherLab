@@ -6,8 +6,6 @@
     <Project Path="src/StockResearcherLab.Worker/StockResearcherLab.Worker.csproj" />
     <Project Path="src/StockResearcherLab.Api/StockResearcherLab.Api.csproj" />
     <Project Path="src/StockResearcherLab.Ui/StockResearcherLab.Ui.csproj" />
-  </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/StockResearcherLab.Tests/StockResearcherLab.Tests.csproj" />
+    <Project Path="src/StockResearcherLab.Tests/StockResearcherLab.Tests.csproj" />
   </Folder>
 </Solution>

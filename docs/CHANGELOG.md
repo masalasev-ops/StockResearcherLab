@@ -27,3 +27,40 @@ Initial corpus, written before any code exists.
 Repository conventions: .NET 10, `.slnx`, central package management, root holding
 only `README.md` and `CLAUDE.md`, secrets in `appsettings.Secrets.json`, EODHD
 dash-form tickers, append-only versioned config. Postgres throughout.
+
+---
+
+## 0.2.0 — 2026-08-06
+
+Phase P, the data probe, signed off. The first version in which a figure in the
+corpus is a measurement rather than a design estimate, and four of the assumptions
+the architecture was built around turned out to be wrong.
+
+- `DECISIONS.md`, D-57 through D-63. D-57 treats a filing date equal to its period
+  end as unknown and is superseded by D-62, which makes the substitution each
+  ticker's own widest clean gap rather than a universal 65 days; D-58 drops short
+  interest from the flow screen, the provider having no series and no as-of date;
+  D-59 sets the freshness guard thresholds from measured row counts; D-60 gates the
+  mean reversion no-digest disqualifier on coverage having existed; D-61 ingests flow
+  at each source's natural grain; D-63 permits correcting a spent prompt's archive to
+  the text actually issued and nothing else
+- `SCHEMA.md` gains `filing_date_effective` and `filing_date_unknown_reason` with its
+  four states, and `flow_daily` becomes two source tables at natural grain plus a
+  derived daily table
+- `CONFIG_REFERENCE.md` loses the one key that had no decision behind it and gains
+  D-59's two thresholds and D-62's minimum clean gap count
+- `BUILD_PLAN.md` gains the conformance pass checks as the content of sign-off step 2
+  and phase 1 checkpoints 1.1 to 1.10
+- `CLAUDE.md` gains the supersession rule and the rule that a build session never
+  adds a measurement to its own scope, and its spent-prompt clause is amended for
+  D-63
+- `PROGRESS.md` carries six probe findings, two conformance findings, corrective
+  passes H and K, and a statement of what the evidence set does and does not cover
+- `tools/probe` with four transcripts committed as the evidence behind every recorded
+  figure
+
+The phase failed its first conformance pass and the record says so. Four figures had
+no measurement behind them and the transcripts were excluded from the repository, so
+nothing recorded was checkable without the build machine. That is why `probe-output/`
+is tracked and why sign-off step 2 is now written down rather than passed between
+sessions.

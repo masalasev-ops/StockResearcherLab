@@ -41,7 +41,8 @@ Run in order. A phase is not done until all five have happened.
    checklist, not a description.
 2. **Conformance pass**, in a session that did not build the phase. Reads the
    architecture sections implemented and the invariants named for that phase. Writes a
-   finding to `PROGRESS.md`.
+   finding to `PROGRESS.md`. It is not a code review. It answers one question: does
+   what was built match what was authored. Its checks are below.
 3. **Reconciliation.** Compare the spent prompt against this plan's detail for the
    phase. They will diverge, because a prompt is written before the work and the plan is
    what was intended. Record the divergence in `PROGRESS.md` under that phase, in one of
@@ -59,16 +60,84 @@ Run in order. A phase is not done until all five have happened.
    changed in the documents.
 
 **The prompt issued for each phase is archived verbatim in `prompts/spent/` as
-`phase-<n>-<slug>.md` and is never edited afterwards.** This plan says what a phase
-should do; the archive says what was actually asked of it. Where the two diverge,
-the divergence is the finding, and it goes in `PROGRESS.md` rather than being
-tidied away in either file.
+`phase-<n>-<slug>.md` and is corrected afterwards only to match the text actually
+issued [D-63].** This plan says what a phase should do; the archive says what was
+actually asked of it. Where the two diverge, the divergence is the finding, and it
+goes in `PROGRESS.md` rather than being tidied away in either file.
+
+### The conformance pass, step 2 in full
+
+Written here because it had existed only in chat, so every run waited on someone
+pasting it and the checks drifted between passes.
+
+**Who may run it.** A session that has made any commit in this repository is
+disqualified, including a commit correcting a finding of an earlier pass. Checking
+your own correction is checking your own build one step removed.
+
+**This step is attested rather than evidenced.** Git carries no session identity, so
+that the checking session was fresh is an operator attestation and no repository can
+hold that fact. Every other step in this procedure produces something checkable from
+the repository alone; this one does not, and treating the attestation as evidence is
+the way the whole procedure fails quietly. The sign-off block records the attestation
+as an attestation.
+
+**It derives its own commit sets from the log** rather than adopting a range it was
+handed. Every pass prefixes its commits with its letter, so the sets are recoverable
+from the messages alone. A boundary taken on trust is how a pass examines the wrong
+commits and reports a clean result that means nothing. `A..B` range notation excludes
+`A`, which silently drops the opening commit of every set.
+
+**Eight checks. Each produces a written finding, including the ones that pass.**
+
+1. **Definition of done, line by line.** For each line, did it produce an observable
+   result, and is that result recorded in the repository. Name every line that is
+   asserted rather than evidenced. A line that is true and unrecorded is still
+   asserted.
+2. **The recorded numbers against what produced them.** Follow every value from the
+   call, query or run that produced it to the row that records it, reading the code
+   and the committed evidence rather than any summary of them. A row filled from a
+   plausible number rather than from a measurement is the failure this check exists
+   for, and it is the most important one here.
+3. **Authorship boundaries** [`CLAUDE.md` §13]. The build session writes `PROGRESS.md`
+   and never `DECISIONS.md`, `BUILD_PLAN.md`, `ARCHITECTURE.html`, `SCHEMA.md`,
+   `VALIDITY.md` or `CLAUDE.md`. Later passes that applied authored decisions under
+   instruction are outside the check and are not reported as violations. Also every
+   commit that wrote to `prompts/spent/`, what it changed, and whether the corpus
+   authorises that kind of edit, distinguishing a header change from a body change
+   [D-63].
+4. **Secrets** [`CLAUDE.md` §10]. No token-shaped string in any blob ever committed,
+   reachable or not. Both secrets files ignored rather than untracked. State the
+   method used, not only the result.
+5. **The reconciliation record.** Is every divergence between the spent prompt and
+   this plan's detail recorded, and is each classified as the prompt asking for less,
+   for more, or for something different. A rewritten reconciliation is checked against
+   the one it superseded, because the failure seen here is a correction narrower than
+   the record it replaced.
+6. **Measured against inferred.** Anything recorded as measured that is actually
+   inferred, and anything recorded as a limitation of the provider or the system that
+   is actually a limitation of the instrument [`CLAUDE.md` §7].
+7. **Consistency with superseded decisions.** Anywhere the code, its comments, its
+   output strings or its committed evidence still asserts what a later decision
+   replaced. Say of each whether it is a defect or an accurate record of what a past
+   run measured against. An executable reference to a superseded rule is a defect; a
+   transcript written while that rule was live is a record and is never edited.
+8. **Cross-reference integrity across the corpus.** Every reference from one document
+   to a numbered section of another resolves to the section it names. Match on the
+   section token alone so backticks, brackets, markdown links and abbreviations are
+   all caught, and establish the target by reading each hit rather than by matching a
+   filename first. State the pattern so the coverage is checkable. The pattern in
+   current use is recorded in `PROGRESS.md` under Corpus consistency passes.
+
+**The pass states divergences and does not correct them.** A conformance pass that
+fixes what it finds destroys the evidence that it was found. Corrections are a
+separate pass with its own numbered checkpoints, and it does not run the checks.
 
 ---
 
 ## Phase P — Data probe
 
-**Status:** `NOT STARTED`
+**Status:** `DONE`, signed off 2026-08-06. Produced D-57 to D-63 and four committed
+transcripts. Sign-off block in `PROGRESS.md`.
 **Runs before phase 0, because its answers change the schema.**
 
 A scratch tool under `tools/probe`. A measuring instrument, not a component. Print
@@ -173,6 +242,21 @@ write-ownership test reads the registry and passes; migrations run clean from em
 Typed HTTP client for the data provider. Bulk end-of-day, fundamentals keyed on
 filing date, sentiment for the whole universe, flow, events. The universe builder
 applying D-4. The freshness guard.
+
+### Checkpoints
+
+| # | Scope |
+|---|---|
+| 1.1 | Typed HTTP client: `api_token` query auth, explicit `fmt=json` on every call, the `::` filter form with colons percent-encoded, and the 1,000-requests-a-minute limit |
+| 1.2 | Bulk end-of-day ingest into `price_daily`, plus the settled-day rule: the most recent available day is still accreting and is not valid |
+| 1.3 | Freshness guard on D-59's thresholds, abort below 40,000 and alert below 45,000 |
+| 1.4 | Fundamentals ingest keyed on `filing_date_effective`, implementing D-62's per-ticker substitution, setting `filing_date_unknown_reason` across its four states, and excluding tickers below `fundamentals.min_clean_gaps_for_substitution` |
+| 1.5 | Universe builder applying D-4, with 20-day median dollar volume computed from `price_daily` rather than any provider average |
+| 1.6 | Sentiment ingest for the whole universe, tolerating a series with rows only on days carrying news |
+| 1.7 | Flow ingest from `sec-filings/form4` and not the legacy endpoint, into `insider_transaction` and `institutional_holding` at natural grain per D-61, with `transaction_code` retained so open-market purchases are separable |
+| 1.8 | Events ingest, and the derived `flow_daily` at ticker-by-day |
+| 1.9 | Endpoint sweep at phase start, recording what the subscription reaches |
+| 1.10 | Tests: no fundamental readable before its effective filing date; substitution fires on equality, null and negative-gap fixtures; a stale end-of-day file aborts the run |
 
 **Done when:** one night of the whole US market lands; the universe builds to
 roughly 2,000 names; feeding the freshness guard deliberately stale data aborts the
@@ -361,6 +445,8 @@ in a phase prompt.
 | P | 4 | If filing dates are absent on small caps, D-46 needs revisiting before screens are built |
 | P | 1 | Entitlement is per endpoint and invisible in the account payload, which showed identical fields on both sides of the mid-phase upgrade. Phase 1 determines what a subscription reaches by sweeping endpoints, never by reading a field |
 | P | 1 | The base rate of unknown filing dates across the whole universe is unknown, and seven names is a hint rather than an answer. It is a query against `fundamental_snapshot` once 1.4 has ingested, read at phase 1 sign-off, and it decides whether D-62's exclusion rule removes a handful of names or a meaningful slice |
+| P | 1 | The dollar volume proxy does not survive into phase 1. Sample selection used `avgvol_50d * adjusted_close` because the bulk feed carries no median dollar volume, and average volume is unadjusted while `adjusted_close` is adjusted, so the product understates for any name that split inside the window. **Closed by 1.5**, which computes the metric from `price_daily`. Recommended by the build session at P.5 and never entered here until K.9 |
+| P | 4 | The S4 open-market purchase base rate is unknown. Transaction code P was 0 on all seven names over 90 days, so `distinct_buyer_count` had nothing to rank on in that window, and six small caps plus a control cannot say whether that is the market or the sample. It is a query against `insider_transaction` once 1.7 has ingested, read at phase 1 sign-off, not a task for any phase |
 | 0 | all | The write-ownership test must be extended as each phase adds tables |
 | 4 | 8 | Config version must be stamped on attribution rows from the first write, or the tuner cannot segment history |
 | 6 | 10 | Cost ledger recording per model before the first full night |

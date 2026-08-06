@@ -6,7 +6,7 @@ What has actually been built, as opposed to what is designed.
 measured timings and row counts are observations and belong to whoever ran them.
 Correct them directly. Do not record intentions here.
 
-Corpus version: 0.1.0 (2026-08-05, initial document set)
+Corpus version: 0.2.0 (2026-08-06, phase P signed off)
 
 ---
 
@@ -14,7 +14,7 @@ Corpus version: 0.1.0 (2026-08-05, initial document set)
 
 | Phase | Status | HEAD | Notes |
 |---|---|---|---|
-| P Data probe | IN PROGRESS | 7a0e8b1 | All five checkpoints landed and all six findings recorded. D-57 to D-61 applied with their consequent edits. Sign-off step 2 has run and phase P did not pass it: four figures had no measurement behind them and the evidence was excluded from the repository. Corrective pass H answers the finding and corrective pass J carries its findings into authored amendments, D-57 superseded by D-62. Step 2 re-runs after both, in a session with no involvement in phase P or in passes H or J. Steps 3 to 5 outstanding |
+| P Data probe | DONE | 3099e66 | All five checkpoints landed and all six findings recorded. D-57 to D-63 produced. Step 2 ran twice: the first pass failed the phase, corrective pass H answered it and pass J carried its findings into authored amendments; the second pass found every recorded figure tracing to committed evidence and left six divergences, all corrected in pass K. All five sign-off steps recorded in the block below. Three P.1 done lines were asserted rather than evidenced by the phase and were evidenced independently at sign-off |
 | 0 Rails | NOT STARTED | | |
 | 1 Ingest and universe | NOT STARTED | | |
 | 2 Compute | NOT STARTED | | |
@@ -91,11 +91,116 @@ Measured figures moved from estimate
   <figure>  <estimate>  <measured>
 ```
 
-### Phase P, not signed off, built on branch `phase-p` at 8a48990
+### Phase P, signed off 2026-08-06, HEAD `3099e66`
 
-Recorded now rather than at sign-off because the divergences are evidence about
-what was asked, and the session that produced them is the one that knows why.
-Steps 2 to 5 of the sign-off procedure have not happened.
+~~Phase P, not signed off, built on branch `phase-p` at 8a48990. Steps 2 to 5 of
+the sign-off procedure have not happened.~~ [superseded by this block, K.10]
+
+`3099e66` is the HEAD this block was written against, not the merge that carries
+it. Everything below the five steps is the build session's own account, written
+before steps 2 to 5 happened and kept as written, because the divergences are
+evidence about what was asked and the session that produced them is the one that
+knows why.
+
+```
+Definition of done      every line run, results below
+Conformance pass        two passes, 2026-08-06, findings below. Attested, not evidenced
+Reconciliation          prompt against plan detail, redone at H.5, patched at K.6
+Next phase authored     checkpoints 1.1 .. 1.10 added to BUILD_PLAN at K.9
+Corpus version          bumped to 0.2.0, CHANGELOG entry added
+```
+
+Definition of done
+
+  Both plan lines, the plan's secrets clause, and the prompt's line per
+  checkpoint. Met means an observable result exists and the repository records
+  it. Asserted means the line is true and nothing records it.
+
+  all four questions have numeric answers in PROGRESS.md
+      met. Six rows filled at `8a48990`, six lines changed and nothing else in
+      the file. Every figure traced to the call that produced it at the second
+      conformance pass.
+  any that came back badly has an entry in DECISIONS.md
+      met at HEAD by D-57 to D-62, and not met when the phase ended. The prompt
+      forbade opening `DECISIONS.md`, so the C, E and J passes authored every
+      entry afterwards. The line is closed and the phase did not close it.
+  no API key enters the repository
+      met. 87 blobs in the object database scanned, reaching the one unreachable
+      commit and the dangling blob. No literal anywhere, both secrets files
+      ignored rather than untracked.
+  P.1 solution builds
+      asserted by the phase, evidenced at the second conformance pass. `dotnet
+      build StockResearcherLab.slnx` on .NET 10.0.301, 0 warnings, 0 errors.
+      Nothing in the repository records the phase itself having run it.
+  P.1 git status --ignored shows the secrets file ignored, not untracked
+      asserted. Re-established independently at the second conformance pass,
+      `git check-ignore -v` attributing both paths to `.gitignore:5`.
+  P.1 a grep of everything staged finds no token-shaped string
+      asserted. Re-established independently over every blob, not only the
+      staged set.
+  P.2 runs end to end on one ticker, printing every measurement including failures
+      met. `probe-20260805-191003.txt`, nine endpoints, five 403s printed with
+      status code and body.
+  P.3 the printed set shows six names in band across four or more sectors
+      met. `probe-20260805-204226.txt`, `in band: 6   distinct sectors: 6`.
+  P.4 all four measurements produce numbers for all seven tickers
+      met. Same transcript, plus the bulk row count over five days.
+  P.5 the table is filled and the rest of PROGRESS.md is byte-identical
+      met. `8a48990` changed six lines in one file and nothing else.
+
+  Three of the ten are asserted, all in P.1, and all three are true. The phase
+  recorded none of them, which is the distinction this line exists to draw.
+
+Conformance finding
+
+  Two passes ran, both on 2026-08-06.
+
+  The first, at HEAD `2802e75`, failed the phase. Four figures inside the
+  answers traced to no probe call, and the evidence behind every figure was
+  excluded from the repository by `.gitignore`, so nothing recorded here was
+  checkable without the build machine. Corrective pass H answered it and
+  corrective pass J carried its findings into authored amendments, D-57
+  superseded by D-62.
+
+  The second, at HEAD `5afcd52`, found every figure in the Measured column
+  tracing to a committed call or transcript. It left six divergences, every one
+  corrected in pass K and none by the pass that found them: three P.1 lines
+  asserted rather than evidenced, an evidence set that does not account for the
+  run date's API consumption, two divergences dropped by the H.5 rewrite, a code
+  comment asserting a measurement that exists only in a commit message, two
+  executable references to a superseded decision, and one cross-reference in
+  `CLAUDE.md` that had never resolved since the baseline commit.
+
+  Both findings are under Conformance passes below, with their methods.
+
+  **Step 2 is attested rather than evidenced.** That a checking session had no
+  involvement in the build or in any correction to it is an operator
+  attestation. Git carries no session identity and no repository can hold that
+  fact. Attested for both passes: the first had no involvement in the build or
+  in the C, E or G passes, the second none in any of those nor in H, J or the
+  first pass.
+
+Reconciliation: spent prompt against plan detail
+
+  Redone at H.5 against this plan's phase P detail, which is what step 3 asks
+  for, and patched at K.6 with three divergences it had dropped. Twelve items
+  against the plan and six recording the build going past both documents, all
+  in the H.5 block below rather than repeated here.
+
+  The one that cost something: the prompt narrowed the plan's *per quarter* to
+  the newest eight, which is *less*, and that bound is why the tool could not
+  produce the figure recorded against it and why D-57's constant rested on 56
+  quarters instead of 454. The one that was structural: the plan's definition of
+  done requires `DECISIONS.md` entries and the prompt forbids opening that file,
+  which is *different*, and both are right. What the plan was missing is a
+  sign-off step that authors them.
+
+Measured figures moved from estimate
+
+  None. Nothing in the Measured figures table above is answerable from a probe
+  over seven names, and the D-4 funnel's 977 is the small bucket on one day
+  rather than a universe size. The figures phase P did measure are provider
+  behaviour and live in the Probe findings table, not that one.
 
 Reconciliation: spent prompt against what the design needs
 
@@ -160,6 +265,60 @@ Note on the supersession convention and how far back it reaches
   re-insertions as licence to rework every prior deletion in the corpus, which would
   turn a convention about design history into an excuse to rewrite it.
 
+Limits of the evidence set [K.5]
+
+  Three things the second conformance pass surfaced by tracing every figure to the
+  call that produced it. All three are limits on what the recorded numbers cover
+  rather than faults in them, and nothing here moves into or out of the Measured
+  column.
+
+  **Which run each figure came from.** The phase measured two different samples on
+  2026-08-05 and the table names neither. The 20:24 run drew CCS, ALNT, IMTX, RJET,
+  MFIC and OOMA from 2026-08-05 itself, which was part-settled at 3,544 rows.
+  `52b64ba` then moved selection to the most recent day within 10 percent of the
+  largest count seen, and the 20:42 run drew CCS, AI, NWPX, KBDC, PHAT and BXC from
+  2026-08-03 at 50,029 rows.
+
+  Every figure in all six rows comes from `probe-20260805-204226.txt`, the 20:42 run,
+  with three exceptions that the cells already label: the three 08-04 bulk readings
+  are one each from the 19:10, 20:24 and 20:42 transcripts; the 08-05 pair of 3,544
+  and 9,072 is one each from the 20:24 and 20:42 transcripts; and the RJET and
+  full-history filing date figures come from
+  `probe-filing-dates-20260806-133038.txt` at H.4. The 20:24 run's own measurements
+  over its own six names are recorded nowhere. They were displaced by the
+  settled-day selection rather than corrected, and that run is why RJET was in the
+  probe's reach at all.
+
+  **The committed transcripts do not account for the run date's API consumption.**
+  The provider's weighted call counter reads 110 at the scaffold's open and 220 at
+  its close, 1,883 at the 20:24 open and 3,733 at its close, and 3,813 at the 20:42
+  open. That leaves roughly 1,663 weighted calls between the scaffold and the 20:24
+  run, and 80 more between the 20:24 and 20:42 runs, with no committed transcript
+  accounting for either.
+
+  Stated as an inference and not a measurement. 1,663 is the scale of one full probe
+  run, and every version from P.2 onward wrote a transcript, so the most likely
+  reading is a run whose output was lost with `bin/` before H.1 moved the directory
+  out of it. Provider-side counter lag and non-probe use of the same token would
+  also move the counter and neither can be excluded from the repository.
+
+  This bounds what H.1 achieved. What it committed is the evidence that survived,
+  not everything the phase produced, and the mechanism it fixed is the reason the
+  difference exists. Nothing recorded in the Probe findings table depends on the
+  missing runs: every figure there traces to a transcript that is present.
+
+  **Three readings the measurement supports without establishing.** The sentiment
+  answer states that rows appear only on days that carry news. What was measured is
+  that the earliest row equals the earliest article on all seven names and that row
+  counts sit below article counts throughout, which is consistent with that reading
+  and does not establish it. The form4 scan stops paging at the first transaction
+  older than the cutoff and caps at 400 filings, which is correct only if the
+  provider returns filings newest first; the code assumes that ordering and does not
+  test it, and on these names it cannot bite because none carries 100 filings inside
+  90 days. And the insider row's `unusable` is a fair reading of a zero return
+  across seven names, but the word stale remains an inference from the disagreement
+  between the two endpoints rather than a measurement of either.
+
 ---
 
 ## Conformance passes
@@ -169,6 +328,7 @@ Summary index. The detail lives in the sign-off block above.
 | Phase | Date | Invariants checked | Finding |
 |---|---|---|---|
 | P | 2026-08-06 | None named for phase P. `CLAUDE.md` §7 and §10, which the prompt scoped in | Four questions carry numeric answers. Four figures inside those answers trace to no probe call. Reconciliation compares the prompt against the design rather than against plan detail and omits three divergences. Authorship clean, no secret in any blob. Three cross-reference defects, all older than the phase |
+| P | 2026-08-06 | Same. Second pass, read at HEAD `5afcd52` | Every figure in the Measured column now traces to a committed call or transcript and the four figures the first pass found are closed. Three P.1 lines are still asserted rather than evidenced. The committed transcripts do not account for the run date's API consumption, so the evidence set is incomplete and nothing says so. The redone reconciliation drops two items the list it replaced carried, both underpinning authored decisions. One code comment asserts a provider limitation with no committed measurement, and two references still point at what a later decision or section replaced. Phase P is not signed off by this pass |
 
 ### Phase P conformance finding, 2026-08-06, read at HEAD `2802e75`
 
@@ -305,6 +465,240 @@ layer, which is §15. Every `D-<n>` reference in the corpus was checked the same
 way: D-1 to D-61 all resolve, and the only apparent miss, D-250, is arithmetic in
 the two-pass backfill note.
 
+### Phase P conformance finding, second pass, 2026-08-06, read at HEAD `5afcd52`
+
+A session with no involvement in the build, in the C, E, G, H or J passes, or in
+the first conformance pass. Commit sets were derived from the log rather than
+adopted from a report. Divergences are stated and not corrected.
+
+**Commit sets used.** Build: `2901ab2`, `fd64f51`, `92ff200`, `7c04769`,
+`2f754ce`, `52b64ba`, `8a48990`, `1d05300`, `189e3d9`. C: `ede929b`, `e2d238c`,
+`6ec37f3`. E: `ab7308b`, `72dd12d`, `f037557`, `d58bea9`, `88a8f6e`, where E.6 is
+the earliest commit of the pass rather than the latest. G: `f0466ac`, `637acc8`,
+`df8cc3c`. First conformance pass: `121686c`, one commit, `PROGRESS.md` only, 136
+insertions. H: `824029e` to `88c07d1`, nine commits, H.4 spanning two. J:
+`2780a84` to `3dfd533`. Outside every pass: `b1a0095`, `ff862bc` and six merges.
+42 objects, all accounted for. Read as git range notation each pass boundary
+would exclude its own opening commit, which drops C.1, E.6, G.1, H.1 and J.1; the
+sets above are inclusive of both endpoints.
+
+**1 Definition of done.** The plan states two lines plus a secrets clause and the
+prompt adds one per checkpoint. *All four questions have numeric answers recorded
+in `PROGRESS.md`*: met, six rows filled at `8a48990` with six lines changed and
+nothing else in the file, satisfying the plan's *editing the existing table in
+place* and the prompt's byte-identical clause together. *Any that came back badly
+has a corresponding entry in `DECISIONS.md`*: met at HEAD by D-57 to D-62, and
+not met when the phase ended. The prompt forbade opening `DECISIONS.md`, so every
+entry was authored afterwards by the C, E and J passes. The line is closed and the
+phase did not close it. *No API key enters the repository*: verified
+independently under check 4. P.2, P.3, P.4 and P.5 each define done as something
+printed, and all four are now evidenced inside the repository:
+`probe-20260805-191003.txt` shows the scaffold running end to end with five 403s
+printed with status and body, `probe-20260805-204226.txt` shows `in band: 6
+distinct sectors: 6` and numbers for all seven tickers across all four
+measurements, and `8a48990`'s diff shows the table edited in place. H.1 is what
+made these three checkable. Three lines remain asserted rather than evidenced,
+all in P.1: *solution builds*, *`git status --ignored` shows
+appsettings.Secrets.json as ignored rather than untracked*, and *a grep of
+everything staged for the first commit finds no token-shaped string*. Nothing in
+the repository records any of the three. This pass ran the first independently,
+`dotnet build StockResearcherLab.slnx` on .NET 10.0.301, succeeding with 0
+warnings and 0 errors, and re-established the other two under check 4. That the
+lines are true does not make them recorded.
+
+**2 Probe findings against the probe.** Every value in the six rows was followed
+from the call that produced it to the row that records it, against
+`tools/probe/Program.cs`, every committed version of it, and the four committed
+transcripts. **Every figure in the Measured column traces.** The four the first
+pass found are closed, and closed three different ways: the listing date and the
+market-wide `transactionDate` are struck as never measured, the 19:24 timestamp
+is corrected to 20:24, and the RJET figure is reproduced exactly by H.4. The
+`limit=1000` control figure it noted separately is now marked as a request cap
+rather than a count. Spot checks that carry the most weight: the news five-year
+totals 177, 199, 255, 924, 3,474 and 19 and the 90-day counts 2, 3, 4, 12, 44 and
+144 are the six small caps of the 20:42 run read off in sorted order; sentiment
+days with a row 4, 7, 17, 34, 63 and 122 likewise, with non-zero equal to rows on
+all seven, which is what makes the *exists but empty* case testable; form4 0, 3,
+6, 12, 48, 64 and distinct insiders 0, 3, 4, 6, 8, 12 with control 26 and 15;
+codes A, D, F, G, M, S as the union across seven names with P absent from all of
+them; the three 08-04 readings 44,665, 44,686 and 44,708 sit in the 19:10, 20:24
+and 20:42 transcripts respectively. The H.4 table reproduces line for line and
+its totals are the column sums: 538 periods, 77 equal, 7 null, 454 clean gaps, 38
+above 65. Three things the trace surfaced that no row states.
+
+  The recorded sample is not the only sample the phase measured. The 20:24 run
+  selected CCS, ALNT, IMTX, RJET, MFIC and OOMA from a part-settled 2026-08-05,
+  and `52b64ba` moved selection to a settled day, after which the 20:42 run
+  selected CCS, AI, NWPX, KBDC, PHAT and BXC. Every recorded figure comes from the
+  second. The Measured column dates the measurement but never names its run, and a
+  reader holding three same-day transcripts carrying two different samples has to
+  work that out.
+
+  The committed transcripts do not account for the run date's API consumption. The
+  provider's own counter reads 110 at the scaffold's open and 220 at its close,
+  1,883 at the 20:24 open and 3,733 at its close, and 3,813 at the 20:42 open.
+  That leaves 1,663 weighted calls between the scaffold and the 20:24 run and 80
+  more between the 20:24 and 20:42 runs, unaccounted for by any committed
+  transcript. 1,663 is the scale of a full probe run, and every version from P.2
+  onward wrote a transcript, so the most likely reading is a run whose transcript
+  was lost with `bin/` before H.1 moved the output directory. Provider-side
+  counter lag and non-probe use of the same token would also move it, and neither
+  can be ruled out from the repository. Stated as an inference, not a measurement.
+  It bears on H.1's claim to have committed the evidence: what was committed is
+  the evidence that still existed.
+
+  `Program.cs` lines 665 to 667 assert that the legacy endpoint *is documented as
+  obsolete and its data lags by months*. Neither clause has committed evidence.
+  The measurement behind it, NVDA over two years with a newest `transactionDate`
+  of 2026-03-25, exists only in `52b64ba`'s commit message, and no committed
+  version of the probe prints `transactionDate` at all. Confirmed by scanning all
+  87 blobs in the object database: the string appears in fourteen `PROGRESS.md`
+  versions, which are the struck text discussing it, and in no version of
+  `Program.cs`. The row itself was rebased by H.2 onto the endpoint disagreement,
+  which does trace; the code comment was not.
+
+**3 Authorship boundaries.** Across the nine build commits the files written are
+`Directory.Build.props`, `Directory.Packages.props`, `StockResearcherLab.slnx`,
+`docs/PROGRESS.md`, `prompts/spent/phase-P-data-probe.md`,
+`tools/probe/Program.cs` and `tools/probe/probe.csproj`. None of the six
+forbidden documents, and `.gitignore` untouched as P.1 required. Clean.
+
+`prompts/spent/` was written by three commits in the whole repository.
+`b1a0095` creates the file. `189e3d9` is header only, `ISSUED` to `SPENT` with
+`Produced` filled, which `prompts/README.md` authorises where it names the header
+fields and the three status values. `2901ab2` changed the header and the body:
+a `Corrected:` line added, and four body changes, "section 1 and section 5" to
+"Sections 7 and 10", "per CLAUDE.md section 1" to "section 7", a new
+commit-per-checkpoint paragraph and a new AFTER block. It landed at 15:00, four
+minutes before P.1, while the header read `ISSUED`. `CLAUDE.md` §14 and
+`prompts/README.md` authorise amending an unrun prompt when a decision changes
+it, and this edit is not decision-driven: it asserts that the archive did not
+match the text actually issued. No corpus rule covers that case, and the only
+evidence that the archive was stale is the build session's own account of it.
+Narrower than it first reads, since the rule that bites is *never edited once
+run* and the prompt had not been run. Disclosed in the header and in the
+reconciliation block, which is the right treatment of an edit no rule covers.
+
+**4 Secrets.** Method: enumerated every object in the object database with
+`git cat-file --batch-all-objects --batch-check`, 87 blobs, 43 commits, 88 trees,
+which reaches unreachable objects as well as reachable ones. `git rev-list --all`
+returns 42 commits, so one is unreachable: `c3633af`, a rewritten form of the
+baseline, inspected and clean. `git fsck --full` reports one dangling blob, a
+`.claude` permissions file. Every blob was piped through a scan for
+`api_token=` followed by anything, `sk-` keys, the provider's hex-dot-digits
+shape, runs of 28 or more alphanumeric characters, and quoted values against
+`ApiToken`, `ApiKey`, `Password` and `token`. The only distinct hits across all
+87 are `api_token={Uri.EscapeDataString(token)}` in the source, `api_token=***`
+in the transcripts and the header comment, and the MSBuild property
+`ManagePackageVersionsCentrally`. No literal anywhere. Every `api_token=`
+occurrence in the four tracked transcripts resolves to `***`, 15 of them, and the
+H.4 transcript prints no URLs at all. `git status --ignored` shows both
+`appsettings.Secrets.json` and `tools/probe/appsettings.Secrets.json` as ignored
+rather than untracked, and `git check-ignore -v` attributes both to
+`.gitignore:5`. The only tracked secrets-shaped path is
+`appsettings.Secrets.example.json`, whose every value is empty, which is what
+D-55 permits. `ff862bc` is additive, two lines for `.claude/`, touching no
+secrets rule; H.1's removal of `**/probe-output/` likewise leaves the secrets
+block intact.
+
+**5 Reconciliation.** H.5 compares the prompt against `BUILD_PLAN.md`'s phase P
+detail, which is what step 3 asks for, separates the prompt-against-plan question
+from the build-against-both question, and classifies every item in one of the
+three prescribed forms. Each of the eleven was checked against both texts and
+each is classified correctly, including the two hardest: the eight-quarter bound
+against the plan's *per quarter* is *less*, and the `DECISIONS.md` conflict is
+*different* rather than a defect in either document. Two divergences are not
+recorded.
+
+  The build-against-both list drops two items the superseded list carried, and
+  both underpin authored decisions. The 90-day news density is in neither the
+  plan, which asks only for the earliest article returned, nor the prompt, which
+  asks for the earliest date, the total and the per-year counts; D-60's threshold
+  of 12 articles rests on it. `SharesShortPriorMonth` is likewise in neither, the
+  prompt asking only whether short interest is populated and how many
+  observations exist over 180 days; D-58's *a one-month change is computable*
+  rests on it. A redone reconciliation that is narrower than the one it supersedes
+  loses exactly the items that later became decisions.
+
+  The plan asks the probe to *confirm the bulk end-of-day endpoint returns a full
+  US day and report the row count*. The prompt asks only to *print the row count
+  returned by the bulk end-of-day endpoint for one recent US trading day*, which
+  drops the confirmation clause. That is *less*, and it is the clause that would
+  have caught the accretion problem by construction. The build caught it anyway by
+  reading five days, which is why this reads as a near miss rather than a failure,
+  and it is not recorded on either side.
+
+**6 Measured against inferred.** No figure in the Measured column is inferred;
+check 2 covers the three items where the record is thinner than it reads. On the
+second half of the question, the rows now separate provider limitations from
+probe limitations well: the control's five-year news total is marked as a floor
+because the 20-page cap bound, the 90-day figure is marked as the `limit=1000`
+request cap on a call that does not page, and the short interest row names the
+call it tried, `historical=1` with from and to returning a nine-member object, so
+a reader can judge for themselves whose limitation it is. Three residual items.
+The sentiment answer states that *rows appear only on days that carry news*,
+which the probe did not measure; it measured that the earliest row equals the
+earliest article on all seven and that row counts sit below article counts
+throughout, which is consistent with the claim and does not establish it. The
+claim sits in the Answer column where judgement belongs, so this is a
+qualification and not a defect. The form4 scan stops paging at the first
+transaction older than the cutoff and caps at 400 filings, which is correct only
+if the provider returns filings newest first; the code assumes that ordering in a
+comment and never tests it, and on these names it cannot bite because no name has
+100 filings inside 90 days. And the legacy endpoint's *unusable* is a fair
+reading of a zero return across seven names, but *stale* remains an inference
+from the disagreement rather than a measurement of it, per check 2.
+
+**7 Consistency with superseded decisions.** D-62 supersedes D-57 and the
+documents were carried across correctly: `CONFIG_REFERENCE.md` strikes
+`fundamentals.filing_date_substitution_days` and adds
+`fundamentals.min_clean_gaps_for_substitution`, `SCHEMA.md` cites D-62 for
+`filing_date_effective` and the per-ticker rule, and `RUNBOOK.md` alerts on a
+ticker's widest clean gap. Two live references survive in code. `Program.cs:872`
+tells a reader the eight-quarter bound *left D-57's 65 day substitution resting on
+56 quarters*, and `Program.cs:919` to `921` classify a gap as `GAP EXCEEDS 65`
+against a comment naming 65 as D-57's substitution constant. Both are defects
+rather than records, because they are executable and a re-run would measure
+against a constant no decision now sets. The same strings inside
+`probe-filing-dates-20260806-133038.txt` are the opposite case: that run happened
+while D-57 was live, and the strings are an accurate record of what it measured
+against. The transcript should not be touched. `PROGRESS.md:344` states that
+*D-57's detection has to run over the whole backfill* as a live obligation, four
+lines above the sentence naming D-62 as its replacement; accurate as the H.4
+pass's own reasoning, and it reads as current on its own.
+
+**8 Cross-references.** Pattern, the sweep adopted at H.6 and run over the whole
+tree rather than over `docs/`:
+
+```
+grep -rnoiE "(§[[:space:]]*[0-9]+([.][0-9]+)?|sections?[[:space:]]+[0-9]+([.][0-9]+)?)" \
+  --include=*.md --include=*.html --include=*.cs .
+```
+
+74 hits across 12 files. Every hit was resolved by reading the target rather than
+by matching a filename, and `ARCHITECTURE.html` resolves by its
+`<span class="secno">` numbers. The three defects H.6 corrected all resolve now.
+One reference does not resolve, and it is not one of the three.
+
+  `CLAUDE.md:305` closes the set-based rule with *Opening a connection inside a
+  loop over tickers usually means the partition key is wrong. See section 3.* §3
+  is Workflow and says nothing about partition keys. The rule is in §5, The stage
+  pattern, under *Parallelism has two partition keys and they are not
+  interchangeable*. Present in `b1a0095`, untouched by phase P, and inside a
+  human-edited-only document. The H.6 sweep used this exact pattern and matched
+  this line, so the miss is in the reading rather than in the pattern, which is
+  worth knowing about a sweep whose whole argument is that it reads every hit.
+
+Every `D-<n>` reference was checked the same way. D-1 to D-62 all resolve, and
+the only apparent miss, D-250, is arithmetic in the two-pass backfill note.
+`Program.cs:129` cites `CLAUDE.md` §6 for null meaning unknown and `Program.cs:867`
+cites `ARCHITECTURE.html` §14 for the five-week filing gap; both resolve.
+
+**Also, outside the eight checks.** The phase status row above carries HEAD
+`7a0e8b1`, which is H.7, while its own note describes pass J and HEAD is
+`5afcd52`. The column was corrected once already for the same staleness at
+`88a8f6e`. Not corrected here.
+
 ---
 
 ## Corrective pass H, 2026-08-06
@@ -386,6 +780,7 @@ three forms.
 
   filing dates bounded to eight quarters   less   the plan says "per quarter"; the prompt says "the last eight quarters"
   sentiment bounded to 180 days           less   the plan puts no window on it; the build ignored the bound and read five years
+  bulk full-day confirmation dropped      less   the plan says "confirm the bulk end-of-day endpoint returns a full US day and report the row count"; the prompt keeps only the row count [added K.6]
   news across all tickers, not one name   more   the plan says "request news for a small cap"
   news totals and per-year counts         more   the plan asks for the earliest article returned and nothing else
   sentiment rows split from non-zero rows more   the plan asks for days returned and counts per day; the split is what made "exists but empty" testable
@@ -417,6 +812,28 @@ four; it is the build that went further.
   institutional ownership measured     in neither
   D-4 price and volume floors applied  in neither; both ask only for the cap band
   account plan and quota printed       in neither
+  news 90-day density                  in neither; the plan asks for the earliest article and the prompt for earliest, total and per-year. D-60's 12-article threshold rests on it [added K.6]
+  SharesShortPriorMonth captured       in neither; the prompt asks only whether short interest is populated and how many 180-day observations exist. D-58's one-month change rests on it [added K.6]
+
+The last two were in the build session's own list and this one dropped them when
+it was rewritten. Both are the reason an authored decision has a number in it, so
+a reconciliation that omits them leaves D-60's threshold and D-58's surviving
+input looking like they came from the plan when they came from the build going
+past it. A rewrite narrower than the record it supersedes is the failure mode to
+watch for here, and it is the second time on this phase that a correction lost
+something the thing it corrected had.
+
+The bulk clause is the near miss. Neither list had it, and it is the one line in
+the plan that would have caught the accretion by construction rather than by the
+build happening to read five days instead of one. Recorded against the prompt
+because the prompt is what dropped it.
+
+**Count.** Twelve items against the plan and six against both, eighteen in all.
+K.6 called for thirteen. The difference is placement rather than coverage: the
+90-day density and `SharesShortPriorMonth` are the build exceeding both documents
+rather than the prompt diverging from the plan, so they belong in the second list,
+and putting them in the first would classify the prompt for something it did not
+do. All three items K.6 named are present.
 
 **Gaps in the plan itself**, where the plan and the prompt agree and are both
 wrong. Neither required the probe's printed output to be committed, and
@@ -488,6 +905,24 @@ Run it over the whole tree, not over `docs/`. `CLAUDE.md` and `README.md` are at
 root, `prompts/` is its own directory, and `tools/` carries section references in
 code comments. `ARCHITECTURE.html` numbers its sections in `<span class="secno">`,
 so references into it resolve by reading rather than by counting headings.
+
+### 2026-08-06, corrective pass K, cross-references
+
+One reference did not resolve. Present in the baseline commit `b1a0095`, untouched
+by phase P, and corrected in place [K.3].
+
+| # | Defect | Correction |
+|---|---|---|
+| 1 | `CLAUDE.md` §6 closed the set-based rule with "See section 3" for the partition-key rule | Corrected to §5, The stage pattern, which is where `Parallelism has two partition keys and they are not interchangeable` is stated. §3 is Workflow |
+
+The H.6 sweep ran this exact pattern and matched this line, so the miss was in the
+reading rather than in the pattern. Worth knowing about a sweep whose whole argument
+is that the target is established by reading every hit: the pattern only guarantees
+the hit is seen, not that it is resolved.
+
+The full sweep at K.3 returned 74 hits across 12 files. Every other section reference
+resolves, and every `D-<n>` reference from D-1 to D-63 resolves. The only apparent
+miss, D-250, is arithmetic in the two-pass backfill note.
 
 ### 2026-08-06, corrective pass H, cross-references
 

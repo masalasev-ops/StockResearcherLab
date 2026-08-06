@@ -504,6 +504,28 @@ exist, being filing dates before their own period end, which is impossible
 in fact and so is unknown rather than early. And equality remains what it
 always was.
 
+**D-63 A spent prompt's body may be corrected to match the text actually
+issued, and may never be changed for any other reason.** `ACTIVE`
+Commit 2901ab2 rewrote four passages of an archived prompt four minutes
+before P.1, on the grounds that the archive did not match what the session
+was given. Nothing in the corpus authorised that, and CLAUDE.md section 14
+states flatly that a spent prompt is never edited once run.
+
+The edit was legitimate and the rule was incomplete. Prompts are composed
+outside the repository and archived separately, so the archive and the
+issued text can diverge by ordinary accident. An archive that records
+something other than what was asked is not serving its purpose, and
+correcting it restores the record rather than damaging it.
+
+The distinction that makes this safe: correcting archive to issued text is
+permitted; changing issued text to what should have been asked is not. The
+first makes the record true, the second makes it flattering. Every such
+correction states in the header that it happened and why.
+
+This does not reopen the general rule. A body edit for any other reason
+remains prohibited, and scope added mid-session is still a divergence
+recorded in PROGRESS.md rather than a retroactive edit.
+
 ---
 
 ## Open

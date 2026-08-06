@@ -29,6 +29,18 @@ Verified column values: `unverified`, `verified <date>`, or `NOT BOUND`.
 | `universe.bucket_large_floor` | 10000000000 | D-4 | UniverseBuilder | unverified |
 | `universe.bucket_mid_floor` | 2000000000 | D-4 | UniverseBuilder | unverified |
 
+## Fundamentals
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `fundamentals.filing_date_substitution_days` | 65 | D-57 | FundamentalsIngestor | unverified |
+| `fundamentals.substitution_rate_alert` | 0.25 | D-57 | FundamentalsIngestor | unverified |
+
+The substitution window is the widest gap the probe observed, not a mean, because
+being late costs freshness while being early costs correctness. The alert exists so
+that a provider change making equality universal is visible rather than silently
+widening every read.
+
 ## Percentiles
 
 | Key | Default | Set by | Consumer | Verified |

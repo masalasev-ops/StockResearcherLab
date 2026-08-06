@@ -37,11 +37,21 @@ Grain: ticker by day. **Writer: PriceIngestor.** ~400 MB.
 ### fundamental_snapshot
 Grain: ticker by fiscal period. **Writer: FundamentalsIngestor.** ~60 MB.
 
-`ticker`, `period_end`, `filing_date`, `period_type`, plus the statement fields.
+`ticker`, `period_end`, `filing_date`, `filing_date_effective`,
+`filing_date_substituted`, `period_type`, plus the statement fields.
 
-**`filing_date` is the key every read filters on, never `period_end`** [D-46,
-INVARIANT 12]. Both are stored so the gap is inspectable, but no query joins on
-`period_end`.
+**`filing_date_effective` is the key every read filters on, never `period_end` and
+never the raw `filing_date`** [D-46, D-57, INVARIANT 12]. `period_end` and the raw
+`filing_date` are both stored so the gap is inspectable, but no query joins on
+either.
+
+`filing_date_effective` equals `filing_date` where the provider supplied a real one.
+Where `filing_date` came back equal to `period_end` the provider has supplied no
+filing date at all, and the row is instead readable from `period_end` plus
+`fundamentals.filing_date_substitution_days` [D-57]. `filing_date_substituted` is
+true on exactly those rows, so the substitution rate is measurable rather than
+invisible, and a provider change that made equality universal would show up rather
+than silently widening every read.
 
 ### sentiment_daily
 Grain: ticker by day, whole universe. **Writer: SentimentIngestor.** ~380 MB.
@@ -60,11 +70,19 @@ and only candidates reach the dossier [D-23].
 Grain: ticker by week. **Writer: FlowIngestor.** ~52 MB.
 
 `ticker`, `week_end`, `publication_date`, `insider_net_usd_90d`,
-`distinct_buyer_count`, `short_interest_pct_float`, `short_interest_change`,
-`inst_ownership_change`.
+`distinct_buyer_count`, `inst_ownership_change`.
 
-Short interest is keyed on `publication_date`, not settlement date, which precedes
-publication and would read data before it existed.
+Short interest is gone. This provider has no series and no as-of date for it, so it
+is not backfillable and the screen ranks on the three fields above [D-58].
+
+**The declared grain is now unsettled and phase 1 must settle it.** The remaining
+fields have different natural grains: insider activity is per transaction and
+arrives whenever a filing lands, while institutional ownership is quarterly and
+dated to the quarter end. Neither is weekly. A ticker-by-week row therefore carries
+one field that changes several times a week and another that changes four times a
+year, and `publication_date` no longer has the field it was named for. Flagged here
+rather than resolved, because the choice belongs with the phase that builds the
+ingest.
 
 ### events
 Grain: ticker by event. **Writer: EventsIngestor.** Small.
@@ -97,7 +115,7 @@ Grain: ticker by day. **Writer: ValuationEngine.** ~540 MB.
 `last_two_earnings_surprises`.
 
 Recomputed daily because price moves. Every fundamental input resolved as of
-`filing_date`.
+`filing_date_effective` [D-57].
 
 ### market_context_daily
 Grain: one row per day. **Writer: MarketContextEngine.** Small.

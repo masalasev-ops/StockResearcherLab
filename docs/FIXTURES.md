@@ -11,12 +11,17 @@ a fixture, because a prompt records what was asked rather than what is true.~~
 `CLAUDE.md` §9. It was stated here as well, and the two copies diverged the moment one
 of them was narrowed.
 
-Nothing is registered yet. Phase 0 opens this file.
+~~Nothing is registered yet. Phase 0 opens this file.~~ [opened, 0.8] Three fixtures
+are registered below, all of them from phase 0's rails. Each exists to make a test
+fail on purpose, because a conformance test that has never failed has not been tested.
 
 ## Registry
 
 | Fixture | Registered | Purpose | Used by |
 |---|---|---|---|
+| Conflicting registry | 0.4 | Two components both claiming `run_log.Insert`, which is the case INVARIANT 10 exists to catch | `WriteOwnershipConformanceTests.TheConformanceTestFailsOnADeliberatelyConflictingRegistry` |
+| Attribution split registry | 0.4 | `CandidateAllocator` inserting `attribution` and `ForwardReturnFiller` updating it, asserted NOT to be a conflict. The case a per-table rule gets wrong and a per-operation rule gets right | `WriteOwnershipConformanceTests.TwoComponentsOnTheSameTableWithDifferentOperationsIsNotAConflict` |
+| Trespassing stage | 0.7 | A stage declaring `run_log` and reading `security`. Both tables exist, so without the guard it succeeds and returns rows | `StageRunnerTests.AStageThatReachesOutsideItsDeclaredSetFailsTheRunAndSaysSo` |
 
 ## Fixtures the design already calls for
 

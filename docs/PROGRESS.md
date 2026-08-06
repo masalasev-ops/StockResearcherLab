@@ -6,7 +6,7 @@ What has actually been built, as opposed to what is designed.
 measured timings and row counts are observations and belong to whoever ran them.
 Correct them directly. Do not record intentions here.
 
-Corpus version: 0.2.1 (2026-08-06, architecture and ownership corrections)
+Corpus version: 0.3.0 (2026-08-06, phase 0 rails)
 
 ---
 
@@ -15,7 +15,7 @@ Corpus version: 0.2.1 (2026-08-06, architecture and ownership corrections)
 | Phase | Status | HEAD | Notes |
 |---|---|---|---|
 | P Data probe | DONE | 3099e66 | All five checkpoints landed and all six findings recorded. D-57 to D-63 produced. Step 2 ran twice: the first pass failed the phase, corrective pass H answered it and pass J carried its findings into authored amendments; the second pass found every recorded figure tracing to committed evidence and left six divergences, all corrected in pass K. All five sign-off steps recorded in the block below. Three P.1 done lines were asserted rather than evidenced by the phase and were evidenced independently at sign-off |
-| 0 Rails | NOT STARTED | | |
+| 0 Rails | IN PROGRESS | a27bdfb | Checkpoints 0.1 to 0.8 built on branch `phase-0-rails`. Solution layout, schema and migrations, stage abstraction and registry, run logging and the write-ownership conformance test, the Api isolation test, the bare run viewer, and one no-op stage end to end. 25 tests green. Not signed off: steps 2 to 5 of the sign-off procedure have not happened |
 | 1 Ingest and universe | NOT STARTED | | |
 | 2 Compute | NOT STARTED | | |
 | 3 Backfill | NOT STARTED | | |

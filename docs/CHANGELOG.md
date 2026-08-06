@@ -100,3 +100,38 @@ Recorded rather than fixed: the 0.2.0 entry above does not name `RUNBOOK.md`,
 `prompts/rubrics.md` or `prompts/README.md`, all three changed during phase P. This
 file is appended to and never rewritten, so the omission stands and is stated here
 instead.
+
+---
+
+## 0.3.0 — 2026-08-06
+
+Phase 0, the rails. The first version with code in it. Nothing is signed off and
+no measurement was made.
+
+- Six source projects and the test project, per `CLAUDE.md` §4 and D-56. `Core` has
+  no project references and `Api` has none to `Pipeline`, which is the structural
+  form of the read-only guarantee and now carries a test that fails if the
+  reference is added
+- Postgres schema and migrations, snapshot-first, from `SCHEMA.md`. Thirty-three
+  tables in `public`, one per table the document declares, including
+  `portfolio_selection`. The migration ledger sits in a `meta` schema so that
+  "every table in the database is in `SCHEMA.md`" can be asserted without an
+  exception carved out of it
+- The stage abstraction: read set, write set per operation, date and config version
+  in, and no route to data except one that checks the declaration first. `IClock` is
+  the only route to the current time
+- The stage registry, and the conformance test asserting no two components claim the
+  same table and operation, with the three splits `SCHEMA.md` declares permitted and
+  a fourth failing
+- Run logging into `run_log`, a bare run viewer over it, and one no-op stage that
+  runs from the command line, logs, and appears in the viewer
+- `guards.ps1`, `migrate.ps1` and `seed.ps1` at the root. `migrate.ps1` is real;
+  the other two are stubs that say what they will do and exit zero
+- `FIXTURES.md` opened with three fixtures, each one existing to make a test fail on
+  purpose
+- `tools/probe` deleted. Its four transcripts were kept, in `docs/evidence/phase-P/`,
+  because they are the evidence behind every figure in the Probe findings table and
+  deleting them would undo H.1
+
+The test project lives in `src/` rather than `tests/`, and `CLAUDE.md` §4 and
+`README.md` were updated by the author to match.

@@ -1,0 +1,68 @@
+Phase P data probe
+Scaffold run (P.2), single ticker: AAPL.US
+
+==============================================================================
+ACCOUNT
+==============================================================================
+  GET https://eodhd.com/api/user?fmt=json&api_token=***
+  subscriptionType  monthly
+  subscriptionMode  paid
+  apiRequests       110
+  apiRequestsDate   2026-08-05
+  dailyRateLimit    100000
+  extraLimit        500
+
+==============================================================================
+MEASUREMENT REACHABILITY, AAPL.US
+==============================================================================
+
+news
+  GET https://eodhd.com/api/news?s=AAPL.US&from=2026-05-07&to=2026-08-05&limit=5&fmt=json&api_token=***
+  array length 5, first date 2026-08-05T18:33:10+00:00
+
+sentiments
+  GET https://eodhd.com/api/sentiments?s=AAPL.US&from=2026-05-07&to=2026-08-05&fmt=json&api_token=***
+  keys [AAPL.US]
+  rows 91
+
+insider-transactions (legacy)
+  GET https://eodhd.com/api/insider-transactions?code=AAPL.US&from=2026-05-07&to=2026-08-05&limit=10&fmt=json&api_token=***
+  FAILED  HTTP 403 Forbidden
+  BODY    Forbidden
+  no result
+
+sec-filings form4 (current)
+  GET https://eodhd.com/api/sec-filings/AAPL.US/form4?fmt=json&api_token=***
+  FAILED  HTTP 403 Forbidden
+  BODY    Forbidden. Please contact support@eodhistoricaldata.com
+  no result
+
+fundamentals, short interest fields
+  GET https://eodhd.com/api/fundamentals/AAPL.US?filter=Technicals&fmt=json&api_token=***
+  FAILED  HTTP 403 Forbidden
+  BODY    Forbidden. Please contact support@eodhistoricaldata.com
+  no result
+
+fundamentals, quarterly balance sheet
+  GET https://eodhd.com/api/fundamentals/AAPL.US?filter=Financials%3A%3ABalance_Sheet%3A%3Aquarterly&fmt=json&api_token=***
+  FAILED  HTTP 403 Forbidden
+  BODY    Forbidden. Please contact support@eodhistoricaldata.com
+  no result
+
+screener (availability only, not used for selection)
+  GET https://eodhd.com/api/screener?filters=%5B%5B%22market_capitalization%22%2C%22%3E%3D%22%2C300000000%5D%2C%5B%22market_capitalization%22%2C%22%3C%22%2C2000000000%5D%2C%5B%22exchange%22%2C%22%3D%22%2C%22us%22%5D%5D&limit=1&fmt=json&api_token=***
+  FAILED  HTTP 403 Forbidden
+  BODY    Forbidden. Please contact support@eodhistoricaldata.com
+  not available on this plan
+
+eod-bulk-last-day/US
+  GET https://eodhd.com/api/eod-bulk-last-day/US?filter=extended&fmt=json&api_token=***
+  rows 44665
+  first code DDDX, date 2026-08-04
+
+==============================================================================
+RUN SUMMARY
+==============================================================================
+  http requests issued  9
+  GET https://eodhd.com/api/user?fmt=json&api_token=***
+  apiRequests after     220

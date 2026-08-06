@@ -921,7 +921,21 @@ using (var doc = await Get("user", true))
     }
 }
 
-var outDir = Path.Combine(AppContext.BaseDirectory, "probe-output");
+// Transcripts are repository evidence rather than build output, so they are
+// written beside the project instead of under bin/, where .gitignore excludes
+// them and the numbers in PROGRESS.md end up with nothing behind them [H.1].
+static string ProjectDir()
+{
+    var d = new DirectoryInfo(AppContext.BaseDirectory);
+    while (d is not null)
+    {
+        if (File.Exists(Path.Combine(d.FullName, "probe.csproj"))) return d.FullName;
+        d = d.Parent;
+    }
+    return AppContext.BaseDirectory;
+}
+
+var outDir = Path.Combine(ProjectDir(), "probe-output");
 Directory.CreateDirectory(outDir);
 var outPath = Path.Combine(outDir, $"probe-{startedUtc.ToString("yyyyMMdd-HHmmss", inv)}.txt");
 await File.WriteAllTextAsync(outPath, Redact(transcript.ToString()));

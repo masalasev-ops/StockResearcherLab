@@ -6,11 +6,14 @@
 !*.Secrets.example.json
 .env
 .env.*
-**/probe-output/
 
 # .NET
 bin/
 obj/
+# tools/probe/probe-output/ is deliberately tracked and must stay outside bin/.
+# The transcripts are the evidence behind the phase P findings, and while they
+# were excluded here nothing recorded in PROGRESS.md was checkable without the
+# build machine [H.1].
 *.user
 *.suo
 .vs/

@@ -371,11 +371,15 @@ read model.
 
 **D-57 A filing date equal to its period end is treated as unknown, and the
 row becomes readable only after period end plus 65 days.** `ACTIVE`
-The probe found names returning `filing_date == period_end` in 35 of 73
-periods and 11 of the newest 12, with no nulls. The field is populated, so
-nothing errors, and reading it as a filing date hands you the quarter's
-numbers on the day the quarter closed. That is the silent-failure class
-invariant 12 exists to prevent.
+~~The probe found names returning `filing_date == period_end` in 35 of 73
+periods and 11 of the newest 12, with no nulls.~~ [evidence corrected, H.3]
+The probe read the newest eight quarters per name, so no figure spanning 73
+periods came from it. What it recorded is RJET.US at 7 of the newest 8 equal
+to `period_end` with no nulls, which is a higher rate than the 35 of 73 this
+entry claimed. The phenomenon is confirmed and the decision is unchanged. The
+field is populated, so nothing errors, and reading it as a filing date hands
+you the quarter's numbers on the day the quarter closed. That is the
+silent-failure class invariant 12 exists to prevent.
 
 Imputing a plausible date would be fabricating a point in time, so the rule
 substitutes the widest gap the probe actually observed, being 65 days across

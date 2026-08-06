@@ -18,6 +18,10 @@
     <ProjectReference Include="..\StockResearcherLab.Core\StockResearcherLab.Core.csproj" />
     <ProjectReference Include="..\StockResearcherLab.Data\StockResearcherLab.Data.csproj" />
     <ProjectReference Include="..\StockResearcherLab.Pipeline\StockResearcherLab.Pipeline.csproj" />
+    <!-- Referenced so the Api is always rebuilt before ApiIsolationTests reads
+         its deps.json. Without this nothing in the test run builds the Api, and
+         that assertion would pass against whatever was last on disk. -->
+    <ProjectReference Include="..\StockResearcherLab.Api\StockResearcherLab.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>

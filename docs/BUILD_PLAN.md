@@ -243,6 +243,11 @@ Typed HTTP client for the data provider. Bulk end-of-day, fundamentals keyed on
 filing date, sentiment for the whole universe, flow, events. The universe builder
 applying D-4. The freshness guard.
 
+**C34 FlowEngine is a layer 2 component and is built here rather than in phase 2**,
+because its work is inseparable from the ingest it derives from: the two source tables
+and the three daily metrics computed off them are one decision, D-61, and splitting
+them across phases would leave `flow_daily` declared and unwritten for a phase.
+
 ### Checkpoints
 
 | # | Scope |
@@ -259,9 +264,15 @@ applying D-4. The freshness guard.
 | 1.10 | Tests: no fundamental readable before its effective filing date; substitution fires on equality, null and negative-gap fixtures; a stale end-of-day file aborts the run |
 
 **Done when:** one night of the whole US market lands; the universe builds to
-roughly 2,000 names; feeding the freshness guard deliberately stale data aborts the
-run and produces no orders; a test asserts no fundamental value is readable before
-its filing date.
+roughly 2,000 names, with the count of names excluded by the clean-gap criterion
+recorded rather than assumed; feeding the freshness guard deliberately stale data
+aborts the run and produces no orders; a test asserts no fundamental value is
+readable before its ~~filing date~~ [corrected, D-62] effective filing date, with the
+equality, null and negative-gap cases each exercised; sentiment lands for the whole
+universe and a name with rows on only a handful of days in the window is ingested
+without error; `insider_transaction` and `institutional_holding` land at their own
+grain with `transaction_code` retained, and `flow_daily` derives from them at
+ticker-by-day; the endpoint sweep from 1.9 is recorded in `PROGRESS.md`.
 
 **Invariants at risk:** 1, 10, 11, 12.
 
@@ -276,6 +287,8 @@ constrains what this phase can promise downstream. Record it.
 
 Indicators, valuation, market context including sector relative strength, and the
 percentile engine with size-and-sector cells and the fifteen-member fallback.
+
+C34 FlowEngine belongs to this layer and was built in phase 1, with D-61's ingest.
 
 **Done when:** a known ticker's indicators match a hand-computed reference; a
 percentile spot-check confirms cell membership is correct and the fallback fires

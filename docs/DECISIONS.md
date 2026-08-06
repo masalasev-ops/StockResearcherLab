@@ -369,6 +369,43 @@ form of D-51, and it is what stops the read-only guarantee eroding the first tim
 feature would be easier with a stage call. If one appears to need it, the answer is a
 read model.
 
+**D-57 A filing date equal to its period end is treated as unknown, and the
+row becomes readable only after period end plus 65 days.** `ACTIVE`
+The probe found names returning `filing_date == period_end` in 35 of 73
+periods and 11 of the newest 12, with no nulls. The field is populated, so
+nothing errors, and reading it as a filing date hands you the quarter's
+numbers on the day the quarter closed. That is the silent-failure class
+invariant 12 exists to prevent.
+
+Imputing a plausible date would be fabricating a point in time, so the rule
+substitutes the widest gap the probe actually observed, being 65 days across
+56 clean quarters where the range was 19 to 65. The maximum is used rather
+than the mean because being late costs freshness while being early costs
+correctness, and point-in-time discipline is a promise never to be early.
+
+The substitution is recorded on the row rather than applied invisibly, so
+the rate is measurable and a provider change that made equality universal
+would be visible rather than silently widening every read.
+
+**D-58 Short interest is dropped from the flow screen.** `ACTIVE`
+The probe settled that this provider has no short interest series and no
+as-of date. Values are populated in Technicals, null throughout SharesStats,
+no date key exists anywhere in the payload, and `historical=1` returns a
+fixed object rather than a series. A one-month change is computable from
+SharesShortPriorMonth; a series is not.
+
+The screen therefore ranks on insider net dollar flow, distinct buyer count
+and institutional ownership change. Three inputs rather than four.
+
+Keeping a one-month change was rejected because it is not backfillable, and
+a screen whose backfill scores come from a different metric set than its
+live scores has a floor drawn from a distribution the live screen does not
+share. A floor like that is not a floor. Identical inputs across backfill
+and live is worth more than a fourth input.
+
+Institutional ownership survives and compensates partly: Holders entries are
+dated and carry change, so it is backfillable at quarterly grain.
+
 ---
 
 ## Open

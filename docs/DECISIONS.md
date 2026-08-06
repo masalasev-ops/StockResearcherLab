@@ -555,6 +555,19 @@ This does not reopen the general rule. A body edit for any other reason
 remains prohibited, and scope added mid-session is still a divergence
 recorded in PROGRESS.md rather than a retroactive edit.
 
+**D-67 The sign-off procedure is two steps, and the grep-checkable
+invariants are checked by CI rather than by a person.** `ACTIVE`
+The five-step procedure was calibrated for phase P, whose deliverable was
+measurements feeding decisions. Applied to phases whose deliverable is a
+passing test suite it produced records rather than findings: across phases
+P and 0 the reconciliation step and the corpus version bump caught nothing,
+while the checks that did catch something were the code-against-design and
+number-against-source ones. Phase 0's conformance pass found exactly one
+invariant breach in the whole tree, which guards.ps1 now finds on every
+push [O.1]. The cost of the removed steps was days per phase and eleven
+correction passes on phase P alone. What replaces them is mechanical and
+runs every time rather than once.
+
 ---
 
 ## Open

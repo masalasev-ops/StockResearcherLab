@@ -150,30 +150,18 @@ Then, in order:
 - Fill the Consumer column in `CONFIG_REFERENCE.md` for every key this phase wired up,
   having actually read the composition code rather than inferring from the name.
 
-### The conformance pass
+### The review at sign-off
 
 **Runs in a fresh session, not the one that built the phase.** The session that wrote
-the code has already convinced itself, and asking it to check its own conformance
-produces agreement rather than a check.
+the code has already convinced itself, and asking it to check its own work produces
+agreement rather than a check. A session that has committed here does not run it.
 
-It reads the architecture sections the phase implements and the invariants the build
-plan names for that phase, and produces a written finding in `PROGRESS.md`. It is not a
-code review. It answers one question: does what was built match what was authored.
+It writes what it found into `PROGRESS.md` and corrects nothing. The two steps and the
+three questions the review asks are in `BUILD_PLAN.md` [D-67].
 
-### Reconciliation, after the conformance pass
-
-Compare the spent prompt against `BUILD_PLAN.md`'s detail for the phase. They will
-diverge, because the prompt was written before the work and the plan is what was
-intended. Record the divergence in `PROGRESS.md`: the prompt asked for less than the
-plan, which is a gap and means the phase is not done; or more, which is unplanned scope
-that either becomes a decision or comes out; or something different, which usually means
-the plan was wrong rather than the prompt.
-
-**Never edit the spent prompt to close a divergence.** It is the only evidence of why
-the code looks the way it does.
-
-The full five-step sign-off is in `BUILD_PLAN.md`, and the last two steps are authoring
-the next phase's checkpoints and bumping the corpus version.
+**Never edit a spent prompt** except to correct it to the text actually issued [D-63].
+It is the only evidence of why the code looks the way it does. Nothing is reconciled
+against it.
 
 ---
 

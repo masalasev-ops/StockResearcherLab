@@ -18,11 +18,14 @@ Treat them the way you would treat code.
 
 Every prompt that has been issued, archived verbatim.
 
-These are **records**. Nothing reads them at runtime and they are never edited.
-A spent prompt records what was asked, not what should have been asked. If a
+These are **records**. Nothing reads them at runtime and they are ~~never edited~~
+[amended, D-63] never edited except to correct the archive to the text actually
+issued. A spent prompt records what was asked, not what should have been asked. If a
 later decision means the request was wrong, that belongs in `DECISIONS.md` and
 in the next prompt. Correcting the archive destroys the only evidence of why the
-code came out the way it did.
+code came out the way it did. The single exception is an archive that does not
+match what was issued, where the correction restores the record rather than
+damaging it and the header says that it happened and why [D-63].
 
 The reconciliation question in `CLAUDE.md` §14 is the test:
 

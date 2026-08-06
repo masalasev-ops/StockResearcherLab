@@ -501,9 +501,12 @@ These constrain the code. If the code disagrees with them, the code is wrong.
 
 ## 14. Prompts
 
-**Every prompt issued is archived verbatim in `prompts/spent/` and is never edited once
-run.** A spent prompt records what was asked, not what should have been asked.
-Correcting it destroys the only evidence of why the code came out the way it did.
+**Every prompt issued is archived verbatim in `prompts/spent/` and ~~is never edited once
+run~~ [amended, D-63] may be edited once run only to correct it to the text actually
+issued.** A spent prompt records what was asked, not what should have been asked.
+Changing it to what should have been asked destroys the only evidence of why the code
+came out the way it did. Correcting it to what was issued restores that evidence, and
+the header states that the correction happened and why [D-63].
 
 Whenever a decision is added, amended or superseded, ask:
 

@@ -401,7 +401,8 @@ what goes silently incomplete the moment one is registered in the other, so no o
 document keeps one. Naming a single fixture where a document states what must be proved
 is not a list and is expected: a definition of done that cannot name what it tests is
 not a definition of done, and the forward list in `FIXTURES.md` cites those documents as
-its own sources.
+its own sources. A spent prompt may name a fixture freely, because it records what was
+asked rather than what is true [moved from `FIXTURES.md`, N.10].
 
 **Prefer testing through the public surface.** `InternalsVisibleTo` is permitted where
 widening the public API purely for tests would be worse. The bar is that the public

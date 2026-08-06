@@ -3,10 +3,13 @@
 The single registry of test fixtures. Every fixture is registered here and referenced
 from here.
 
-**Do not enumerate fixture names in build plan detail or in `CLAUDE.md`.** A list
+~~**Do not enumerate fixture names in build plan detail or in `CLAUDE.md`.** A list
 kept in two places goes silently incomplete the moment one is registered in the other,
 and the copy that goes stale is the one nobody is looking at. A spent prompt may name
-a fixture, because a prompt records what was asked rather than what is true.
+a fixture, because a prompt records what was asked rather than what is true.~~
+[moved, N.10] What other documents may say about fixtures is stated once, in
+`CLAUDE.md` §9. It was stated here as well, and the two copies diverged the moment one
+of them was narrowed.
 
 Nothing is registered yet. Phase 0 opens this file.
 

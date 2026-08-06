@@ -3,8 +3,8 @@
 Rules for agents working in StockResearcherLab.
 
 Read `ARCHITECTURE.html` before changing anything structural. Read `DECISIONS.md`
-when a change touches a numbered decision. `BUILD_PLAN.md` says which phase is
-current and what its definition of done is.
+when a change touches a numbered decision. `PROGRESS.md` says which phase is
+current and `BUILD_PLAN.md` says what its definition of done is [D-66].
 
 **Every rule in this file is justified by this system.** Nothing here is carried from
 another codebase on the strength of what went wrong there. A rule whose cost is real

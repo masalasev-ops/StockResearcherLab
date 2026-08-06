@@ -555,6 +555,13 @@ This does not reopen the general rule. A body edit for any other reason
 remains prohibited, and scope added mid-session is still a divergence
 recorded in PROGRESS.md rather than a retroactive edit.
 
+**D-66 Phase status is recorded in `PROGRESS.md` and nowhere else.**
+`ACTIVE`
+BUILD_PLAN carried a status field per phase, duplicating PROGRESS for all
+twelve. The duplication crossed an authorship boundary, so the field could
+only be updated by hand after the fact and went stale on the first phase
+that ran. BUILD_PLAN holds what is decided; PROGRESS holds what happened.
+
 **D-67 The sign-off procedure is two steps, and the grep-checkable
 invariants are checked by CI rather than by a person.** `ACTIVE`
 The five-step procedure was calibrated for phase P, whose deliverable was

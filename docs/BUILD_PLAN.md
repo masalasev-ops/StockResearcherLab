@@ -9,7 +9,8 @@ break. That list is not a summary of the phase. It is what the review at sign-of
 looks at first, and what `guards.ps1` checks on every push where the invariant is
 grep-checkable [D-67].
 
-Status markers: `NOT STARTED`, `IN PROGRESS`, `DONE`, `BLOCKED`.
+No phase below carries a status. `PROGRESS.md`'s phase status table is where that
+lives, and it is the only place [D-66]. This document holds what is decided.
 
 ---
 
@@ -26,8 +27,8 @@ A commit that spans two checkpoints means the checkpoints were drawn wrong; spli
 **Detail is authored one phase ahead, not eleven.** Phases below carry scope and a
 definition of done from the outset, because those are decisions. Numbered checkpoints
 are authored when the previous phase signs off, because writing them earlier means
-writing against assumptions the build has not tested yet. Phase P and phase 0 carry
-checkpoints now; phase 1 gets them when phase 0 signs off.
+writing against assumptions the build has not tested yet. Each phase's checkpoints
+are authored at the previous phase's sign-off.
 
 ### Sign-off
 
@@ -60,8 +61,6 @@ the way it does. Nothing is reconciled against it [D-67].
 
 ## Phase P — Data probe
 
-**Status:** `DONE`, signed off 2026-08-06. Produced D-57 to D-63 and four committed
-transcripts. Sign-off block in `PROGRESS.md`.
 **Runs before phase 0, because its answers change the schema.**
 
 A scratch tool under `tools/probe`. A measuring instrument, not a component. Print
@@ -116,8 +115,6 @@ first commit.
 
 ## Phase 0 — Rails
 
-**Status:** `NOT STARTED`
-
 Repository structure, solution layout, Postgres schema and migrations, the stage
 registry, run logging, and the conformance test over write ownership. One trivial
 stage end to end to prove the rails work.
@@ -160,8 +157,6 @@ write-ownership test reads the registry and passes; migrations run clean from em
 ---
 
 ## Phase 1 — Ingest and universe
-
-**Status:** `NOT STARTED`
 
 Typed HTTP client for the data provider. Bulk end-of-day, fundamentals keyed on
 filing date, sentiment for the whole universe, flow, events. The universe builder
@@ -207,8 +202,6 @@ constrains what this phase can promise downstream. Record it.
 
 ## Phase 2 — Compute
 
-**Status:** `NOT STARTED`
-
 Indicators, valuation, market context including sector relative strength, and the
 percentile engine with size-and-sector cells and the fifteen-member fallback.
 
@@ -224,8 +217,6 @@ where cells are thin.
 
 ## Phase 3 — Backfill of ingest and compute
 
-**Status:** `NOT STARTED`
-
 Five years, including delisted tickers, two-pass and parallel. Ticker-partitioned
 for ingest, indicators and valuation. Date-partitioned for percentiles.
 
@@ -239,7 +230,6 @@ date produces byte-identical output to the first run.
 
 ## Phase 4 — Screens and candidate selection
 
-**Status:** `NOT STARTED`
 **This is the phase where you find out whether the idea works, and it is the last
 one before money is spent on models.**
 
@@ -267,8 +257,6 @@ forward returns before anything has judged them.
 
 ## Phase 5 — Digest chain
 
-**Status:** `NOT STARTED`
-
 Local client over the OpenAI-compatible endpoint, Haiku client, the ordered chain
 with health checks, the nightly rotation of two candidates to the secondary, and the
 gate.
@@ -283,8 +271,6 @@ produces no orders; the rotation is present every night regardless of primary he
 ---
 
 ## Phase 6 — The researcher
-
-**Status:** `NOT STARTED`
 
 Dossier builder producing the cached prefix and per-candidate blocks. Researcher
 client running twice, Opus 5 batched and V4 Pro synchronous. Proposal validator with
@@ -304,8 +290,6 @@ must be recording per model before the first full night, not after.
 
 ## Phase 7 — Risk, execution and portfolios
 
-**Status:** `NOT STARTED`
-
 Risk gate with the arbitration steps, paper broker, position manager, portfolio
 registry, portfolio runner.
 
@@ -321,8 +305,6 @@ natural exit.
 
 ## Phase 8 — Learning loops
 
-**Status:** `NOT STARTED`
-
 Forward return filler with all three benchmark columns, screen tuner, lesson writer,
 calibration reporter.
 
@@ -337,8 +319,6 @@ twelve; a reliability diagram renders from real backfilled attribution.
 
 ## Phase 9 — API and UI
 
-**Status:** `NOT STARTED`
-
 Read-only query API, read model builder, Blazor client, the six screens.
 
 **Done when:** all six screens render from real data; the digest chain indicator
@@ -351,8 +331,6 @@ local model connection config.
 ---
 
 ## Phase 10 — Soak
-
-**Status:** `NOT STARTED`
 
 Run nightly with nothing acted on. Watch cost, failures, concentration, and the
 validator rejection rate.

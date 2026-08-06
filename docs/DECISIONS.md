@@ -589,3 +589,40 @@ Decide from the ~~A against D~~ [superseded, D-36] `Research: Opus 5` against
 rejection rate per model, which is available much sooner. The letters were the
 naming in use before D-36 set the four portfolio names, and they survived the
 rename here [M.3].
+
+**D-64 The freshness guard's abort floor against a part-settled file.** `OPEN`
+Owed to checkpoint 1.3.
+
+D-59 sets the floor at 40,000 and the alert band at 40,000 to 45,000, on
+settled days measuring 50,029 to 50,204 and sessions still in progress
+measuring 3,544 and 9,072. Those two populations are far apart and the floor
+separates them.
+
+2026-08-04 is the case neither figure covers. It was read three times across
+the evening of 2026-08-05 at 44,665, 44,686 and 44,708, still gaining rows
+after it had stopped being the most recent day. 44,708 is 11 percent below the
+lowest settled count, above the abort floor, and inside the alert band. A
+part-settled file of that shape passes the guard and produces orders on a day
+whose bars are incomplete, which is the failure the guard exists to prevent.
+
+What is open is what to do about it, not what the numbers are. Raising the
+floor toward the settled range narrows the margin against a legitimately
+short day, a half session or a holiday-shortened one, and a bound is not
+loosened or tightened because a measurement missed it [`CLAUDE.md` §11].
+Phase 1 decides from a wider sample than three readings of one day.
+
+**D-65 What the freshness guard asserts about the latest price date.** `OPEN`
+Owed to checkpoints 1.2 and 1.3.
+
+`ARCHITECTURE.html` §4 requires the latest price date to equal today.
+Checkpoint 1.2's settled-day rule rejects the most recent available day as
+still accreting. Both cannot hold: the day whose date equals today is the day
+1.2 will not use.
+
+Two readings and neither is chosen here. Either the guard asserts against the
+newest settled date rather than today, which makes the assertion agree with
+what the ingest actually loads, or the run is expected to see today's date
+because it runs after the session has settled, which makes 1.2's rule the
+narrower statement of the same thing. The measurement that would separate them
+is when a US day stops accreting, which phase 1 sees every night and the probe
+saw once.

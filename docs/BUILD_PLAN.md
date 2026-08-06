@@ -261,7 +261,7 @@ them across phases would leave `flow_daily` declared and unwritten for a phase.
 | 1.7 | Flow ingest from `sec-filings/form4` and not the legacy endpoint, into `insider_transaction` and `institutional_holding` at natural grain per D-61, with `transaction_code` retained so open-market purchases are separable |
 | 1.8 | Events ingest, and the derived `flow_daily` at ticker-by-day |
 | 1.9 | Endpoint sweep at phase start, recording what the subscription reaches |
-| 1.10 | Tests: no fundamental readable before its effective filing date; substitution fires on equality, null and negative-gap fixtures; a stale end-of-day file aborts the run |
+| 1.10 | Tests: no fundamental readable before its effective filing date; the substitution and exclusion fixtures registered in `FIXTURES.md`; a stale end-of-day file aborts the run |
 
 **Done when:** one night of the whole US market lands; the universe builds to
 roughly 2,000 names, with the count of names excluded by the clean-gap criterion

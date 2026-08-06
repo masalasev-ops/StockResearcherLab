@@ -29,6 +29,11 @@ above when they are written.
 - A stale end-of-day file, which the freshness guard must abort on [phase 1]
 - A fundamental whose filing date is later than its period end, asserting no read
   before the filing date [phase 1]
+- A fundamental whose filing date equals its period end [phase 1]
+- A fundamental whose filing date is null [phase 1]
+- A fundamental whose filing date precedes its own period end [phase 1]
+- A ticker with fewer than four clean gaps, which the universe must exclude
+  [phase 1]
 - A night where the primary digest provider is unavailable and the chain falls
   through [phase 5]
 - A night where no digest provider is healthy and the run halts [phase 5]

@@ -250,8 +250,8 @@ applying D-4. The freshness guard.
 | 1.1 | Typed HTTP client: `api_token` query auth, explicit `fmt=json` on every call, the `::` filter form with colons percent-encoded, and the 1,000-requests-a-minute limit |
 | 1.2 | Bulk end-of-day ingest into `price_daily`, plus the settled-day rule: the most recent available day is still accreting and is not valid |
 | 1.3 | Freshness guard on D-59's thresholds, abort below 40,000 and alert below 45,000 |
-| 1.4 | Fundamentals ingest keyed on `filing_date_effective`, implementing D-62's per-ticker substitution, setting `filing_date_unknown_reason` across its four states, and excluding tickers below `fundamentals.min_clean_gaps_for_substitution` |
-| 1.5 | Universe builder applying D-4, with 20-day median dollar volume computed from `price_daily` rather than any provider average |
+| 1.4 | Fundamentals ingest keyed on `filing_date_effective`, implementing D-62's per-ticker substitution, setting `filing_date_unknown_reason` across its four states, and recording enough for the count to be computed downstream. The exclusion itself is 1.5's, not this checkpoint's [D-4, INVARIANT 1] |
+| 1.5 | Universe builder applying D-4, including the clean filing-gap exclusion computed for the date being built rather than read from any stored total [D-62, M.1], with 20-day median dollar volume computed from `price_daily` rather than any provider average |
 | 1.6 | Sentiment ingest for the whole universe, tolerating a series with rows only on days carrying news |
 | 1.7 | Flow ingest from `sec-filings/form4` and not the legacy endpoint, into `insider_transaction` and `institutional_holding` at natural grain per D-61, with `transaction_code` retained so open-market purchases are separable |
 | 1.8 | Events ingest, and the derived `flow_daily` at ticker-by-day |

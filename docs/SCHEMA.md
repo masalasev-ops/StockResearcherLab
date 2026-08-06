@@ -1,9 +1,23 @@
 # SCHEMA.md
 
-Every table, its grain, and the single component permitted to write it. The write
-ownership column is not documentation. It is the contract the conformance test in
-phase 0 asserts against the stage registry, which is how INVARIANT 10 is enforced
-mechanically rather than by review.
+Every table, its grain, and which component owns which write to it. The ownership
+declaration is not documentation. It is the contract the conformance test in phase 0
+asserts against the stage registry, which is how INVARIANT 10 is enforced mechanically
+rather than by review.
+
+**Ownership is per operation, not per table** ~~and two tables are documented
+exceptions~~ [amended, INVARIANT 10 and L.3]. The registry declares component, table,
+operation and column set, and the test asserts no two components claim the same
+triple. Where a heading below reads **Writer: X**, X owns every operation on that
+table. Where it names several, each declares the operation and the columns it owns,
+and nothing else may write there at all.
+
+The exception list was the wrong shape rather than too short. `attribution`,
+`proposal`, and `order` with `fill` and `position` each had more than one writer from
+the first draft, which is already past the two the old rule allowed, and `security`
+gained one with D-62. Six tables, four splits. Every attempt to enumerate exceptions
+ran out before the list was complete, because a rule that counts exceptions gets
+longer every time the design is correct.
 
 Column lists below are the load-bearing ones, not exhaustive. Types, indexes and
 constraints are phase 0 work and are not fabricated here.
@@ -15,15 +29,26 @@ constraints are phase 0 work and are not fabricated here.
 ## Reference
 
 ### security
-Grain: one row per ticker. **Writer: UniverseBuilder.**
+Grain: one row per ticker. **UniverseBuilder owns the insert and every column below
+except one. FundamentalsIngestor owns the update of `clean_gap_count` alone.**
 
 `ticker`, `name`, `sector`, `size_bucket`, `market_cap`, `first_seen`, `last_seen`,
-`delisted_date`, `is_active`.
+`delisted_date`, `is_active`, `clean_gap_count`.
 
 Size buckets: large-and-above at $10B or more, mid $2B to $10B, small $300M to $2B.
 `delisted_date` is populated rather than the row deleted, because the historical
 universe must be reconstructable per date including names that no longer exist
 [D-48].
+
+`clean_gap_count` is how many filing-date gaps of at least one day this ticker has
+shown. FundamentalsIngestor maintains it as ordinary ingest output and forms no view
+about it; UniverseBuilder reads it and excludes below
+`fundamentals.min_clean_gaps_for_substitution` [D-62, D-4]. The exclusion is applied
+in the universe definition rather than in the fundamentals path because it is an
+absolute filter [INVARIANT 1], and the count sits here rather than on
+`fundamental_snapshot` because it is per ticker rather than per period. This is the
+third table with a per-operation split and it is declared the same way as the other
+two.
 
 ---
 
@@ -198,10 +223,12 @@ ForwardReturnFiller updates.** ~9 MB.
 `return_5d_raw`, `return_5d_vs_spy`, `return_5d_vs_peers`, and the same triple at
 21 and 63 days.
 
-**This is the only table with two writers, and it is deliberate.** The allocator
-inserts the row with scores frozen and return columns empty; the filler updates
-return columns only as dates mature. The conformance test allows this pair
-explicitly and no third writer.
+~~**This is the only table with two writers, and it is deliberate.**~~ [superseded,
+INVARIANT 10 as amended] Two components, one operation each. **CandidateAllocator
+owns the insert**, writing the row with scores frozen and return columns empty.
+**ForwardReturnFiller owns the update**, and only of the nine return columns. Neither
+may perform the other's operation, and no third component writes here at all, which
+is a stronger claim than the exception it replaces.
 
 Written at shortlist time for every candidate, never reconstructed [D-40, INVARIANT
 4]. `config_version` is what lets history be segmented rather than pooled after a
@@ -240,8 +267,10 @@ updates status.** Grows ~30 MB/yr.
 `counter_argument`, `primary_driver`, `stop_pct`, `target_pct`, `horizon_days`,
 `status`, `rejection_reason`.
 
-Second deliberate two-writer pair: the client inserts, the validator sets status and
-reason. Nothing else writes here.
+~~Second deliberate two-writer pair~~ [superseded, INVARIANT 10 as amended]. Two
+components, one operation each. **ResearcherClient owns the insert.**
+**ProposalValidator owns the update**, and only of `status` and `rejection_reason`.
+Nothing else writes here.
 
 ---
 
@@ -261,12 +290,22 @@ Exactly one research portfolio carries `is_primary`. Screens and Random match th
 entry count to whichever it is.
 
 ### order / fill / position
-Grain: per event, tagged by portfolio. **Writers: RiskGate and PortfolioRunner write
-orders, PaperBroker writes fills and opens positions, PositionManager closes them.**
-Small.
+Grain: per event, tagged by portfolio. **RiskGate and PortfolioRunner insert orders.
+PaperBroker inserts fills and inserts positions. PositionManager updates positions to
+closed.** Small.
 
-Each of the three has a distinct write set within these tables. The registry
-declares which, and the conformance test enforces it.
+Three tables and four components, each owning a different transition. This is the
+group the old two-exception rule could never have accommodated, and it is why the rule
+was restated per operation rather than extended by one more exception. The registry
+declares the operation and column set for each, and the conformance test asserts no
+two components claim the same triple.
+
+RiskGate and PortfolioRunner both insert orders and are the one pair that shares an
+operation on a table. They are separated by portfolio: the runner writes for every
+non-research portfolio off the shared candidate set, the gate writes for the research
+portfolios after arbitration. The registry declares that split and the test asserts
+it, because a shared operation with no declared partition is the case invariant 10
+exists to catch.
 
 ### trade_outcome
 Grain: per closed trade. **Writer: PositionManager.** Small.

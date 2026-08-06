@@ -66,9 +66,14 @@ file, and none of them fails loudly when broken.
    comparable and the experiment is void [D-36].
 9. **The researcher never sees a raw price series and never computes a ratio.**
    Everything arrives precomputed. It is a judge, not a calculator [D-16].
-10. **Exactly one component writes each table.** The stage registry declares it and a
-    test enforces it. Two exceptions are documented in `SCHEMA.md` and no third is
-    permitted.
+10. **Exactly one component writes each table per operation.** ~~Two exceptions are
+    documented in `SCHEMA.md` and no third is permitted.~~ [amended, L.3] The stage
+    registry declares component, table, operation and column set, and a test asserts
+    no two components claim the same triple. Enumerating exceptions kept failing
+    because the rule was stated wrongly, not because the design was wrong:
+    attribution is inserted by the allocator and updated by the filler, proposal is
+    inserted by the client and status-set by the validator, and order, fill and
+    position have three components each owning a different transition.
 11. **No ambient clock.** Inject `IClock`. Nothing reads system time outside the clock
     implementation. This is what makes replay and invariant 6 possible.
 12. **Every fundamental read keys on filing date, never period end.** Period end is the

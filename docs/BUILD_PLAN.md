@@ -208,7 +208,7 @@ Project layout is `CLAUDE.md` §4 and D-56. The `Api` project must not reference
 the read-only guarantee.
 
 Also a bare run viewer. Not the run health screen, just enough to see stages,
-durations and row counts. Debugging a thirty-three component pipeline through raw
+durations and row counts. Debugging a thirty-four component pipeline through raw
 SQL for eight phases is miserable, and this costs an afternoon.
 
 The rails are the anti-drift mechanism. Building them after the first real component
@@ -222,7 +222,7 @@ component.
 | 0.1 | Solution layout per `CLAUDE.md` §4 and D-56, central package management, `.gitattributes`, `guards.ps1` stub |
 | 0.2 | Postgres schema and migrations from `SCHEMA.md`, snapshot-first, running clean from empty |
 | 0.3 | Stage abstraction and registry: declared read and write sets, date and config version in, pure |
-| 0.4 | Run logging and the conformance test asserting write ownership matches `SCHEMA.md` |
+| 0.4 | Run logging, and the conformance test asserting that no two components claim the same component-table-operation triple, matching the per-operation declarations in `SCHEMA.md` [INVARIANT 10 as amended] |
 | 0.5 | The `Api` must not reference `Pipeline` test |
 | 0.6 | Bare run viewer: stages, durations, row counts. Not the run health screen |
 | 0.7 | One no-op stage end to end, proving the rails |

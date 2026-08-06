@@ -34,7 +34,7 @@ Verified column values: `unverified`, `verified <date>`, or `NOT BOUND`.
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
 | ~~`fundamentals.filing_date_substitution_days`~~ | ~~65~~ | ~~D-57~~ | ~~FundamentalsIngestor~~ | [superseded, D-62] |
-| `fundamentals.min_clean_gaps_for_substitution` | 4 | D-62 | FundamentalsIngestor | unverified |
+| `fundamentals.min_clean_gaps_for_substitution` | 4 | D-62 | UniverseBuilder, ~~FundamentalsIngestor~~ [corrected, L.2] | unverified |
 | `fundamentals.substitution_rate_alert` | 0.25 | D-57 | FundamentalsIngestor | unverified |
 
 The substitution window is ~~the widest gap the probe observed, not a mean, because
@@ -45,6 +45,14 @@ ticker's filing history rather than set here, so it gets no key. What is
 configurable is the floor beneath which no substitution is attempted at all. Below
 `fundamentals.min_clean_gaps_for_substitution` observed clean gaps the name leaves
 the universe rather than being assigned a guess.
+
+That exclusion is applied by UniverseBuilder alongside market cap, price and volume,
+not by the fundamentals path [L.2, D-4]. It is an absolute filter, and INVARIANT 1
+puts absolute filters in the universe definition and nowhere else, so a component
+downstream applying this one would be narrowing the universe after ranking at ingest
+had already decided what could be discovered. FundamentalsIngestor maintains the
+count in `security.clean_gap_count` as ordinary ingest output and reads this key not
+at all.
 
 The alert exists so that a provider change making equality universal is visible
 rather than silently widening every read. It survives D-62 unchanged, and its

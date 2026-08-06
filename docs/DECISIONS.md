@@ -40,8 +40,16 @@ selection comparison.
 **D-4 Universe criteria are absolute, not relative.** `ACTIVE`
 Common stock and ADRs, excluding funds, trusts and SPACs. Market cap at or above
 $300M. Price at or above $5. Twenty-day median dollar volume at or above $2M.
-At least 250 trading days of history. The dollar volume floor was raised from $1M
-because the participation cap would otherwise reject a typical $8,300 position.
+At least 250 trading days of history. At least four clean filing-date gaps observed
+[added, D-62]. The dollar volume floor was raised from $1M because the participation
+cap would otherwise reject a typical $8,300 position.
+
+The filing-gap criterion arrived with D-62 rather than at scoping, and the list above
+was complete only until then. It belongs here rather than in the fundamentals path
+because it is an absolute filter, and INVARIANT 1 puts absolute filters in the
+universe definition and nowhere else. FundamentalsIngestor maintains the per-ticker
+count as ordinary ingest output; UniverseBuilder reads it and applies the exclusion
+alongside market cap, price and volume.
 
 **D-5 Absolute filters live only in the universe definition.** `ACTIVE`
 No component downstream narrows by rank, score or count. Raised after the news

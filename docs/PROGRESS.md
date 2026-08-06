@@ -1050,3 +1050,47 @@ table declared anywhere, which is a read-side question phase 7 has to settle: wh
 portfolio equity is a store or is derived from fills and positions at read time. Both
 are recorded here so that a later reader can tell a line nobody looked at from one
 that was looked at and left.
+
+### Deferred after pass N
+
+Pass N ran to eleven clauses rather than the eight the heading above names. N.9, N.10
+and N.11 arrived as rulings on what N.6 and N.8 reported rather than as part of the
+original set. The heading is left as written because it describes what was issued.
+
+Ten items were found and not corrected. Nothing here is a clause and nothing here
+changed the corpus. Each was left because it sat outside the clause that found it, and
+each is recorded so a later reader can tell a line that was looked at and left from one
+nobody read.
+
+| # | What it is | Owner or trigger | Found at |
+|---|---|---|---|
+| 1 | `README.md:44` describes `SCHEMA.md` as "Tables, grain, and single-writer ownership". INVARIANT 10 is per operation since L.3, and three tables carry more than one writer | The next edit to `README.md`, or the next corpus consistency sweep | N.5 commit body |
+| 2 | `README.md` "Where to start" sends a reader to `BUILD_PLAN.md` phase P, which is DONE as of K.10 | Phase 0 becoming current | N.5 commit body |
+| 3 | `equity` is a read target with no store. ARCHITECTURE §3 lists C18 reading `proposal`, `position`, equity and `indicator_daily`, and `SCHEMA.md` declares no `equity` table. The row's own typography already separates it, the other three being in `<code>` and equity bare, which is how it survived every sweep so far, all of them write-side | Phase 7, which builds the risk layer and would declare it | The pass N record above, N.4 |
+| 4 | `FIXTURES.md`'s existing filing-date entry says "asserting no read before the filing date" where D-62 makes it the effective filing date | Phase 1, when checkpoint 1.10 writes the fixture and registers it | N.8 commit body |
+| 5 | `CLAUDE.md:394` carries the same wording, "a test that no fundamental is readable before its filing date" | The next authored amendment to `CLAUDE.md` §9 | N.8 commit body |
+| 6 | Checkpoint 1.8's events-ingest half is not exercised by phase 1's definition of done. `flow_daily` is covered and events ingest is not | Phase 1 sign-off, step 1 | N.6 commit body |
+| 7 | Checkpoint 1.1 is reachable from phase 1's definition of done only through "one night lands", which exercises the HTTP client without asserting the token auth, the explicit `fmt`, the encoded filter form or the rate limit it names | Phase 1 sign-off, step 1 | N.6 commit body |
+| 8 | `CHANGELOG.md` 0.2.0 does not name `RUNBOOK.md`, `prompts/rubrics.md` or `prompts/README.md`, all three changed during phase P. They are covered only by 0.1.0's initial-corpus listing | None. The file is appended to and never rewritten, so the omission stands and 0.2.1 says so | N.4 commit body |
+| 9 | A sweep whose pass condition is a non-zero count cannot validate its own pattern. Full text below | Conformance check 8, whenever it is next touched | N.11, never written down until now |
+| 10 | The architecture states writes three times over. Full text below | After phase 0 has proved the registry and its test | Passes K through N, never written down until now |
+
+**Item 9, in full.** A sweep whose pass condition is a non-zero count must state the
+expected count in advance or compare against a prior run. A pattern cannot validate
+itself, so a wrong pattern reports a clean number and reads as a pass. A sweep expecting
+zero is self-validating and needs no baseline. Owed to conformance check 8 whenever it is
+next touched.
+
+**Item 10, in full.** The architecture's store matrix states writes twice, once in its
+own Written-by column and once in the section 3 catalogue, and SCHEMA states them a third
+time. Every write-column finding in passes K through N came from that duplication.
+Dropping the Written-by and Read-by columns and pointing at SCHEMA would end the class.
+It is an architecture change, it is human-authored, and it waits until phase 0 has proved
+the registry and its test work.
+
+Item 9 is the general form of what N.11 found in the particular. N.11's rule catches a
+pattern that misses hits it should have made; item 9 catches a pattern that finds hits
+that are not there, or the wrong ones, and neither is visible from the number alone. The
+N.11 re-audit is the worked example: my own first audit pattern returned 51 section
+references where there are 100, and the only thing that caught it was the count
+disagreeing with a prior run.

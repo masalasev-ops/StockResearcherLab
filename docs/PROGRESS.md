@@ -6,7 +6,7 @@ What has actually been built, as opposed to what is designed.
 measured timings and row counts are observations and belong to whoever ran them.
 Correct them directly. Do not record intentions here.
 
-Corpus version: 0.2.1 (2026-08-06, architecture and ownership corrections)
+Corpus version: 0.3.0 (2026-08-06, phase 0 rails)
 
 ---
 
@@ -15,7 +15,7 @@ Corpus version: 0.2.1 (2026-08-06, architecture and ownership corrections)
 | Phase | Status | HEAD | Notes |
 |---|---|---|---|
 | P Data probe | DONE | 3099e66 | All five checkpoints landed and all six findings recorded. D-57 to D-63 produced. Step 2 ran twice: the first pass failed the phase, corrective pass H answered it and pass J carried its findings into authored amendments; the second pass found every recorded figure tracing to committed evidence and left six divergences, all corrected in pass K. All five sign-off steps recorded in the block below. Three P.1 done lines were asserted rather than evidenced by the phase and were evidenced independently at sign-off |
-| 0 Rails | NOT STARTED | | |
+| 0 Rails | IN PROGRESS | a27bdfb | Checkpoints 0.1 to 0.8 built on branch `phase-0-rails`. Solution layout, schema and migrations, stage abstraction and registry, run logging and the write-ownership conformance test, the Api isolation test, the bare run viewer, and one no-op stage end to end. 25 tests green. Not signed off: steps 2 to 5 of the sign-off procedure have not happened |
 | 1 Ingest and universe | NOT STARTED | | |
 | 2 Compute | NOT STARTED | | |
 | 3 Backfill | NOT STARTED | | |
@@ -319,6 +319,76 @@ Limits of the evidence set [K.5]
   across seven names, but the word stale remains an inference from the disagreement
   between the two endpoints rather than a measurement of either.
 
+### Phase 0, not signed off, built on branch `phase-0-rails`
+
+Written by the build session. Steps 2 to 5 of the sign-off procedure have not
+happened: no conformance pass has run, the phase is not signed off, and nothing
+below is corrected here.
+
+Definition of done, line by line [P0.A]
+
+  Evidenced means an observable result the repository records, and the row names
+  where it sits. Asserted means the line is true and nothing here records it, and
+  the row says what would evidence it. Several lines were proved by output pasted
+  into commit bodies during the build, and a commit body is an account of a run
+  rather than a record of one: check 1 reads those as asserted and so does this.
+
+  **Naming a test evidences that the assertion is encoded, not that it currently
+  passes.** Nothing in this repository has ever run the suite. The CI workflow at
+  `.github/workflows/ci.yml` would cover the build, migrate, idempotence and test
+  lines, and **it has never run**: `gh run list` returns nothing for the whole
+  repository, `gh pr checks 1` reports no checks, and the PR head carries zero
+  check-runs. Every line whose evidence would be a CI run is therefore asserted,
+  and the run id column below is empty because there is no run id.
+
+| # | Line | State | Where the evidence sits, or what would evidence it |
+|---|---|---|---|
+| 0.1 | `dotnet build` green from a clean clone | asserted | A CI run. Proved in the 0.1 commit body only. No run exists |
+| 0.1 | Every project in `CLAUDE.md` §4 exists and is in the solution | evidenced | `StockResearcherLab.slnx` and the seven `.csproj` files, all readable in the tree. No test asserts it, so a project could be deleted from the solution without anything going red |
+| 0.2 | `migrate.ps1` runs clean against an empty database | asserted | A CI run. The workflow's "Migrate, from an empty server" step. Proved by hand in the 0.2 commit body |
+| 0.2 | Idempotent on a second run | asserted | A CI run. The workflow greps for `nothing to apply` and fails otherwise. Proved by hand in the 0.2 commit body |
+| 0.2 | A test asserts SCHEMA.md and the database agree, both directions | evidenced | `SchemaParityTests.EveryTableInSchemaDocumentExistsInTheDatabase` and `.EveryTableInTheDatabaseIsDeclaredInSchemaDocument`, plus `.SchemaDocumentDeclaresTheTablesItIsExpectedTo` guarding the parser against passing over an empty set |
+| 0.3 | An undeclared read fails at runtime with a named error | evidenced | `StageDataGuardTests.AnUndeclaredReadFailsBeforeTheDatabaseIsTouched`, and six more in `DeclaredAccessTests` |
+| 0.4 | The conformance test passes over the real registry | evidenced | `WriteOwnershipConformanceTests.NoTwoComponentsClaimTheSameTableAndOperation`, built from `PipelineComposition.BuildRegistry`, which is the real registry rather than a fixture |
+| 0.4 | A deliberately conflicting stage proves the test fails | evidenced | `WriteOwnershipConformanceTests.TheConformanceTestFailsOnADeliberatelyConflictingRegistry`, a permanent fixture registered in `FIXTURES.md`. The stronger proof, a conflicting component added to the real composition, is in the 0.4 commit body only and is asserted |
+| 0.5 | A test asserts the Api does not reference Pipeline | evidenced | `ApiIsolationTests.ApiDoesNotReferencePipeline`, `.ApiDoesNotReferenceWorkerEither`, `.TheCompiledApiCarriesNoPipelineDependency` |
+| 0.5 | The test fails if the reference is added, proved by adding it | **asserted** | Nothing. Unlike 0.4 there is no permanent fixture for the failure path: the proof exists only in the 0.5 commit body and nothing re-runs it. A fixture in the shape of 0.4's would evidence it |
+| 0.6 | A run appears in the viewer with durations and row counts | **asserted** | Nothing. No test exercises `/api/runs` or renders the page. Proved by curl output in the 0.6 commit body. An endpoint test, or a render assertion, would evidence it |
+| 0.7 | The stage runs and writes its `run_log` row | evidenced | `StageRunnerTests.TheNoOpStageRunsAndLogsOk`, with the failure path in `.AStageThatReachesOutsideItsDeclaredSetFailsTheRunAndSaysSo` |
+| 0.7 | It runs from the command line | asserted | Nothing. The runner is tested in process; no test invokes the Worker binary. Commit body only |
+| 0.7 | It is visible in the viewer | **asserted** | Nothing. Same gap as the 0.6 row |
+| 0.7 | It passes the 0.4 conformance test | evidenced | The 0.4 tests read the same registry the stage is registered in |
+| 0.8 | Corpus version matches in PROGRESS and newest CHANGELOG, README names none | evidenced | Committed artefacts, directly readable: this file's version line, `CHANGELOG.md`'s `## 0.3.0`, and no version string anywhere in `README.md`. No test asserts it, so it can drift silently |
+| Done when | A no-op stage runs, logs, and appears in the viewer | part evidenced | Runs and logs: `StageRunnerTests.TheNoOpStageRunsAndLogsOk`. Appears in the viewer: asserted, as above |
+| Done when | The write-ownership test reads the registry and passes | evidenced as encoded | `WriteOwnershipConformanceTests`. That it passes is asserted, since no run is recorded |
+| Done when | Migrations run clean from empty | asserted | A CI run |
+
+  Six lines are asserted outright and three more are evidenced only as encoded
+  assertions whose results nothing records. The two that would cost real work to
+  close are 0.5's failure path, which wants a fixture, and the viewer lines,
+  which want a test that exercises the endpoint. Both are gaps for the correction
+  pass rather than work for now, and no code was changed to make any line pass.
+
+Reconciliation: spent prompt against plan detail [P0.B]
+
+  `prompts/spent/phase-0-rails.md` against `BUILD_PLAN.md`'s phase 0 detail.
+  Written by this session because step 3 names no owner, it is not the
+  conformance pass's, and the facts below live in the session that has them.
+
+  archive written after the work        different  `CLAUDE.md` §3 requires the prompt archived before code is written and gives the reason: one archived at the end is archived after the session has learned things. It was written at the end, so its being verbatim rests on the session's own account rather than on the ordering the rule exists to guarantee. A divergence from the procedure rather than between the two documents, and recorded as such
+  tests under `src/` not `tests/`       different  Arrived mid-session, so it is in neither the plan nor the archived prompt. The plan's 0.1 cites `CLAUDE.md` §4, which said `tests/`. Closed by the author amending §4 and `README.md`
+  commit subject `Phase 0 / 0.1 - ...`  different  Arrived mid-session and is in neither document. `CLAUDE.md` §3 and `BUILD_PLAN`'s convention both say `4.3 <what it did>`. **Closed in neither document**, so the repository now states one convention and practises another
+  the database password                 less       Arrived mid-session. Both documents assume a reachable Postgres and neither says how to reach one, so the prompt asked for less than the plan's definition of done needs. It changed no work; it made work possible that was otherwise blocked
+  `tools/probe` deleted at 0.1          more       The plan's 0.1 is solution layout, central package management, `.gitattributes` and the `guards.ps1` stub. Deleting the probe is not in it. The prompt added it
+  transcripts kept, not deleted        more       In neither document. The build moved the four probe transcripts to `docs/evidence/phase-P/` rather than deleting them with the tool, because they are the evidence behind every figure in the Probe findings table and H.1 exists for that reason. Unplanned scope, and the `PROGRESS.md` and `DECISIONS.md` references to `probe-output/` paths are now stale by one directory
+  CI workflow as an unnumbered chore    more       In neither document. The plan's phase 0 conventions name `guards.ps1` for the CI greps and no workflow. It arrived after 0.8, outside the checkpoint sequence
+  schema detail beyond the plan         more       The plan's 0.2 says schema and migrations from `SCHEMA.md`, snapshot-first, running clean from empty. The prompt added money as native `numeric` [INVARIANT 16] and named `portfolio_selection` explicitly
+
+  Eight entries, none resolved. The one worth reading twice is the commit subject
+  format: the other mid-session changes were either closed by the author or
+  changed no work, and that one changed every commit on the branch while leaving
+  both documents saying something else.
+
 ---
 
 ## Conformance passes
@@ -329,6 +399,7 @@ Summary index. The detail lives in the sign-off block above.
 |---|---|---|---|
 | P | 2026-08-06 | None named for phase P. `CLAUDE.md` §7 and §10, which the prompt scoped in | Four questions carry numeric answers. Four figures inside those answers trace to no probe call. Reconciliation compares the prompt against the design rather than against plan detail and omits three divergences. Authorship clean, no secret in any blob. Three cross-reference defects, all older than the phase |
 | P | 2026-08-06 | Same. Second pass, read at HEAD `5afcd52` | Every figure in the Measured column now traces to a committed call or transcript and the four figures the first pass found are closed. Three P.1 lines are still asserted rather than evidenced. The committed transcripts do not account for the run date's API consumption, so the evidence set is incomplete and nothing says so. The redone reconciliation drops two items the list it replaced carried, both underpinning authored decisions. One code comment asserts a provider limitation with no committed measurement, and two references still point at what a later decision or section replaced. Phase P is not signed off by this pass |
+| 0 | 2026-08-06 | 10 and 11, named by `BUILD_PLAN.md`. `ARCHITECTURE.html` §14 and §16 | INVARIANT 10 is built and mechanically enforced. INVARIANT 11 is built and broken in the same phase, at `Migrator.cs:77`, with the grep named for it shipped as a stub. Eight of nineteen definition-of-done lines are asserted rather than evidenced and CI has never run, so nothing in the repository records a passing suite; all eight were established independently here. Two recorded counts do not trace to what produced them and one recorded claim is false. The reconciliation compares the right two texts and carries no build-against-both list, so nine findings reported in commit bodies are recorded nowhere a later reader will look, two of them consequential. Four live references point at `tools/probe`, deleted at 0.1. All 150 cross-references resolve, and the recorded sweep's file set no longer reaches fourteen of them. Phase 0 is not signed off by this pass |
 
 ### Phase P conformance finding, 2026-08-06, read at HEAD `2802e75`
 
@@ -698,6 +769,470 @@ cites `ARCHITECTURE.html` §14 for the five-week filing gap; both resolve.
 `7a0e8b1`, which is H.7, while its own note describes pass J and HEAD is
 `5afcd52`. The column was corrected once already for the same staleness at
 `88a8f6e`. Not corrected here.
+
+### Phase 0 conformance finding, 2026-08-06, read at HEAD `d4baeaf`
+
+A session with no involvement in the phase 0 build, in any correction to it, or in
+any earlier pass in this repository, and which has made no commit here.
+
+**Step 2 is attested rather than evidenced.** Git carries no session identity and no
+repository can hold that fact, so the paragraph above is an operator attestation.
+Every other step of the procedure produces something checkable from the repository
+alone; this one does not.
+
+Divergences are stated and not corrected. Nothing in the tree was changed. Where
+this pass ran something it ran it against a fresh clone in a scratch directory and a
+database created for the purpose, and `git status` is clean at `d4baeaf`.
+
+**Commit sets used.** Derived from the log rather than adopted. `git rev-list
+--reverse main..HEAD`, with `main` at `ed4668d`, the merge of pass N, returns
+thirteen commits and correctly excludes `ed4668d`, which is the baseline rather than
+a member of the set:
+
+`1c83d5d` 0.1, `82a1689` 0.2, `1eef2bc` chore, `ec4c245` 0.3, `1542c3e` 0.4,
+`7599867` chore, `0c37495` 0.5, `3b8466f` 0.6, `a27bdfb` 0.7, `408931a` 0.8,
+`7f4e900` chore, `8b3d408` chore, `d4baeaf` chore.
+
+Eight carry a checkpoint number and five are unnumbered chores. The branch is linear
+and unmerged, pull request 1 open. Unlike passes H through N this set is not
+recoverable from a letter prefix, because the phase opens its subjects
+`Phase 0 / 0.1 -` rather than `0.1 `. Check 5 carries that as a divergence; it is
+noted here because it is also what makes the boundary worth deriving.
+
+**The architecture sections this phase implements.**
+
+*§14, stack and runtime.* Matches. .NET 10 across every project, Postgres, an
+ASP.NET Core minimal API that is read-only, and a Blazor client that talks to it and
+to nothing else. §14's backfill half belongs to phase 3. The Ui is Blazor Server
+rather than WebAssembly; the 0.1 commit body records that as a deviation, and it is
+not one against the text, because neither §14 nor §15 names a hosting model. What
+does diverge is the reference shape, under check 5.
+
+*§16, data stores.* Matches exactly, and this was checked rather than read. §16's
+store matrix has thirty rows which expand to thirty-three tables, `order / fill /
+position` giving three and `cost_ledger / run_log` giving two. `0001_snapshot.sql`
+creates thirty-three tables in `public`. Set difference in both directions is empty.
+The migration ledger sits in a `meta` schema rather than `public`, which is what lets
+the parity assertion hold without an exception carved out of it. §16's Written-by
+column is not asserted by anything, and cannot be until components exist; the one
+writer phase 0 registers, `RunLog` owning `run_log`, is what §16 and §3 give as C27.
+
+**INVARIANT 10, one writer per table per operation.** Built, and enforced
+mechanically rather than by review, which is the point of it. `StageRegistry` is
+constructed in exactly one place, `PipelineComposition.BuildRegistry`, and the
+conformance test reads that rather than a fixture. Ownership is per operation from
+the first line: `TableWrite` is a table, a `WriteOperation` and the column set owned,
+so `Update` on a table a component declares only `Insert` on is a different claim and
+fails. `IStage` is split into `IWriteOwner` plus the runnable part so that a writer
+which is not a stage still appears, which closes the hole where a writer the test
+cannot see is a writer the invariant is not enforced against. The failure path is
+covered permanently by a registered fixture rather than by a commit body, and the
+case the amended rule exists for, allocator inserting and filler updating
+`attribution`, is asserted **not** to be a conflict. All four assertions pass.
+
+One gap, which the 0.4 commit body reports and no document carries. The test asserts
+the registry against `SCHEMA.md`'s table list, which it parses, and against a
+hardcoded array of the three permitted split tables, `["attribution", "proposal",
+"order", "fill", "position"]`. It does not assert the registry against `SCHEMA.md`'s
+own writer declarations, because those are stated in prose that varies in form. So
+half the assertion reads the document and half carries a copy of it, which is the
+shape `SchemaDocument` exists to avoid. With one stage registered it proves little
+either way. `BUILD_PLAN.md` already carries "the write-ownership test must be
+extended as each phase adds tables" as an obligation from 0 to all; this is a second
+and different obligation about the same test and it is recorded nowhere.
+
+**INVARIANT 11, no ambient clock. Built, and broken in the same phase.**
+
+`src/StockResearcherLab.Data/Migrator.cs:77` passes `DateTime.UtcNow` as the
+`applied_at` value written to `meta.schema_migration`. The invariant says nothing
+reads system time outside the clock implementation and `CLAUDE.md` §6 states it as a
+rule about those two calls by name. `SystemClock` is the implementation; `Migrator`
+is not, takes no `IClock`, and is not a stage.
+
+The consequence is small and the breach is exact. It is also the only one. The same
+search over `src/` returns `SystemClock.cs` twice, which is the implementation, one
+comment in `RunLogTests.cs` naming the rule, and nothing else. `Guid.NewGuid()`
+appears three times, all in tests, all producing a unique stage name so rows can be
+isolated in a shared `run_log`, and none reaches output or ordering. No `now()`,
+`current_date` or `current_timestamp` default appears anywhere in
+`0001_snapshot.sql`, so there is no database-side clock either. Everything the
+invariant is actually for is right: `StageRunner` takes `started_at` from the
+injected clock and the elapsed time from a `Stopwatch`, with a comment saying why a
+stopwatch is not a second clock; the Worker resolves an absent run date from
+`clock.Today`; both the date and the config version arrive in `StageContext` rather
+than being resolved inside a stage.
+
+What makes it a finding rather than a detail is what was meant to catch it.
+`guards.ps1` names this exact grep, "INVARIANT 11 no ambient clock. Grep for
+DateTime.Now and DateTime.UtcNow anywhere outside the IClock implementation", and
+ships as a stub that prints and exits zero. The plan's 0.1 asks for a stub and the
+file is candid about being one, so nothing was hidden. The result stands anyway:
+phase 0 built the mechanism the invariant depends on and shipped the first violation
+of it in the same phase, with the guard named for it deliberately unwired.
+
+---
+
+**1 Definition of done, line by line.** The plan states three Done-when clauses and
+the prompt adds a Test/DoD line per checkpoint. Nineteen lines. *Recorded* means an
+observable result the repository holds. *Asserted* means the line is true and
+nothing here records it. *Encoded* means a test states the assertion and no run of
+it is recorded, which is the state of every test-backed line in this phase, because
+**CI has never run**: `gh run list` returns nothing for the repository and the GitHub
+API reports zero check-runs on `d4baeaf`. Re-established at this HEAD, not taken from
+the build's account.
+
+| # | Line | Recorded | Established independently by this pass |
+|---|---|---|---|
+| 0.1 | `dotnet build` green from a clean clone | asserted | Cloned `phase-0-rails` at `d4baeaf` into an empty directory, no secrets file present, .NET 10.0.301: build succeeded, 0 warnings, 0 errors |
+| 0.1 | Every project in `CLAUDE.md` §4 exists and is in the solution | recorded | Seven `.csproj` files, all seven listed in `StockResearcherLab.slnx`. §4 also still names `tools/probe`, which 0.1 deleted, so the line as written is no longer exactly satisfiable. Nothing asserts solution membership |
+| 0.2 | `migrate.ps1` runs clean against an empty database | asserted | Created an empty database and ran the Worker's `migrate` from the clean clone with the connection string in the environment: `0001_snapshot.sql applied`, `1 migration(s) applied`, exit 0, 33 tables in `public` and 1 in `meta` |
+| 0.2 | Idempotent on a second run | asserted | Second run: `already applied`, `nothing to apply, schema already current`, exit 0 |
+| 0.2 | A test asserts `SCHEMA.md` and the database agree, both directions | encoded | `SchemaParityTests`, three tests, all pass. The third guards the parser against both directions passing over an empty set |
+| 0.3 | An undeclared read fails at runtime with a named error | encoded | `StageDataGuardTests` and `DeclaredAccessTests`, all pass. The guard sits in `StageData`, so it is on the path a stage actually takes rather than on the rule in isolation |
+| 0.4 | The conformance test passes over the real registry | encoded | Passes, over `PipelineComposition.BuildRegistry` |
+| 0.4 | A deliberately conflicting stage proves the test fails | encoded | Passes. A permanent fixture, registered in `FIXTURES.md`. The stronger proof, a conflict added to real composition, is commit body only |
+| 0.5 | A test asserts the Api does not reference Pipeline | encoded | Three tests, all pass. The closure is walked transitively and the deps.json assertion is guarded against passing over an empty set |
+| 0.5 | The test fails if the reference is added, proved by adding it | **asserted** | Added `<ProjectReference Include="..\StockResearcherLab.Pipeline\...">` to `Api.csproj` in the scratch clone, rebuilt, ran: `ApiDoesNotReferencePipeline` and `TheCompiledApiCarriesNoPipelineDependency` both fail, `ApiDoesNotReferenceWorkerEither` passes. Reproduces the commit body exactly. No fixture makes this repeatable, and see the residual below |
+| 0.6 | A run appears in the viewer with durations and row counts | **asserted** | Started the Api and the Ui from the clean clone against the freshly migrated database. `GET /api/runs` returned the `NoOpStage` row as JSON; the page at `/` rendered it with `175 ms` and `0` in the duration and rows columns |
+| 0.7 | The stage runs and writes its `run_log` row | encoded | `StageRunnerTests.TheNoOpStageRunsAndLogsOk` passes, and the command-line run below wrote `run_log` row 1: `ok`, `175`, `0`, null error |
+| 0.7 | It runs from the command line | asserted | `run NoOpStage 2026-08-06` printed `ok, 0 row(s) written`, exit 0. `stages` listed `NoOpStage` and `RunLog` |
+| 0.7 | It is visible in the viewer | **asserted** | Yes, as the 0.6 row above |
+| 0.7 | It passes the 0.4 conformance test | encoded | The 0.4 tests read the registry the stage is registered in |
+| 0.8 | Corpus version matches in PROGRESS and newest CHANGELOG, README names none | recorded | `Corpus version: 0.3.0`, `## 0.3.0` as the newest CHANGELOG entry, zero `x.y.z` strings in `README.md`. Nothing asserts it, so it can drift silently |
+| Done when | A no-op stage runs, logs, and appears in the viewer | part | Runs and logs: encoded. Appears in the viewer: asserted. All three halves established here |
+| Done when | The write-ownership test reads the registry and passes | encoded | It reads the real registry, and it passes |
+| Done when | Migrations run clean from empty | asserted | As 0.2 above |
+
+**Eight of the nineteen are asserted and every one of the eight is true.** This pass
+established all eight, and that does not make any of them recorded. Nine more are
+encoded assertions whose results nothing in the repository holds. Two lines are
+recorded outright, both by committed artefacts rather than by a run.
+
+The prompt's AFTER block adds a twentieth thing: *print HEAD and the branch commits,
+state phase 0's Done when against what was built*. Its output is in no committed
+file, and the one place it partly landed, the phase status row, carries a HEAD four
+commits stale.
+
+**2 The recorded numbers against what produced them.** Five figures, three of which
+trace and two of which do not, plus one recorded claim that is false.
+
+*Traces.* "Thirty-three tables in `public`", in the 0.2 commit body and in
+`CHANGELOG.md` 0.3.0. Reproduced here on a database migrated from empty: 33 in
+`public`, 1 in `meta`. The corpus version 0.3.0 agrees across `PROGRESS.md` and the
+newest `CHANGELOG.md` entry. `FIXTURES.md`'s three rows each name a test that exists
+and passes.
+
+*"25 tests green", in the phase status row.* Traces to no committed run. Reproduced
+here exactly, `dotnet test StockResearcherLab.slnx --no-build` at `d4baeaf`: 25
+discovered, 25 passed, 0 failed. The figure is right and unrecorded, and the same
+file, three hundred lines below it, says nothing in this repository has ever run the
+suite. The distinction P0.A draws correctly, that a workflow dry-run locally is an
+account of a run and not a record of one, is not applied to the row that carries the
+number.
+
+*P0.A's "Six lines are asserted outright".* **The table immediately above it marks
+eight rows `asserted`**: 0.1 build, 0.2 migrate, 0.2 idempotence, 0.5 failure path,
+0.6 viewer, 0.7 command line, 0.7 viewer, and the Done-when migrations line. Three of
+the eight are bolded and five are not, which is the likeliest source of the count,
+but the state column says `asserted` in all eight. This is the check-2 failure in
+miniature: a count stated beside the thing that produces it and not equal to it,
+inside the block whose subject is that distinction.
+
+*P0.A's "three more are evidenced only as encoded assertions whose results nothing
+records".* By the block's own opening rule and its own statement that the suite has
+never been run here, every `evidenced` row resting on a named test is in that state.
+Seven rows rest on a named test and one more is explicitly marked "evidenced as
+encoded", which is eight, not three.
+
+*The claim that does not hold.* P0.B and the 0.1 commit body both state that "the
+`PROGRESS.md` and `DECISIONS.md` references to `probe-output/` paths are now stale by
+one directory". **`DECISIONS.md` carries no such reference.** Searched
+whitespace-tolerantly over the whole file for `probe[-\s]*output`, `tools\s*/\s*probe`,
+`probe-2026` and `probe-filing`: no hit, and the only occurrence of the word
+transcript, at line 394, carries no path. The `PROGRESS.md` half is correct, at lines
+778 and 786.
+
+The 0.6 commit body's "200, 5,637 bytes, 17 table rows" followed by "16 row(s)" in
+the same block is not a repository record either way, and the two counts differ by a
+header row without saying so.
+
+**3 Authorship boundaries.** Across the thirteen commits the files written are the
+build files, `StockResearcherLab.slnx`, everything under `src/`,
+`.github/workflows/ci.yml`, `guards.ps1`, `migrate.ps1`, `seed.ps1`,
+`.gitattributes`, the four probe transcripts moved into `docs/evidence/phase-P/`,
+`docs/CHANGELOG.md`, `docs/FIXTURES.md`, `docs/PROGRESS.md`,
+`prompts/spent/phase-0-rails.md`, and `CLAUDE.md` and `README.md`. `.gitignore` is
+untouched: `git log main..HEAD -- .gitignore` returns nothing.
+
+**One of the six documents was written on this branch.** `7599867` modifies
+`CLAUDE.md`, dropping the `tests/` line from the §4 layout, and `README.md` line 69.
+Its body states that the edits were made by the human author and committed separately
+by the build session because `git add -A` had swept them into 0.4. Git holds no
+evidence for that: every commit on the branch carries the same author and committer,
+so the attribution rests on the commit body, exactly as this pass's own freshness
+does. Recorded as attested rather than evidenced. On its face it is authored content
+correctly authored, and the sequence is the one `CLAUDE.md` §13 asks for: the build
+reported the divergence at `1eef2bc` and did not close it, and the author closed it at
+`7599867`.
+
+`prompts/spent/` was written once, by `8b3d408`, which **creates**
+`prompts/spent/phase-0-rails.md` whole, 115 lines. That is neither a header change
+nor a body change to an existing archive, and it is what the corpus does not have a
+rule for. `CLAUDE.md` §3 requires the prompt archived before code is written and
+gives the reason. D-63 and `prompts/README.md` authorise correcting an archive toward
+the text actually issued. Neither covers writing the archive after the phase is
+built, and nothing forbids it either, because the corpus assumes the ordering §3
+requires. The commit body discloses the ordering, states the text is recoverable and
+verbatim, and names three instructions that arrived mid-session and are deliberately
+absent because they were not in the prompt as issued. That disclosure is the right
+treatment and it does not restore what the ordering rule was for: the archive being
+verbatim rests on the build session's own account, which is the condition §3 exists
+to remove. The alternative was no archive at all, which would have blocked sign-off
+step 3 and this pass's check 5 entirely. The header carries Target, Issued, Status
+`SPENT` and Produced, which is the four-field shape `prompts/README.md` names, with
+one of its three status values.
+
+**4 Secrets.** Clean, and the method carries more weight than usual because the
+repository is public, `masalasev-ops/StockResearcherLab`.
+
+Method. Enumerated every object with `git cat-file --batch-all-objects
+--batch-check`: 215 blobs, 85 commits, 214 trees. `git rev-list --all` returns 82
+commits, so three are unreachable and the enumeration reaches them. `git fsck --full`
+reports eight dangling blobs and no missing object. Every one of the 215 blobs was
+piped through six patterns: `api_token=` followed by anything that is not a
+placeholder, the provider's hex-dot-digits token shape, `sk-` keys, `Password=`
+inside a connection string, a quoted value against `ApiToken`, `ApiKey`, `Password`,
+`Token` or `Secret`, and an Authorization bearer header. **No hit for any pattern in
+any blob.**
+
+A zero is worth only as much as the pattern behind it [deferred item 9], so the six
+were first run against a positive control: the four real untracked
+`appsettings.Secrets.json` files in the working tree, which carry a live provider
+token and a database password. The token-shape pattern fires on all four; `Password=`
+and the quoted-value pattern fire on the three that carry a connection string. The
+pattern set is therefore known to detect the exact secrets this repository actually
+holds, and the zero across the object database is a measurement rather than a pattern
+failing to match.
+
+`git status --ignored` shows all four secrets paths as ignored rather than untracked,
+and `git check-ignore -v` attributes every one to `.gitignore:5`. The only tracked
+secrets-shaped path in the tree is `appsettings.Secrets.example.json`, whose every
+value is empty, which is what D-55 permits. The CI workflow introduces no credential:
+the service container uses `POSTGRES_HOST_AUTH_METHOD: trust` and the connection
+string names a user and no password, and its "Confirm no secrets file is present"
+step fails the job before anything reads configuration.
+
+One property of the instrument, reported by the CI chore's body and recorded nowhere
+else. The Api's `appsettings.Secrets.json` flows into the test output directory
+through the project reference 0.5 added, so a local test run can take its connection
+string from a file other than the test project's own. Confirmed:
+`src/StockResearcherLab.Tests/bin/Debug/net10.0/appsettings.Secrets.json` exists, and
+it, the test project's source file and the Api's are byte identical, sha256
+`b078bc7b...`. The ambiguity is real and it changed nothing for this pass, because
+every candidate file carries the same connection string.
+
+**5 The reconciliation record.** P0.B compares
+`prompts/spent/phase-0-rails.md` against `BUILD_PLAN.md`'s phase 0 detail, which is
+the comparand step 3 asks for, and classifies all eight of its entries in the three
+prescribed forms. Each of the eight was checked against both texts and each is
+classified correctly. The commit subject entry is right to be singled out: the
+repository states one convention in two documents and practises another in every
+commit on the branch.
+
+Five divergences are not recorded.
+
+  *The prompt scoped the architecture read to §3 and §16, and said "Nothing else."*
+  Phase 0 implements §14 for the stack, and §14 is the section naming .NET, Postgres,
+  the read-only minimal API and the Blazor client. **Less**, against `CLAUDE.md` §3's
+  instruction to read the sections the phase implements. It cost nothing, because the
+  build produced all four anyway, and it is the mechanism by which a stack decision
+  could have been missed without anyone noticing.
+
+  *`TreatWarningsAsErrors` on.* The prompt's 0.1 requires it. The plan's 0.1 names
+  central package management and says nothing about warning policy. **More**, and it
+  is load-bearing: it is why a warning fails the build rather than accumulating.
+
+  *The corpus version bump inside 0.8.* The build reported the tension in the 0.8
+  commit body and bumped, which is what the checkpoint asks in its own words. The
+  tension is not between the prompt and the plan. **`BUILD_PLAN.md` contradicts
+  itself**: checkpoint 0.8 says "first corpus version bump" and sign-off step 5 says
+  the bump happens at sign-off. The version is now 0.3.0 with steps 2 to 5 unstarted.
+  Visible rather than hidden, authored, and unresolved.
+
+  *The plan's 0.8 says to open `CHANGELOG.md`.* It was opened at corpus 0.1.0, before
+  phase P. There was nothing to open. A small inaccuracy in the plan, in neither list.
+
+  *There is no build-against-both list, and that is the structural one.* H.5
+  established on phase P that the prompt-against-plan question and the
+  build-against-both question are different, and that folding them together is how a
+  reconciliation loses the items that later become decisions. P0.B has only the first.
+  What belongs in the second is the set of findings the phase reported in commit
+  bodies and nowhere else, which is nine: the transcripts kept rather than deleted,
+  the Ui hosting model, the root secrets file not matching its template, the money
+  column in `SCHEMA.md`, the migrator not repairing drift, two reserved table names,
+  the writer-name half of the 0.4 assertion, the stale-artifact defect found and fixed
+  inside the 0.5 test, and the secrets file flowing into the test output. `CLAUDE.md`
+  §7 says what makes something a record is where it will be read. Two of the nine are
+  consequential:
+
+  **0.2 resolved a contradiction between an authored document and an invariant rather
+  than stopping.** `SCHEMA.md`'s `indicator_daily` lists `median_dollar_volume_20d`
+  among its columns and then says "Store as 32-bit floats". A median dollar volume is
+  money and INVARIANT 16 does not bend for storage size. `CLAUDE.md` §3 says that when
+  something contradicts an authored document you stop, report it, and do not proceed
+  past that point, and specifically do not implement what you judge the document
+  should have said. The build built `numeric`, reported in the commit body, and
+  continued. The column is right, the schema is right, and the procedure is what was
+  broken. Nothing in any document records that the contradiction exists, so the next
+  reader of `SCHEMA.md` §indicator_daily meets it again from scratch.
+
+  **0.1 gave the Ui a reference to the whole Api project.** `CLAUDE.md` §4 says the Ui
+  "References Api contracts only". There is no contracts project; `RunContracts.cs`
+  sits inside the Api. The build reported this and said correctly that a separate
+  contracts project is an authored decision and not its own. The consequence is
+  checkable and was checked: the Ui's compiled dependency closure carries
+  `StockResearcherLab.Data/1.0.0` and `Npgsql/9.0.4`. 0.5's own test treats the
+  transitive closure as decisive when the subject is the Api, on the stated ground
+  that a direct check would pass while the guarantee was broken. Both
+  `StockResearcherLab.Ui.csproj` and `Ui/Program.cs` state "no reference to Data",
+  which is true directly and false transitively, and no test applies 0.5's standard to
+  the Ui at all.
+
+**6 Measured against inferred.** Nothing in the Measured figures table moved, and
+correctly: phase 0 measures nothing about the system under study. Its numbers are
+properties of the build.
+
+Two figures are recorded as fact and inferred from a run nothing recorded, both under
+check 2: "25 tests green" in the phase status row, and "Passed 25, Failed 0" in the CI
+chore's body, which describes a local dry run in the vocabulary of the CI job it was
+rehearsing. Both are true.
+
+One claim attributes to the toolchain a limitation with no committed evidence. The
+0.1 commit body states that a WebAssembly Ui cannot carry a project reference to the
+Api, because the Api's `FrameworkReference` to `Microsoft.AspNetCore.App` has no
+browser-wasm runtime pack, and that the build fails with `NETSDK1082`, marked "Tried
+it, that is the observed error, not a prediction". The identifier is specific and the
+reasoning holds, and there is no transcript. It is the same shape as the phase P
+finding about `Program.cs:665`, a measurement whose only record is a commit message,
+and it matters more here because it is the entire justification for the Ui's hosting
+model differing from what a reader of §15 would expect.
+
+The rows that separate an instrument limitation from a system one do it well.
+`TestDatabase` refuses to skip when the database is unreachable and says why; the
+`SchemaParityTests` parser guard exists so both directions cannot pass over an empty
+set; the deps.json assertion checks the file exists and that a project library is
+listed. Each is a case of a check that would otherwise report green while asserting
+nothing, caught in advance.
+
+One residual of exactly that class survives inside the 0.5 test, found here rather
+than reported. The 0.5 commit body says the stale-artifact defect was closed by having
+the test project reference the Api, "so the artifact is rebuilt by construction rather
+than by someone remembering to". That holds only while the build succeeds. In the
+first attempt at the failure-path proof above, the build failed for an unrelated
+reason, a running Api process holding its own exe, which is the Windows detail the 0.6
+commit body warned about. `dotnet test --no-build` then read the previous `deps.json`
+and `TheCompiledApiCarriesNoPipelineDependency` passed with the Pipeline reference
+present, while `ApiDoesNotReferencePipeline` correctly failed. After stopping the
+process and rebuilding, both failed together. CI is not exposed, because its Build
+step gates the Test step. A local `--no-build` run after a failed build is. The defect
+is narrowed rather than closed, and the narrowing is not written down.
+
+**7 Consistency with superseded decisions.** No executable reference to a superseded
+rule, which is the half that matters most. Every `D-<n>` cited in code, migrations,
+scripts and the workflow was resolved against `DECISIONS.md`: D-9, D-23, D-25, D-27,
+D-29, D-36, D-38, D-40, D-43, D-44, D-46, D-48, D-51, D-55, D-56, D-58, D-61, D-62,
+all `ACTIVE`. D-57 appears nowhere outside `DECISIONS.md` itself, `PROGRESS.md`'s
+record of the passes that superseded it, and the phase P transcripts under
+`docs/evidence/phase-P/`, which were written while it was live and are records rather
+than defects. INVARIANT 10 is carried in its amended form at every one of the eleven
+places it appears in code, and the registry, the guard and the test are all per
+operation.
+
+Four live references now point at something that does not exist, all of them created
+by 0.1 deleting `tools/probe`.
+
+  `.gitignore` lines 13 to 16 carry a comment reading "tools/probe/probe-output/ is
+  deliberately tracked and must stay outside bin/", with H.1's reasoning attached. The
+  directory is gone and the transcripts are at `docs/evidence/phase-P/`. A live
+  instruction in a live file about a path that does not exist. The phase did not
+  report this one, and `.gitignore` was never opened, which is consistent with
+  `CLAUDE.md` §10's rule being about inspecting a diff where there was none.
+
+  `CLAUDE.md` §4 still draws a `tools/` block containing `probe`, "phase P only,
+  deleted or rewritten afterwards". It was deleted, by an instruction that cited this
+  very file. This is also what makes 0.1's own definition of done, "every project
+  named in `CLAUDE.md` §4 exists", not exactly satisfiable as written. Authored, not
+  the build's to fix, and not reported either.
+
+  `PROGRESS.md` line 778 states that pass H's evidence is `tools/probe/probe-output/`
+  and line 786 names a transcript by that path. Both read as current pointers. The
+  phase reported this class, over-broadly, per check 2.
+
+  `README.md` line 45 describes `SCHEMA.md` as "Tables, grain, and single-writer
+  ownership". INVARIANT 10 has been per operation since L.3, and phase 0 has now built
+  the per-operation registry and its test, so the line is contradicted by shipped code
+  rather than only by a document. It stands as deferred item 1 after pass N with "the
+  next edit to `README.md`" as its trigger; `7599867` was an edit to `README.md` and
+  did not take it.
+
+Three deferred items reached their stated trigger during this phase and are open.
+Item 2, `README.md`'s "Where to start" sending a reader to `BUILD_PLAN.md` phase P,
+triggered by phase 0 becoming current. Item 10, the architecture stating writes three
+times over, triggered "after phase 0 has proved the registry and its test work", which
+this pass observes to have happened. Item 5, `CLAUDE.md` line 397 saying "a test that
+no fundamental is readable before its filing date" where D-62 makes it the effective
+filing date, is owed to the next authored amendment to §9 and has not had one.
+
+**8 Cross-reference integrity.** Pattern, whitespace-tolerant per N.11, run over the
+whole tree:
+
+```
+(?:§|[Ss]ections?)[\s]*[0-9]+(?:\.[0-9]+)?
+```
+
+**All 150 section references resolve**, each established by reading its target rather
+than by matching a filename, with `ARCHITECTURE.html` resolving by its
+`<span class="secno">` numbers. Every count in this check is as at `d4baeaf` and
+therefore excludes this finding, which added 32 more to this file: re-running the
+sweep after it returns 168 over the recorded set and 182 over the extended one, and a
+later pass comparing against a prior run needs the `d4baeaf` figures rather than
+these. Every `D-<n>` reference in the tree resolves, D-1
+through D-63, and the only apparent miss, D-250, is arithmetic in the two-pass
+backfill note, as three earlier passes recorded. The wrapped-reference detector, a
+token at the end of one line and its number at the start of the next, returns zero.
+
+**The recorded file set no longer covers the tree.** The sweep adopted at H.6 and
+re-audited at N.11 is `--include=*.md --include=*.html --include=*.cs`. Over that set
+the pattern now returns 136 hits in 27 files. Over a set extended with `.razor`,
+`.ps1`, `.yml`, `.props` and `.csproj`, all five introduced or newly populated by
+phase 0, it returns 150 in 38 files. **Fourteen references sit outside the recorded
+sweep**: three in `Directory.Build.props`, six in the `.csproj` comments, two in
+`.github/workflows/ci.yml`, and one each in `guards.ps1`, `seed.ps1` and
+`Runs.razor`. All fourteen resolve, so nothing was wrong; the file set is what needs
+extending before the next phase adds more code than documents.
+
+Per deferred item 9, the count is compared against a prior run rather than read as a
+pass on its own. The same pattern over the same file set at `ed4668d`, the baseline
+this branch was cut from, returns 103, which is N.11's 100 plus the three references
+`ca0012c` added when it recorded the deferred items. The difference reconciles
+exactly: 103, less the 2 that left with `tools/probe/Program.cs`, plus 24 in
+`src/**/*.cs`, 4 in the spent prompt, 2 in the new `CHANGELOG.md` entry and 5 in this
+file's phase 0 block, is 136.
+
+**Also, outside the eight checks.** Two things.
+
+The phase status row carries HEAD `a27bdfb`, which is 0.7. It was written at
+`408931a` and has not moved through four later commits, one of which added the P0.A
+and P0.B blocks to the same file. This is the third occurrence of the same staleness
+in this document, after `88a8f6e` and K.4 corrected it twice on phase P. Not
+corrected here.
+
+The phase 0 sign-off block opens "Steps 2 to 5 of the sign-off procedure have not
+happened: no conformance pass has run". That was true when written and this pass
+supersedes the second clause of it. Marking it is sign-off's job and not this pass's,
+so the sentence is left as the build session wrote it.
+
+**Phase 0 is not signed off by this pass.**
 
 ---
 

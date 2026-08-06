@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Domain types, the stage abstraction, IClock, as-of config resolution.
+       NO PROJECT REFERENCES, and that is load-bearing rather than tidy
+       [CLAUDE.md section 4]. Anything needing a database, an HTTP client or a
+       clock implementation does not belong here. -->
+
+</Project>

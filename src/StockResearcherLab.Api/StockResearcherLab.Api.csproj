@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Read-only query API. References Core and Data, and NEVER Pipeline
+       [CLAUDE.md section 4]. That absence is the structural form of the
+       read-only guarantee and checkpoint 0.5 asserts it as a test. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\StockResearcherLab.Core\StockResearcherLab.Core.csproj" />
+    <ProjectReference Include="..\StockResearcherLab.Data\StockResearcherLab.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.Secrets.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('appsettings.Secrets.json')" />
+  </ItemGroup>
+
+</Project>

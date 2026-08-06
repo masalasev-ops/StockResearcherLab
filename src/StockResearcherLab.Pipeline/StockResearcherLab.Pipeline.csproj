@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- All stages, in folders named for the layers in ARCHITECTURE.html, plus the
+       stage registry. References Core and Data [CLAUDE.md section 4, D-56].
+
+       Layers are folders inside one project rather than separate assemblies. The
+       boundary that matters here is the stage contract and one writer per table
+       per operation, both enforced by the registry test, and assembly references
+       would add build ceremony without adding enforcement. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\StockResearcherLab.Core\StockResearcherLab.Core.csproj" />
+    <ProjectReference Include="..\StockResearcherLab.Data\StockResearcherLab.Data.csproj" />
+  </ItemGroup>
+
+</Project>

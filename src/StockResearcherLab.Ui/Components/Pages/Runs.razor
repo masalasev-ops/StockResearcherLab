@@ -1,0 +1,93 @@
+@page "/"
+@using System.Net.Http.Json
+@using System.Globalization
+@using StockResearcherLab.Api.Contracts
+@inject IHttpClientFactory Http
+
+@* The bare run viewer [0.6]. Stages, durations, row counts. Not the run health
+   screen: no cost, no freshness, no local model panel, no alerts. Enough to
+   debug a thirty-four component pipeline without raw SQL.
+
+   Static server rendering. There is nothing to interact with, and static render
+   means the table is in the HTML rather than arriving after a websocket
+   connects, which is what lets it be checked without a browser. *@
+
+<PageTitle>Runs</PageTitle>
+
+<h1>Runs</h1>
+<p class="sub">Stages, durations and row counts. Newest first.</p>
+
+@if (_error is not null)
+{
+    <p class="fail">Could not reach the API: @_error</p>
+}
+else if (_runs is null)
+{
+    <p class="empty">Loading.</p>
+}
+else if (_runs.Count == 0)
+{
+    <p class="empty">No runs recorded yet. Run a stage and it appears here.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Run date</th>
+                <th>Stage</th>
+                <th>Status</th>
+                <th>Started</th>
+                <th style="text-align:right">Duration</th>
+                <th style="text-align:right">Rows</th>
+                <th>Error</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in _runs)
+            {
+                <tr>
+                    <td>@r.RunDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)</td>
+                    <td>@r.Stage</td>
+                    <td class="@StatusClass(r.Status)">@r.Status</td>
+                    <td>@r.StartedAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)</td>
+                    <td class="num">@Show(r.DurationMs, " ms")</td>
+                    <td class="num">@Show(r.RowsWritten, "")</td>
+                    <td>@(r.Error ?? "")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <p class="sub" style="margin-top:18px">@_runs.Count row(s).</p>
+}
+
+@code {
+    private IReadOnlyList<StageRun>? _runs;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var client = Http.CreateClient("api");
+            _runs = await client.GetFromJsonAsync<List<StageRun>>("/api/runs");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    // Null means unknown, never zero. A stage that failed wrote an unknown
+    // number of rows rather than none of them [CLAUDE.md section 6], and the
+    // viewer has to show that difference rather than printing 0.
+    private static string Show(long? value, string suffix)
+        => value is null ? "unknown" : value.Value.ToString("N0", CultureInfo.InvariantCulture) + suffix;
+
+    private static string StatusClass(string status) => status switch
+    {
+        "ok" => "ok",
+        "failed" => "fail",
+        _ => "run",
+    };
+}

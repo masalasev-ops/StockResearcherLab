@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Postgres access, migrations, every store. References Core [CLAUDE.md
+       section 4, D-56]. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\StockResearcherLab.Core\StockResearcherLab.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\*.sql" />
+  </ItemGroup>
+
+</Project>

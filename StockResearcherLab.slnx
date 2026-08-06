@@ -1,5 +1,11 @@
 <Solution>
-  <Folder Name="/tools/">
-    <Project Path="tools/probe/probe.csproj" />
+  <Folder Name="/src/">
+    <Project Path="src/StockResearcherLab.Core/StockResearcherLab.Core.csproj" />
+    <Project Path="src/StockResearcherLab.Data/StockResearcherLab.Data.csproj" />
+    <Project Path="src/StockResearcherLab.Pipeline/StockResearcherLab.Pipeline.csproj" />
+    <Project Path="src/StockResearcherLab.Worker/StockResearcherLab.Worker.csproj" />
+    <Project Path="src/StockResearcherLab.Api/StockResearcherLab.Api.csproj" />
+    <Project Path="src/StockResearcherLab.Ui/StockResearcherLab.Ui.csproj" />
+    <Project Path="src/StockResearcherLab.Tests/StockResearcherLab.Tests.csproj" />
   </Folder>
 </Solution>

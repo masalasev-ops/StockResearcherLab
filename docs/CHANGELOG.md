@@ -135,3 +135,27 @@ no measurement was made.
 
 The test project lives in `src/` rather than `tests/`, and `CLAUDE.md` §4 and
 `README.md` were updated by the author to match.
+
+---
+
+## Closed — 2026-08-06
+
+**Corpus versioning stops here. This is the last entry and the file is not
+appended to again** [D-67].
+
+Versioning the corpus as a whole made sense while the documents were the only
+artefact and a phase could change six of them at once. Three versions later the
+code is the artefact, git is the version, and a number bumped by hand at sign-off
+recorded that documents had changed without recording what a reader could not
+already see from the diff. It caught nothing across phases P and 0, and the
+sign-off step that produced it went with the other three at D-67.
+
+Two lines above are now historical rather than current. The header says
+`PROGRESS.md` records which corpus version the build was working against; that
+line is removed from `PROGRESS.md` at O.6. And the 0.1.0 entry describes
+`SCHEMA.md` as single-writer ownership per table, which INVARIANT 10 has not been
+since L.3. Both stand as written, because this file is a record and correcting a
+record is how it stops being one.
+
+What replaces it: nothing. A document change is a commit, the commit says what it
+changed and why, and `PROGRESS.md` says what is built.

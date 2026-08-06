@@ -25,9 +25,9 @@ nobody wins on market exposure. SPY is a reference line, not a portfolio.
 
 ## Documents
 
-`CHANGELOG.md` carries the version history and `PROGRESS.md` carries the
-present build state and the current corpus version. This file states neither,
-which is why no version number appears above.
+`PROGRESS.md` carries the present build state. `CHANGELOG.md` is a closed record
+of corpus versioning, which stopped at D-67. This file states no version, and
+there is no longer one to state.
 
 Read these three, in order, to understand the lab:
 
@@ -42,7 +42,7 @@ Read these when you need them:
 | `CLAUDE.md` | Rules for agents. Section 2 is the invariants | Human only |
 | `docs/DECISIONS.md` | The numbered register. Looked up, not read through | Human only |
 | `docs/BUILD_PLAN.md` | Phases, definitions of done, carried obligations | Human only |
-| `docs/SCHEMA.md` | Tables, grain, and single-writer ownership | Human only |
+| `docs/SCHEMA.md` | Tables, grain, and write ownership per operation | Human only |
 | `docs/CONFIG_REFERENCE.md` | Every config key and its verified consumer | Mixed |
 | `docs/GLOSSARY.md` | Terms with a specific meaning here | Human only |
 | `docs/FIXTURES.md` | The single registry of test fixtures | Mixed |
@@ -55,7 +55,7 @@ These track state and are appended to, never rewritten:
 | File | What it is |
 |---|---|
 | `docs/PROGRESS.md` | What has actually been built |
-| `docs/CHANGELOG.md` | Corpus versions |
+| `docs/CHANGELOG.md` | Corpus versions, a closed record since D-67 |
 
 The architecture and the invariants exist to constrain the code. If the code
 disagrees with them, the code is wrong.
@@ -92,5 +92,5 @@ unspent until the calibration report and the model comparison have real data.
 
 ## Where to start
 
-`docs/BUILD_PLAN.md`, phase P. It runs before anything else because its answers
-change the schema.
+`docs/PROGRESS.md`, for which phase is current and what is built, then that phase
+in `docs/BUILD_PLAN.md` [D-66].

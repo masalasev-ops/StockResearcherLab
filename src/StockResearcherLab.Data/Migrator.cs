@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using Npgsql;
+using StockResearcherLab.Core;
 
 namespace StockResearcherLab.Data;
 
@@ -18,11 +19,20 @@ namespace StockResearcherLab.Data;
 public sealed class Migrator
 {
     private readonly string _connectionString;
+    private readonly IClock _clock;
     private readonly Action<string> _say;
 
-    public Migrator(string connectionString, Action<string>? say = null)
+    /// <summary>
+    /// The clock is injected rather than read. `applied_at` is a timestamp this
+    /// class writes, and nothing reads system time outside the clock
+    /// implementation [INVARIANT 11]. The migrator is not a stage, so no
+    /// StageContext arrived carrying one, which is how the only breach in the
+    /// tree came to sit here [O.1].
+    /// </summary>
+    public Migrator(string connectionString, IClock clock, Action<string>? say = null)
     {
         _connectionString = connectionString;
+        _clock = clock;
         _say = say ?? (_ => { });
     }
 
@@ -74,7 +84,7 @@ public sealed class Migrator
                 await ExecuteAsync(conn, sql, ct, tx).ConfigureAwait(false);
                 await ExecuteAsync(conn,
                     "INSERT INTO meta.schema_migration (filename, applied_at, sha256) VALUES (@f, @a, @h);",
-                    ct, tx, ("f", filename), ("a", DateTime.UtcNow), ("h", hash)).ConfigureAwait(false);
+                    ct, tx, ("f", filename), ("a", _clock.UtcNow), ("h", hash)).ConfigureAwait(false);
                 await tx.CommitAsync(ct).ConfigureAwait(false);
             }
 

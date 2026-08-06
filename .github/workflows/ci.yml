@@ -48,6 +48,17 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
+      - name: Guards
+        # The greps for the invariants that are grep-checkable, wired for real
+        # at O.1. Four checks over the tracked files under src/, each expecting
+        # zero and each failing the job on a hit.
+        #
+        # First rather than last. It needs only the checkout, it takes a second,
+        # and a guard reporting after a three-minute suite is a guard whose
+        # signal arrives too late to be the first thing anyone reads.
+        shell: pwsh
+        run: ./guards.ps1
+
       - name: Set up .NET 10
         uses: actions/setup-dotnet@v4
         with:
@@ -91,9 +102,3 @@ jobs:
 
       - name: Test
         run: dotnet test StockResearcherLab.slnx --no-build --verbosity quiet
-
-      - name: Guards
-        # The greps for the invariants that are grep-checkable. A stub at 0.1
-        # that exits zero and says so.
-        shell: pwsh
-        run: ./guards.ps1

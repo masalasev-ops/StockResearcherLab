@@ -10,10 +10,11 @@
 # .NET
 bin/
 obj/
-# tools/probe/probe-output/ is deliberately tracked and must stay outside bin/.
-# The transcripts are the evidence behind the phase P findings, and while they
-# were excluded here nothing recorded in PROGRESS.md was checkable without the
-# build machine [H.1].
+# docs/evidence/ is deliberately tracked and must stay outside bin/. The phase P
+# transcripts there are the evidence behind every figure in the Probe findings
+# table, and while they were excluded from the repository nothing recorded in
+# PROGRESS.md was checkable without the build machine [H.1]. They moved out of
+# the probe's own output directory when 0.1 deleted it [O.9].
 *.user
 *.suo
 .vs/

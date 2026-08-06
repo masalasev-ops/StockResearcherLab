@@ -45,7 +45,7 @@ string RequireConnectionString()
 async Task<int> MigrateAsync()
 {
     Console.WriteLine("migrate");
-    var applied = await new Migrator(RequireConnectionString(), Console.WriteLine)
+    var applied = await new Migrator(RequireConnectionString(), new SystemClock(), Console.WriteLine)
         .ApplyAsync().ConfigureAwait(false);
 
     Console.WriteLine(applied.Count == 0

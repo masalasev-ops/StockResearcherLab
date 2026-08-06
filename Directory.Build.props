@@ -1,8 +1,8 @@
 <Project>
 
   <!-- Shared MSBuild properties for every project in the repository. Phase 0
-       checkpoint 0.1 sets the full set; phase P carried only what tools/probe
-       needed, and that project is gone. -->
+       checkpoint 0.1 sets the full set; the phase P scratch project that
+       preceded it carried only what it needed and was deleted at 0.1 [O.9]. -->
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>

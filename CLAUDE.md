@@ -3,8 +3,8 @@
 Rules for agents working in StockResearcherLab.
 
 Read `ARCHITECTURE.html` before changing anything structural. Read `DECISIONS.md`
-when a change touches a numbered decision. `BUILD_PLAN.md` says which phase is
-current and what its definition of done is.
+when a change touches a numbered decision. `PROGRESS.md` says which phase is
+current and `BUILD_PLAN.md` says what its definition of done is [D-66].
 
 **Every rule in this file is justified by this system.** Nothing here is carried from
 another codebase on the strength of what went wrong there. A rule whose cost is real
@@ -110,18 +110,21 @@ learned things, and it stops being a record of what was asked.
 Work checkpoint by checkpoint and commit per checkpoint, not per phase. A phase that
 lands as one commit cannot be bisected and cannot be partially reverted.
 
-**A commit message opens with its checkpoint number**, so `4.3 candidate allocator
-quota enforcement`. Checkpoints are numbered in `BUILD_PLAN.md`. Churn commits carry no
-number and say what they are. A commit spanning two checkpoints means the checkpoints
-were drawn wrong, so split it rather than the message.
+**A commit message opens with its phase and its checkpoint**, so `Phase 4 / 4.3 -
+candidate allocator quota enforcement`. Checkpoints are numbered in `BUILD_PLAN.md`.
+Churn commits put `chore` where the checkpoint number goes and say what they are, so
+`Phase 4 / chore - line endings`. A correction pass uses its letter as the phase, so
+`Phase O / O.1 - the clock read`. A commit spanning two checkpoints means the
+checkpoints were drawn wrong, so split it rather than the message.
 
 Run the invariant tests continuously rather than at the end. They are cheap and they
 are the only thing standing between a plausible-looking run and a worthless one.
 
-**When something contradicts an authored document, stop.** A decision, an invariant, or
-the architecture. Report it and do not proceed past that point. Do not implement what
-you judge the document should have said: the authority is the decision, never the code,
-and a build that quietly resolves a contradiction leaves no trace that one existed.
+**When two authored documents contradict each other and one of them is an invariant,**
+follow the invariant, build what it requires, and report the contradiction. Do not
+stall on it. Stop only when a decision or an invariant is contradicted by the work
+itself and following it is not possible. In every other case, note it and continue.
+Never edit an authored document to match what you built.
 
 When something is merely wrong, missing or awkward without contradicting an authored
 document, note it and continue. Section 15 covers what to raise and what to file.
@@ -149,30 +152,18 @@ Then, in order:
 - Fill the Consumer column in `CONFIG_REFERENCE.md` for every key this phase wired up,
   having actually read the composition code rather than inferring from the name.
 
-### The conformance pass
+### The review at sign-off
 
 **Runs in a fresh session, not the one that built the phase.** The session that wrote
-the code has already convinced itself, and asking it to check its own conformance
-produces agreement rather than a check.
+the code has already convinced itself, and asking it to check its own work produces
+agreement rather than a check. A session that has committed here does not run it.
 
-It reads the architecture sections the phase implements and the invariants the build
-plan names for that phase, and produces a written finding in `PROGRESS.md`. It is not a
-code review. It answers one question: does what was built match what was authored.
+It writes what it found into `PROGRESS.md` and corrects nothing. The two steps and the
+three questions the review asks are in `BUILD_PLAN.md` [D-67].
 
-### Reconciliation, after the conformance pass
-
-Compare the spent prompt against `BUILD_PLAN.md`'s detail for the phase. They will
-diverge, because the prompt was written before the work and the plan is what was
-intended. Record the divergence in `PROGRESS.md`: the prompt asked for less than the
-plan, which is a gap and means the phase is not done; or more, which is unplanned scope
-that either becomes a decision or comes out; or something different, which usually means
-the plan was wrong rather than the prompt.
-
-**Never edit the spent prompt to close a divergence.** It is the only evidence of why
-the code looks the way it does.
-
-The full five-step sign-off is in `BUILD_PLAN.md`, and the last two steps are authoring
-the next phase's checkpoints and bumping the corpus version.
+**Never edit a spent prompt** except to correct it to the text actually issued [D-63].
+It is the only evidence of why the code looks the way it does. Nothing is reconciled
+against it.
 
 ---
 
@@ -204,12 +195,14 @@ src/
   StockResearcherLab.Worker     the host that runs the nightly pipeline and the
                                 backfill. References Pipeline.
   StockResearcherLab.Api        read-only query API. References Core and Data.
-  StockResearcherLab.Ui         Blazor. References Api contracts only.
+  StockResearcherLab.Ui         Blazor. References Api. [amended, O.3]
   StockResearcherLab.Tests
-
-tools/
-  probe                         phase P only, deleted or rewritten afterwards
 ```
+
+Phase P's scratch probe was deleted at checkpoint 0.1, as its own scope said it
+would be. Its transcripts are kept at `docs/evidence/phase-P/`, because four
+decisions cite them and nothing recorded in `PROGRESS.md` is checkable without
+them [O.9].
 
 **The Api never references Pipeline, and that is load-bearing rather than tidy.** It is
 what structurally prevents the interface from invoking a stage, which is how the

@@ -154,11 +154,14 @@ Grain: ticker by day. **Writer: IndicatorEngine.** ~1.2 GB, the second largest t
 
 Roughly forty technical columns plus their percentiles. `atr_pct`, `adx14`,
 `dist_200dma`, `dist_52w_high`, `rs_change_21d`, `rs_change_63d`,
-`rs_change_vs_sector`, `volume_vs_50d_avg`, `ma50_200_slope`, `base_breakout_flag`,
-`median_dollar_volume_20d`.
+`rs_change_vs_sector`, `volume_vs_50d_avg`, `ma50_200_slope`,
+`base_breakout_flag`~~, `median_dollar_volume_20d`~~ [moved out of this list, O.2].
 
 Store as 32-bit floats. No technical indicator needs fifteen significant figures and
 it halves the table.
+
+`median_dollar_volume_20d` is `numeric`, not a 32-bit float, because a dollar volume
+is money and INVARIANT 16 does not bend for storage size [O.2].
 
 All computed locally from `price_daily`. Never bought from the provider.
 

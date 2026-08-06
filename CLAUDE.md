@@ -118,10 +118,11 @@ were drawn wrong, so split it rather than the message.
 Run the invariant tests continuously rather than at the end. They are cheap and they
 are the only thing standing between a plausible-looking run and a worthless one.
 
-**When something contradicts an authored document, stop.** A decision, an invariant, or
-the architecture. Report it and do not proceed past that point. Do not implement what
-you judge the document should have said: the authority is the decision, never the code,
-and a build that quietly resolves a contradiction leaves no trace that one existed.
+**When two authored documents contradict each other and one of them is an invariant,**
+follow the invariant, build what it requires, and report the contradiction. Do not
+stall on it. Stop only when a decision or an invariant is contradicted by the work
+itself and following it is not possible. In every other case, note it and continue.
+Never edit an authored document to match what you built.
 
 When something is merely wrong, missing or awkward without contradicting an authored
 document, note it and continue. Section 15 covers what to raise and what to file.

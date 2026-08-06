@@ -50,9 +50,9 @@ That exclusion is applied by UniverseBuilder alongside market cap, price and vol
 not by the fundamentals path [L.2, D-4]. It is an absolute filter, and INVARIANT 1
 puts absolute filters in the universe definition and nowhere else, so a component
 downstream applying this one would be narrowing the universe after ranking at ingest
-had already decided what could be discovered. FundamentalsIngestor maintains the
-count in `security.clean_gap_count` as ordinary ingest output and reads this key not
-at all.
+had already decided what could be discovered. The count is computed for the date being
+built rather than stored on any table, so the threshold is applied against the
+ticker's filing history as it stood then rather than as it stands now [M.1].
 
 The alert exists so that a provider change making equality universal is visible
 rather than silently widening every read. It survives D-62 unchanged, and its

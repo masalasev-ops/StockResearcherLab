@@ -14,10 +14,11 @@ and nothing else may write there at all.
 
 The exception list was the wrong shape rather than too short. `attribution`,
 `proposal`, and `order` with `fill` and `position` each had more than one writer from
-the first draft, which is already past the two the old rule allowed, and `security`
-gained one with D-62. Six tables, four splits. Every attempt to enumerate exceptions
-ran out before the list was complete, because a rule that counts exceptions gets
-longer every time the design is correct.
+the first draft, which is already past the two the old rule allowed. Three splits over
+five tables, and no fourth: the one candidate for it, a stored clean gap count on
+`security`, turned out to want computing rather than storing [M.1]. Every attempt to
+enumerate exceptions ran out before the list was complete, because a rule that counts
+exceptions gets longer every time the design is correct.
 
 Column lists below are the load-bearing ones, not exhaustive. Types, indexes and
 constraints are phase 0 work and are not fabricated here.
@@ -29,26 +30,28 @@ constraints are phase 0 work and are not fabricated here.
 ## Reference
 
 ### security
-Grain: one row per ticker. **UniverseBuilder owns the insert and every column below
-except one. FundamentalsIngestor owns the update of `clean_gap_count` alone.**
+Grain: one row per ticker. **Writer: UniverseBuilder.**
 
 `ticker`, `name`, `sector`, `size_bucket`, `market_cap`, `first_seen`, `last_seen`,
-`delisted_date`, `is_active`, `clean_gap_count`.
+`delisted_date`, `is_active`.
 
 Size buckets: large-and-above at $10B or more, mid $2B to $10B, small $300M to $2B.
 `delisted_date` is populated rather than the row deleted, because the historical
 universe must be reconstructable per date including names that no longer exist
 [D-48].
 
-`clean_gap_count` is how many filing-date gaps of at least one day this ticker has
-shown. FundamentalsIngestor maintains it as ordinary ingest output and forms no view
-about it; UniverseBuilder reads it and excludes below
-`fundamentals.min_clean_gaps_for_substitution` [D-62, D-4]. The exclusion is applied
-in the universe definition rather than in the fundamentals path because it is an
-absolute filter [INVARIANT 1], and the count sits here rather than on
-`fundamental_snapshot` because it is per ticker rather than per period. This is the
-third table with a per-operation split and it is declared the same way as the other
-two.
+**The clean gap count is computed, never stored** ~~as `clean_gap_count`, maintained
+by FundamentalsIngestor~~ [reversed, M.1]. UniverseBuilder counts rows in
+`fundamental_snapshot` for that ticker whose `filing_date_unknown_reason` is `none`
+and whose `filing_date_effective` is at or before the date being built, and excludes
+below `fundamentals.min_clean_gaps_for_substitution` [D-62, D-4].
+
+A stored scalar would have been wrong in the permissive direction. The count is
+as-of: a ticker has more clean gaps now than it had three years ago, so a backfill
+reading one value would admit names a live system on that date would have excluded,
+and backfilled screen scores would sit on a different population than live ones. Made
+a computation, it is point-in-time correct by construction and needs no column, no
+second writer on this table, and nothing to keep in step [INVARIANT 13].
 
 ---
 

@@ -19,6 +19,9 @@ obj/
 .idea/
 .vscode/
 
+# Agent tooling. Local session state, not repository content.
+.claude/
+
 # OS
 Thumbs.db
 .DS_Store

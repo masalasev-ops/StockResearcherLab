@@ -348,6 +348,11 @@ confident statement about it. That is the specific risk here.
 grep, which tells you a string exists somewhere but not what the code does with it. Not
 from memory of a read earlier in the session.
 
+**A grep used as verification must be whitespace-tolerant, and the pattern is stated
+alongside the result** [N.11]. Prose in this corpus is hard-wrapped, so a phrase that
+breaks across a line will not match a line-anchored pattern. That failure is silent: the
+sweep reports no hit and reads as a pass.
+
 **Print the HEAD sha and recent commits before analysing a branch.** Analysis against a
 stale checkout produces findings that were fixed already.
 
@@ -395,10 +400,14 @@ a test that no fundamental is readable before its filing date, write ownership i
 over the stage registry, and the worked arbitration example in `ARCHITECTURE.html` is a
 fixture that must reproduce exactly.
 
-**Fixtures live in `FIXTURES.md` and are referenced from there.** Do not enumerate
-fixture names in build plan detail or in this file. A list kept in two places goes
-silently incomplete the moment one is registered in the other, and the stale copy is the
-one nobody is looking at.
+**Fixtures live in `FIXTURES.md` and are registered nowhere else.** ~~Do not enumerate
+fixture names in build plan detail or in this file.~~ [narrowed, N.8] A second list is
+what goes silently incomplete the moment one is registered in the other, so no other
+document keeps one. Naming a single fixture where a document states what must be proved
+is not a list and is expected: a definition of done that cannot name what it tests is
+not a definition of done, and the forward list in `FIXTURES.md` cites those documents as
+its own sources. A spent prompt may name a fixture freely, because it records what was
+asked rather than what is true [moved from `FIXTURES.md`, N.10].
 
 **Prefer testing through the public surface.** `InternalsVisibleTo` is permitted where
 widening the public API purely for tests would be worse. The bar is that the public

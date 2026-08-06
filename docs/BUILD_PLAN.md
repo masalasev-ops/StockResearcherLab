@@ -125,8 +125,9 @@ commits and reports a clean result that means nothing. `A..B` range notation exc
    to a numbered section of another resolves to the section it names. Match on the
    section token alone so backticks, brackets, markdown links and abbreviations are
    all caught, and establish the target by reading each hit rather than by matching a
-   filename first. State the pattern so the coverage is checkable. The pattern in
-   current use is recorded in `PROGRESS.md` under Corpus consistency passes.
+   filename first. State the pattern so the coverage is checkable, and make it
+   whitespace-tolerant [`CLAUDE.md` §7]. The pattern in current use is recorded in
+   `PROGRESS.md` under Corpus consistency passes.
 
 **The pass states divergences and does not correct them.** A conformance pass that
 fixes what it finds destroys the evidence that it was found. Corrections are a
@@ -243,6 +244,11 @@ Typed HTTP client for the data provider. Bulk end-of-day, fundamentals keyed on
 filing date, sentiment for the whole universe, flow, events. The universe builder
 applying D-4. The freshness guard.
 
+**C34 FlowEngine is a layer 2 component and is built here rather than in phase 2**,
+because its work is inseparable from the ingest it derives from: the two source tables
+and the three daily metrics computed off them are one decision, D-61, and splitting
+them across phases would leave `flow_daily` declared and unwritten for a phase.
+
 ### Checkpoints
 
 | # | Scope |
@@ -250,18 +256,24 @@ applying D-4. The freshness guard.
 | 1.1 | Typed HTTP client: `api_token` query auth, explicit `fmt=json` on every call, the `::` filter form with colons percent-encoded, and the 1,000-requests-a-minute limit |
 | 1.2 | Bulk end-of-day ingest into `price_daily`, plus the settled-day rule: the most recent available day is still accreting and is not valid |
 | 1.3 | Freshness guard on D-59's thresholds, abort below 40,000 and alert below 45,000 |
-| 1.4 | Fundamentals ingest keyed on `filing_date_effective`, implementing D-62's per-ticker substitution, setting `filing_date_unknown_reason` across its four states, and excluding tickers below `fundamentals.min_clean_gaps_for_substitution` |
-| 1.5 | Universe builder applying D-4, with 20-day median dollar volume computed from `price_daily` rather than any provider average |
+| 1.4 | Fundamentals ingest keyed on `filing_date_effective`, implementing D-62's per-ticker substitution, setting `filing_date_unknown_reason` across its four states, and recording enough for the count to be computed downstream. The exclusion itself is 1.5's, not this checkpoint's [D-4, INVARIANT 1] |
+| 1.5 | Universe builder applying D-4, including the clean filing-gap exclusion computed for the date being built rather than read from any stored total [D-62, M.1], with 20-day median dollar volume computed from `price_daily` rather than any provider average |
 | 1.6 | Sentiment ingest for the whole universe, tolerating a series with rows only on days carrying news |
 | 1.7 | Flow ingest from `sec-filings/form4` and not the legacy endpoint, into `insider_transaction` and `institutional_holding` at natural grain per D-61, with `transaction_code` retained so open-market purchases are separable |
 | 1.8 | Events ingest, and the derived `flow_daily` at ticker-by-day |
 | 1.9 | Endpoint sweep at phase start, recording what the subscription reaches |
-| 1.10 | Tests: no fundamental readable before its effective filing date; substitution fires on equality, null and negative-gap fixtures; a stale end-of-day file aborts the run |
+| 1.10 | Tests: no fundamental readable before its effective filing date; the substitution and exclusion fixtures registered in `FIXTURES.md`; a stale end-of-day file aborts the run |
 
 **Done when:** one night of the whole US market lands; the universe builds to
-roughly 2,000 names; feeding the freshness guard deliberately stale data aborts the
-run and produces no orders; a test asserts no fundamental value is readable before
-its filing date.
+roughly 2,000 names, with the count of names excluded by the clean-gap criterion
+recorded rather than assumed; feeding the freshness guard deliberately stale data
+aborts the run and produces no orders; a test asserts no fundamental value is
+readable before its ~~filing date~~ [corrected, D-62] effective filing date, with the
+equality, null and negative-gap cases each exercised; sentiment lands for the whole
+universe and a name with rows on only a handful of days in the window is ingested
+without error; `insider_transaction` and `institutional_holding` land at their own
+grain with `transaction_code` retained, and `flow_daily` derives from them at
+ticker-by-day; the endpoint sweep from 1.9 is recorded in `PROGRESS.md`.
 
 **Invariants at risk:** 1, 10, 11, 12.
 
@@ -276,6 +288,8 @@ constrains what this phase can promise downstream. Record it.
 
 Indicators, valuation, market context including sector relative strength, and the
 percentile engine with size-and-sector cells and the fifteen-member fallback.
+
+C34 FlowEngine belongs to this layer and was built in phase 1, with D-61's ingest.
 
 **Done when:** a known ticker's indicators match a hand-computed reference; a
 percentile spot-check confirms cell membership is correct and the fallback fires

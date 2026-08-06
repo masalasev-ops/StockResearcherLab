@@ -64,3 +64,39 @@ no measurement behind them and the transcripts were excluded from the repository
 nothing recorded was checkable without the build machine. That is why `probe-output/`
 is tracked and why sign-off step 2 is now written down rather than passed between
 sessions.
+
+---
+
+## 0.2.1 — 2026-08-06
+
+Corrective passes L, M and N. No code, no measurement, nothing signed off. The
+documents were made to agree with the decisions phase P had already produced.
+
+- `ARCHITECTURE.html` absorbs D-57 to D-63. C34 FlowEngine added for D-61, which
+  `SCHEMA.md` had already declared a writer for and the architecture had no component
+  for; D-62's exclusion added to the universe criteria; D-60's coverage condition,
+  D-18's probability and D-59's thresholds carried in; the store matrix gains
+  `insider_transaction`, `institutional_holding` and `portfolio_selection`
+- INVARIANT 10 restated as one writer per table per operation, in `CLAUDE.md` under the
+  supersession rule and in `SCHEMA.md`'s ownership declarations. The old
+  two-exceptions rule had been wrong in both directions: three tables carried multiple
+  writers from the first draft. Checkpoint 0.4 now describes a test that can be written
+- The clean filing-gap count made a computation rather than a stored column, because it
+  is as-of and a stored total read during backfill would admit names a live system
+  would have excluded
+- D-62 gains a stated limitation: `filing_date_effective` is itself as-of, runs
+  conservative rather than early, and is accepted rather than corrected
+- `order` given one writer. RiskGate inserts for all four portfolios and
+  PortfolioRunner persists to `portfolio_selection`, so risk rules exist in exactly one
+  place [INVARIANT 8]
+- `BUILD_PLAN.md` phase 1's definition of done extended from four of its ten
+  checkpoints; `FIXTURES.md` gains the substitution and exclusion fixtures that
+  checkpoint 1.10 had been enumerating in its place; `README.md` stops naming a corpus
+  version in the sentence that says it names none
+- `prompts/candidate-block.md` no longer tells the model that a missing digest cannot
+  happen, which D-60 is built on
+
+Recorded rather than fixed: the 0.2.0 entry above does not name `RUNBOOK.md`,
+`prompts/rubrics.md` or `prompts/README.md`, all three changed during phase P. This
+file is appended to and never rewritten, so the omission stands and is stated here
+instead.

@@ -6,7 +6,7 @@ What has actually been built, as opposed to what is designed.
 measured timings and row counts are observations and belong to whoever ran them.
 Correct them directly. Do not record intentions here.
 
-Corpus version: 0.2.0 (2026-08-06, phase P signed off)
+Corpus version: 0.2.1 (2026-08-06, architecture and ownership corrections)
 
 ---
 
@@ -906,6 +906,24 @@ root, `prompts/` is its own directory, and `tools/` carries section references i
 code comments. `ARCHITECTURE.html` numbers its sections in `<span class="secno">`,
 so references into it resolve by reading rather than by counting headings.
 
+**It is line-anchored, and that is a second way to miss silently** [N.11]. `grep` matches
+within a line, so `[[:space:]]` never crosses a newline, and prose here is hard-wrapped.
+A reference written as `section` at the end of one line and `5` at the start of the next
+produces no hit and the sweep reads as a pass. The whitespace-tolerant form, run over the
+same file set:
+
+```
+python -c "import re,io,glob; rx=re.compile(r'(?:§|[Ss]ections?)[\s]*[0-9]+(?:\.[0-9]+)?')"
+```
+
+Run at N.11 over every `.md`, `.html` and `.cs` file in the tree: **100 section
+references, none wrapped**, so the line-anchored sweeps at H.6 and K.3 were not false
+passes. The same re-audit covered the `D-<n>` references and every done-condition grep
+in passes L, M and N, twelve patterns in all. Exactly one hit in the corpus breaks
+across a line, `CLAUDE.md:403`, and N.10 had already found it by accident rather than by
+pattern. That is the whole argument for the rule: the miss rate was one, and nothing
+about the method would have told us if it had been ten.
+
 ### 2026-08-06, corrective pass K, cross-references
 
 One reference did not resolve. Present in the baseline commit `b1a0095`, untouched
@@ -960,3 +978,119 @@ Defect 2 was the one that mattered. A component instructed to read `screen_confi
 and a schema declaring `config_rows` would have produced two tables and a
 one-writer-per-table violation that the registry test could not have caught, because
 both would have had exactly one writer.
+
+---
+
+## Corrective passes L, M and N, 2026-08-06
+
+**L and M ran after the 0.2.0 entry was written**, which happened at K.10 as sign-off
+step 5. That entry names phase P's documents and cannot name theirs, because they did
+not exist yet. `CHANGELOG.md` is appended to and never rewritten, so 0.2.1 carries
+them rather than 0.2.0 being corrected.
+
+### Pass L, the architecture absorbs D-57 to D-63
+
+Changed `ARCHITECTURE.html`, `SCHEMA.md`, `CLAUDE.md`, `BUILD_PLAN.md`,
+`CONFIG_REFERENCE.md`, `DECISIONS.md` and `prompts/candidate-block.md`.
+
+What it settled. D-61 had no component: `SCHEMA.md` already named `FlowEngine` as
+`flow_daily`'s writer and no such thing existed in the architecture, so C34 was added
+with the two source tables that were also missing from the store matrix. D-62's
+exclusion went into the universe definition, where INVARIANT 1 requires absolute
+filters to live. INVARIANT 10 was restated as one writer per table per operation,
+after its exception count turned out wrong in both directions. And the rest of the
+drift: a conviction integer in section 7 against D-18, calibration described as
+bucketing conviction, nine three-portfolio references, a call count of 31 against a
+figure and a cost table that both said 29, D-60's coverage condition that the runtime
+rubric carried and the architecture did not.
+
+The candidate block told the model a missing digest cannot happen because INVARIANT 15
+prevents it, while D-60 is built on exactly that case. A runtime prompt, so a clean
+deletion rather than a strike [`CLAUDE.md` §13].
+
+### Pass M, one reversal and one limitation
+
+Changed `SCHEMA.md`, `ARCHITECTURE.html`, `DECISIONS.md` and `CONFIG_REFERENCE.md`.
+
+Reversed L's `security.clean_gap_count` column and the per-operation split it carried.
+The count is as-of: a ticker has more clean gaps now than three years ago, so a stored
+scalar read during backfill admits names a live system would have excluded, which is
+the permissive direction and puts backfilled screen scores on a different population
+than live ones. UniverseBuilder computes it for the date being built instead. The
+split count went back to three.
+
+Stated the limitation that survives the reversal, inside D-62 rather than as a new
+decision. `filing_date_effective` is computed at ingest from the widest clean gap
+known then, so a backfill reading an older row uses a window derived partly from
+filing behaviour that had not happened yet. A widest gap only grows, so affected rows
+become readable later than they truly would have been rather than earlier. Accepted
+rather than corrected, and it does not reach the universe exclusion.
+
+Struck D-54's portfolio letters, the last authored decision naming a portfolio by
+letter.
+
+### Pass N, eight places two documents disagreed
+
+Changed `ARCHITECTURE.html`, `SCHEMA.md`, `BUILD_PLAN.md`, `FIXTURES.md`, `README.md`,
+`CHANGELOG.md` and this file.
+
+What it settled. `order` has one writer: RiskGate for all four portfolios, with
+PortfolioRunner persisting to a new `portfolio_selection` store rather than writing
+orders, which is the structural form of INVARIANT 8 and left figure 7 unchanged. The
+clean-gap exclusion moved from checkpoint 1.4 to 1.5, matching the five documents
+that already placed it in UniverseBuilder. Three write-column mismatches between
+sections 3 and 16 resolved toward the store matrix. Phase 1's definition of done
+extended from four of its ten checkpoints toward all of them. `FIXTURES.md` caught up
+with the fixtures checkpoint 1.10 had been enumerating in its place.
+
+Two things pass N found and did not correct, because each sits outside the clause that
+found it. `README.md` describes `SCHEMA.md` as single-writer ownership, which
+INVARIANT 10 no longer is. And `equity` appears in C18's Reads column with no `equity`
+table declared anywhere, which is a read-side question phase 7 has to settle: whether
+portfolio equity is a store or is derived from fills and positions at read time. Both
+are recorded here so that a later reader can tell a line nobody looked at from one
+that was looked at and left.
+
+### Deferred after pass N
+
+Pass N ran to eleven clauses rather than the eight the heading above names. N.9, N.10
+and N.11 arrived as rulings on what N.6 and N.8 reported rather than as part of the
+original set. The heading is left as written because it describes what was issued.
+
+Ten items were found and not corrected. Nothing here is a clause and nothing here
+changed the corpus. Each was left because it sat outside the clause that found it, and
+each is recorded so a later reader can tell a line that was looked at and left from one
+nobody read.
+
+| # | What it is | Owner or trigger | Found at |
+|---|---|---|---|
+| 1 | `README.md:44` describes `SCHEMA.md` as "Tables, grain, and single-writer ownership". INVARIANT 10 is per operation since L.3, and three tables carry more than one writer | The next edit to `README.md`, or the next corpus consistency sweep | N.5 commit body |
+| 2 | `README.md` "Where to start" sends a reader to `BUILD_PLAN.md` phase P, which is DONE as of K.10 | Phase 0 becoming current | N.5 commit body |
+| 3 | `equity` is a read target with no store. ARCHITECTURE §3 lists C18 reading `proposal`, `position`, equity and `indicator_daily`, and `SCHEMA.md` declares no `equity` table. The row's own typography already separates it, the other three being in `<code>` and equity bare, which is how it survived every sweep so far, all of them write-side | Phase 7, which builds the risk layer and would declare it | The pass N record above, N.4 |
+| 4 | `FIXTURES.md`'s existing filing-date entry says "asserting no read before the filing date" where D-62 makes it the effective filing date | Phase 1, when checkpoint 1.10 writes the fixture and registers it | N.8 commit body |
+| 5 | `CLAUDE.md:394` carries the same wording, "a test that no fundamental is readable before its filing date" | The next authored amendment to `CLAUDE.md` §9 | N.8 commit body |
+| 6 | Checkpoint 1.8's events-ingest half is not exercised by phase 1's definition of done. `flow_daily` is covered and events ingest is not | Phase 1 sign-off, step 1 | N.6 commit body |
+| 7 | Checkpoint 1.1 is reachable from phase 1's definition of done only through "one night lands", which exercises the HTTP client without asserting the token auth, the explicit `fmt`, the encoded filter form or the rate limit it names | Phase 1 sign-off, step 1 | N.6 commit body |
+| 8 | `CHANGELOG.md` 0.2.0 does not name `RUNBOOK.md`, `prompts/rubrics.md` or `prompts/README.md`, all three changed during phase P. They are covered only by 0.1.0's initial-corpus listing | None. The file is appended to and never rewritten, so the omission stands and 0.2.1 says so | N.4 commit body |
+| 9 | A sweep whose pass condition is a non-zero count cannot validate its own pattern. Full text below | Conformance check 8, whenever it is next touched | N.11, never written down until now |
+| 10 | The architecture states writes three times over. Full text below | After phase 0 has proved the registry and its test | Passes K through N, never written down until now |
+
+**Item 9, in full.** A sweep whose pass condition is a non-zero count must state the
+expected count in advance or compare against a prior run. A pattern cannot validate
+itself, so a wrong pattern reports a clean number and reads as a pass. A sweep expecting
+zero is self-validating and needs no baseline. Owed to conformance check 8 whenever it is
+next touched.
+
+**Item 10, in full.** The architecture's store matrix states writes twice, once in its
+own Written-by column and once in the section 3 catalogue, and SCHEMA states them a third
+time. Every write-column finding in passes K through N came from that duplication.
+Dropping the Written-by and Read-by columns and pointing at SCHEMA would end the class.
+It is an architecture change, it is human-authored, and it waits until phase 0 has proved
+the registry and its test work.
+
+Item 9 is the general form of what N.11 found in the particular. N.11's rule catches a
+pattern that misses hits it should have made; item 9 catches a pattern that finds hits
+that are not there, or the wrong ones, and neither is visible from the number alone. The
+N.11 re-audit is the worked example: my own first audit pattern returned 51 section
+references where there are 100, and the only thing that caught it was the count
+disagreeing with a prior run.

@@ -292,23 +292,40 @@ record by force-closing anything [D-38].
 Exactly one research portfolio carries `is_primary`. Screens and Random match their
 entry count to whichever it is.
 
-### order / fill / position
-Grain: per event, tagged by portfolio. **RiskGate and PortfolioRunner insert orders.
-PaperBroker inserts fills and inserts positions. PositionManager updates positions to
-closed.** Small.
+### portfolio_selection
+Grain: portfolio by ticker by day. **Writer: PortfolioRunner.** Small.
 
-Three tables and four components, each owning a different transition. This is the
+`portfolio_id`, `date`, `ticker`, `source`, `source_ref`.
+
+`source` is one of `proposal`, `screen_rotation` or `random_draw`, and
+`source_ref` points at the proposal, the screen and rank, or the seed. The two
+research portfolios select from `proposal`; the two controls have no equivalent
+store and this is it, which is what lets one component apply risk to all four
+rather than two components applying it to two each [INVARIANT 8].
+
+A selection that the risk caps then block leaves a row here and no order. That
+is the only place the difference between what a control portfolio wanted and
+what it got is visible, and without it an underperforming control cannot be
+read as a weak selection rule rather than a blocked one.
+
+### order / fill / position
+Grain: per event, tagged by portfolio. **RiskGate inserts orders. PaperBroker inserts
+fills and inserts positions. PositionManager updates positions to closed.** Small.
+
+Three tables and three components, each owning a different transition. This is the
 group the old two-exception rule could never have accommodated, and it is why the rule
 was restated per operation rather than extended by one more exception. The registry
 declares the operation and column set for each, and the conformance test asserts no
 two components claim the same triple.
 
-RiskGate and PortfolioRunner both insert orders and are the one pair that shares an
+~~RiskGate and PortfolioRunner both insert orders and are the one pair that shares an
 operation on a table. They are separated by portfolio: the runner writes for every
 non-research portfolio off the shared candidate set, the gate writes for the research
-portfolios after arbitration. The registry declares that split and the test asserts
-it, because a shared operation with no declared partition is the case invariant 10
-exists to catch.
+portfolios after arbitration.~~ [reversed, N.1] No operation on these tables is shared
+by two components. The runner writes `portfolio_selection` and the gate turns
+selections into orders for every portfolio, so sizing, stops and caps exist in exactly
+one place. A split by portfolio class would have put them in two, and INVARIANT 8 says
+that voids the comparison.
 
 ### trade_outcome
 Grain: per closed trade. **Writer: PositionManager.** Small.

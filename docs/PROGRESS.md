@@ -319,6 +319,76 @@ Limits of the evidence set [K.5]
   across seven names, but the word stale remains an inference from the disagreement
   between the two endpoints rather than a measurement of either.
 
+### Phase 0, not signed off, built on branch `phase-0-rails`
+
+Written by the build session. Steps 2 to 5 of the sign-off procedure have not
+happened: no conformance pass has run, the phase is not signed off, and nothing
+below is corrected here.
+
+Definition of done, line by line [P0.A]
+
+  Evidenced means an observable result the repository records, and the row names
+  where it sits. Asserted means the line is true and nothing here records it, and
+  the row says what would evidence it. Several lines were proved by output pasted
+  into commit bodies during the build, and a commit body is an account of a run
+  rather than a record of one: check 1 reads those as asserted and so does this.
+
+  **Naming a test evidences that the assertion is encoded, not that it currently
+  passes.** Nothing in this repository has ever run the suite. The CI workflow at
+  `.github/workflows/ci.yml` would cover the build, migrate, idempotence and test
+  lines, and **it has never run**: `gh run list` returns nothing for the whole
+  repository, `gh pr checks 1` reports no checks, and the PR head carries zero
+  check-runs. Every line whose evidence would be a CI run is therefore asserted,
+  and the run id column below is empty because there is no run id.
+
+| # | Line | State | Where the evidence sits, or what would evidence it |
+|---|---|---|---|
+| 0.1 | `dotnet build` green from a clean clone | asserted | A CI run. Proved in the 0.1 commit body only. No run exists |
+| 0.1 | Every project in `CLAUDE.md` §4 exists and is in the solution | evidenced | `StockResearcherLab.slnx` and the seven `.csproj` files, all readable in the tree. No test asserts it, so a project could be deleted from the solution without anything going red |
+| 0.2 | `migrate.ps1` runs clean against an empty database | asserted | A CI run. The workflow's "Migrate, from an empty server" step. Proved by hand in the 0.2 commit body |
+| 0.2 | Idempotent on a second run | asserted | A CI run. The workflow greps for `nothing to apply` and fails otherwise. Proved by hand in the 0.2 commit body |
+| 0.2 | A test asserts SCHEMA.md and the database agree, both directions | evidenced | `SchemaParityTests.EveryTableInSchemaDocumentExistsInTheDatabase` and `.EveryTableInTheDatabaseIsDeclaredInSchemaDocument`, plus `.SchemaDocumentDeclaresTheTablesItIsExpectedTo` guarding the parser against passing over an empty set |
+| 0.3 | An undeclared read fails at runtime with a named error | evidenced | `StageDataGuardTests.AnUndeclaredReadFailsBeforeTheDatabaseIsTouched`, and six more in `DeclaredAccessTests` |
+| 0.4 | The conformance test passes over the real registry | evidenced | `WriteOwnershipConformanceTests.NoTwoComponentsClaimTheSameTableAndOperation`, built from `PipelineComposition.BuildRegistry`, which is the real registry rather than a fixture |
+| 0.4 | A deliberately conflicting stage proves the test fails | evidenced | `WriteOwnershipConformanceTests.TheConformanceTestFailsOnADeliberatelyConflictingRegistry`, a permanent fixture registered in `FIXTURES.md`. The stronger proof, a conflicting component added to the real composition, is in the 0.4 commit body only and is asserted |
+| 0.5 | A test asserts the Api does not reference Pipeline | evidenced | `ApiIsolationTests.ApiDoesNotReferencePipeline`, `.ApiDoesNotReferenceWorkerEither`, `.TheCompiledApiCarriesNoPipelineDependency` |
+| 0.5 | The test fails if the reference is added, proved by adding it | **asserted** | Nothing. Unlike 0.4 there is no permanent fixture for the failure path: the proof exists only in the 0.5 commit body and nothing re-runs it. A fixture in the shape of 0.4's would evidence it |
+| 0.6 | A run appears in the viewer with durations and row counts | **asserted** | Nothing. No test exercises `/api/runs` or renders the page. Proved by curl output in the 0.6 commit body. An endpoint test, or a render assertion, would evidence it |
+| 0.7 | The stage runs and writes its `run_log` row | evidenced | `StageRunnerTests.TheNoOpStageRunsAndLogsOk`, with the failure path in `.AStageThatReachesOutsideItsDeclaredSetFailsTheRunAndSaysSo` |
+| 0.7 | It runs from the command line | asserted | Nothing. The runner is tested in process; no test invokes the Worker binary. Commit body only |
+| 0.7 | It is visible in the viewer | **asserted** | Nothing. Same gap as the 0.6 row |
+| 0.7 | It passes the 0.4 conformance test | evidenced | The 0.4 tests read the same registry the stage is registered in |
+| 0.8 | Corpus version matches in PROGRESS and newest CHANGELOG, README names none | evidenced | Committed artefacts, directly readable: this file's version line, `CHANGELOG.md`'s `## 0.3.0`, and no version string anywhere in `README.md`. No test asserts it, so it can drift silently |
+| Done when | A no-op stage runs, logs, and appears in the viewer | part evidenced | Runs and logs: `StageRunnerTests.TheNoOpStageRunsAndLogsOk`. Appears in the viewer: asserted, as above |
+| Done when | The write-ownership test reads the registry and passes | evidenced as encoded | `WriteOwnershipConformanceTests`. That it passes is asserted, since no run is recorded |
+| Done when | Migrations run clean from empty | asserted | A CI run |
+
+  Six lines are asserted outright and three more are evidenced only as encoded
+  assertions whose results nothing records. The two that would cost real work to
+  close are 0.5's failure path, which wants a fixture, and the viewer lines,
+  which want a test that exercises the endpoint. Both are gaps for the correction
+  pass rather than work for now, and no code was changed to make any line pass.
+
+Reconciliation: spent prompt against plan detail [P0.B]
+
+  `prompts/spent/phase-0-rails.md` against `BUILD_PLAN.md`'s phase 0 detail.
+  Written by this session because step 3 names no owner, it is not the
+  conformance pass's, and the facts below live in the session that has them.
+
+  archive written after the work        different  `CLAUDE.md` §3 requires the prompt archived before code is written and gives the reason: one archived at the end is archived after the session has learned things. It was written at the end, so its being verbatim rests on the session's own account rather than on the ordering the rule exists to guarantee. A divergence from the procedure rather than between the two documents, and recorded as such
+  tests under `src/` not `tests/`       different  Arrived mid-session, so it is in neither the plan nor the archived prompt. The plan's 0.1 cites `CLAUDE.md` §4, which said `tests/`. Closed by the author amending §4 and `README.md`
+  commit subject `Phase 0 / 0.1 - ...`  different  Arrived mid-session and is in neither document. `CLAUDE.md` §3 and `BUILD_PLAN`'s convention both say `4.3 <what it did>`. **Closed in neither document**, so the repository now states one convention and practises another
+  the database password                 less       Arrived mid-session. Both documents assume a reachable Postgres and neither says how to reach one, so the prompt asked for less than the plan's definition of done needs. It changed no work; it made work possible that was otherwise blocked
+  `tools/probe` deleted at 0.1          more       The plan's 0.1 is solution layout, central package management, `.gitattributes` and the `guards.ps1` stub. Deleting the probe is not in it. The prompt added it
+  transcripts kept, not deleted        more       In neither document. The build moved the four probe transcripts to `docs/evidence/phase-P/` rather than deleting them with the tool, because they are the evidence behind every figure in the Probe findings table and H.1 exists for that reason. Unplanned scope, and the `PROGRESS.md` and `DECISIONS.md` references to `probe-output/` paths are now stale by one directory
+  CI workflow as an unnumbered chore    more       In neither document. The plan's phase 0 conventions name `guards.ps1` for the CI greps and no workflow. It arrived after 0.8, outside the checkpoint sequence
+  schema detail beyond the plan         more       The plan's 0.2 says schema and migrations from `SCHEMA.md`, snapshot-first, running clean from empty. The prompt added money as native `numeric` [INVARIANT 16] and named `portfolio_selection` explicitly
+
+  Eight entries, none resolved. The one worth reading twice is the commit subject
+  format: the other mid-session changes were either closed by the author or
+  changed no work, and that one changed every commit on the branch while leaving
+  both documents saying something else.
+
 ---
 
 ## Conformance passes

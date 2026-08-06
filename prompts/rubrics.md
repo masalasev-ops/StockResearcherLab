@@ -159,8 +159,7 @@ is legitimate.
 weight on how many rather than how much.
 
 **Strongest evidence.** Multiple distinct insiders buying in the open market, dollar
-amounts material relative to their compensation, and short interest falling from an
-elevated base.
+amounts material relative to their compensation.
 
 **Disqualifying regardless of everything else.**
 - A single buyer. One person has one reason and you cannot know it.
@@ -168,8 +167,6 @@ elevated base.
   open-market decisions.
 - Insider buying alongside a large dilutive offering. The company sold shares while an
   officer bought a few.
-- Short interest elevated and rising with no insider buying. That is a crowded short,
-  which is a squeeze setup rather than a thesis.
 
 **The failure mode to guard against.** Insiders carry information but not timing, and
 are frequently early by two or three quarters. This screen needs the technical picture
@@ -177,8 +174,8 @@ to not be actively deteriorating, because a correct thesis on a six-month horizo
 still stops you out at 2 ATR.
 
 **Weighting.** Distinct buyer count above dollar total. Three officers buying modest
-amounts is stronger evidence than one buying a great deal. Short interest change is
-secondary and is never a thesis on its own.
+amounts is stronger evidence than one buying a great deal. Institutional ownership
+change is secondary and is never a thesis on its own.
 
 ---
 

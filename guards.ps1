@@ -17,11 +17,20 @@
     scanned, which is the one way this set can be short, and it cannot happen on
     a CI checkout.
 
-    COMMENTS ARE STRIPPED before matching, // to end of line and -- to end of
-    line. Two of the four patterns otherwise match the prose that states the
-    invariant, in 0001_snapshot.sql and in a test comment, and a comment naming
-    a rule is not a breach of it. The cost is one blind spot: a breach to the
-    right of a // inside a string literal on the same line would be missed.
+    COMMENTS ARE STRIPPED before matching. // to end of line, over every
+    extension scanned. -- to end of line, over .sql ONLY. Two of the four
+    patterns otherwise match the prose that states the invariant, in
+    0001_snapshot.sql and in a test comment, and a comment naming a rule is not
+    a breach of it. The cost is one blind spot: a breach to the right of a //
+    inside a string literal on the same line would be missed.
+
+    THE -- STRIP IS SCOPED TO .sql because in C# that sequence is the decrement
+    operator [pass Q, Q.4]. Applied to .cs it deletes the rest of the line, so a
+    real breach to the right of `i--` is never matched and the check reports
+    zero, which reads as a pass. That is the failure class this file exists to
+    catch, arriving through the file written to catch it. It was inert only
+    because no C# in the tree decremented anything, and phase 1 writes the first
+    paging loops.
 
     PATTERNS ARE WHITESPACE-TOLERANT and matched over the whole file rather than
     line by line, so a token broken across a line still matches [CLAUDE.md
@@ -78,13 +87,19 @@ function Get-TrackedSourceFiles {
 }
 
 function Remove-Comments {
-    param([string] $Text)
+    param([string] $Text, [string] $Extension)
 
-    # // to end of line, and -- to end of line. Applied to every extension
-    # rather than branched on, because neither sequence means anything else in
-    # the file types scanned here.
+    # // to end of line, over every extension scanned.
     $stripped = [regex]::Replace($Text, '//[^\r\n]*', '')
-    return [regex]::Replace($stripped, '--[^\r\n]*', '')
+
+    # -- to end of line, over .sql only. Branched rather than applied to
+    # everything, because in C# -- is the decrement operator and stripping it
+    # there blinds every check to the rest of the line [pass Q, Q.4].
+    if ($Extension -eq '.sql') {
+        $stripped = [regex]::Replace($stripped, '--[^\r\n]*', '')
+    }
+
+    return $stripped
 }
 
 $files = Get-TrackedSourceFiles
@@ -115,7 +130,9 @@ foreach ($check in $checks) {
         $full = Join-Path $root $path
         if (-not (Test-Path -LiteralPath $full)) { continue }
 
-        $text = Remove-Comments -Text (Get-Content -LiteralPath $full -Raw)
+        $text = Remove-Comments `
+            -Text (Get-Content -LiteralPath $full -Raw) `
+            -Extension ([System.IO.Path]::GetExtension($path))
         if ($null -eq $text) { continue }
 
         foreach ($m in [regex]::Matches($text, $check.Pattern)) {

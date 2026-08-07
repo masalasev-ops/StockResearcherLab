@@ -401,6 +401,73 @@ was never empty. It has not reproduced across consecutive runs and no root cause
 is claimed; the drop now reads the database back and fails at that step if it
 survived.
 
+### Upsertable grain, every store
+
+Run once at 1.12 over all thirty-three tables in `public`, with the table filter
+removed from the conflict-target audit. D-68 requires every stage write to be
+idempotent on the table's own grain, and `ON CONFLICT` needs a `PRIMARY KEY` or
+`UNIQUE` index matching the target exactly. A column filled by
+`GENERATED ALWAYS AS IDENTITY` cannot be supplied by a bulk write, so a unique
+index covering only such a column is not a usable grain.
+
+**Recorded to be known, not to be pre-built.** No migration is added by this
+table. Each phase adds the index for the tables it writes, in the migration that
+first writes them, as this phase does at 1.4 for `events` and
+`insider_transaction`.
+
+| Store | Upsertable grain today | Surrogate key |
+|---|---|---|
+| `alert` | **none** | `alert_id` |
+| `attribution` | `ticker` + `date` | - |
+| `calibration` | `model_id` + `screen_id` + `report_date` | - |
+| `candidate_set` | `ticker` + `date` | - |
+| `config_rows` | `key` + `version` | - |
+| `cost_ledger` | **none** | `cost_ledger_id` |
+| `dossier` | `date` where `ticker IS NULL`; `date` + `ticker` where not. Both partial | `dossier_id` |
+| `events` | **none** | `event_id` |
+| `fill` | **none** | `fill_id` |
+| `flow_daily` | `ticker` + `date` | - |
+| `fundamental_snapshot` | `ticker` + `period_end` + `period_type` | - |
+| `gate_result` | `ticker` + `date` | - |
+| `headline` | **none** | `headline_id` |
+| `indicator_daily` | `ticker` + `date` | - |
+| `insider_transaction` | **none** | `insider_transaction_id` |
+| `institutional_holding` | `ticker` + `report_date` + `holder_name` | - |
+| `local_model_config` | `provider_order` | - |
+| `market_context_daily` | `date` | - |
+| `news_digest` | `ticker` + `date` | - |
+| `order` | **none** | `order_id` |
+| `portfolio` | `portfolio_id` | - |
+| `portfolio_selection` | `portfolio_id` + `date` + `ticker` | - |
+| `position` | **none** | `position_id` |
+| `price_daily` | `ticker` + `date` | - |
+| `proposal` | `ticker` + `date` + `model_id` | - |
+| `researcher_memory` | **none** | `researcher_memory_id` |
+| `run_log` | **none** | `run_log_id` |
+| `screen_history` | `screen_id` + `date` | - |
+| `screen_score_daily` | `ticker` + `screen_id` + `date` | - |
+| `security` | `ticker` | - |
+| `sentiment_daily` | `ticker` + `date` | - |
+| `trade_outcome` | **none** | `trade_outcome_id` |
+| `valuation_daily` | `ticker` + `date` | - |
+
+**Eleven stores have no upsertable grain**, and each lands on the phase that first
+writes it. This phase owns two of them, `events` and `insider_transaction`, and
+1.4's migration gives both a `UNIQUE NULLS NOT DISTINCT` index [A11]. The other
+nine are phase 4's `alert`, phase 5's `headline`, phase 6's `cost_ledger`, phase
+7's `order`, `fill`, `position` and `trade_outcome`, phase 8's
+`researcher_memory`, and `run_log`, which C27 appends to and never re-runs.
+
+**`dossier` is the case a table-level reading gets wrong.** Its two unique indexes
+are partial, one for the nightly prefix where `ticker IS NULL` and one per
+candidate block. `ON CONFLICT` can use a partial index only when the statement
+repeats its `WHERE` clause, so phase 6 has a grain but not a plain one. It reads
+as "none" to any query that filters partial indexes out, which the first pass of
+this audit did.
+
+**The eight this phase writes match their checkpoints**, with the two exceptions
+above which 1.4 closes.
+
 ## Open items carried forward
 
 Found and not closed. Each names what triggers it. The pass narratives behind
@@ -416,5 +483,5 @@ them are in `docs/archive/process-2026-08.md`.
 | 6 | `ARCHITECTURE.html` states writes three times over, in its own Written-by column, in the §3 catalogue and in `SCHEMA.md`. Every write-column defect in passes K through N came from that duplication. Its stated trigger, phase 0 proving the registry and its test, has fired | An authored change to `ARCHITECTURE.html` |
 | 7 | The 0.4 conformance test asserts the registry against `SCHEMA.md`'s table list and against a hardcoded list of the three permitted splits, not against `SCHEMA.md`'s own writer declarations, which are stated in prose that varies in form | Phase 1, when real components make the check worth something |
 | 8 | 0.5 has no permanent fixture for its failure path, and no test exercises `/api/runs` or renders the viewer. Both are code and belong to a phase rather than to a correction pass | Phase 9, or the next phase touching either |
-| 9 | `TheCompiledApiCarriesNoPipelineDependency` reads `deps.json` from disk. Its stale-artifact defect was closed by having the test project reference the Api, which holds only while the build succeeds: after a failed build, `dotnet test --no-build` reads the previous artifact and the assertion passes against it. CI is not exposed, because its Build step gates Test | Phase 9, with item 10 |
+| 9 | ~~`TheCompiledApiCarriesNoPipelineDependency` reads `deps.json` from disk. Its stale-artifact defect was closed by having the test project reference the Api, which holds only while the build succeeds: after a failed build, `dotnet test --no-build` reads the previous artifact and the assertion passes against it. CI is not exposed, because its Build step gates Test~~ **Observed rather than predicted at 1.12**, where `dotnet test --no-build` reported 56 passing against a stale binary after a build that had just failed with four errors. Mitigated at 1.12 by making `ci.ps1` the per-checkpoint verification command instead of a three-command sequence: it runs the same steps in the same order and exits non-zero on the first failure, so it cannot reach the test step after a failed build. Proved by committing a deliberate syntax error and running it, which exited 1 at the Build step and printed no test count. **The hazard itself is unchanged** for anyone running `dotnet test --no-build` by hand; what changed is that nothing in the corpus now tells them to | Phase 9, with item 10 |
 | 10 | The Api's `appsettings.Secrets.json` flows into the test output directory through the 0.5 project reference, so a local test run can take its connection string from a file other than the test project's own. All four are byte identical today | Whenever the two need to differ |

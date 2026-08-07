@@ -215,9 +215,19 @@ try {
     Assert-ExitZero 'guards.ps1'
     $guards | Select-Object -Last 1 | ForEach-Object { Write-Host "      $_" }
 
-    $checks = @($guards | Where-Object { "$_" -match '^\s+INVARIANT\s' }).Count
+    # Read the count off guards.ps1's own summary line rather than counting the
+    # per-check headings. Counting them meant matching the label, and the labels
+    # are not all "INVARIANT n": the fifth check stands for a CLAUDE.md section
+    # rather than a numbered invariant, so it was silently not counted and this
+    # block reported four where guards.ps1 reported five.
+    $summary = $guards | Where-Object { "$_" -match '^guards\.ps1: ok\.\s+(\d+) checks' } | Select-Object -Last 1
+    if (-not $summary) {
+        throw 'guards.ps1 printed no summary line. It exits 0 over an empty scan too, so a missing count here is a broken capture rather than a clean tree.'
+    }
+
+    $checks = [int]([regex]::Match("$summary", '^guards\.ps1: ok\.\s+(\d+) checks').Groups[1].Value)
     if ($checks -eq 0) {
-        throw 'guards.ps1 reported no checks. It exits 0 over an empty scan too, so a zero here is a broken capture rather than a clean tree.'
+        throw 'guards.ps1 reported zero checks.'
     }
     $results['guards.ps1'] = "exit 0, $checks checks, zero each"
 

@@ -135,3 +135,82 @@ a count at exactly a round request cap is a cap and not a count [carried obligat
   from 2015-01-01 to 2026-08-07   rows 20  filed_at 2026-06-12 .. 2025-09-11
   from 2015-01-01 to 2024-01-01   rows 20  filed_at 2026-06-12 .. 2025-09-11
   from 2015-01-01 to 2022-01-01   rows 20  filed_at 2026-06-12 .. 2025-09-11
+
+================================================================================
+SECOND SITTING, same day. A12's timeboxed check, which retracted a finding from
+the first sitting. The passes above stand as they were run; nothing is edited.
+The first sitting concluded that form4 ignores paging. It ignores 'limit' and
+'offset'. It pages on 'page[offset]' and 'page[limit]', which a 422 named.
+================================================================================
+
+=== A12 timeboxed check: any date-ranged or market-wide insider feed? ===
+  insider-transactions, market-wide, no code           200   [100]  code,exchange,date,reportDate,ownerCik
+  insider-transactions, market-wide, dated             200   [0]
+  insider-transactions, code=CCS.US dated              200   [4]  code,exchange,date,reportDate,ownerCik
+  insider-transactions, code=NVDA.US                   200   [100]  code,exchange,date,reportDate,ownerCik
+  bulk sec-filings, US, form4                          404   body: Symbol not found
+  sec-filings market-wide                              404   body: <!DOCTYPE html> <html lang="en"> <head>     <link rel="canon
+  bulk-fundamentals US                                 403   body: Forbidden. Please contact support@eodhistoricaldata.com
+  fundamentals filter InsiderTransactions              200   {4}  0,1,2,3
+  fundamentals filter Holders                          200   {2}  Institutions,Funds
+  fundamentals filter outstandingShares                200   {55}  0,1,2,3,4
+  sec-filings/{t}/form4 page param                     422   body: {"errors":{"page":["Page must be an array: &page[offset]=0&p
+  sec-filings/{t}/form4 order=asc                      200   {3}  data,meta,links
+
+=== institutional_holding: is Holders::Institutions dated and backfillable? ===
+  entries 20
+  [0] name=BlackRock Inc, date=2026-03-31, totalShares=18.0657, totalAssets=0.0052, currentShares=5136591, change=-97623, change_p=-1.8651
+  [1] name=Dimensional Fund Advisors, Inc., date=2026-03-31, totalShares=6.8979, totalAssets=0.0234, currentShares=1961284, change=-4818, change_p=-0.2451
+  distinct report dates present: 1  2026-03-31
+
+=== form4 with page[offset] / page[limit], the syntax the 422 named ===
+  offset 0    limit 50  rows 50   filed_at 2026-06-12 .. 2024-03-19
+  offset 50   limit 50  rows 50   filed_at 2024-03-15 .. 2022-09-16
+  offset 100  limit 50  rows 50   filed_at 2022-09-16 .. 2021-05-07
+  offset 150  limit 50  rows 50   filed_at 2021-05-04 .. 2019-04-22
+  collected 200, distinct 200   (index reports 324 form4 filings for CCS.US)
+
+=== meta/links when paging is used ===
+  meta  {"total":324,"page":{"offset":0,"limit":5}}
+  links {"next":"\/api\/sec-filings\/CCS.US\/form4?page%5Boffset%5D=5&page%5Blimit%5D=5"}
+
+=== legacy insider-transactions: limit, offset, and how far back it reaches ===
+  code=CCS.US limit=1000         rows 1     date 2026-02-12 .. 2026-02-12
+  code=CCS.US limit=1000 5y      rows 4     date 2026-02-12 .. 2025-04-28
+  code=NVDA.US limit=1000        rows 115   date 2026-03-25 .. 2025-08-08
+  market-wide limit=1000         rows 1000  date 2026-04-24 .. 2026-04-14
+
+=== legacy insider-transactions row shape ===
+    code                   NVDA
+    exchange               US
+    date                   2026-03-25
+    reportDate             2026-03-27
+    ownerCik               
+    ownerName              Daniel Meuser
+    ownerRelationship      
+    ownerTitle             U.S. Congress Member <small>(R-PA)</small>
+    transactionDate        2026-03-25
+    transactionCode        S
+    transactionAmount      
+    transactionPrice       178.68
+    transactionAcquiredDisposed D
+    postTransactionAmount  
+    link                   
+
+=== Holders::Institutions, distinct report dates per ticker ===
+  CCS.US     entries 20   distinct dates 1  -> 2026-03-31
+  NVDA.US    entries 20   distinct dates 1  -> 2026-03-31
+  BXC.US     entries 20   distinct dates 2  -> 2026-03-31, 2026-06-30
+
+=== is there a paged / historical holders endpoint? ===
+    HTTP 404 <!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="canonical" href="https://
+  sec-filings/CCS.US index: form types -> 10k(12), 10q(37), form4(324), 8k(132)
+  Holders::Funds               Object size 20
+
+=== form4 total reachable vs index count, three tickers ===
+  CCS.US     meta {"total":324,"page":{"offset":0,"limit":1}}
+  NVDA.US    meta {"total":590,"page":{"offset":0,"limit":1}}
+  PHAT.US    meta {"total":171,"page":{"offset":0,"limit":1}}

@@ -659,7 +659,44 @@ rejection rate per model, which is available much sooner. The letters were the
 naming in use before D-36 set the four portfolio names, and they survived the
 rename here [M.3].
 
-~~**D-64 The freshness guard's abort floor against a part-settled file.** `OPEN`~~
+~~**D-69 Whether the flow screen survives an unbackfillable institutional
+ownership source.** `OPEN`
+Owed to phase 4, not phase 1. Recorded on the corrected 1.9 measurements, not
+on the retracted ones: the subject is `inst_ownership_change`, and insider
+data is not the problem.
+
+`Holders::Institutions` is a top-20 snapshot rather than a series. CCS.US and
+NVDA.US each return 20 entries at a single `date`, 2026-03-31; BXC.US returns
+20 across two, 2026-03-31 and 2026-06-30. `sec-filings/{t}/13f` is a 404 and
+the filings index lists only `10k`, `10q`, `form4` and `8k`. `SCHEMA.md` says
+`report_date` is what makes this table backfillable, and against this source
+that is false: the column is populated, which is why the claim survived, but
+one or two distinct values per ticker is not a history.
+
+So S4's third input has no past. `insider_net_90d_usd` and
+`distinct_buyer_count` are unaffected and fully backfillable, form4 paging on
+`page[offset]` and `page[limit]` with `meta.total` matching the filings index
+on every ticker checked, CCS.US 324, NVDA.US 590, PHAT.US 171.
+
+D-58 already removed `short_interest_change` from S4 for the same reason in a
+different form, that a screen whose backfill scores come from a different
+population than its live scores has a floor drawn from a distribution the live
+screen does not share. This is the second of three inputs to meet it.
+
+Options, none chosen here. Run S4 on its two insider inputs and drop
+`inst_ownership_change`, which keeps the screen backfillable and costs the one
+input that is not insider-derived. Keep all three and accept that S4's floor is
+drawn from a two-input distribution during backfill and a three-input one
+live, which D-58 rejected. Or source ownership from SEC EDGAR 13F, free and
+complete, at the cost of a second provider and a real ingest.
+
+The timeboxed check A12 asked for was run and is in the same transcript. The
+subscription exposes no dated or market-wide institutional feed. It does expose
+a market-wide legacy `insider-transactions` endpoint, 1,000 rows in one call,
+but it is stale by roughly three months and thin per ticker, and it is not
+needed now that form4 pages.
+
+**D-64 The freshness guard's abort floor against a part-settled file.** `OPEN`~~
 [answered, and now stated in full above as `ACTIVE`]. The body is not repeated
 here, because a decision stated twice is a decision that can disagree with
 itself. The number is kept in place so that the register shows it was open and

@@ -247,24 +247,61 @@ That in turn constrains the order of C02 and C07, because a count C02 has alread
 overwritten this run cannot be compared against. Reported, not closed: it touches
 `RUNBOOK.md`'s authored 17:30 and 17:40 ordering.
 
-**Finding 2, and it is a constraint on what this phase can promise.**
-`/api/sec-filings/{t}/form4` **ignores `from`, `to`, `limit` and `offset`.** Every
-combination returns the same fixed 20 most-recent filings: `limit` at 5, 20, 50,
-100 and 1000 all return 20; `offset` 0 through 100 returns the same first
-`accession_number` every time, 120 rows collected and 20 distinct; six 180-day
-windows back to 2023 and three different `to` values all return the identical
-span. For CCS.US the index reports 324 form4 filings and the 20 reachable ones
-cover 2025-09-11 to 2026-06-12.
+~~**Finding 2, and it is a constraint on what this phase can promise.**
+`/api/sec-filings/{t}/form4` ignores `from`, `to`, `limit` and `offset`. Every
+combination returns the same fixed 20 most-recent filings... So insider flow is
+not backfillable beyond the most recent 20 filings per ticker.~~
+**[RETRACTED, and it was wrong rather than incomplete. See Finding 2 corrected.]**
 
-So insider flow is not backfillable beyond the most recent 20 filings per ticker,
-and on an active name 20 filings may not even span 90 days: the probe measured 26
-transactions for the control in that window. This is the same shape as the
-argument D-58 accepted when it dropped short interest, that a screen whose
-backfill scores come from a different population than its live scores has a floor
-drawn from a distribution the live screen does not share. It is owed to a human
-as a decision about the S4 flow screen and about phase 3, and it is the carried
-obligation from phase P to phase 1 about flow coverage constraining what this
-phase can promise, now answered with a number.
+**Finding 2, corrected. Insider flow is fully backfillable.**
+`/api/sec-filings/{t}/form4` **pages on `page[offset]` and `page[limit]`**, which
+is the JSON:API form. It does ignore `limit` and `offset`, which is what the first
+sitting tested and why it concluded the endpoint was unpageable. A `422` on a
+`page=2` probe named the real syntax: *Page must be an array:
+`&page[offset]=0&page[limit]=...`*.
+
+Walked at `page[limit]=50`, CCS.US returns 200 distinct filings over four pages
+reaching back to **2019-04-22**, and `meta` reports `{"total":324,...}` with a
+`links.next` URL. `meta.total` matches the index count exactly on three tickers:
+CCS.US 324, NVDA.US 590, PHAT.US 171. There is no 20-filing ceiling and no date
+restriction. Nothing in D-61, S4 or phase 3's backfill is constrained by this
+endpoint.
+
+**The error and what inherited it.** The retracted finding is in the body of
+commit `6cb0a4f`, which cannot be edited, and that commit's message should be read
+against this block. No code was written against it and no decision was authored on
+it, so nothing else inherited it. The cause was testing two plausible parameter
+names and concluding from their failure rather than reading what the endpoint
+said when asked wrongly.
+
+**Finding 3, and this one is the real constraint.** `Holders::Institutions` is a
+**top-20 snapshot, not a series.** CCS.US and NVDA.US each return 20 entries at a
+single `date`, 2026-03-31; BXC.US returns 20 across two, 2026-03-31 and
+2026-06-30. There is no 13f endpoint: `sec-filings/{t}/13f` is a 404, and the
+filings index lists only `10k`, `10q`, `form4` and `8k`.
+
+`SCHEMA.md` says of `institutional_holding` that "`report_date` is what makes this
+backfillable, and it is the field short interest turned out not to have". Against
+this source that is false. The column exists and is populated, which is why the
+claim survived, but one or two distinct values per ticker is not a series, and
+`inst_ownership_change` therefore has no history to compute over. It can be
+accumulated forward from tonight and nothing more.
+
+So the flow screen's three inputs stand as: `insider_net_90d_usd` and
+`distinct_buyer_count` backfillable from form4, and `inst_ownership_change`
+forward-only. That is the inverse of what the retracted finding said, and it is
+the carried obligation from phase P about flow coverage, now answered.
+
+The probe's separate result that transaction code P was zero on all seven names
+over 90 days is untouched by any of this and still bears on `distinct_buyer_count`.
+
+**The legacy `insider-transactions` endpoint, measured rather than assumed.** It
+is alive market-wide: no `code` and `limit=1000` returns 1,000 rows. It is stale,
+the newest being 2026-04-24 against a 2026-08-07 run, which is the staleness the
+probe inferred from per-ticker zeros. Per ticker it is thin: NVDA.US 115 rows,
+CCS.US 1 row without a date range and 4 with a five-year one. Its payload also
+carries US Congress member trades, which are not Form 4 insider filings. It stays
+unused, as checkpoint 1.7 already requires, and now for measured reasons.
 
 **A form4 filing is not a transaction.** It carries `accession_number`,
 `filed_at`, `period_of_report`, and `non_derivative`, `derivative` and `footnotes`

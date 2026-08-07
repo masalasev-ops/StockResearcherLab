@@ -223,3 +223,25 @@ short tops up on a later run, which is what actually heals accretion; D-68's
 idempotent upsert is what makes re-loading safe. Without it a part-settled day
 stays part-settled in `price_daily` for ever, and settledness would keep failing it
 with nothing able to fix it.
+
+**`price.reload_window_days` and `freshness.settled_window_days` are coupled, and
+lowering the first is not a local change** [A26]. The reload window decides how far
+back C02 tops a short day up. The settled window decides how far back C07 takes its
+median. A date that settles more slowly than the reload window ages out of C02's
+reach while still short, stays short for ever, and then sits inside C07's median
+dragging the reference down. The guard gets quieter rather than louder, which is the
+wrong direction for a guard, and it degrades silently.
+
+So the reload window must comfortably exceed the time a session takes to finish
+filling, not merely exceed it. 2026-08-04 was still gaining rows more than
+twenty-four hours after its session closed. Both are set to 20, which leaves a wide
+margin over that observation.
+
+This is also the second reason the settled window takes a median rather than a mean,
+and the stronger of the two: a median over twenty is unmoved by one stuck day, so
+the failure above is bounded even if it happens. A mean would absorb it in
+proportion to its shortfall.
+
+A later session lowering `price.reload_window_days` for call-volume reasons should
+read this paragraph first. Twenty dates against one bulk call each is not the
+expensive part of a night.

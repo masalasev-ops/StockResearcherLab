@@ -175,6 +175,66 @@ public sealed class BulkUpsertTests
         await ClearAsync(ticker, ct).ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// A25. `[A-Za-z0-9_]` stops injection and does not stop `order`. Postgres
+    /// reserves it, and `0001_snapshot.sql` quotes it for that reason. Unquoted,
+    /// the generated SQL is a syntax error that would first appear in phase 5 when
+    /// RiskGate writes an order, nowhere near this checkpoint.
+    ///
+    /// Quoting also pins case: an unquoted identifier folds to lower case, and the
+    /// schema is lower-case snake by convention rather than by enforcement.
+    /// </summary>
+    [Fact]
+    public async Task AReservedWordTableNameIsQuotedAndWorks()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var data = new StageData(
+            TestDatabase.ConnectionString,
+            new DeclaredAccess("TestStage", [], [new TableWrite("order", WriteOperation.Insert)]));
+
+        var portfolio = "SRLTEST-RESERVED";
+
+        await using (var clean = new NpgsqlConnection(TestDatabase.ConnectionString))
+        {
+            await clean.OpenAsync(ct).ConfigureAwait(true);
+            await using var del = new NpgsqlCommand(
+                "DELETE FROM \"order\" WHERE portfolio_id = @p;", clean);
+            del.Parameters.AddWithValue("p", portfolio);
+            await del.ExecuteNonQueryAsync(ct).ConfigureAwait(true);
+        }
+
+        // order_id is GENERATED ALWAYS AS IDENTITY and is not written, which is
+        // also what proves the staging table carries no NOT NULL it should not.
+        string[] columns = ["portfolio_id", "date", "ticker", "side", "quantity", "status", "created_at"];
+
+        await data.BulkUpsertAsync("order", columns, ["order_id"],
+            async (w, c) =>
+            {
+                await w.StartRowAsync(c).ConfigureAwait(false);
+                await w.WriteAsync(portfolio, c).ConfigureAwait(false);
+                await w.WriteAsync(new DateOnly(2026, 8, 7), c).ConfigureAwait(false);
+                await w.WriteAsync("SRLTEST", c).ConfigureAwait(false);
+                await w.WriteAsync("BUY", c).ConfigureAwait(false);
+                await w.WriteAsync(100m, c).ConfigureAwait(false);
+                await w.WriteAsync("queued", c).ConfigureAwait(false);
+                await w.WriteAsync(new DateTimeOffset(2026, 8, 7, 12, 0, 0, TimeSpan.Zero), c).ConfigureAwait(false);
+            }, ct).ConfigureAwait(true);
+
+        await using (var check = new NpgsqlConnection(TestDatabase.ConnectionString))
+        {
+            await check.OpenAsync(ct).ConfigureAwait(true);
+            await using var cmd = new NpgsqlCommand(
+                "SELECT count(*) FROM \"order\" WHERE portfolio_id = @p;", check);
+            cmd.Parameters.AddWithValue("p", portfolio);
+            Assert.Equal(1L, (long)(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(true))!);
+
+            await using var del = new NpgsqlCommand(
+                "DELETE FROM \"order\" WHERE portfolio_id = @p;", check);
+            del.Parameters.AddWithValue("p", portfolio);
+            await del.ExecuteNonQueryAsync(ct).ConfigureAwait(true);
+        }
+    }
+
     [Fact]
     public async Task AConflictTargetIsRequired()
     {

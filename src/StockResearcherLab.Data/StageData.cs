@@ -118,10 +118,18 @@ public sealed class StageData : IStageData
         var staging = "srl_stage_" + table.Replace('.', '_');
         var columnList = string.Join(", ", columns.Select(Quote));
 
-        // Dropped on commit is not used: there is no transaction here, and the
-        // table goes when the connection closes either way.
+        // CREATE TABLE AS ... WITH NO DATA rather than LIKE. LIKE copies NOT NULL,
+        // which puts a NOT NULL identity primary key into the staging table that
+        // the COPY never writes, so the copy fails on a constraint the target
+        // generates for itself. That is every table with a surrogate key: order,
+        // position, and insider_transaction and events, which are the two A7 and
+        // A11 exist for. AS SELECT takes the column types and none of the
+        // constraints, which is exactly what a staging table wants [A25].
+        //
+        // The table goes when the connection closes; there is no transaction here
+        // and none is wanted, because phase 3 loads five years through this path.
         await ExecuteAsync(conn,
-            $"CREATE TEMP TABLE {Quote(staging)} (LIKE {Quote(table)} INCLUDING DEFAULTS) ON COMMIT PRESERVE ROWS;",
+            $"CREATE TEMP TABLE {Quote(staging)} AS SELECT {columnList} FROM {Quote(table)} WITH NO DATA;",
             ct).ConfigureAwait(false);
 
         await using (var importer = await conn.BeginBinaryImportAsync(

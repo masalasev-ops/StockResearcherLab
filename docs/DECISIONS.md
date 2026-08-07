@@ -575,8 +575,12 @@ push [O.1]. The cost of the removed steps was days per phase and eleven
 correction passes on phase P alone. What replaces them is mechanical and
 runs every time rather than once.
 
-**D-64 The row count alert threshold is not revised, and the question is
-deferred until settled counts exist.** `ACTIVE`
+**D-64 ~~The row count alert threshold is not revised, and the question is
+deferred until settled counts exist.~~ The absolute row-count floors stand.**
+`ACTIVE`
+The deferral is closed at the foot of this entry. The original reasoning is
+kept rather than replaced, because it was the reasoning that turned out to be
+right and a closure that deletes it reads as though the answer was obvious.
 D-59 alerts below 45,000 rows. The probe's 2026-08-04 finished at 44,708,
 which would alert, and that looks like a bound set too high.
 
@@ -591,6 +595,43 @@ D-65's settledness check is what produces the evidence, since a count is
 only meaningful once the day is known to be final. The question is asked
 again after phase 1 has accumulated settled counts, read at sign-off. It is
 a query against price_daily, not a measurement task.
+
+**Closed at 1.9, and the floors stand.** 2026-08-04 finished at 50,228 rows.
+The probe read it at 44,665, 44,686 and 44,708 and stopped rather than
+converged. Settled days now read 50,029, 50,148, 50,204 and 50,228, a spread
+of 0.4 percent.
+
+D-59's floors are unchanged. 44,708 sat above the 40,000 abort floor and
+inside the 40,000 to 45,000 alert band, so no movement of those floors would
+have caught that day without also rejecting settled days. The absolute floors
+answer "is this file catastrophically short". They were never the tool for
+"is this file still filling", which is D-70's check.
+
+**D-70's two values, seeded at 1.13.**
+
+`freshness.settled_fraction` = 0.95. The separation corridor runs from 89.2
+percent, the measured part-settled ceiling, to 99.7 percent, the lowest
+settled observation. The part-settled side is measured across three readings;
+the settled side is four consecutive summer sessions and its true spread is
+unknown. The bound therefore sits near the measured side, six points above
+it, leaving five points for settled variation not yet observed. The asymmetry
+supports this rather than opposing it: a false fail costs one stale day and
+self-corrects through the fallback, while a false pass runs the night on an
+11 percent short universe and looks normal.
+
+`freshness.settled_window_days` = 20. A median, not a mean, and 20 rather
+than a handful, because a day loaded short is still in the trailing window
+until C02's reload tops it up, and it would drag the reference down exactly
+when the test should not loosen. A median over 20 is unmoved by one such day.
+20 also matches the window already used for median dollar volume.
+
+**Watch item, recorded rather than rediscovered.** The first low-volume
+holiday week is what would move 0.95. If a genuinely settled session between
+Christmas and New Year comes in below it, the value is too high and rises
+with that observation recorded. Written here before the week arrives, because
+`CLAUDE.md` §11 forbids loosening a bound because a measurement missed it,
+and the difference between that and a bound set on an unobserved regime is
+the reasoning being on record first.
 
 **D-65 The freshness guard checks recency, completeness and settledness,
 and these are three different things.** `ACTIVE`
@@ -608,8 +649,8 @@ makes false.
 Completeness. D-59's thresholds are unchanged, abort below 40,000 and alert
 below 45,000, subject to D-64.
 
-Settledness. A date is unsettled if re-fetching it returns more rows than
-are stored for it. Both figures already exist, so this is a comparison
+Settledness. ~~A date is unsettled if re-fetching it returns more rows than
+are stored for it.~~ [superseded, D-70] Both figures already exist, so this is a comparison
 rather than a threshold and no new bound is introduced. The probe's
 2026-08-04 fails it three times within one evening.
 
@@ -644,6 +685,30 @@ provider that files two rows a stage cannot tell apart, which is why 1.7's
 sweep answers whether its tuple is genuinely unique against real rows
 rather than by assumption.
 
+**D-70 Settledness is measured against the trailing population, not by
+re-fetching.** `ACTIVE`
+Supersedes the settledness mechanism in D-65. D-65 otherwise stands: recency
+and completeness are unchanged and the three checks remain three.
+
+Re-fetching a date inside one run detects nothing. 2026-08-06 read back to
+back returned 44,204 both times, because accretion runs over hours while two
+calls are seconds apart. Repairing it with a count stored by an earlier run
+was rejected: a stage is a pure function of its date and config version
+[`CLAUDE.md` §5, §6], and a guard whose verdict depends on what it saw during
+a previous wall-clock run is not. Two databases holding identical
+`price_daily` contents would disagree.
+
+A date is settled when its row count in `price_daily` is at or above
+`freshness.settled_fraction` of the median row count of the last
+`freshness.settled_window_days` dates strictly before it. Computed from
+`price_daily` alone, on first sight, with no dependence on run history. The
+fallback is unchanged: walk back from the newest date until one passes all
+three checks, and return it.
+
+This removes the ordering constraint the re-fetch implied between C02 and
+C07. `RUNBOOK.md`'s 17:30 and 17:40 stand, and C07 makes one provider call
+rather than two.
+
 ---
 
 ## Open
@@ -659,7 +724,17 @@ rejection rate per model, which is available much sooner. The letters were the
 naming in use before D-36 set the four portfolio names, and they survived the
 rename here [M.3].
 
-~~**D-69 Whether the flow screen survives an unbackfillable institutional
+~~**D-64 The freshness guard's abort floor against a part-settled file.** `OPEN`~~
+[answered, and now stated in full above as `ACTIVE`]. The body is not repeated
+here, because a decision stated twice is a decision that can disagree with
+itself. The number is kept in place so that the register shows it was open and
+where it went.
+
+~~**D-65 What the freshness guard asserts about the latest price date.** `OPEN`~~
+[answered, and now stated in full above as `ACTIVE`]. Same handling, same
+reason.
+
+**D-69 Whether the flow screen survives an unbackfillable institutional
 ownership source.** `OPEN`
 Owed to phase 4, not phase 1. Recorded on the corrected 1.9 measurements, not
 on the retracted ones: the subject is `inst_ownership_change`, and insider
@@ -696,12 +771,13 @@ a market-wide legacy `insider-transactions` endpoint, 1,000 rows in one call,
 but it is stale by roughly three months and thin per ticker, and it is not
 needed now that form4 pages.
 
-**D-64 The freshness guard's abort floor against a part-settled file.** `OPEN`~~
-[answered, and now stated in full above as `ACTIVE`]. The body is not repeated
-here, because a decision stated twice is a decision that can disagree with
-itself. The number is kept in place so that the register shows it was open and
-where it went.
+**Recorded alongside whichever way it goes** [A15]. After this, both of S4's
+surviving inputs come from one endpoint, so a single provider change takes the
+whole screen rather than one input. The screen was designed with four inputs
+from three sources; D-58 removed one and this removes or isolates another, and
+the concentration that leaves is a property of the screen rather than of either
+decision on its own.
 
-~~**D-65 What the freshness guard asserts about the latest price date.** `OPEN`~~
-[answered, and now stated in full above as `ACTIVE`]. Same handling, same
-reason.
+`institutional_holding` still ingests and 1.7's institutional half still builds.
+A top-20 current-holders snapshot is a usable static feature. It is only the
+change metric that has no series behind it.

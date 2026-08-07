@@ -183,6 +183,9 @@ value, but changing it to `vs_spy` is a defect and not a tuning option [INVARIAN
 | ~~`freshness.row_count_tolerance`~~ | ~~from probe~~ | — | FreshnessGuard | [removed, D-59] |
 | `freshness.row_count_abort_below` | 40000 | D-59 | FreshnessGuard | unverified |
 | `freshness.row_count_alert_below` | 45000 | D-59 | FreshnessGuard | unverified |
+| `freshness.settled_fraction` | 0.95 | D-70 | FreshnessGuard | unverified |
+| `freshness.settled_window_days` | 20 | D-70 | FreshnessGuard | unverified |
+| `price.reload_window_days` | 20 | A10 | PriceIngestor | unverified |
 
 ~~The freshness tolerance has no default until phase P measures a real bulk end-of-day
 row count.~~ [removed, D-59]
@@ -194,8 +197,29 @@ enough apart that a wide floor separates them with no false positives, while a t
 band would fire on the 11 percent day and teach the operator to ignore it. There is no
 upper bound: no failure mode produces too many rows.
 
-**The guard has three checks and only one of them has a key** [D-65]. The two keys
+~~**The guard has three checks and only one of them has a key** [D-65]. The two keys
 above are completeness. Recency reads the exchange calendar for the most recent
 completed trading session, and settledness compares a re-fetch of a date against the
 rows already stored for it. Neither is a threshold, so neither gets a key, and adding
-one would invent a bound where the decision deliberately introduced none.
+one would invent a bound where the decision deliberately introduced none.~~
+[superseded, D-70]
+
+**The guard has three checks and two of them carry keys.**
+`freshness.row_count_*` are completeness. `freshness.settled_*` are settledness,
+which became a threshold when the re-fetch was dropped: a date is settled when its
+count is at or above `settled_fraction` of the median of the last
+`settled_window_days` dates before it, computed from `price_daily` alone [D-70].
+Recency still has no key, because it reads the exchange calendar for the most
+recent completed session and compares dates rather than crossing a bound.
+
+The two values and their reasoning are in D-64's closure rather than here,
+including why 0.95 sits six points above the measured part-settled ceiling rather
+than midway between the populations, and the holiday-week watch item that would
+move it.
+
+`price.reload_window_days` belongs to C02 rather than to the guard. C02 re-loads a
+trailing window of dates every night rather than tonight alone, so a day loaded
+short tops up on a later run, which is what actually heals accretion; D-68's
+idempotent upsert is what makes re-loading safe. Without it a part-settled day
+stays part-settled in `price_daily` for ever, and settledness would keep failing it
+with nothing able to fix it.

@@ -199,7 +199,7 @@ findings rather than measurements.
 | Endpoint | HTTP | What came back |
 |---|---|---|
 | `eod-bulk-last-day/US` | 200 | 44,204 rows, the still-accreting day |
-| `eod-bulk-last-day/US?date=` | 200 | Works, which is what the settledness re-fetch needs. 50,229 for a settled day |
+| `eod-bulk-last-day/US?date=` | 200 | Works. 50,229 for a settled day. Measured when settledness was still a re-fetch; D-70 dropped that, and the parameter is now what C02's trailing re-load window uses |
 | `exchange-symbol-list/US` | 200 | 51,413 |
 | `exchange-details/US` | 200 | `TradingHours` with `WorkingDays` Mon-Fri and 09:30-16:00, 11 dated `ExchangeHolidays`, `ActiveTickers` 51,547 |
 | `eod/{t}` | 200 | 22 rows over 30 days |
@@ -244,8 +244,15 @@ evening. It does not. Settledness can only be evaluated against a count stored b
 an **earlier run**, which means a date is unsettled on first sight by
 construction and becomes settled at the first later run whose re-fetch matches.
 That in turn constrains the order of C02 and C07, because a count C02 has already
-overwritten this run cannot be compared against. Reported, not closed: it touches
-`RUNBOOK.md`'s authored 17:30 and 17:40 ordering.
+overwritten this run cannot be compared against.
+
+**Closed by D-70,** which dropped the re-fetch rather than repairing it. A count
+stored by an earlier run was rejected as the replacement for the same reason the
+re-fetch failed differently: a stage is a pure function of its date and config
+version, and a guard whose verdict depends on a previous wall-clock run is not.
+Settledness is now relative to the trailing population and computed from
+`price_daily` alone, which removes the ordering constraint entirely, so
+`RUNBOOK.md`'s 17:30 and 17:40 stand untouched and C07 makes one provider call.
 
 ~~**Finding 2, and it is a constraint on what this phase can promise.**
 `/api/sec-filings/{t}/form4` ignores `from`, `to`, `limit` and `offset`. Every

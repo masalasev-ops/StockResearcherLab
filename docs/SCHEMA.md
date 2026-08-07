@@ -119,8 +119,16 @@ Small.
 
 `ticker`, `report_date`, `holder_name`, `shares`, `change`, `change_pct`.
 
-Quarterly, because that is the grain the filings arrive at. `report_date` is what
-makes this backfillable, and it is the field short interest turned out not to have.
+Quarterly, because that is the grain the filings arrive at. ~~`report_date` is what
+makes this backfillable, and it is the field short interest turned out not to have.~~
+[struck, D-69] Measured false at 1.9. `Holders::Institutions` is a top-20 snapshot
+rather than a series: CCS.US and NVDA.US return 20 entries at a single `report_date`
+and BXC.US 20 across two, `sec-filings/{t}/13f` is a 404, and the filings index
+lists only `10k`, `10q`, `form4` and `8k`. The column is populated, which is why
+the claim survived being written. One or two distinct values per ticker is not a
+history, so `inst_ownership_change` has nothing to compute a change over and
+accumulates forward only. The table still ingests, because a current top-20 holder
+list is a usable static feature; it is the change metric that has no series.
 
 ### flow_daily
 Grain: ticker by day, ~~ticker by week~~ [superseded, D-61]. **Writer: FlowEngine, a

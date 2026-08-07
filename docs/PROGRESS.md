@@ -184,6 +184,26 @@ ingest must not inherit. Also owed and recorded below.
 **In progress.** Pre-flight complete. Checkpoint 1.9 done, no other checkpoint
 code yet.
 
+### Checkpoints landed
+
+| # | What | Tests after |
+|---|---|---|
+| 1.9 | Endpoint sweep, and the Finding 2 retraction below | 25 |
+| 1.13 | As-of config resolution, fourteen keys seeded | 36 |
+| 1.1 | Typed HTTP client, request form pinned, paging on `page[offset]` | 46 |
+| 1.12 | Staged bulk load path, `TEMP` staging inside one connection | 56 |
+| 1.2 | Bulk end-of-day into `price_daily` over a trailing reload window | 64 |
+| 1.11 | `NoOpStage` retired, registry checked against the catalogue | 68 |
+| 1.3 | Freshness guard, three checks | 79 |
+
+**Two figures in commit bodies were guessed and are wrong.** `1b66daf` says
+"5 checks over 38 files" and `5a4ec08` says "over 44 files"; the runs immediately
+above each commit printed **40** and **42**. Nothing rests on either number, but a
+commit message cannot be edited and this corpus asks that every number trace to what
+produced it, so the correction lives here. The cause was writing the message from
+memory after the run rather than from its output, and the practice from here is to
+omit a figure rather than recall one.
+
 ### 1.9, the endpoint sweep
 
 Run 2026-08-07 from a scratch file-based app outside the repository, as phase P's

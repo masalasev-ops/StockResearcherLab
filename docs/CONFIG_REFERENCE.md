@@ -193,3 +193,9 @@ tolerance was replaced by a floor and an alert because the two populations are f
 enough apart that a wide floor separates them with no false positives, while a tight
 band would fire on the 11 percent day and teach the operator to ignore it. There is no
 upper bound: no failure mode produces too many rows.
+
+**The guard has three checks and only one of them has a key** [D-65]. The two keys
+above are completeness. Recency reads the exchange calendar for the most recent
+completed trading session, and settledness compares a re-fetch of a date against the
+rows already stored for it. Neither is a threshold, so neither gets a key, and adding
+one would invent a bound where the decision deliberately introduced none.

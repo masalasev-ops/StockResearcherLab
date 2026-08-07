@@ -13,7 +13,7 @@ night.
 | Time (ET) | What runs |
 |---|---|
 | 17:30 | Price ingest, whole US market, one bulk call |
-| 17:40 | Freshness guard. Aborts everything if the data is stale |
+| 17:40 | Freshness guard. Recency, completeness and settledness. Aborts everything on the first two; the third re-reads on a later run [D-65] |
 | 17:45 | Fundamentals, flow, events |
 | 18:00 | Sentiment, whole universe |
 | 18:05 | Indicators, valuation, market context |
@@ -52,7 +52,10 @@ on, because missed nights are silent and the run log is the only place they appe
 
 | Condition | Detected by | Behaviour | What to do |
 |---|---|---|---|
-| End-of-day file stale or short | FreshnessGuard | Abort. No orders | Check the provider. Rerun when fresh. A skipped night costs nothing |
+| ~~End-of-day file stale or short~~ | ~~FreshnessGuard~~ | ~~Abort. No orders~~ | ~~Check the provider. Rerun when fresh. A skipped night costs nothing~~ [split into the three rows below, D-65] |
+| Recency: the newest date in `price_daily` is older than the most recent completed trading session | FreshnessGuard | Abort. No orders | The provider has not updated, or a run was missed. Check the provider, then check `run_log` for a gap. Rerun when fresh. A skipped night costs nothing |
+| Completeness: the row count is below `freshness.row_count_abort_below` | FreshnessGuard | Abort. No orders. Between the abort floor and `freshness.row_count_alert_below`, alert without aborting | A truncated file. Check the provider and rerun. Do not revise the threshold from a single night: the bound is asked again against accumulated settled counts at sign-off, and moving it because a measurement missed it is what `CLAUDE.md` §11 prohibits [D-64] |
+| Settledness: re-fetching a date returns more rows than are stored for it | FreshnessGuard | **Not an abort.** The date is re-read on a later run and the ingest falls back to the newest date that does pass | Nothing. The session is still accreting, which the probe saw run for hours and into the following evening. If every candidate date fails, the run has nothing settled to work on and stops on recency instead |
 | Filing date substitution rate above `fundamentals.substitution_rate_alert`, or any ticker whose widest clean gap exceeds 180 days | FundamentalsIngestor | Alert | The provider's date handling has changed. Investigate before the next backfill, since every substituted row reads late by that ticker's own widest gap and the rate going up widens that silently. A widest gap above 180 days is a filer whose fundamentals reach a screen too late to be worth much, and the universe should be told rather than left to carry it [D-62] |
 | A screen returns zero names | ScreenEngine | Normal. Smaller candidate set | Nothing |
 | All five screens return zero | ScreenEngine | Halt before the researcher | Data fault, not a quiet market. Investigate |

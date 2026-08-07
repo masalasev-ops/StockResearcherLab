@@ -187,7 +187,8 @@ them across phases would leave `flow_daily` declared and unwritten for a phase.
 **Done when:** one night of the whole US market lands; the universe builds to
 roughly 2,000 names, with the count of names excluded by the clean-gap criterion
 recorded rather than assumed; feeding the freshness guard deliberately stale data
-aborts the run and produces no orders; a test asserts no fundamental value is
+aborts the run and produces no orders; a date that fails settledness is re-read on a
+later run rather than skipped [D-65]; a test asserts no fundamental value is
 readable before its ~~filing date~~ [corrected, D-62] effective filing date, with the
 equality, null and negative-gap cases each exercised; sentiment lands for the whole
 universe and a name with rows on only a handful of days in the window is ingested

@@ -575,6 +575,48 @@ push [O.1]. The cost of the removed steps was days per phase and eleven
 correction passes on phase P alone. What replaces them is mechanical and
 runs every time rather than once.
 
+**D-64 The row count alert threshold is not revised, and the question is
+deferred until settled counts exist.** `ACTIVE`
+D-59 alerts below 45,000 rows. The probe's 2026-08-04 finished at 44,708,
+which would alert, and that looks like a bound set too high.
+
+It is not evidence of that. The day was read three times in one evening at
+44,665, 44,686 and 44,708, rising each time, and the reads stopped rather
+than converged. Its final count is unknown. A day still accreting says
+nothing about where a threshold for settled days belongs, and revising the
+bound on it would be loosening a bound because a measurement missed it,
+which CLAUDE.md section 11 prohibits.
+
+D-65's settledness check is what produces the evidence, since a count is
+only meaningful once the day is known to be final. The question is asked
+again after phase 1 has accumulated settled counts, read at sign-off. It is
+a query against price_daily, not a measurement task.
+
+**D-65 The freshness guard checks recency, completeness and settledness,
+and these are three different things.** `ACTIVE`
+ARCHITECTURE.html section 4 asserts the latest price date equals today.
+Checkpoint 1.2 rejects the most recent available day as still accreting.
+Both cannot hold, and the architecture is the half that is wrong: it was
+written before the probe found a session accreting for hours and into the
+following evening.
+
+Recency. The newest date in price_daily is not older than the most recent
+completed trading session. This catches a provider that has not updated and
+a run that was missed. It does not assert today, which the settled-day rule
+makes false.
+
+Completeness. D-59's thresholds are unchanged, abort below 40,000 and alert
+below 45,000, subject to D-64.
+
+Settledness. A date is unsettled if re-fetching it returns more rows than
+are stored for it. Both figures already exist, so this is a comparison
+rather than a threshold and no new bound is introduced. The probe's
+2026-08-04 fails it three times within one evening.
+
+Ingest loads the newest date passing all three. A date failing settledness
+is re-read on a later run rather than discarded, because it is incomplete
+rather than wrong.
+
 ---
 
 ## Open
@@ -590,39 +632,12 @@ rejection rate per model, which is available much sooner. The letters were the
 naming in use before D-36 set the four portfolio names, and they survived the
 rename here [M.3].
 
-**D-64 The freshness guard's abort floor against a part-settled file.** `OPEN`
-Owed to checkpoint 1.3.
+~~**D-64 The freshness guard's abort floor against a part-settled file.** `OPEN`~~
+[answered, and now stated in full above as `ACTIVE`]. The body is not repeated
+here, because a decision stated twice is a decision that can disagree with
+itself. The number is kept in place so that the register shows it was open and
+where it went.
 
-D-59 sets the floor at 40,000 and the alert band at 40,000 to 45,000, on
-settled days measuring 50,029 to 50,204 and sessions still in progress
-measuring 3,544 and 9,072. Those two populations are far apart and the floor
-separates them.
-
-2026-08-04 is the case neither figure covers. It was read three times across
-the evening of 2026-08-05 at 44,665, 44,686 and 44,708, still gaining rows
-after it had stopped being the most recent day. 44,708 is 11 percent below the
-lowest settled count, above the abort floor, and inside the alert band. A
-part-settled file of that shape passes the guard and produces orders on a day
-whose bars are incomplete, which is the failure the guard exists to prevent.
-
-What is open is what to do about it, not what the numbers are. Raising the
-floor toward the settled range narrows the margin against a legitimately
-short day, a half session or a holiday-shortened one, and a bound is not
-loosened or tightened because a measurement missed it [`CLAUDE.md` §11].
-Phase 1 decides from a wider sample than three readings of one day.
-
-**D-65 What the freshness guard asserts about the latest price date.** `OPEN`
-Owed to checkpoints 1.2 and 1.3.
-
-`ARCHITECTURE.html` §4 requires the latest price date to equal today.
-Checkpoint 1.2's settled-day rule rejects the most recent available day as
-still accreting. Both cannot hold: the day whose date equals today is the day
-1.2 will not use.
-
-Two readings and neither is chosen here. Either the guard asserts against the
-newest settled date rather than today, which makes the assertion agree with
-what the ingest actually loads, or the run is expected to see today's date
-because it runs after the session has settled, which makes 1.2's rule the
-narrower statement of the same thing. The measurement that would separate them
-is when a US day stops accreting, which phase 1 sees every night and the probe
-saw once.
+~~**D-65 What the freshness guard asserts about the latest price date.** `OPEN`~~
+[answered, and now stated in full above as `ACTIVE`]. Same handling, same
+reason.

@@ -197,31 +197,64 @@ public sealed class FundamentalsIngestor : IStage
     /// bootstrap applies only the criteria that need no fundamentals, since the
     /// ones that do are what this stage exists to supply.
     /// </summary>
-    private static async Task<IReadOnlyList<string>> CandidatesAsync(
+    private async Task<IReadOnlyList<string>> CandidatesAsync(
         StageContext context, decimal minPrice, int maxPerRun, CancellationToken ct)
     {
-        var fromSecurity = await context.Data.ReadAsync(
-            "security",
-            "SELECT ticker FROM security WHERE is_active ORDER BY ticker LIMIT " +
-            maxPerRun.ToString(CultureInfo.InvariantCulture) + ";",
+        // Two reads rather than one query joining both tables. IStageData checks the
+        // table a caller names and cannot see what the SQL actually touches, so a
+        // join here would be leaning on that gap rather than being checked by it.
+        var already = await context.Data.ReadAsync(
+            "fundamental_snapshot",
+            "SELECT DISTINCT ticker FROM fundamental_snapshot;",
             ct).ConfigureAwait(false);
 
-        if (fromSecurity.Count > 0)
-        {
-            return fromSecurity.Select(r => (string) r[0]!).ToList();
-        }
+        var fetched = already.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
 
-        // Bootstrap. Excludes the index tickers the bulk feed carries, which begin
-        // with a caret and are not common stock [D-2].
+        var fromSecurity = await context.Data.ReadAsync(
+            "security", "SELECT ticker FROM security WHERE is_active ORDER BY ticker;", ct)
+            .ConfigureAwait(false);
+
+        var pool = fromSecurity.Count > 0
+            ? fromSecurity.Select(r => (string) r[0]!).ToList()
+            : await BootstrapPoolAsync(context, minPrice, ct).ConfigureAwait(false);
+
+        // Never fetched first, then the rest, each group ordinal. That is what makes
+        // this a rotation: ordering by ticker alone re-selects the same head every
+        // run and the coverage never advances past the first page.
+        return pool
+            .OrderBy(t => fetched.Contains(t) ? 1 : 0)
+            .ThenBy(t => t, StringComparer.Ordinal)
+            .Take(maxPerRun)
+            .ToList();
+    }
+
+    /// <summary>
+    /// The bootstrap pool: everything priced above the floor on the date being
+    /// built, excluding the index tickers the bulk feed carries, which begin with a
+    /// caret and are not common stock [D-2].
+    ///
+    /// Only the criteria that need no fundamentals, because the ones that do are
+    /// what this stage exists to supply. C01 applies the rest.
+    /// </summary>
+    private async Task<List<string>> BootstrapPoolAsync(
+        StageContext context, decimal minPrice, CancellationToken ct)
+    {
         var sql =
             "SELECT ticker FROM price_daily WHERE date = DATE '" +
             context.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "' " +
             "AND close >= " + minPrice.ToString(CultureInfo.InvariantCulture) + " " +
-            "AND ticker NOT LIKE '^%' " +
-            "ORDER BY ticker LIMIT " + maxPerRun.ToString(CultureInfo.InvariantCulture) + ";";
+            "AND ticker NOT LIKE '^%' ORDER BY ticker;";
 
         var rows = await context.Data.ReadAsync("price_daily", sql, ct).ConfigureAwait(false);
-        return rows.Select(r => (string) r[0]!).ToList();
+
+        // Restricted to the instruments D-4 admits before a single per-ticker call
+        // is spent. Without it the pool is 39,711 names at the price floor, almost
+        // all of them funds and OTC listings the universe rejects anyway, and four
+        // runs of 500 landed financials for 133 tickers. This is the same universe
+        // criterion applied sooner, not a second one [D-5, INVARIANT 1].
+        var admitted = await SymbolList.AdmittedAsync(_client, ct).ConfigureAwait(false);
+
+        return rows.Select(r => (string) r[0]!).Where(admitted.ContainsKey).ToList();
     }
 
     private static async Task<long> LongAsync(StageContext context, string key, CancellationToken ct)

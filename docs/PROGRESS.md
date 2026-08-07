@@ -204,6 +204,53 @@ produced it, so the correction lives here. The cause was writing the message fro
 memory after the run rather than from its output, and the practice from here is to
 omit a figure rather than recall one.
 
+### The provider meters weighted units, not requests, and phase 3 cannot afford the naive plan
+
+**Found by exhausting the daily allowance during 1.5, at roughly 97,000 of 100,000
+units against about 9,000 actual requests.** Nothing in the corpus had a figure for
+this and every estimate in it counts requests.
+
+The provider prices a call by endpoint rather than counting one per request. On the
+observed consumption the weights are approximately:
+
+| Endpoint | Requests made | Apparent weight | Units |
+|---|---|---|---|
+| `eod-bulk-last-day` | ~440 | ~100 each | ~44,000 |
+| `fundamentals/{t}` | ~7,900 | ~10 each | ~79,000 |
+| `exchange-symbol-list`, `eod`, `sentiments` | ~250 | ~1 each | ~250 |
+
+The exact weights are the provider's to state and are not measured here. What is
+measured is the ratio: **about eleven units per request on this phase's mix**, and
+that is the number every plan in this corpus is missing.
+
+**What it costs the design, which is the part that matters.**
+
+D-47 backfills five years. That is roughly 1,260 trading days of bulk end-of-day at
+~100 units each, or **~126,000 units for prices alone**, more than a full day's
+allowance for one pass of one table. A five-year fundamentals backfill over ~2,000
+names is another ~20,000 per full refresh.
+
+C02's own nightly cost is `price.reload_window_days` × 100 = **2,000 units a night**
+at the current 20, which is 2 percent of a daily allowance for one stage. A26 says
+twenty dates against one bulk call each is not the expensive part of a night, and
+against a weighted meter that sentence is wrong: it is the most expensive part by an
+order of magnitude.
+
+C03 at `fundamentals.max_tickers_per_run` = 500 costs **~5,000 units a run**.
+
+**Nothing is changed here on the strength of this.** Both keys are configuration
+with reasoning recorded against them, and lowering a bound because a measurement
+made it inconvenient is what `CLAUDE.md` §11 prohibits. What this note does is put
+the figure where the next person planning phase 3 will read it, before they write a
+backfill that cannot run. The obvious candidates are a smaller reload window traded
+against A26's coupling, and a backfill paced across days rather than run in one
+pass, and both are authored decisions rather than mine.
+
+**Also owed:** `ARCHITECTURE.html` §17 and the cost model estimate an annual spend
+built on model tokens. They carry no provider-call line at all, and on these weights
+the data provider is a real constraint on what the system can do in a day rather
+than a flat subscription cost.
+
 ### Rename sweeps state their exclusions
 
 A1.a's done condition asked that a repository-wide sweep for the old column name

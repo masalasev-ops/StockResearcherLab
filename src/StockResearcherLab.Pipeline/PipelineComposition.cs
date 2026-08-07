@@ -38,6 +38,7 @@ public static class PipelineComposition
             owners.Add(new PriceIngestor(eodhd));
             owners.Add(new FreshnessGuard(eodhd));
             owners.Add(new FundamentalsIngestor(eodhd));
+            owners.Add(new UniverseBuilder(eodhd));
         }
 
         return new StageRegistry(owners);

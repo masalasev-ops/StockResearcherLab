@@ -181,7 +181,103 @@ ingest must not inherit. Also owed and recorded below.
 
 ## Phase 1, ingest and universe
 
-**In progress.** Pre-flight complete, no checkpoint code yet.
+**In progress.** Pre-flight complete. Checkpoint 1.9 done, no other checkpoint
+code yet.
+
+### 1.9, the endpoint sweep
+
+Run 2026-08-07 from a scratch file-based app outside the repository, as phase P's
+probe was. Transcript at `docs/evidence/phase-1/endpoint-sweep-20260807.txt`, 137
+lines, checked for token leakage before committing. Entitlement is per endpoint
+and invisible in the account payload, so this is what was called rather than what
+a field claims.
+
+**Every endpoint phase 1 needs returns 200.** No entitlement gap blocks any
+checkpoint. Three answers change what the phase builds and two of them are
+findings rather than measurements.
+
+| Endpoint | HTTP | What came back |
+|---|---|---|
+| `eod-bulk-last-day/US` | 200 | 44,204 rows, the still-accreting day |
+| `eod-bulk-last-day/US?date=` | 200 | Works, which is what the settledness re-fetch needs. 50,229 for a settled day |
+| `exchange-symbol-list/US` | 200 | 51,413 |
+| `exchange-details/US` | 200 | `TradingHours` with `WorkingDays` Mon-Fri and 09:30-16:00, 11 dated `ExchangeHolidays`, `ActiveTickers` 51,547 |
+| `eod/{t}` | 200 | 22 rows over 30 days |
+| `fundamentals/{t}` | 200 | 12 top-level blocks |
+| `fundamentals` `::` filters | 200 | `General::Sector`, `Highlights`, `Financials::Balance_Sheet::quarterly` (55 periods), `Holders::Institutions` (object keyed `0`,`1`,…), `SharesStats` all resolve percent-encoded |
+| `sentiments` | 200 | Object keyed by ticker |
+| `news` | 200 | 10 rows at `limit=10` |
+| `sec-filings/{t}` | 200 | An **index**, not rows: per form type a count, a latest date and a URL |
+| `sec-filings/{t}/form4` | 200 | Fixed 20 filings. See below |
+| `insider-transactions` (legacy) | 200 | 0 rows, confirming the probe |
+| `calendar/earnings` | 200 | Object, and `symbols=` narrows it |
+| `splits/{t}` | 200 | 0 for CCS over five years |
+| `div/{t}` | 200 | 20 rows |
+
+**Row counts by date, which is D-65's mechanism measured.** Requested against
+`eod-bulk-last-day/US?date=`:
+
+| Date | Rows | Reading |
+|---|---|---|
+| 2026-08-06 | 44,204 | In the 40,000 to 45,000 alert band, above the abort floor |
+| 2026-08-05 | 50,172 | Settled |
+| 2026-08-04 | **50,228** | Settled |
+| 2026-08-03 | 50,151 | Settled |
+| 2026-08-01, 08-02 | 0 | Weekend. A non-session returns an empty array rather than an error |
+| 2026-07-31 | 50,227 | Settled |
+| 2026-07-30 | 50,244 | Settled |
+
+**2026-08-04 finished at 50,228.** The probe read it three times on the evening of
+2026-08-05 at 44,665, 44,686 and 44,708 and stopped rather than converged, and
+that reading is what D-64 was opened about. It settled into the ordinary range.
+D-64 declined to revise D-59's thresholds on the grounds that a day still
+accreting says nothing about where a bound for settled days belongs, and the
+finished count is the evidence that was right: nothing was wrong with the
+threshold, the day was simply not done.
+
+**Finding 1, and it contradicts the build plan.** Reading the same date twice
+inside one run does not detect accretion. 2026-08-06 read back to back returned
+44,204 then 44,204, and 08-05 and 08-03 were likewise stable, because accretion
+runs over hours while two calls are seconds apart. The plan states that C02 at
+17:30 followed by C07 at 17:40 supplies the stored-and-fetched pair inside one
+evening. It does not. Settledness can only be evaluated against a count stored by
+an **earlier run**, which means a date is unsettled on first sight by
+construction and becomes settled at the first later run whose re-fetch matches.
+That in turn constrains the order of C02 and C07, because a count C02 has already
+overwritten this run cannot be compared against. Reported, not closed: it touches
+`RUNBOOK.md`'s authored 17:30 and 17:40 ordering.
+
+**Finding 2, and it is a constraint on what this phase can promise.**
+`/api/sec-filings/{t}/form4` **ignores `from`, `to`, `limit` and `offset`.** Every
+combination returns the same fixed 20 most-recent filings: `limit` at 5, 20, 50,
+100 and 1000 all return 20; `offset` 0 through 100 returns the same first
+`accession_number` every time, 120 rows collected and 20 distinct; six 180-day
+windows back to 2023 and three different `to` values all return the identical
+span. For CCS.US the index reports 324 form4 filings and the 20 reachable ones
+cover 2025-09-11 to 2026-06-12.
+
+So insider flow is not backfillable beyond the most recent 20 filings per ticker,
+and on an active name 20 filings may not even span 90 days: the probe measured 26
+transactions for the control in that window. This is the same shape as the
+argument D-58 accepted when it dropped short interest, that a screen whose
+backfill scores come from a different population than its live scores has a floor
+drawn from a distribution the live screen does not share. It is owed to a human
+as a decision about the S4 flow screen and about phase 3, and it is the carried
+obligation from phase P to phase 1 about flow coverage constraining what this
+phase can promise, now answered with a number.
+
+**A form4 filing is not a transaction.** It carries `accession_number`,
+`filed_at`, `period_of_report`, and `non_derivative`, `derivative` and `footnotes`
+arrays, with the transactions nested inside the first two. `accession_number` is
+therefore part of any natural key for `insider_transaction`, which is narrower
+than the tuple A7 provisionally named. On the four NVDA filings inspected each
+side held exactly one transaction, so no collision was observed, but one filing
+carrying two rows for one owner on one date under one code is not ruled out by
+four filings. D-68's reopening clause is the route if it appears.
+
+**A4's calendar source is confirmed reachable.** `exchange-details/US` returns
+`WorkingDays` and a dated holiday list, which is what 1.3's recency check needs
+and what the checkpoint chose over deriving the session from `price_daily`.
 
 **The CI runner gap, recorded now rather than at sign-off** [A6]. Phase 0 was
 signed off with step 1 met by running every `ci.yml` step by hand. The same gap

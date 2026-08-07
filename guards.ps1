@@ -2,7 +2,7 @@
 <#
     guards.ps1 - the CI greps for the invariants that are grep-checkable.
 
-    Four checks over src/. Each states its pattern beside its count, each
+    Five checks over src/. Each states its pattern beside its count, each
     expects zero, and any hit fails the run. A zero expectation is
     self-validating: a wrong pattern that finds nothing and a right pattern that
     finds nothing are indistinguishable from the number alone, so the file set
@@ -74,6 +74,14 @@ $checks = @(
         Extensions = @('.cs', '.razor')
         Exclude    = @()
         Why        = ''
+    },
+    @{
+        Invariant  = 'CLAUDE.md section 6'
+        What       = 'US Eastern is resolved in one place: no TimeZoneInfo outside the clock implementation'
+        Pattern    = 'TimeZoneInfo'
+        Extensions = @('.cs', '.razor')
+        Exclude    = @('src/StockResearcherLab.Data/SystemClock.cs')
+        Why        = 'InvariantGlobalization is on, so FindSystemTimeZoneById cannot resolve an IANA id on Windows and throws only on the path that reaches it. SystemClock.cs is the one place allowed and it already tries the IANA id then the Windows one, in that order. Every other Eastern conversion belongs in SQL, where Postgres carries its own tzdata [1.13]'
     }
 )
 

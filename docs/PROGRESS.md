@@ -323,6 +323,34 @@ four filings. D-68's reopening clause is the route if it appears.
 `WorkingDays` and a dated holiday list, which is what 1.3's recency check needs
 and what the checkpoint chose over deriving the session from `price_daily`.
 
+### 1.13, and a correction to its own commit message
+
+`9750a37`'s body states that under `InvariantGlobalization` .NET "cannot resolve
+any timezone id at all". **That is too strong and the commit message cannot be
+edited, so the correction lives here.**
+
+What is true: the IANA id `America/New_York` does not resolve on Windows under
+`InvariantGlobalization=true`, because Windows keeps timezone data in the registry
+and the IANA-to-Windows mapping is the part ICU supplies. The Windows id `Eastern
+Standard Time` still resolves. `SystemClock.ResolveEastern` already tries the IANA
+id and then the Windows one, in that order, so `SystemClock.Today` works on this
+machine and would work on Linux where the IANA id resolves from tzdata. Verified
+by running `run NoOpStage` with no date argument, which is the path that reads
+`Today`: it returned 2026-08-07 rather than throwing.
+
+The off-by-one in the seed instant is unaffected and stands as recorded. So does
+the conclusion that config's Eastern conversion belongs in SQL, though the reason
+is narrower than stated: not that .NET cannot convert, but that the conversion
+already has to happen in the query that filters on `set_at`, and doing it twice in
+two places is how the two would drift.
+
+**A fifth guard** now greps for `TimeZoneInfo` over `src/`, excluding
+`SystemClock.cs` on the same reasoning that excludes it from the ambient-clock
+check: it is the implementation and the one place the resolution is allowed. A21
+asked for the guard to exclude nothing, which cannot ship green while the
+legitimate user exists, and a guard that ships red is a guard everyone learns to
+ignore [O.1].
+
 **The CI runner gap, recorded now rather than at sign-off** [A6]. Phase 0 was
 signed off with step 1 met by running every `ci.yml` step by hand. The same gap
 applies to this phase and the decision is taken here so it is not taken under

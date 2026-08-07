@@ -155,10 +155,13 @@ public sealed class ConfigResolutionTests
         // test below returning a row for a date that should have had none.
         //
         // Asserted on the UTC hour rather than by converting, because
-        // InvariantGlobalization is on in Directory.Build.props and .NET therefore
-        // cannot resolve any timezone id at all. The conversion itself lives in SQL,
-        // where Postgres carries its own tzdata, and the end-to-end proof is
-        // TheStoreResolvesASeededKeyAndRefusesADateBeforeIt.
+        // InvariantGlobalization is on in Directory.Build.props and the IANA id
+        // "America/New_York" therefore does not resolve on Windows: timezone data
+        // comes from the registry, and the IANA-to-Windows mapping is the part ICU
+        // supplies. The Windows id still resolves, which is why SystemClock tries
+        // both in that order and works. The conversion for config lives in SQL
+        // anyway, where Postgres carries its own tzdata, and the end-to-end proof
+        // is TheStoreResolvesASeededKeyAndRefusesADateBeforeIt.
         //
         // US Eastern is UTC-5 or UTC-4 and never ahead of UTC, so an instant at or
         // after 05:00 UTC cannot fall back into the previous Eastern day.

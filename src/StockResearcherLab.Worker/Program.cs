@@ -21,6 +21,9 @@ switch (command)
     case "migrate":
         return await MigrateAsync().ConfigureAwait(false);
 
+    case "seed":
+        return await SeedAsync().ConfigureAwait(false);
+
     case "run":
         return await RunStageAsync().ConfigureAwait(false);
 
@@ -30,6 +33,7 @@ switch (command)
     default:
         Console.WriteLine("StockResearcherLab.Worker");
         Console.WriteLine("  migrate               apply the schema, snapshot-first. Idempotent.");
+        Console.WriteLine("  seed                  insert version 1 of every config key. Idempotent.");
         Console.WriteLine("  stages                list the registered components and what each writes.");
         Console.WriteLine("  run <stage> [date]    run one stage. Date defaults to today, US Eastern.");
         return 0;
@@ -51,6 +55,17 @@ async Task<int> MigrateAsync()
     Console.WriteLine(applied.Count == 0
         ? "  nothing to apply, schema already current"
         : $"  {applied.Count} migration(s) applied");
+    return 0;
+}
+
+async Task<int> SeedAsync()
+{
+    Console.WriteLine("seed");
+    var seeder = new ConfigSeeder(RequireConnectionString());
+    var inserted = await seeder.SeedAsync().ConfigureAwait(false);
+
+    Console.WriteLine(ConfigSeeder.Describe(inserted, ConfigSeeder.Keys.Count));
+    Console.WriteLine($"  {ConfigSeeder.Keys.Count} keys");
     return 0;
 }
 

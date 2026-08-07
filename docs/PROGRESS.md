@@ -407,6 +407,28 @@ non-zero, and no result recorded. Five consecutive runs since, including three b
 to back, have all passed with the drop confirming absence and migrate creating the
 database.
 
+**Occurrence three arrived with evidence, and it narrows the cause without closing
+it.** Evidence at `docs/evidence/phase-1/ci-failure-20260807-161935.txt`, written by
+the mechanism added for exactly this. What it rules out is the obvious reading:
+
+  drop step        reported "dropped, confirmed absent", having read `pg_database`
+                   back after the DROP
+  schema applied   `meta.schema_migration.applied_at` = 16:19:35 UTC
+  failure stamped  16:19:38 UTC, three seconds later
+  captured output  "already applied / nothing to apply, schema already current"
+
+So the database **was** dropped and **was** created and migrated. The drop is not
+failing silently, and `stockresearcherlab_ci` is not surviving the DROP. What
+actually failed is the correspondence between the output `ci.ps1` captured for the
+migrate step and the invocation that did the work: the captured text is a
+second-run shape, reading a ledger row that already existed, while the ledger row
+was written seconds earlier. `pg_stat_activity` at the moment of failure showed no
+session attached to the target and no session on `template1`, so both of the two
+candidates recorded in advance are eliminated.
+
+That is as far as the evidence goes. It is a narrower question than before, which
+was the point of collecting it, and it is left open rather than guessed at.
+
 No root cause is claimed. What can be said is the shape of the risk rather than its
 cause: **the failure mode is a loud stop, not a false green.** Two independent
 checks stand between it and a wrong record. The drop reads the database back and

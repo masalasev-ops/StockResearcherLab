@@ -1,0 +1,31 @@
+﻿ci.ps1 failure evidence
+step      : Migrate, from an empty server
+utc       : 2026-08-07 16:19:38Z
+head      : f75908a
+database  : stockresearcherlab_ci
+
+No cause is claimed by this file. It exists so the next occurrence is read
+rather than investigated from nothing. The two candidates worth checking
+first are a drop refused because a session is still attached to the target,
+and a create refused because a session is attached to template1.
+
+=== error, verbatim ===
+The migrate output contains no "created database" line, so the database existed when it ran. The drop step reported success immediately before.
+
+=== step output, verbatim ===
+migrate
+  0001_snapshot.sql            already applied
+  nothing to apply, schema already current
+
+=== pg_stat_activity, every session ===
+pid      datname                    application_name           client       state                query
+2616     postgres                                              ::1          active               SELECT pid, coalesce(datname,'-'), coalesce(application_name,'-'), coalesce(host
+6624     postgres                                              ::1          idle                 SELECT J.jobid   FROM pgagent.pga_job J  WHERE jobenabled    AND jobagentid IS N
+3492     -                                                     local        -                    
+6592     -                                                     local        -                    
+6604     -                                                     local        -                    
+11140    -                                                     local        -                    
+11148    -                                                     local        -                    
+11168    -                                                     local        -                    
+11188    -                                                     local        -                    
+11208    -                                                     local        -                    

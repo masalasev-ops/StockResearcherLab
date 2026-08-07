@@ -99,9 +99,9 @@ public sealed class ConfigSeeder
         new(2020, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>
-    /// Fourteen keys. The count is asserted rather than left to be miscounted: it
-    /// was recorded as nine, corrected to eleven at A5, twelve at A10 and fourteen
-    /// at A14, and every correction was a key that existed with nothing seeding it.
+    /// Fifteen keys. The count is asserted rather than left to be miscounted: it
+    /// was recorded as nine, corrected to eleven at A5, twelve at A10, fourteen at A14 and fifteen
+    /// at 1.4, and every correction was a key that existed with nothing seeding it.
     /// </summary>
     public static IReadOnlyList<(string Key, string Value)> Keys { get; } =
     [
@@ -118,6 +118,12 @@ public sealed class ConfigSeeder
         ("fundamentals.min_clean_gaps_for_substitution", "4"),
         ("fundamentals.substitution_rate_alert", "0.25"),
         ("fundamentals.widest_gap_alert_days", "180"),
+
+        // How many tickers C03 fetches in one run. The fundamentals endpoint is per
+        // ticker, so the whole candidate set is thousands of calls and a night
+        // should not spend all of them on one stage. Rolling rather than complete,
+        // which is what ARCHITECTURE.html section 3 already asks of C03.
+        ("fundamentals.max_tickers_per_run", "500"),
 
         // Freshness. The two row-count floors are D-59 and stand unrevised at
         // D-64's closure. The two settled_* values are D-70's and their reasoning

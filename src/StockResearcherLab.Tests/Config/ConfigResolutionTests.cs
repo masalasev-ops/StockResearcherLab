@@ -112,7 +112,7 @@ public sealed class ConfigResolutionTests
         // The count has been wrong three times, recorded as nine and corrected to
         // eleven, twelve and fourteen, and every correction was a key that existed
         // with nothing seeding it. Asserted rather than counted by hand.
-        Assert.Equal(14, ConfigSeeder.Keys.Count);
+        Assert.Equal(15, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)
@@ -128,6 +128,7 @@ public sealed class ConfigResolutionTests
                      "freshness.settled_window_days",
                      "price.reload_window_days",
                      "fundamentals.widest_gap_alert_days",
+                     "fundamentals.max_tickers_per_run",
                  })
         {
             Assert.Contains(ConfigSeeder.Keys, k => string.Equals(k.Key, required, StringComparison.Ordinal));

@@ -22,6 +22,23 @@ public sealed class NightlyRunTests
 {
     private const string Marker = "SRLNIGHT";
 
+    /// <summary>
+    /// Test doubles never answer to a catalogue component name.
+    ///
+    /// StageRunner writes a run_log row under whatever Name a stage gives, and
+    /// run_log is the operational record that C28 and the run viewer read. A test
+    /// row under a real component name makes "did the guard run tonight"
+    /// unanswerable from the table, and it inflated the FreshnessGuard count from
+    /// three real runs to nine. The RunLogRoundTrip tests already avoid this by
+    /// suffixing a guid; this follows them.
+    /// </summary>
+    private static readonly string Suffix = Guid.NewGuid().ToString("N")[..8];
+
+    private static readonly string GuardName = "TestGuard-" + Suffix;
+    private static readonly string WriterName = "TestWriter-" + Suffix;
+    private static readonly string SilentName = "TestSilentWriter-" + Suffix;
+    private static readonly string AbsentName = "TestNeverRegistered-" + Suffix;
+
     private static readonly IClock Clock = new FixedClock(
         new DateTimeOffset(2026, 8, 7, 23, 0, 0, TimeSpan.Zero), new DateOnly(2026, 8, 7));
 
@@ -63,11 +80,11 @@ public sealed class NightlyRunTests
         var ct = TestContext.Current.CancellationToken;
         await ClearAsync(ct).ConfigureAwait(true);
 
-        var writer = new MarkerWriter("SentimentIngestor");
+        var writer = new MarkerWriter(WriterName);
         var night = Build(new AbortingGuard(), writer);
 
         var result = await night.ExecuteAsync(
-            new DateOnly(2026, 8, 7), 1, ["FreshnessGuard", "SentimentIngestor"], ct).ConfigureAwait(true);
+            new DateOnly(2026, 8, 7), 1, [GuardName, WriterName], ct).ConfigureAwait(true);
 
         Assert.False(result.Completed);
         Assert.Null(result.TradingDate);
@@ -77,7 +94,7 @@ public sealed class NightlyRunTests
         Assert.Equal(0, await MarkerRowsAsync(ct).ConfigureAwait(true));
 
         Assert.Equal("failed", result.Steps[0].Outcome);
-        Assert.DoesNotContain(result.Steps, s => string.Equals(s.Stage, "SentimentIngestor", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.Steps, s => string.Equals(s.Stage, WriterName, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -91,11 +108,11 @@ public sealed class NightlyRunTests
         await ClearAsync(ct).ConfigureAwait(true);
 
         var blessed = new DateOnly(2026, 8, 5);
-        var writer = new MarkerWriter("SentimentIngestor");
+        var writer = new MarkerWriter(WriterName);
         var night = Build(new BlessingGuard(blessed), writer);
 
         var result = await night.ExecuteAsync(
-            new DateOnly(2026, 8, 7), 1, ["FreshnessGuard", "SentimentIngestor"], ct).ConfigureAwait(true);
+            new DateOnly(2026, 8, 7), 1, [GuardName, WriterName], ct).ConfigureAwait(true);
 
         Assert.True(result.Completed);
         Assert.Equal(blessed, result.TradingDate);
@@ -116,15 +133,15 @@ public sealed class NightlyRunTests
     {
         var ct = TestContext.Current.CancellationToken;
 
-        var second = new MarkerWriter("SentimentIngestor");
+        var second = new MarkerWriter(WriterName);
         var night = Build(
             new BlessingGuard(new DateOnly(2026, 8, 5)),
-            new SilentWriter("FundamentalsIngestor"),
+            new SilentWriter(SilentName),
             second);
 
         var result = await night.ExecuteAsync(
             new DateOnly(2026, 8, 7), 1,
-            ["FreshnessGuard", "FundamentalsIngestor", "SentimentIngestor"], ct).ConfigureAwait(true);
+            [GuardName, SilentName, WriterName], ct).ConfigureAwait(true);
 
         Assert.False(result.Completed);
         Assert.False(second.Ran);
@@ -141,11 +158,11 @@ public sealed class NightlyRunTests
         var ct = TestContext.Current.CancellationToken;
         await ClearAsync(ct).ConfigureAwait(true);
 
-        var writer = new MarkerWriter("SentimentIngestor");
+        var writer = new MarkerWriter(WriterName);
         var night = Build(new BlessingGuard(new DateOnly(2026, 8, 5)), writer);
 
         var result = await night.ExecuteAsync(
-            new DateOnly(2026, 8, 7), 1, ["FreshnessGuard", "SentimentIngestor"], ct).ConfigureAwait(true);
+            new DateOnly(2026, 8, 7), 1, [GuardName, WriterName], ct).ConfigureAwait(true);
 
         Assert.True(result.Completed);
         Assert.True(writer.Ran);
@@ -164,11 +181,11 @@ public sealed class NightlyRunTests
         var night = Build(new BlessingGuard(new DateOnly(2026, 8, 5)));
 
         var result = await night.ExecuteAsync(
-            new DateOnly(2026, 8, 7), 1, ["FreshnessGuard", "FlowEngine"], ct).ConfigureAwait(true);
+            new DateOnly(2026, 8, 7), 1, [GuardName, AbsentName], ct).ConfigureAwait(true);
 
         Assert.True(result.Completed);
 
-        var missing = Assert.Single(result.Steps, s => string.Equals(s.Stage, "FlowEngine", StringComparison.Ordinal));
+        var missing = Assert.Single(result.Steps, s => string.Equals(s.Stage, AbsentName, StringComparison.Ordinal));
         Assert.Equal("not registered", missing.Outcome);
     }
 
@@ -190,11 +207,28 @@ public sealed class NightlyRunTests
         Assert.DoesNotContain("UniverseBuilder", NightlyRun.EveningOrder);
     }
 
+    /// <summary>
+    /// The convention this file follows, asserted rather than trusted to a comment.
+    /// A double named for a real component writes a run_log row indistinguishable
+    /// from the real one's, which is what made the FreshnessGuard count read nine
+    /// when three real runs had happened.
+    /// </summary>
+    [Fact]
+    public void NoTestDoubleAnswersToACatalogueComponentName()
+    {
+        var declared = ArchitectureDocument.ComponentNames();
+
+        foreach (var name in new[] { GuardName, WriterName, SilentName, AbsentName })
+        {
+            Assert.DoesNotContain(name, declared);
+        }
+    }
+
     // --------------------------------------------------------------- doubles ---
 
     private sealed class AbortingGuard : IStage
     {
-        public string Name => "FreshnessGuard";
+        public string Name { get; } = GuardName;
 
         public IReadOnlyList<string> ReadSet { get; } = ["price_daily"];
 
@@ -208,7 +242,7 @@ public sealed class NightlyRunTests
 
     private sealed class BlessingGuard(DateOnly date) : IStage
     {
-        public string Name => "FreshnessGuard";
+        public string Name { get; } = GuardName;
 
         public IReadOnlyList<string> ReadSet { get; } = ["price_daily"];
 

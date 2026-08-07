@@ -79,6 +79,37 @@ ALTER TABLE fundamental_snapshot
     -- probe found them disagreeing on NVDA in 2 of 109 periods.
     ADD COLUMN IF NOT EXISTS filing_date_source           text NULL;
 
+-- ======================== 1a. filing_date_effective becomes nullable =========
+--
+-- D-62 substitutes period_end plus that ticker's widest clean gap. A ticker with
+-- ZERO clean gaps has no widest to substitute from, and NOT NULL could only be
+-- satisfied by writing a date that is not true: period_end makes the row readable
+-- immediately, which is the lookahead D-62 exists to prevent, and a universal
+-- constant is what D-62 explicitly rejected.
+--
+-- Null means no usable filing date and none derivable. Every read filters
+-- filing_date_effective <= date, so such a row is unreadable by construction rather
+-- than by anyone remembering to exclude it.
+--
+-- The CHECK is narrower than the NOT NULL it replaces rather than weaker. It still
+-- catches the case NOT NULL was pointing at, a row losing its date to a bug, while
+-- permitting the one case NOT NULL could only handle by fabricating.
+
+ALTER TABLE fundamental_snapshot ALTER COLUMN filing_date_effective DROP NOT NULL;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'fundamental_snapshot_effective_date_ck')
+    THEN
+        ALTER TABLE fundamental_snapshot
+            ADD CONSTRAINT fundamental_snapshot_effective_date_ck
+            CHECK (filing_date_effective IS NOT NULL
+                   OR filing_date_unknown_reason <> 'none');
+    END IF;
+END $$;
+
 -- ==================================================== 2. flow_daily rename ===
 --
 -- ARCHITECTURE.html sections 3 and 5 and D-61 all name this insider_net_90d_usd.

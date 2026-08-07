@@ -81,6 +81,21 @@ clean gap observed before the read date [D-62]. A ticker with fewer than
 `fundamentals.min_clean_gaps_for_substitution` clean gaps observed is excluded from
 the universe rather than given a substituted date.
 
+**The column was ~~`NOT NULL`~~ [struck, 1.4] and is nullable, where null means the
+provider's filing date was unusable and no substitution was derivable either**,
+which is a ticker with zero clean gaps to take a widest from. `NOT NULL` could only
+be satisfied there by writing a date that is not true: `period_end` makes the row
+readable immediately, which is the lookahead D-62 exists to prevent, and a universal
+constant is what D-62 explicitly rejected.
+
+A narrower constraint replaces it, `CHECK (filing_date_effective IS NOT NULL OR
+filing_date_unknown_reason <> 'none')`. That still catches the case `NOT NULL` was
+pointing at, a row losing its date to a bug, while permitting the one case it could
+only handle by fabricating. Every read filters `filing_date_effective <= date`, so a
+null row is unreadable by construction rather than by anyone remembering to exclude
+it, and the zero-clean-gap population is
+`filing_date_unknown_reason <> 'none' AND filing_date_effective IS NULL`.
+
 `filing_date_unknown_reason` records which case fired, one of `null`, `equal`,
 `negative` or `none`. Four distinguishable states rather than a boolean, because
 which one fired is diagnostic: a rise in `null` is the provider dropping the field,

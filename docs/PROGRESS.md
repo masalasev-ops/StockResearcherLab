@@ -204,6 +204,38 @@ produced it, so the correction lives here. The cause was writing the message fro
 memory after the run rather than from its output, and the practice from here is to
 omit a figure rather than recall one.
 
+### Rename sweeps state their exclusions
+
+A1.a's done condition asked that a repository-wide sweep for the old column name
+return nothing. It cannot, and forcing it would have meant editing two files the
+corpus forbids editing.
+
+**Four categories legitimately keep the old name**, and writing the exclusions out
+made it clear that a repository-wide text sweep is the wrong instrument rather than
+one needing a longer list:
+
+| Keeps the old name | Why |
+|---|---|
+| `prompts/spent/` | A spent prompt records what was asked and is never edited except to match the text issued [D-63] |
+| `0001_snapshot.sql` | Snapshot-first: a change adds a numbered file beside one that has run rather than editing it, and the ledger records its hash |
+| Struck text in `SCHEMA.md` | A fact removed from an authored document is struck and pointed at what replaced it, not deleted [`CLAUDE.md` §13] |
+| `0002`, and prose describing the rename | **A rename must name what it renames.** `ALTER TABLE ... RENAME COLUMN insider_net_usd_90d` cannot avoid the old name, and neither can a sentence explaining why it moved |
+
+The fourth is the one that settles it. Once the migration performing the rename and
+the prose recording it are both excluded, a text sweep is asserting almost nothing,
+and padding the list further would have produced a green line over an empty set,
+which is the failure this phase keeps meeting in other forms.
+
+**The check that means something is over live code and live schema**, where the old
+name must not appear at all:
+
+    git ls-files 'src/**/*.cs' 'src/**/*.razor'  ->  no match
+    information_schema.columns                   ->  flow_daily.insider_net_90d_usd only
+
+Both run clean. **A sweep that cannot return zero is not a done condition**, and the
+fix is to sweep the thing the rename actually had to change rather than to enumerate
+everything it did not.
+
 ### 1.9, the endpoint sweep
 
 Run 2026-08-07 from a scratch file-based app outside the repository, as phase P's

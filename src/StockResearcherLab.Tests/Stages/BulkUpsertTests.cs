@@ -181,58 +181,81 @@ public sealed class BulkUpsertTests
     /// the generated SQL is a syntax error that would first appear in phase 5 when
     /// RiskGate writes an order, nowhere near this checkpoint.
     ///
+    /// Asserted on the generated SQL rather than by executing it. Neither `order`
+    /// nor `position` carries a unique index on a writable column, so neither can
+    /// be upserted into at all: the only conflict target either offers is its
+    /// generated key, which A27 now refuses because a target the write does not
+    /// supply never matches. The statements are the thing under test.
+    ///
     /// Quoting also pins case: an unquoted identifier folds to lower case, and the
     /// schema is lower-case snake by convention rather than by enforcement.
     /// </summary>
     [Fact]
-    public async Task AReservedWordTableNameIsQuotedAndWorks()
+    public void AReservedWordTableNameIsQuotedInEveryGeneratedStatement()
     {
-        var ct = TestContext.Current.CancellationToken;
+        string[] columns = ["portfolio_id", "date", "ticker"];
+        var staging = BulkUpsertSql.StagingNameFor("order");
+
+        Assert.Equal("srl_stage_order", staging);
+
+        Assert.Equal(
+            "CREATE TEMP TABLE \"srl_stage_order\" AS SELECT \"portfolio_id\", \"date\", \"ticker\" " +
+            "FROM \"order\" WITH NO DATA;",
+            BulkUpsertSql.CreateStaging(staging, "order", columns));
+
+        Assert.Equal(
+            "COPY \"srl_stage_order\" (\"portfolio_id\", \"date\", \"ticker\") FROM STDIN (FORMAT BINARY)",
+            BulkUpsertSql.Copy(staging, columns));
+
+        Assert.Equal(
+            "INSERT INTO \"order\" (\"portfolio_id\", \"date\", \"ticker\") " +
+            "SELECT \"portfolio_id\", \"date\", \"ticker\" FROM \"srl_stage_order\" " +
+            "ON CONFLICT (\"portfolio_id\", \"date\") DO UPDATE SET \"ticker\" = EXCLUDED.\"ticker\";",
+            BulkUpsertSql.Upsert("order", staging, columns, ["portfolio_id", "date"]));
+
+        Assert.Equal("DROP TABLE IF EXISTS \"srl_stage_order\";", BulkUpsertSql.DropStaging(staging));
+    }
+
+    /// <summary>
+    /// A27. TableWrite.Columns has been declared and asserted by nothing since
+    /// phase 0. The staged route is the first place a stage states in code exactly
+    /// which columns it writes, so it is where the declaration becomes enforceable.
+    /// </summary>
+    [Fact]
+    public async Task AStageWritingAColumnItDidNotDeclareThrowsBeforeAnythingOpens()
+    {
         var data = new StageData(
             TestDatabase.ConnectionString,
-            new DeclaredAccess("TestStage", [], [new TableWrite("order", WriteOperation.Insert)]));
+            new DeclaredAccess("TestStage", [],
+                [new TableWrite("price_daily", WriteOperation.Insert, ["ticker", "date", "close"])]));
 
-        var portfolio = "SRLTEST-RESERVED";
+        var ex = await Assert.ThrowsAsync<UndeclaredTableAccessException>(
+            () => data.BulkUpsertAsync(
+                "price_daily", ["ticker", "date", "close", "volume"], PriceKey,
+                (_, _) => throw new InvalidOperationException("must not be reached"),
+                TestContext.Current.CancellationToken)).ConfigureAwait(true);
 
-        await using (var clean = new NpgsqlConnection(TestDatabase.ConnectionString))
-        {
-            await clean.OpenAsync(ct).ConfigureAwait(true);
-            await using var del = new NpgsqlCommand(
-                "DELETE FROM \"order\" WHERE portfolio_id = @p;", clean);
-            del.Parameters.AddWithValue("p", portfolio);
-            await del.ExecuteNonQueryAsync(ct).ConfigureAwait(true);
-        }
+        Assert.Contains("volume", ex.Message, StringComparison.Ordinal);
+    }
 
-        // order_id is GENERATED ALWAYS AS IDENTITY and is not written, which is
-        // also what proves the staging table carries no NOT NULL it should not.
-        string[] columns = ["portfolio_id", "date", "ticker", "side", "quantity", "status", "created_at"];
+    /// <summary>
+    /// A27. A conflict target the write does not supply can never match, so the
+    /// upsert inserts a duplicate on every re-run while the statement succeeds and
+    /// the row count climbs. That is D-68 silently not holding, and it is not a SQL
+    /// error: ON CONFLICT on a generated key is valid and simply never fires.
+    /// </summary>
+    [Fact]
+    public async Task AConflictTargetOutsideTheWrittenColumnsIsRefused()
+    {
+        var data = DataFor("price_daily");
 
-        await data.BulkUpsertAsync("order", columns, ["order_id"],
-            async (w, c) =>
-            {
-                await w.StartRowAsync(c).ConfigureAwait(false);
-                await w.WriteAsync(portfolio, c).ConfigureAwait(false);
-                await w.WriteAsync(new DateOnly(2026, 8, 7), c).ConfigureAwait(false);
-                await w.WriteAsync("SRLTEST", c).ConfigureAwait(false);
-                await w.WriteAsync("BUY", c).ConfigureAwait(false);
-                await w.WriteAsync(100m, c).ConfigureAwait(false);
-                await w.WriteAsync("queued", c).ConfigureAwait(false);
-                await w.WriteAsync(new DateTimeOffset(2026, 8, 7, 12, 0, 0, TimeSpan.Zero), c).ConfigureAwait(false);
-            }, ct).ConfigureAwait(true);
+        var ex = await Assert.ThrowsAsync<ArgumentException>(
+            () => data.BulkUpsertAsync(
+                "price_daily", ["ticker", "date", "close"], ["ticker", "date", "adj_close"],
+                (_, _) => throw new InvalidOperationException("must not be reached"),
+                TestContext.Current.CancellationToken)).ConfigureAwait(true);
 
-        await using (var check = new NpgsqlConnection(TestDatabase.ConnectionString))
-        {
-            await check.OpenAsync(ct).ConfigureAwait(true);
-            await using var cmd = new NpgsqlCommand(
-                "SELECT count(*) FROM \"order\" WHERE portfolio_id = @p;", check);
-            cmd.Parameters.AddWithValue("p", portfolio);
-            Assert.Equal(1L, (long)(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(true))!);
-
-            await using var del = new NpgsqlCommand(
-                "DELETE FROM \"order\" WHERE portfolio_id = @p;", check);
-            del.Parameters.AddWithValue("p", portfolio);
-            await del.ExecuteNonQueryAsync(ct).ConfigureAwait(true);
-        }
+        Assert.Contains("adj_close", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

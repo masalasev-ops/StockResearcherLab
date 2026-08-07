@@ -232,10 +232,19 @@ reach while still short, stays short for ever, and then sits inside C07's median
 dragging the reference down. The guard gets quieter rather than louder, which is the
 wrong direction for a guard, and it degrades silently.
 
-So the reload window must comfortably exceed the time a session takes to finish
-filling, not merely exceed it. 2026-08-04 was still gaining rows more than
-twenty-four hours after its session closed. Both are set to 20, which leaves a wide
-margin over that observation.
+**The two count different things and both are 20** [A28].
+`price.reload_window_days` counts **calendar days** back from the run date, with a
+non-session returning an empty response that is tolerated rather than treated as a
+fault, because C02 has no trading calendar to consult until C07 exists.
+`freshness.settled_window_days` counts **dates present in `price_daily`**, which are
+trading dates by construction, since a date with no session never lands a row.
+
+**The requirement is not that the two windows match.** It is that a date finishes
+settling before it ages out of reload reach. Twenty calendar days is about fourteen
+trading dates, against an observed settling period of more than twenty-four hours,
+so the margin is large and deliberate rather than incidental: 2026-08-04 was still
+gaining rows more than a day after its session closed and finished well inside
+either window.
 
 This is also the second reason the settled window takes a median rather than a mean,
 and the stronger of the two: a median over twenty is unmoved by one stuck day, so

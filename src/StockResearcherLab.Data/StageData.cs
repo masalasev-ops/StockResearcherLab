@@ -100,6 +100,29 @@ public sealed class StageData : IStageData
         // The fast path must not be the way the guard gets bypassed.
         _access.EnsureCanWrite(table, WriteOperation.Insert);
 
+        // Column-level ownership, enforced rather than declared [A27]. This is the
+        // first place a stage states in code exactly which columns it writes, which
+        // is what TableWrite.Columns was carried forward from phase 0 waiting for.
+        _access.EnsureColumnsDeclared(table, WriteOperation.Insert, columns);
+
+        // A conflict target the write does not supply can never match, so every
+        // re-run inserts another row while the statement succeeds and the count
+        // climbs. That is D-68 silently not holding, and it is not a SQL error:
+        // ON CONFLICT on a generated key is valid and simply never fires [A27].
+        var unwritten = conflictTarget
+            .Where(c => !columns.Contains(c, StringComparer.Ordinal))
+            .OrderBy(c => c, StringComparer.Ordinal)
+            .ToList();
+
+        if (unwritten.Count > 0)
+        {
+            throw new ArgumentException(
+                $"Conflict target column(s) {string.Join(", ", unwritten)} are not written by this " +
+                $"bulk load into '{table}'. A target the write does not supply never matches, so the " +
+                "upsert inserts a duplicate on every re-run while succeeding. Idempotence on the " +
+                "table's own grain is what D-68 requires.", nameof(conflictTarget));
+        }
+
         foreach (var name in columns.Concat(conflictTarget))
         {
             RejectUnsafeIdentifier(name);
@@ -115,47 +138,25 @@ public sealed class StageData : IStageData
         await using var conn = new NpgsqlConnection(_connectionString);
         await conn.OpenAsync(ct).ConfigureAwait(false);
 
-        var staging = "srl_stage_" + table.Replace('.', '_');
-        var columnList = string.Join(", ", columns.Select(Quote));
+        // The statements are built in BulkUpsertSql so they can be asserted
+        // verbatim without executing, which is the only way to test the quoting of
+        // a reserved-word table that carries no upsertable unique index [A25].
+        var staging = BulkUpsertSql.StagingNameFor(table);
 
-        // CREATE TABLE AS ... WITH NO DATA rather than LIKE. LIKE copies NOT NULL,
-        // which puts a NOT NULL identity primary key into the staging table that
-        // the COPY never writes, so the copy fails on a constraint the target
-        // generates for itself. That is every table with a surrogate key: order,
-        // position, and insider_transaction and events, which are the two A7 and
-        // A11 exist for. AS SELECT takes the column types and none of the
-        // constraints, which is exactly what a staging table wants [A25].
-        //
-        // The table goes when the connection closes; there is no transaction here
-        // and none is wanted, because phase 3 loads five years through this path.
-        await ExecuteAsync(conn,
-            $"CREATE TEMP TABLE {Quote(staging)} AS SELECT {columnList} FROM {Quote(table)} WITH NO DATA;",
-            ct).ConfigureAwait(false);
+        await ExecuteAsync(conn, BulkUpsertSql.CreateStaging(staging, table, columns), ct)
+            .ConfigureAwait(false);
 
         await using (var importer = await conn.BeginBinaryImportAsync(
-            $"COPY {Quote(staging)} ({columnList}) FROM STDIN (FORMAT BINARY)", ct).ConfigureAwait(false))
+            BulkUpsertSql.Copy(staging, columns), ct).ConfigureAwait(false))
         {
             await write(new NpgsqlBulkWriter(importer), ct).ConfigureAwait(false);
             await importer.CompleteAsync(ct).ConfigureAwait(false);
         }
 
-        // The updatable columns are everything the caller writes that is not part
-        // of the key, so a re-run replaces values without touching the key.
-        var updatable = columns
-            .Where(c => !conflictTarget.Contains(c, StringComparer.Ordinal))
-            .ToList();
+        var affected = await ExecuteAsync(
+            conn, BulkUpsertSql.Upsert(table, staging, columns, conflictTarget), ct).ConfigureAwait(false);
 
-        var action = updatable.Count == 0
-            ? "DO NOTHING"
-            : "DO UPDATE SET " + string.Join(", ", updatable.Select(c => $"{Quote(c)} = EXCLUDED.{Quote(c)}"));
-
-        var upsert =
-            $"INSERT INTO {Quote(table)} ({columnList}) SELECT {columnList} FROM {Quote(staging)} " +
-            $"ON CONFLICT ({string.Join(", ", conflictTarget.Select(Quote))}) {action};";
-
-        var affected = await ExecuteAsync(conn, upsert, ct).ConfigureAwait(false);
-
-        await ExecuteAsync(conn, $"DROP TABLE IF EXISTS {Quote(staging)};", ct).ConfigureAwait(false);
+        await ExecuteAsync(conn, BulkUpsertSql.DropStaging(staging), ct).ConfigureAwait(false);
 
         return affected;
     }
@@ -182,8 +183,6 @@ public sealed class StageData : IStageData
                 "no parameters, so they are restricted to letters, digits and underscore.");
         }
     }
-
-    private static string Quote(string identifier) => "\"" + identifier + "\"";
 
     private sealed class NpgsqlBulkWriter(NpgsqlBinaryImporter importer) : IBulkWriter
     {

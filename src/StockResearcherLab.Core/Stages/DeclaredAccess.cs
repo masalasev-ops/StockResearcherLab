@@ -75,6 +75,44 @@ public sealed class DeclaredAccess
             ReadSet.Count == 0 ? "(nothing)" : string.Join(", ", Ordered(ReadSet)));
     }
 
+    /// <summary>
+    /// Every column in <paramref name="columns"/> must be one this stage declared
+    /// for that table and operation.
+    ///
+    /// An empty declared column set means the whole table, which is the ordinary
+    /// case, and nothing is checked. Where a stage declares a partial write the
+    /// declaration becomes enforceable rather than documentary, which is what
+    /// <see cref="TableWrite.Columns"/> was carried forward from phase 0 to get
+    /// [A27].
+    /// </summary>
+    public void EnsureColumnsDeclared(string table, WriteOperation operation, IReadOnlyList<string> columns)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+
+        var declared = WriteSet.FirstOrDefault(w =>
+            string.Equals(w.Table, table, StringComparison.Ordinal) && w.Operation == operation);
+
+        if (declared is null || declared.Columns.Count == 0)
+        {
+            return;
+        }
+
+        var undeclared = columns
+            .Where(c => !declared.Columns.Contains(c, StringComparer.Ordinal))
+            .OrderBy(c => c, StringComparer.Ordinal)
+            .ToList();
+
+        if (undeclared.Count == 0)
+        {
+            return;
+        }
+
+        throw new UndeclaredTableAccessException(
+            StageName, table,
+            $"write column(s) {string.Join(", ", undeclared)} of",
+            string.Join(", ", Ordered(declared.Columns)));
+    }
+
     public void EnsureCanWrite(string table, WriteOperation operation)
     {
         if (CanWrite(table, operation))

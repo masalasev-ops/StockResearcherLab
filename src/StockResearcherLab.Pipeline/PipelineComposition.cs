@@ -36,6 +36,7 @@ public static class PipelineComposition
             var eodhd = new EodhdClient(http, apiToken, clock ?? new SystemClock());
 
             owners.Add(new PriceIngestor(eodhd));
+            owners.Add(new FreshnessGuard(eodhd));
         }
 
         return new StageRegistry(owners);

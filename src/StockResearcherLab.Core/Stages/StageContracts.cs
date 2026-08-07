@@ -39,9 +39,26 @@ public sealed record TableWrite(string Table, WriteOperation Operation, IReadOnl
 
 /// <summary>What a stage did. Row counts land in run_log.</summary>
 /// <param name="RowsWritten">Rows this stage wrote. Zero is a legitimate answer and is not an error on its own.</param>
-public readonly record struct StageResult(long RowsWritten)
+/// <param name="Status">
+/// What the runner records. <c>ok</c> for the ordinary case, and a stage may return
+/// something else where completing successfully is not the whole story.
+///
+/// This exists because two components must raise an alert and neither may write the
+/// <c>alert</c> table, which has ConcentrationMonitor as its only writer. Both emit
+/// through the run log instead, exactly as C07 already does for its abort, and a
+/// band that produced a row indistinguishable from a clean one would not be an
+/// alert at all [A3, INVARIANT 10].
+/// </param>
+/// <param name="Detail">
+/// The line worth reading when <see cref="Status"/> is not <c>ok</c>. It lands in
+/// <c>run_log.error</c>, which is the only free-text column that table has.
+/// </param>
+public readonly record struct StageResult(long RowsWritten, string Status = "ok", string? Detail = null)
 {
     public static StageResult None => new(0);
+
+    /// <summary>Completed, and something about it is worth an operator's attention.</summary>
+    public static StageResult Alert(long rowsWritten, string detail) => new(rowsWritten, "alert", detail);
 }
 
 /// <summary>

@@ -72,4 +72,125 @@ public sealed class StageData : IStageData
 
         return await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
+
+    public async Task<long> BulkUpsertAsync(
+        string table,
+        IReadOnlyList<string> columns,
+        IReadOnlyList<string> conflictTarget,
+        Func<IBulkWriter, CancellationToken, Task> write,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+        ArgumentNullException.ThrowIfNull(conflictTarget);
+        ArgumentNullException.ThrowIfNull(write);
+
+        if (columns.Count == 0)
+        {
+            throw new ArgumentException("A bulk write needs at least one column.", nameof(columns));
+        }
+
+        if (conflictTarget.Count == 0)
+        {
+            throw new ArgumentException(
+                "A bulk write needs a conflict target. Every stage write is idempotent on the " +
+                "table's own grain, so there is always one [D-68].", nameof(conflictTarget));
+        }
+
+        // Before a connection is opened, exactly as the read and write routes do.
+        // The fast path must not be the way the guard gets bypassed.
+        _access.EnsureCanWrite(table, WriteOperation.Insert);
+
+        foreach (var name in columns.Concat(conflictTarget))
+        {
+            RejectUnsafeIdentifier(name);
+        }
+
+        RejectUnsafeIdentifier(table);
+
+        // One connection for the whole operation. The staging table is TEMP and is
+        // invisible to any other connection, so the COPY and the upsert cannot be
+        // split across two [A24]. TEMP rather than a named UNLOGGED table because a
+        // crashed run would leave a named one populated for the next run's insert
+        // to pick up, and two stages loading at once would collide on the name.
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(ct).ConfigureAwait(false);
+
+        var staging = "srl_stage_" + table.Replace('.', '_');
+        var columnList = string.Join(", ", columns.Select(Quote));
+
+        // Dropped on commit is not used: there is no transaction here, and the
+        // table goes when the connection closes either way.
+        await ExecuteAsync(conn,
+            $"CREATE TEMP TABLE {Quote(staging)} (LIKE {Quote(table)} INCLUDING DEFAULTS) ON COMMIT PRESERVE ROWS;",
+            ct).ConfigureAwait(false);
+
+        await using (var importer = await conn.BeginBinaryImportAsync(
+            $"COPY {Quote(staging)} ({columnList}) FROM STDIN (FORMAT BINARY)", ct).ConfigureAwait(false))
+        {
+            await write(new NpgsqlBulkWriter(importer), ct).ConfigureAwait(false);
+            await importer.CompleteAsync(ct).ConfigureAwait(false);
+        }
+
+        // The updatable columns are everything the caller writes that is not part
+        // of the key, so a re-run replaces values without touching the key.
+        var updatable = columns
+            .Where(c => !conflictTarget.Contains(c, StringComparer.Ordinal))
+            .ToList();
+
+        var action = updatable.Count == 0
+            ? "DO NOTHING"
+            : "DO UPDATE SET " + string.Join(", ", updatable.Select(c => $"{Quote(c)} = EXCLUDED.{Quote(c)}"));
+
+        var upsert =
+            $"INSERT INTO {Quote(table)} ({columnList}) SELECT {columnList} FROM {Quote(staging)} " +
+            $"ON CONFLICT ({string.Join(", ", conflictTarget.Select(Quote))}) {action};";
+
+        var affected = await ExecuteAsync(conn, upsert, ct).ConfigureAwait(false);
+
+        await ExecuteAsync(conn, $"DROP TABLE IF EXISTS {Quote(staging)};", ct).ConfigureAwait(false);
+
+        return affected;
+    }
+
+    private static async Task<int> ExecuteAsync(NpgsqlConnection conn, string sql, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        return await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Identifiers are interpolated into DDL, which takes no parameters, so they are
+    /// restricted rather than trusted. Every one comes from a stage's own declared
+    /// column set today; this is what keeps that true if one ever comes from a
+    /// config row.
+    /// </summary>
+    private static void RejectUnsafeIdentifier(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)
+            || !name.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
+        {
+            throw new ArgumentException(
+                $"'{name}' is not a plain identifier. Table and column names reach DDL, which takes " +
+                "no parameters, so they are restricted to letters, digits and underscore.");
+        }
+    }
+
+    private static string Quote(string identifier) => "\"" + identifier + "\"";
+
+    private sealed class NpgsqlBulkWriter(NpgsqlBinaryImporter importer) : IBulkWriter
+    {
+        public async Task StartRowAsync(CancellationToken ct = default)
+            => await importer.StartRowAsync(ct).ConfigureAwait(false);
+
+        public async Task WriteAsync<T>(T? value, CancellationToken ct = default)
+        {
+            if (value is null)
+            {
+                await importer.WriteNullAsync(ct).ConfigureAwait(false);
+                return;
+            }
+
+            await importer.WriteAsync(value, ct).ConfigureAwait(false);
+        }
+    }
 }

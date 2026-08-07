@@ -27,6 +27,9 @@ switch (command)
     case "run":
         return await RunStageAsync().ConfigureAwait(false);
 
+    case "run-night":
+        return await RunNightAsync().ConfigureAwait(false);
+
     case "stages":
         return ListStages();
 
@@ -36,6 +39,7 @@ switch (command)
         Console.WriteLine("  seed                  insert version 1 of every config key. Idempotent.");
         Console.WriteLine("  stages                list the registered components and what each writes.");
         Console.WriteLine("  run <stage> [date]    run one stage. Date defaults to today, US Eastern.");
+        Console.WriteLine("  run-night [date]      run the evening sequence in order, halting on the first failure.");
         return 0;
 }
 
@@ -56,6 +60,31 @@ async Task<int> MigrateAsync()
         ? "  nothing to apply, schema already current"
         : $"  {applied.Count} migration(s) applied");
     return 0;
+}
+
+async Task<int> RunNightAsync()
+{
+    var clock = new SystemClock();
+    var date = args.Length > 1
+        ? DateOnly.ParseExact(args[1], "yyyy-MM-dd", CultureInfo.InvariantCulture)
+        : clock.Today;
+
+    // Config version 1 until the tuner writes another. Passed in rather than
+    // resolved inside a stage [D-43, INVARIANT 13].
+    const int configVersion = 1;
+
+    Console.WriteLine($"run-night  {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}  config v{configVersion}");
+
+    var night = NightlyRun.For(
+        RequireConnectionString(), config["Eodhd:ApiToken"], clock, Console.WriteLine);
+
+    var result = await night.ExecuteAsync(date, configVersion).ConfigureAwait(false);
+
+    Console.WriteLine($"  {result.Summary()}");
+
+    // Non-zero when the night halted, so an unattended run is visible as a failure
+    // rather than as a quiet short night.
+    return result.Completed ? 0 : 1;
 }
 
 async Task<int> SeedAsync()

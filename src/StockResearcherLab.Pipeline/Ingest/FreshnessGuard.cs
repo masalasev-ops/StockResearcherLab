@@ -64,9 +64,12 @@ public sealed class FreshnessGuard : IStage
         // operator can distinguish from a clean night. Recording it as "ok" would
         // make the alert indistinguishable from its absence, which is the whole
         // failure the band exists to prevent.
+        // The usable date travels back with the result. This is the one stage that
+        // returns one, because it is the one that decides which stored date the
+        // rest of the night works on.
         return verdict.Alert || verdict.SettlednessSkipped
-            ? StageResult.Alert(0, verdict.Summary())
-            : StageResult.None;
+            ? StageResult.Alert(0, verdict.Summary()) with { TradingDate = verdict.UsableDate }
+            : StageResult.None with { TradingDate = verdict.UsableDate };
     }
 
     /// <summary>

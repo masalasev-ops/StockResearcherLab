@@ -53,7 +53,16 @@ public sealed record TableWrite(string Table, WriteOperation Operation, IReadOnl
 /// The line worth reading when <see cref="Status"/> is not <c>ok</c>. It lands in
 /// <c>run_log.error</c>, which is the only free-text column that table has.
 /// </param>
-public readonly record struct StageResult(long RowsWritten, string Status = "ok", string? Detail = null)
+/// <param name="TradingDate">
+/// The date the rest of the run should use, where a stage determines one. Only the
+/// freshness guard does: it is the component that decides which stored date is
+/// usable, and every stage after it works on that date rather than on the date the
+/// run was started for [D-65, D-70].
+///
+/// Null everywhere else, which is the ordinary case.
+/// </param>
+public readonly record struct StageResult(
+    long RowsWritten, string Status = "ok", string? Detail = null, DateOnly? TradingDate = null)
 {
     public static StageResult None => new(0);
 

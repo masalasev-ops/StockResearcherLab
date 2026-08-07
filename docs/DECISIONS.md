@@ -617,6 +617,33 @@ Ingest loads the newest date passing all three. A date failing settledness
 is re-read on a later run rather than discarded, because it is incomplete
 rather than wrong.
 
+**D-68 Every stage write is idempotent on the table's own grain.** `ACTIVE`
+The rails define no unit of work. `StageData` opens a connection per call
+and `StageRunner` wraps nothing in a transaction, so a stage that throws
+leaves its writes committed while `run_log` records `rows_written` as
+unknown. `ARCHITECTURE.html` section 4 states that any stage can be re-run
+against an earlier night without side effects, and `CLAUDE.md` section 6
+states that a stage completes or it fails the run. Neither was enforceable,
+and phase 1 builds seven writing stages.
+
+A re-run of any stage over any date replaces rather than duplicates. Where
+a table carries a surrogate identity key the grain is declared as a unique
+index in the migration that first writes it, because naming a conflict
+target is not enough: `ON CONFLICT` against a table with no matching
+constraint raises before a row is written. `insider_transaction` and
+`events` are the two such tables in this phase, and `0002` gives each one.
+
+A transaction per stage is the alternative and is rejected. Phase 3 runs
+these same stages over five years, and one transaction spanning twelve
+million rows is its own failure mode. Idempotence costs an index and
+survives being interrupted; a long transaction costs nothing until the
+first time it does not complete.
+
+A future multi-table stage with no natural key reopens this. So does a
+provider that files two rows a stage cannot tell apart, which is why 1.7's
+sweep answers whether its tuple is genuinely unique against real rows
+rather than by assumption.
+
 ---
 
 ## Open

@@ -14,7 +14,7 @@ Correct them directly. Do not record intentions here.
 |---|---|---|---|
 | P Data probe | DONE | 3099e66 | All five checkpoints landed and all six findings recorded. D-57 to D-63 produced. Closed under the five-step procedure retired at D-67, after two conformance passes and the C, E, G, H, J and K corrections. That record is in the archive |
 | 0 Rails | DONE | d9cb5df | Signed off 2026-08-06. Checkpoints 0.1 to 0.8, plus CI, the sign-off review, and pass O's corrections. 25 tests green. Step 1 was met by running every CI step locally, because no hosted runner has ever picked up a job on this account. Step 2 ran at `d4baeaf` and does not cover pass O's four corrected files. Both gaps are in the phase 0 block below |
-| 1 Ingest and universe | NOT STARTED | | |
+| 1 Ingest and universe | IN PROGRESS | | Pre-flight done: prompt archived, `guards.ps1` comment stripper scoped, `ci.ps1` added, D-68 authored. Checkpoints 1.11 to 1.14 were added to the plan before the phase started, and 1.3 widened by D-65. The CI runner gap is recorded below rather than at sign-off |
 | 2 Compute | NOT STARTED | | |
 | 3 Backfill | NOT STARTED | | |
 | 4 Screens and selection | NOT STARTED | | |
@@ -178,6 +178,52 @@ the class of breach the review found by hand.
 test extending as each phase adds tables, the Ui's contracts assembly,
 `NoOpStage`'s name, `TableWrite.Columns`, and the five probe patterns phase 1's
 ingest must not inherit. Also owed and recorded below.
+
+## Phase 1, ingest and universe
+
+**In progress.** Pre-flight complete, no checkpoint code yet.
+
+**The CI runner gap, recorded now rather than at sign-off** [A6]. Phase 0 was
+signed off with step 1 met by running every `ci.yml` step by hand. The same gap
+applies to this phase and the decision is taken here so it is not taken under
+pressure later.
+
+Hosted runners are still not being allocated to this account. The repository's
+total run count is 1: one run queued on the merge of `phase-0-rails`, sat
+fifteen minutes unassigned, and was cancelled by GitHub. It is not the YAML, the
+triggers, the registration or the repository permissions, all of which were
+checked at phase 0, and it is not minute exhaustion, the repository being public.
+
+**A self-hosted runner does not close it,** which is why one was not added.
+`ci.yml` is `runs-on: ubuntu-latest` with a `services: postgres:18` container,
+so it needs a Linux runner with Docker. A Windows runner would need the workflow
+rewritten against a locally installed database, and that loses the empty-server
+property the two migrate steps exist to prove.
+
+**What was done instead.** `ci.ps1` at the repository root, added at `db5863c`.
+It runs `ci.yml`'s steps in their own order against a git worktree at HEAD, which
+is tracked files only and therefore carries no secrets file, and against a
+dedicated database dropped first. It exits non-zero on the first failure and
+prints the same seven results phase 0 recorded by hand. Sign-off step 1 asks that
+nothing be recorded by hand that a run can record, and this is what makes the
+local path a run. `ci.yml` is unchanged and works the moment runners are
+allocated.
+
+**What this still does not cover.** `ci.ps1` runs on Windows against an installed
+Postgres; `ci.yml` runs on Linux against a container. A defect that only appears
+on the other platform is invisible to both, since one of them has never executed.
+Phase 1 sign-off records `ci.ps1` output, and states this line alongside it.
+
+**Two defects found while building `ci.ps1`,** both recorded because both are the
+silent kind. `guards.ps1` reports through `Write-Host`, which does not reach the
+pipeline in Windows PowerShell, so the first version of `ci.ps1` captured nothing
+and recorded "0 checks" while the guard output still appeared on the console; a
+zero check count now throws rather than being recorded. Separately, one run
+reported a successful database drop and then found the schema already present,
+which would have recorded "migrate ran clean from empty" against a database that
+was never empty. It has not reproduced across consecutive runs and no root cause
+is claimed; the drop now reads the database back and fails at that step if it
+survived.
 
 ## Open items carried forward
 

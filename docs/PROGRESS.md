@@ -344,9 +344,17 @@ is narrower than stated: not that .NET cannot convert, but that the conversion
 already has to happen in the query that filters on `set_at`, and doing it twice in
 two places is how the two would drift.
 
-**A fifth guard** now greps for `TimeZoneInfo` over `src/`, excluding
-`SystemClock.cs` on the same reasoning that excludes it from the ambient-clock
-check: it is the implementation and the one place the resolution is allowed. A21
+**The rule, with its exception in the same sentence** [A23]. Every US Eastern
+conversion happens in SQL, where Postgres carries its own tzdata, **except
+`SystemClock`, which is the single place permitted to read the ambient clock and is
+therefore the single place permitted to convert it.** A rule stated without its
+exception invites the exception to be read as a breach, and this one is neither
+accidental nor tolerated: the component that answers what today means in market
+terms is exactly the component that has to know.
+
+**A fifth guard** enforces that boundary and its exclusion list is the enforcement.
+It greps for `TimeZoneInfo` over `src/` and excludes `SystemClock.cs` and nothing
+else, on the same reasoning that excludes it from the ambient-clock check. A21
 asked for the guard to exclude nothing, which cannot ship green while the
 legitimate user exists, and a guard that ships red is a guard everyone learns to
 ignore [O.1].

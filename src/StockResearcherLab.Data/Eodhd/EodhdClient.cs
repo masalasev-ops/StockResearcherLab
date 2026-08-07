@@ -61,6 +61,31 @@ public sealed class EodhdClient
     private readonly string _apiToken;
     private readonly EodhdRateLimiter _limiter;
 
+    /// <summary>
+    /// An <see cref="HttpClient"/> configured the way this client wants one.
+    ///
+    /// <c>PooledConnectionLifetime</c> is the reason this exists. A single
+    /// long-lived HttpClient is what avoids socket exhaustion, but it also pins DNS
+    /// for the life of the process, so a provider that moves an address is followed
+    /// only after a restart. Recycling pooled connections on a timer is the other
+    /// thing IHttpClientFactory does, and it is the half that matters here: a
+    /// nightly run is minutes, but phase 3's backfill holds one process for hours
+    /// [A22]. One property rather than a package and a DI registration.
+    /// </summary>
+    public static HttpClient CreateHttpClient(TimeSpan? pooledConnectionLifetime = null)
+    {
+        var handler = new SocketsHttpHandler
+        {
+            PooledConnectionLifetime = pooledConnectionLifetime ?? TimeSpan.FromMinutes(5),
+        };
+
+        return new HttpClient(handler)
+        {
+            BaseAddress = new Uri(EodhdUrl.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(120),
+        };
+    }
+
     public EodhdClient(HttpClient http, string apiToken, IClock clock, int requestsPerMinute = 1000)
     {
         ArgumentNullException.ThrowIfNull(http);

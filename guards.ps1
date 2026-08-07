@@ -81,7 +81,7 @@ $checks = @(
         Pattern    = 'TimeZoneInfo'
         Extensions = @('.cs', '.razor')
         Exclude    = @('src/StockResearcherLab.Data/SystemClock.cs')
-        Why        = 'InvariantGlobalization is on, so FindSystemTimeZoneById cannot resolve an IANA id on Windows and throws only on the path that reaches it. SystemClock.cs is the one place allowed and it already tries the IANA id then the Windows one, in that order. Every other Eastern conversion belongs in SQL, where Postgres carries its own tzdata [1.13]'
+        Why        = 'Every US Eastern conversion happens in SQL, where Postgres carries its own tzdata, except SystemClock.cs, which is the single place permitted to read the ambient clock and is therefore the single place permitted to convert it. This exclusion list is that boundary [A23]. It matters because InvariantGlobalization is on, so FindSystemTimeZoneById cannot resolve an IANA id on Windows and throws only on the path that reaches it; SystemClock already tries the IANA id then the Windows one, in that order'
     }
 )
 

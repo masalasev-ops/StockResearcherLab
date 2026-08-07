@@ -106,6 +106,30 @@ public sealed class EodhdClientTests
         Assert.Equal(100, ids.Distinct().Count());
     }
 
+    /// <summary>
+    /// A22. The loop terminates on links.next but builds the next request from
+    /// offset arithmetic, so two things have to agree and only one was tested.
+    /// This asserts the URL the client builds for page n+1 against the links.next
+    /// the endpoint offered on page n, character for character.
+    ///
+    /// Offset drift would otherwise surface as a silently skipped or repeated page,
+    /// which returns successfully and produces a short table.
+    /// </summary>
+    [Fact]
+    public async Task EachRequestMatchesTheNextLinkTheEndpointOffered()
+    {
+        var handler = new PagedHandler(total: 100, pageSize: 25);
+
+        await Client(handler).GetAllPagesAsync(
+            "sec-filings/CCS.US/form4", [], pageSize: 25,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        // Three successors offered across four pages, and the second through
+        // fourth requests are what they should be.
+        Assert.Equal(3, handler.ExpectedNext.Count);
+        Assert.Equal(handler.ExpectedNext, handler.Requested.Skip(1).ToList());
+    }
+
     [Fact]
     public async Task PagingWalksAPartialLastPage()
     {
@@ -220,13 +244,22 @@ public sealed class EodhdClientTests
     /// </summary>
     private sealed class PagedHandler(int total, int pageSize, int? stopAfterPages = null) : HttpMessageHandler
     {
+        private const string Path = "sec-filings/CCS.US/form4";
+
         public int Calls { get; private set; }
+
+        /// <summary>What links.next offered, in order. One entry per page that had a successor.</summary>
+        public List<string> ExpectedNext { get; } = [];
+
+        /// <summary>What the client actually asked for, path and page parameters only.</summary>
+        public List<string> Requested { get; } = [];
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             Calls++;
 
             var query = request.RequestUri!.Query;
+            Requested.Add(WithoutTokenAndFmt(request.RequestUri));
             var offset = ReadOffset(query);
             var count = Math.Max(0, Math.Min(pageSize, total - offset));
 
@@ -234,9 +267,24 @@ public sealed class EodhdClientTests
 
             var served = offset + count;
             var more = served < total && (stopAfterPages is null || Calls < stopAfterPages);
+
+            // links.next is emitted in exactly the form the client should build for
+            // the following page, so the test can compare the two [A22]. `served`
+            // is computed here from this handler's own accounting while the client
+            // computes offset += pageSize, so the comparison is between two
+            // independent arithmetic paths rather than a value echoed back.
+            //
+            // The real endpoint's links.next carries no api_token, checked at 1.9,
+            // so the token is absent here too and the comparison is made on the
+            // path and page parameters.
             var links = more
-                ? $$"""{"next":"/api/x?page%5Boffset%5D={{served}}&page%5Blimit%5D={{pageSize}}"}"""
+                ? $$"""{"next":"{{Path}}?page%5Boffset%5D={{served}}&page%5Blimit%5D={{pageSize}}"}"""
                 : "{}";
+
+            if (more)
+            {
+                ExpectedNext.Add($"{Path}?page%5Boffset%5D={served}&page%5Blimit%5D={pageSize}");
+            }
 
             var body = $$"""{"data":[{{rows}}],"meta":{"total":{{total}}},"links":{{links}}}""";
 
@@ -244,6 +292,21 @@ public sealed class EodhdClientTests
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
             });
+        }
+
+        /// <summary>
+        /// The request reduced to path plus page parameters, which is the shape
+        /// links.next comes in. Escaping is preserved rather than normalised,
+        /// because the escaping is half of what is being compared.
+        /// </summary>
+        private static string WithoutTokenAndFmt(Uri uri)
+        {
+            var kept = uri.Query.TrimStart('?')
+                .Split('&', StringSplitOptions.RemoveEmptyEntries)
+                .Where(p => !p.StartsWith("api_token=", StringComparison.Ordinal)
+                            && !p.StartsWith("fmt=", StringComparison.Ordinal));
+
+            return Path + "?" + string.Join("&", kept);
         }
 
         private static int ReadOffset(string query)

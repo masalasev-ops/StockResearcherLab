@@ -28,10 +28,6 @@ public static class PipelineComposition
         {
             // Not a stage. Sits outside the layers and owns run_log.
             new RunLog(connectionString),
-
-            // The no-op stage that proves the rails [0.7]. Retired at 1.11, now
-            // that a real stage has replaced it.
-            new NoOpStage(),
         };
 
         if (!string.IsNullOrWhiteSpace(apiToken))

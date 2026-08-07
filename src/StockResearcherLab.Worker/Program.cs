@@ -71,7 +71,7 @@ async Task<int> SeedAsync()
 
 int ListStages()
 {
-    var registry = PipelineComposition.BuildRegistry(RequireConnectionString());
+    var registry = PipelineComposition.BuildRegistry(RequireConnectionString(), config["Eodhd:ApiToken"], new SystemClock());
     Console.WriteLine("registered components");
 
     foreach (var owner in registry.Owners)
@@ -96,7 +96,8 @@ async Task<int> RunStageAsync()
 
     var connectionString = RequireConnectionString();
     var clock = new SystemClock();
-    var registry = PipelineComposition.BuildRegistry(connectionString);
+    var registry = PipelineComposition.BuildRegistry(
+        connectionString, config["Eodhd:ApiToken"], clock);
     var runLog = new RunLog(connectionString);
     var runner = new StageRunner(registry, runLog, clock, connectionString);
 

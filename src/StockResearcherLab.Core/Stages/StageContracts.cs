@@ -87,12 +87,14 @@ public interface IWriteOwner
 /// </summary>
 public sealed class StageContext
 {
-    public StageContext(DateOnly date, int configVersion, IStageData data, IClock clock)
+    public StageContext(
+        DateOnly date, int configVersion, IStageData data, IClock clock, Config.IConfigStore config)
     {
         Date = date;
         ConfigVersion = configVersion;
         Data = data;
         Clock = clock;
+        Config = config;
     }
 
     /// <summary>The trading date being processed. A label the exchange gave a session, never a timezone conversion.</summary>
@@ -109,4 +111,14 @@ public sealed class StageContext
 
     /// <summary>Injected. Nothing reads system time outside the clock implementation [INVARIANT 11].</summary>
     public IClock Clock { get; }
+
+    /// <summary>
+    /// Configuration, resolved as of <see cref="Date"/> and never as of now.
+    ///
+    /// It sits here rather than being constructed by a stage so that the date a
+    /// stage resolves against is the date it was handed. A stage building its own
+    /// store could resolve against a different one, and the failure would be a
+    /// plausible number rather than an error [D-43, INVARIANT 13].
+    /// </summary>
+    public Config.IConfigStore Config { get; }
 }

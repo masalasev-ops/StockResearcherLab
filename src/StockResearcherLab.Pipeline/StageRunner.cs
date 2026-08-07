@@ -43,7 +43,12 @@ public sealed class StageRunner
 
         var access = _registry.AccessFor(stage);
         var data = new StageData(_connectionString, access);
-        var context = new StageContext(date, configVersion, data, _clock);
+
+        // Config resolves as of the date being processed. Constructed here rather
+        // than by the stage, so a stage cannot resolve against a date other than
+        // the one it was handed [D-43, INVARIANT 13].
+        var config = new ConfigStore(_connectionString);
+        var context = new StageContext(date, configVersion, data, _clock, config);
 
         // started_at comes from the injected clock. The duration comes from a
         // stopwatch, which measures elapsed time rather than reading the time of

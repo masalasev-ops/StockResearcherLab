@@ -134,7 +134,7 @@ list is a usable static feature; it is the change metric that has no series.
 Grain: ticker by day, ~~ticker by week~~ [superseded, D-61]. **Writer: FlowEngine, a
 compute stage, not the ingest.** ~52 MB.
 
-`ticker`, `date`, `insider_net_usd_90d`, `distinct_buyer_count`,
+`ticker`, `date`, ~~`insider_net_usd_90d`~~ [corrected, A1.a] `insider_net_90d_usd`, `distinct_buyer_count`,
 `inst_ownership_change`,
 ~~`week_end`, `publication_date`, `short_interest_pct_float`,
 `short_interest_change`~~ [removed, D-58 and D-61].
@@ -143,6 +143,13 @@ Derived rather than ingested. The two source tables above land at their own grai
 this table is computed from them, exactly as `indicator_daily` is computed from
 `price_daily`. Ingest grain follows the source; consumption grain follows the screen
 [D-61].
+
+**The column was named `insider_net_usd_90d` here and in `0001_snapshot.sql` and
+`insider_net_90d_usd` in `ARCHITECTURE.html` sections 3 and 5 and in D-61** [A1.a].
+The architecture constrains the code and names match the architecture, so this
+document was the wrong one. Renamed in `0002` rather than dropped and recreated:
+the table had never held a row, so either would have done, and a rename says what
+happened where a drop would not.
 
 Short interest is gone: this provider has no series and no as-of date for it, so it is
 not backfillable and the screen ranks on the three fields above [D-58].

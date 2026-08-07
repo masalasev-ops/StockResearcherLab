@@ -397,9 +397,24 @@ and recorded "0 checks" while the guard output still appeared on the console; a
 zero check count now throws rather than being recorded. Separately, one run
 reported a successful database drop and then found the schema already present,
 which would have recorded "migrate ran clean from empty" against a database that
-was never empty. It has not reproduced across consecutive runs and no root cause
-is claimed; the drop now reads the database back and fails at that step if it
+was never empty. The drop now reads the database back and fails at that step if it
 survived.
+
+**That second one has recurred and is still unexplained.** Two occurrences in
+roughly nine runs, the second after the readback was added. Both surfaced the same
+way: the migrate step asserting it had not created the database, the run exiting
+non-zero, and no result recorded. Five consecutive runs since, including three back
+to back, have all passed with the drop confirming absence and migrate creating the
+database.
+
+No root cause is claimed. What can be said is the shape of the risk rather than its
+cause: **the failure mode is a loud stop, not a false green.** Two independent
+checks stand between it and a wrong record. The drop reads the database back and
+exits non-zero if it survived, and the migrate step asserts it created the database
+rather than trusting that it did. A run that cannot prove it started from an empty
+server records nothing at all. Left open here rather than closed, because an
+intermittent fault in the script that verifies everything else is worth carrying
+visibly until it either recurs often enough to diagnose or stops.
 
 ### Upsertable grain, every store
 
@@ -456,7 +471,26 @@ writes it. This phase owns two of them, `events` and `insider_transaction`, and
 1.4's migration gives both a `UNIQUE NULLS NOT DISTINCT` index [A11]. The other
 nine are phase 4's `alert`, phase 5's `headline`, phase 6's `cost_ledger`, phase
 7's `order`, `fill`, `position` and `trade_outcome`, phase 8's
-`researcher_memory`, and `run_log`, which C27 appends to and never re-runs.
+`researcher_memory`, and `run_log`.
+
+**Which kind of problem it is matters more than the count.** Most of the nine are
+**event records**, where every other store in this system is a snapshot keyed on an
+entity and a date. That is why a natural grain falls out of the snapshots and not
+out of these: two identical orders on one night are not a duplicate to be
+collapsed, they are two orders. A unique index on the row's own attributes is
+therefore the wrong instrument, and the likely mechanism is idempotence by run
+scope, deleting and reinserting the rows a portfolio and date own, rather than
+idempotence by row identity. Likely rather than decided, since the phase that
+writes them authors that when it can see the shape of a fill.
+
+`order`, `fill`, `position`, `trade_outcome`, `alert`, `headline` and `cost_ledger`
+are all event records. `researcher_memory` is not, so it needs a grain decided
+rather than a scope. **`run_log` needs nothing at all**: C27 appends and never
+re-runs, so it is append-only by design rather than by omission, and it should not
+be read later as an outstanding gap.
+
+Each of these is a carried obligation row in `BUILD_PLAN.md` rather than only a
+line here, because that table is where the phase that owns it will look.
 
 **`dossier` is the case a table-level reading gets wrong.** Its two unique indexes
 are partial, one for the nightly prefix where `ticker IS NULL` and one per

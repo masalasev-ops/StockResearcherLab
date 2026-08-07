@@ -67,6 +67,99 @@ function Assert-ExitZero {
     }
 }
 
+function Assert-MirrorsWorkflow {
+    <#
+        Reads .github/workflows/ci.yml and asserts that every command it runs has a
+        counterpart here.
+
+        WHY. The step list was matched by hand once and nothing re-checked it. The
+        script whose whole purpose is to stand in for CI is the last place a silent
+        divergence should be possible, and this is the same correction made to the
+        guard count one level out: read the thing being mirrored rather than
+        re-deriving it, and fail loudly when the source is not where it was expected.
+
+        DELIBERATELY CRUDE, and worth knowing what it misses. It matches `run:`
+        lines and the indented block under `run: |`, and pairs each against a
+        distinctive substring. It does not parse YAML, so it would miss a second
+        job, a command moved into a composite action or a `uses:` step, an `if:`
+        that disables a step, and any change to a command's arguments that leaves
+        its substring intact. It catches the case that matters: a step added to or
+        removed from ci.yml with nothing added or removed here.
+    #>
+
+    $workflow = Join-Path $root '.github/workflows/ci.yml'
+    if (-not (Test-Path -LiteralPath $workflow)) {
+        throw "No .github/workflows/ci.yml. This script exists to run its steps, so it cannot verify it mirrors anything."
+    }
+
+    $lines = Get-Content -LiteralPath $workflow
+    $commands = @()
+
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $m = [regex]::Match($lines[$i], '^(\s*)-?\s*run:\s*(.*)$')
+        if (-not $m.Success) { continue }
+
+        $indent = $m.Groups[1].Value.Length
+        $inline = $m.Groups[2].Value.Trim()
+
+        if ($inline -and $inline -ne '|' -and $inline -ne '>') {
+            $commands += $inline
+            continue
+        }
+
+        # A block scalar. Take the more-indented lines that follow.
+        $block = @()
+        for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+            $line = $lines[$j]
+            if (-not $line.Trim()) { $block += ''; continue }
+            $lead = $line.Length - $line.TrimStart().Length
+            if ($lead -le $indent) { break }
+            $block += $line.Trim()
+        }
+        $commands += ($block -join ' ').Trim()
+    }
+
+    $commands = @($commands | Where-Object { $_ })
+    if ($commands.Count -eq 0) {
+        throw "No 'run:' steps found in ci.yml. Either the workflow changed shape or this parser stopped matching, and both mean this script is no longer known to mirror it."
+    }
+
+    # Each entry is a step of this script and the substring that identifies the
+    # ci.yml command it stands in for.
+    $mirrors = @(
+        @{ Step = 'Guards';                          Match = 'guards.ps1' },
+        @{ Step = 'Restore';                         Match = 'dotnet restore' },
+        @{ Step = 'Build';                           Match = 'dotnet build' },
+        @{ Step = 'Confirm no secrets file';         Match = '.Secrets.json' },
+        @{ Step = 'Migrate / Migrate again';         Match = '-- migrate' },
+        @{ Step = 'Test';                            Match = 'dotnet test' }
+    )
+
+    $orphans = @($commands | Where-Object {
+        $cmd = $_
+        -not ($mirrors | Where-Object { $cmd -like "*$($_.Match)*" })
+    })
+
+    if ($orphans.Count -gt 0) {
+        throw ("ci.yml runs a command this script does not mirror:`n  " +
+            ($orphans -join "`n  ") +
+            "`nAdd the step here, or this script has stopped standing in for CI while still reporting green.")
+    }
+
+    $unused = @($mirrors | Where-Object {
+        $mirror = $_
+        -not ($commands | Where-Object { $_ -like "*$($mirror.Match)*" })
+    })
+
+    if ($unused.Count -gt 0) {
+        throw ("This script has steps ci.yml no longer runs: " +
+            (($unused | ForEach-Object { $_.Step }) -join ', ') +
+            ". The two have diverged in the other direction.")
+    }
+
+    Write-Host "      $($commands.Count) run steps in ci.yml, each mirrored"
+}
+
 function Resolve-ConnectionString {
     if ($ConnectionString) { return $ConnectionString }
 
@@ -187,6 +280,11 @@ Write-Host "  worktree  $work"
 $previousConnection = $env:ConnectionStrings__Postgres
 
 try {
+    # ---- Mirror check. Before anything, because a divergence here means every
+    # ---- result below is answering a question about the wrong step list.
+    Write-Step 'Assert this script still mirrors ci.yml'
+    Assert-MirrorsWorkflow
+
     # ---- Check out. CI's actions/checkout@v4. -----------------------------
     Write-Step 'Check out'
     & git -C $root worktree add --detach --quiet $work HEAD

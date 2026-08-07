@@ -160,6 +160,97 @@ function Assert-MirrorsWorkflow {
     Write-Host "      $($commands.Count) run steps in ci.yml, each mirrored"
 }
 
+function Write-FailureEvidence {
+    <#
+        Called only when the drop, create or migrate steps fail. Writes what the
+        server said and who was connected, then returns the path so the exit
+        message can name it.
+
+        WHY. The migrate step has failed twice in about nine runs and no cause is
+        claimed. Nothing here diagnoses it; the change is only that occurrence
+        three arrives with evidence attached rather than as a puzzle. Nothing is
+        retried and nothing is worked around, because working around a failure you
+        cannot explain is how it stops being observable.
+
+        Two candidates this will distinguish immediately, recorded so the next
+        occurrence is read rather than investigated: a drop refused because a
+        session is still attached to the target, and a create refused because a
+        session is attached to template1. Neither is asserted.
+    #>
+    param([string] $Step, [string] $Cs, [string[]] $Output, [string] $ErrorText)
+
+    $dir = Join-Path $root 'docs/evidence/phase-1'
+    if (-not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir | Out-Null
+    }
+
+    $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
+    $path = Join-Path $dir "ci-failure-$stamp.txt"
+
+    $sessions = '(not collected)'
+    $scriptPath = Join-Path ([System.IO.Path]::GetTempPath()) ("srl-ci-diag-" + [System.Diagnostics.Process]::GetCurrentProcess().Id + ".cs")
+
+    $csharp = @'
+#:package Npgsql@9.0.4
+using Npgsql;
+
+var cs = Environment.GetEnvironmentVariable("CI_TARGET")!;
+var maintenance = new NpgsqlConnectionStringBuilder(cs) { Database = "postgres" }.ConnectionString;
+
+await using var conn = new NpgsqlConnection(maintenance);
+await conn.OpenAsync();
+await using var cmd = new NpgsqlCommand(
+    "SELECT pid, coalesce(datname,'-'), coalesce(application_name,'-'), " +
+    "coalesce(host(client_addr),'local'), coalesce(state,'-'), " +
+    "coalesce(left(query, 80),'-') FROM pg_stat_activity ORDER BY datname, pid;", conn);
+await using var r = await cmd.ExecuteReaderAsync();
+Console.WriteLine($"{"pid",-8} {"datname",-26} {"application_name",-26} {"client",-12} {"state",-20} query");
+while (await r.ReadAsync())
+{
+    Console.WriteLine($"{r.GetInt32(0),-8} {r.GetString(1),-26} {r.GetString(2),-26} " +
+                      $"{r.GetString(3),-12} {r.GetString(4),-20} {r.GetString(5)}");
+}
+'@
+
+    try {
+        Set-Content -LiteralPath $scriptPath -Value $csharp -Encoding utf8
+        $env:CI_TARGET = $Cs
+        $sessions = (& dotnet run $scriptPath) -join "`n"
+    }
+    catch {
+        $sessions = "(pg_stat_activity query itself failed: $($_.Exception.Message))"
+    }
+    finally {
+        Remove-Item Env:\CI_TARGET -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue
+    }
+
+    $body = @(
+        "ci.ps1 failure evidence"
+        "step      : $Step"
+        "utc       : $((Get-Date).ToUniversalTime().ToString('u'))"
+        "head      : $head"
+        "database  : $Database"
+        ""
+        "No cause is claimed by this file. It exists so the next occurrence is read"
+        "rather than investigated from nothing. The two candidates worth checking"
+        "first are a drop refused because a session is still attached to the target,"
+        "and a create refused because a session is attached to template1."
+        ""
+        "=== error, verbatim ==="
+        $ErrorText
+        ""
+        "=== step output, verbatim ==="
+        ($Output -join "`n")
+        ""
+        "=== pg_stat_activity, every session ==="
+        $sessions
+    )
+
+    Set-Content -LiteralPath $path -Value $body -Encoding utf8
+    return $path
+}
+
 function Resolve-ConnectionString {
     if ($ConnectionString) { return $ConnectionString }
 
@@ -201,6 +292,24 @@ function Remove-CiDatabase {
 #:package Npgsql@9.0.4
 using Npgsql;
 
+try
+{
+    return await DropAsync();
+}
+catch (PostgresException ex)
+{
+    // The server's own words and its SQLSTATE, verbatim. 55006 on the target and
+    // 55006 on template1 are the same code on different objects, and only the
+    // message tells them apart.
+    Console.Error.WriteLine($"SQLSTATE {ex.SqlState}: {ex.MessageText}");
+    if (!string.IsNullOrEmpty(ex.Detail)) Console.Error.WriteLine($"DETAIL: {ex.Detail}");
+    if (!string.IsNullOrEmpty(ex.Hint)) Console.Error.WriteLine($"HINT: {ex.Hint}");
+    Console.Error.WriteLine(ex.ToString());
+    return 1;
+}
+
+async Task<int> DropAsync()
+{
 var cs = Environment.GetEnvironmentVariable("CI_TARGET")
     ?? throw new InvalidOperationException("CI_TARGET unset.");
 
@@ -232,6 +341,11 @@ await using (var drop = new NpgsqlCommand(
 // Read it back. A drop that reported success and left the database standing
 // would send the next step against a populated schema, and "migrate ran clean
 // from empty" would be recorded off a database that was never empty.
+//
+// A PostgresException is caught at the bottom of this file and its SQLSTATE
+// printed verbatim, because "database is being accessed by other users" is
+// 55006 and reads nothing like "template1 is being accessed", which is the
+// same code on a different object.
 await using (var check = new NpgsqlCommand(
     "SELECT 1 FROM pg_database WHERE datname = @d;", conn))
 {
@@ -245,6 +359,7 @@ await using (var check = new NpgsqlCommand(
 
 Console.WriteLine($"dropped {db}, confirmed absent");
 return 0;
+}
 '@
 
     Set-Content -LiteralPath $scriptPath -Value $csharp -Encoding utf8
@@ -252,7 +367,11 @@ return 0;
     try {
         $env:CI_TARGET = $Cs
         $out = & dotnet run $scriptPath
-        Assert-ExitZero 'the database drop'
+        if ($LASTEXITCODE -ne 0) {
+            $evidence = Write-FailureEvidence -Step 'Drop the database' -Cs $Cs -Output $out `
+                -ErrorText "dotnet run exited $LASTEXITCODE. The SQLSTATE is on stderr above."
+            throw "The database drop failed. Evidence written to $evidence."
+        }
         Write-Host ("      " + ($out | Select-Object -Last 1))
     }
     finally {
@@ -318,16 +437,21 @@ try {
     # are not all "INVARIANT n": the fifth check stands for a CLAUDE.md section
     # rather than a numbered invariant, so it was silently not counted and this
     # block reported four where guards.ps1 reported five.
-    $summary = $guards | Where-Object { "$_" -match '^guards\.ps1: ok\.\s+(\d+) checks' } | Select-Object -Last 1
+    $summary = $guards | Where-Object { "$_" -match '^guards\.ps1: ok\.\s+(\d+) checks over (\d+) files' } | Select-Object -Last 1
     if (-not $summary) {
-        throw 'guards.ps1 printed no summary line. It exits 0 over an empty scan too, so a missing count here is a broken capture rather than a clean tree.'
+        throw 'guards.ps1 printed no summary line naming both counts. It exits 0 over an empty scan too, so a missing count here is a broken capture rather than a clean tree.'
     }
 
-    $checks = [int]([regex]::Match("$summary", '^guards\.ps1: ok\.\s+(\d+) checks').Groups[1].Value)
-    if ($checks -eq 0) {
-        throw 'guards.ps1 reported zero checks.'
+    $m = [regex]::Match("$summary", '^guards\.ps1: ok\.\s+(\d+) checks over (\d+) files')
+    $checks = [int] $m.Groups[1].Value
+    $sweptFiles = [int] $m.Groups[2].Value
+    if ($checks -eq 0 -or $sweptFiles -eq 0) {
+        throw 'guards.ps1 reported zero checks or zero files.'
     }
-    $results['guards.ps1'] = "exit 0, $checks checks, zero each"
+
+    # Both numbers, not just the verdict. How much was checked is as much a result
+    # as whether it passed, and a shrinking sweep produces an identical green line.
+    $results['guards.ps1'] = "exit 0, $checks checks over $sweptFiles files, zero each"
 
     # ---- Set up .NET 10. CI's actions/setup-dotnet@v4. --------------------
     Write-Step 'Set up .NET 10'
@@ -378,15 +502,27 @@ try {
     # ---- Migrate, from an empty server -----------------------------------
     Write-Step 'Migrate, from an empty server'
     $m1 = & dotnet run --project (Join-Path $work 'src/StockResearcherLab.Worker') --no-build --no-launch-profile -- migrate
-    Assert-ExitZero 'the first migrate'
+    if ($LASTEXITCODE -ne 0) {
+        $evidence = Write-FailureEvidence -Step 'Migrate, from an empty server' -Cs $cs -Output $m1 `
+            -ErrorText "dotnet run -- migrate exited $LASTEXITCODE."
+        throw "The first migrate failed. Evidence written to $evidence."
+    }
     $m1 | ForEach-Object { Write-Host "      $_" }
     $created = @($m1 | Select-String -Pattern 'created database').Count -gt 0
     $applied = @($m1 | Select-String -Pattern '\.sql\s+applied')
     if (-not $created) {
-        throw 'The first migrate did not create the database, so it did not run against an empty server.'
+        # This is the intermittent one. Two occurrences in about nine runs and no
+        # cause claimed, so the evidence is collected rather than the failure
+        # worked around: nothing is retried, and a run that cannot prove it began
+        # against an empty server records nothing at all.
+        $evidence = Write-FailureEvidence -Step 'Migrate, from an empty server' -Cs $cs -Output $m1 `
+            -ErrorText 'The migrate output contains no "created database" line, so the database existed when it ran. The drop step reported success immediately before.'
+        throw "The first migrate did not create the database, so it did not run against an empty server. Evidence written to $evidence."
     }
     if ($applied.Count -eq 0) {
-        throw 'The first migrate applied no migration file.'
+        $evidence = Write-FailureEvidence -Step 'Migrate, from an empty server' -Cs $cs -Output $m1 `
+            -ErrorText 'The migrate output names no applied .sql file.'
+        throw "The first migrate applied no migration file. Evidence written to $evidence."
     }
     $files = ($applied | ForEach-Object { ($_ -replace '^\s*', '') -replace '\s+applied.*$', '' }) -join ', '
     $results['migrate, from an empty server'] = "created database, $files applied"

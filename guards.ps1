@@ -120,6 +120,15 @@ if ($files.Count -eq 0) {
 Write-Host "guards.ps1: $($files.Count) tracked files under src/"
 Write-Host ""
 
+# Every extension any check runs over. The union of the per-check scopes must come
+# to every tracked file carrying one of these, or the sweep is narrower than it
+# reads and a green line says nothing about the files it stopped covering. A path
+# move, an ignore rule or a change to how the list is enumerated would all shrink
+# it silently, which is the same defect as a count that said four and meant five.
+$allExtensions = @($checks | ForEach-Object { $_.Extensions } | Sort-Object -Unique)
+$expected = @($files | Where-Object { $allExtensions -contains [System.IO.Path]::GetExtension($_) })
+$swept = New-Object System.Collections.Generic.HashSet[string]
+
 $failed = 0
 
 foreach ($check in $checks) {
@@ -132,6 +141,8 @@ foreach ($check in $checks) {
         }
         return $true
     })
+
+    foreach ($path in $scope) { [void] $swept.Add($path) }
 
     $hits = @()
     foreach ($path in $scope) {
@@ -167,5 +178,16 @@ if ($failed -gt 0) {
     exit 1
 }
 
-Write-Host "guards.ps1: ok. $($checks.Count) checks, every one expecting zero and finding zero."
+# The scope is asserted rather than printed for a human to eyeball. Five checks
+# finding zero over a set that quietly shrank produces a line identical to five
+# checks finding zero over everything.
+$missed = @($expected | Where-Object { -not $swept.Contains($_) })
+if ($missed.Count -gt 0) {
+    Write-Host "guards.ps1: FAIL. $($missed.Count) tracked file(s) carry a scanned extension and no check swept them:"
+    foreach ($m in ($missed | Sort-Object)) { Write-Host "      $m" }
+    Write-Host "            A green line over a set that shrank is indistinguishable from a green line over everything."
+    exit 1
+}
+
+Write-Host "guards.ps1: ok. $($checks.Count) checks over $($swept.Count) files, every one expecting zero and finding zero."
 exit 0

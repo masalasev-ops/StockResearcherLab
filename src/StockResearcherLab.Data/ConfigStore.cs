@@ -99,9 +99,9 @@ public sealed class ConfigSeeder
         new(2020, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>
-    /// Fifteen keys. The count is asserted rather than left to be miscounted: it
-    /// was recorded as nine, corrected to eleven at A5, twelve at A10, fourteen at A14 and fifteen
-    /// at 1.4, and every correction was a key that existed with nothing seeding it.
+    /// Seventeen keys. The count is asserted rather than left to be miscounted: it
+    /// was recorded as nine, corrected to eleven at A5, twelve at A10, fourteen at A14, fifteen at 1.4
+    /// and seventeen at 1.6, and every correction was a key that existed with nothing seeding it.
     /// </summary>
     public static IReadOnlyList<(string Key, string Value)> Keys { get; } =
     [
@@ -124,6 +124,14 @@ public sealed class ConfigSeeder
         // should not spend all of them on one stage. Rolling rather than complete,
         // which is what ARCHITECTURE.html section 3 already asks of C03.
         ("fundamentals.max_tickers_per_run", "500"),
+
+        // Sentiment covers the whole universe [D-23], so the endpoint's
+        // comma-separated symbol list is what keeps that from being one call per
+        // name. Both are configuration rather than literals, and the batch size is
+        // one of the few places the provider's weighted metering can be traded
+        // against anything [CLAUDE.md section 8].
+        ("sentiment.tickers_per_call", "50"),
+        ("sentiment.lookback_days", "30"),
 
         // Freshness. The two row-count floors are D-59 and stand unrevised at
         // D-64's closure. The two settled_* values are D-70's and their reasoning

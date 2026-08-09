@@ -56,8 +56,9 @@ public sealed class NightlyRunTests
         await using var conn = new NpgsqlConnection(TestDatabase.ConnectionString);
         await conn.OpenAsync(ct).ConfigureAwait(false);
         await using var cmd = new NpgsqlCommand(
-            "SELECT count(*) FROM price_daily WHERE ticker LIKE @p;", conn);
-        cmd.Parameters.AddWithValue("p", Marker + "%");
+            "SELECT count(*) FROM price_daily WHERE ticker >= @lo AND ticker < @hi;", conn);
+        cmd.Parameters.AddWithValue("lo", Marker);
+        cmd.Parameters.AddWithValue("hi", Marker + "~");
         return (long)(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false))!;
     }
 
@@ -65,8 +66,10 @@ public sealed class NightlyRunTests
     {
         await using var conn = new NpgsqlConnection(TestDatabase.ConnectionString);
         await conn.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = new NpgsqlCommand("DELETE FROM price_daily WHERE ticker LIKE @p;", conn);
-        cmd.Parameters.AddWithValue("p", Marker + "%");
+        await using var cmd = new NpgsqlCommand(
+            "DELETE FROM price_daily WHERE ticker >= @lo AND ticker < @hi;", conn);
+        cmd.Parameters.AddWithValue("lo", Marker);
+        cmd.Parameters.AddWithValue("hi", Marker + "~");
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 

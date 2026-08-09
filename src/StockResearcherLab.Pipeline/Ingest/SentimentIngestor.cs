@@ -114,10 +114,13 @@ public sealed class SentimentIngestor : IStage
 
     /// <summary>
     /// Batched, because the endpoint accepts a comma-separated symbol list and one
-    /// call per name over a two-thousand name universe is two thousand calls a
-    /// night. The batch size is configuration rather than a literal: the provider
-    /// meters weighted units and this is one of the few places the cost can be
-    /// traded against anything [`CLAUDE.md` §8, PROGRESS on metering].
+    /// call per name over a two-thousand name universe is two thousand round trips.
+    ///
+    /// **This is a latency knob and not a cost one**, which is the opposite of what
+    /// was written here when 1.6 landed. Sentiment is metered flat per ticker:
+    /// measured at 1, 10 and 20 tickers it cost 5, 50 and 100 units, so batching
+    /// changes how long the stage takes and not what it spends. The size stays
+    /// configuration because it is still a real tunable [`CLAUDE.md` §8].
     /// </summary>
     private static IEnumerable<IReadOnlyList<string>> Batch(IReadOnlyList<string> all, int size)
     {

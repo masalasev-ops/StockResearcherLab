@@ -210,41 +210,57 @@ omit a figure rather than recall one.
 units against about 9,000 actual requests.** Nothing in the corpus had a figure for
 this and every estimate in it counts requests.
 
-The provider prices a call by endpoint rather than counting one per request. On the
-observed consumption the weights are approximately:
+The provider prices a call by endpoint rather than counting one per request.
+**`/api/user` reports the running total, so the weights are measured rather than
+inferred**, by bracketing one call of each kind between two reads of it. The user
+endpoint itself costs nothing, which is what makes the bracket clean. Measured
+2026-08-09:
 
-| Endpoint | Requests made | Apparent weight | Units |
-|---|---|---|---|
-| `eod-bulk-last-day` | ~440 | ~100 each | ~44,000 |
-| `fundamentals/{t}` | ~7,900 | ~10 each | ~79,000 |
-| `exchange-symbol-list`, `eod`, `sentiments` | ~250 | ~1 each | ~250 |
+| Endpoint | Units | What one call buys |
+|---|---|---|
+| `eod-bulk-last-day/US?date=` | **100** | ~50,000 rows, one day, every name |
+| `eod/{t}` | **1** | one name, five years |
+| `fundamentals/{t}` | **10** | one name, every period. Filtered and unfiltered cost the same |
+| `sentiments` | **5 per ticker** | flat per ticker: 1, 10 and 20 tickers cost 5, 50 and 100 |
+| `sec-filings/{t}/form4` | **10** | one page |
+| `exchange-symbol-list/US` | **1** | 51,401 instruments |
+| `calendar/earnings`, `exchange-details` | **1** | |
 
-The exact weights are the provider's to state and are not measured here. What is
-measured is the ratio: **about eleven units per request on this phase's mix**, and
-that is the number every plan in this corpus is missing.
+**A CORRECTION TO WHAT THIS NOTE FIRST SAID.** It claimed D-47's five-year backfill
+was "~126,000 units for prices alone, more than a full day's allowance". That was
+wrong, and wrong because it assumed the backfill would use bulk-by-date. It should
+not, and `ARCHITECTURE.html` §19 already says so: historical price ingest partitions
+by **ticker**. At 1 unit for a name's whole history, five years over ~2,500 tickers
+including delisted names is about **2,500 units**, not 126,000. The architecture had
+it right and the note had it wrong.
 
-**What it costs the design, which is the part that matters.**
+The two endpoints are for different jobs and the weights say which. Bulk-by-date
+buys every name for one day and is right for a night. Per-ticker buys one name for
+every day and is right for a backfill. Using either for the other's job costs
+roughly sixty times more than it needs to.
 
-D-47 backfills five years. That is roughly 1,260 trading days of bulk end-of-day at
-~100 units each, or **~126,000 units for prices alone**, more than a full day's
-allowance for one pass of one table. A five-year fundamentals backfill over ~2,000
-names is another ~20,000 per full refresh.
+**Measured steady-state cost**, on a universe of ~2,000:
 
-C02's own nightly cost is `price.reload_window_days` × 100 = **2,000 units a night**
-at the current 20, which is 2 percent of a daily allowance for one stage. A26 says
-twenty dates against one bulk call each is not the expensive part of a night, and
-against a weighted meter that sentence is wrong: it is the most expensive part by an
-order of magnitude.
+| | Units | |
+|---|---|---|
+| C02, 20 dates × 100 | 2,000 | nightly |
+| C03, 500 tickers × 10 | 5,000 | nightly |
+| C04, 2,000 tickers × 5 | 10,000 | nightly |
+| C06, C07 | ~10 | nightly |
+| **Nightly total** | **~17,000** | 17% of the daily allowance |
+| C05 form4, 2,000 × 10 per page | 20,000+ | weekly, and the one open question |
+| Five-year backfill, prices and fundamentals | ~25,000 | one-off |
 
-C03 at `fundamentals.max_tickers_per_run` = 500 costs **~5,000 units a run**.
+**So the allowance is not the constraint it looked like yesterday.** What made
+yesterday expensive was loading a year of prices by date, 18 bulk calls at 100 each
+plus thirteen C03 runs, which is the backfill done the nightly way.
 
-**Nothing is changed here on the strength of this.** Both keys are configuration
-with reasoning recorded against them, and lowering a bound because a measurement
-made it inconvenient is what `CLAUDE.md` §11 prohibits. What this note does is put
-the figure where the next person planning phase 3 will read it, before they write a
-backfill that cannot run. The obvious candidates are a smaller reload window traded
-against A26's coupling, and a backfill paced across days rather than run in one
-pass, and both are authored decisions rather than mine.
+**Two consequences worth acting on, neither taken here.** `fundamentals/{t}`
+unfiltered costs the same as filtered and carries `General::Sector`, so C01's
+per-member sector call is buying at 10 units what C03 could carry for nothing. And
+`sentiment.tickers_per_call` is a latency knob rather than a cost one, since
+sentiment is flat per ticker; the comment introduced with it at 1.6 said otherwise
+and is corrected.
 
 **Also owed:** `ARCHITECTURE.html` §17 and the cost model estimate an annual spend
 built on model tokens. They carry no provider-call line at all, and on these weights

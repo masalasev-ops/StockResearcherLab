@@ -126,10 +126,10 @@ public sealed class ConfigSeeder
         ("fundamentals.max_tickers_per_run", "500"),
 
         // Sentiment covers the whole universe [D-23], so the endpoint's
-        // comma-separated symbol list is what keeps that from being one call per
-        // name. Both are configuration rather than literals, and the batch size is
-        // one of the few places the provider's weighted metering can be traded
-        // against anything [CLAUDE.md section 8].
+        // comma-separated symbol list is what keeps that from being one round trip
+        // per name. The batch size is a latency knob and not a cost one: sentiment
+        // is metered flat at 5 units per ticker whatever the batch, measured at 1,
+        // 10 and 20 tickers [PROGRESS, endpoint weights].
         ("sentiment.tickers_per_call", "50"),
         ("sentiment.lookback_days", "30"),
 

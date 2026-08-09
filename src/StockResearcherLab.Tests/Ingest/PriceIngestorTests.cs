@@ -26,6 +26,16 @@ public sealed class PriceIngestorTests
 {
     private const string Prefix = "SRLT";
 
+    /// <summary>
+    /// Every ticker any test here can create: the prefix, a per-test letter, and a
+    /// small index. Enumerated so cleanup can use equality, which uses the primary
+    /// key, rather than a prefix match, which does not.
+    /// </summary>
+    private static readonly string[] AllTestTickers =
+        (from letter in "ABCDEFGH"
+         from n in Enumerable.Range(0, 5)
+         select Prefix + letter + n + ".US").ToArray();
+
     private static StageContext ContextFor(PriceIngestor stage, DateOnly date, int window)
         => new(
             date,
@@ -61,8 +71,15 @@ public sealed class PriceIngestorTests
     {
         await using var conn = new NpgsqlConnection(TestDatabase.ConnectionString);
         await conn.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = new NpgsqlCommand("DELETE FROM price_daily WHERE ticker LIKE @p;", conn);
-        cmd.Parameters.AddWithValue("p", Prefix + "%");
+        // Exact tickers rather than a prefix. price_daily holds millions of rows
+        // once real bars land, and neither a LIKE prefix nor a range with a high
+        // sentinel uses the (ticker, date) index under a linguistic collation: the
+        // first went to a sequential scan and timed out, the second silently matched
+        // nothing because punctuation does not sort after digits. Equality does use
+        // the index, and these tests know exactly which tickers they create.
+        await using var cmd = new NpgsqlCommand(
+            "DELETE FROM price_daily WHERE ticker = ANY(@t);", conn);
+        cmd.Parameters.AddWithValue("t", AllTestTickers);
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
@@ -188,8 +205,8 @@ public sealed class PriceIngestorTests
         await using var conn = new NpgsqlConnection(TestDatabase.ConnectionString);
         await conn.OpenAsync(ct).ConfigureAwait(true);
         await using var cmd = new NpgsqlCommand(
-            "SELECT count(*) FROM price_daily WHERE ticker LIKE @p AND date = @d;", conn);
-        cmd.Parameters.AddWithValue("p", Prefix + "E%");
+            "SELECT count(*) FROM price_daily WHERE ticker = ANY(@t) AND date = @d;", conn);
+        cmd.Parameters.AddWithValue("t", Enumerable.Range(0, 5).Select(n => Prefix + "E" + n + ".US").ToArray());
         cmd.Parameters.AddWithValue("d", runDate);
 
         Assert.Equal(3L, (long)(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(true))!);

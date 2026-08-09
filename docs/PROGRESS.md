@@ -267,6 +267,36 @@ built on model tokens. They carry no provider-call line at all, and on these wei
 the data provider is a real constraint on what the system can do in a day rather
 than a flat subscription cost.
 
+### INVARIANT 16's grep cannot tell a technical float from a monetary one
+
+Found at 1.6, when `SentimentIngestor` became the first C# to use `float` and
+`guards.ps1` failed on it.
+
+**It is not a breach.** `sentiment_score` is declared `real` in `SCHEMA.md`, a
+sentiment score is not money, and binary COPY is strict about types, so the CLR
+type has to be `float`. The invariant is about monetary paths and that file has
+none. The grep is a deliberate approximation and cannot make the distinction.
+
+The file is excluded with that reason stated, which is the pattern `SystemClock.cs`
+already sets for two other checks. **The exclusion does not scale and should not be
+copied.** `indicator_daily` carries about forty `real` columns and phase 2 writes
+them, so the same argument would produce forty file exclusions and the check would
+be excluding most of the code it exists to check.
+
+**Owed before phase 2**, as an authored answer rather than another exclusion.
+Candidates, none chosen here: scope the check to files that write a money column
+by reading the declared column sets, which the stage registry now makes possible;
+or name the monetary columns in `SCHEMA.md` and check the writes against that list;
+or accept the grep is spent and replace it with a test over `TableWrite.Columns`.
+The last is the only one that gets stronger rather than weaker as the system grows.
+
+**Also recorded: the guard was red in commit `5fadcde` and I committed anyway.**
+The command was `guards.ps1 | tail -1 && git commit`, and a pipeline's exit code is
+the last command's, so `&&` saw `tail` succeed. The same shape caused a wrong exit
+reading earlier in this phase. `ci.ps1` does not have this defect, because it checks
+`$LASTEXITCODE` per step rather than chaining, and it is the reason the per-checkpoint
+verification is one command.
+
 ### Rename sweeps state their exclusions
 
 A1.a's done condition asked that a repository-wide sweep for the old column name

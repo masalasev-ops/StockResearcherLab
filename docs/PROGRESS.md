@@ -1013,6 +1013,149 @@ this audit did.
 **The eight this phase writes match their checkpoints**, with the two exceptions
 above which 1.4 closes.
 
+### Five findings on the ingest components and the `ARCHITECTURE.html` §3 catalogue
+
+**These are findings and not fixes, because the corpus is not amended ahead of the
+review that checks the code against it.**
+
+Each entry keeps two things apart. The **observation** is checkable from the files
+it names and was read at `ee9cbd1`. The **reading** is one judgement, and the
+sign-off review's own conclusion is what settles it: a reviewer can disagree with a
+reading without anything having to be undone, because nothing was changed on the
+strength of one. No decision is authored here, no carried obligation is added, and
+nothing is struck.
+
+**1. Four ingest components read a table the catalogue does not give them.**
+
+**Observation.** `FundamentalsIngestor.ReadSet` is `["price_daily", "security"]` at
+`FundamentalsIngestor.cs:52`. `SentimentIngestor`, `FlowIngestor` and
+`EventsIngestor` each declare `["security"]`, at `SentimentIngestor.cs:44`,
+`FlowIngestor.cs:49` and `EventsIngestor.cs:52`. §3 gives their Reads as, in order,
+"Fundamentals endpoint, `events`"; "Sentiment endpoint"; "Insider, ownership";
+"Calendar, splits, dividends". `DeclaredAccess.EnsureCanRead` throws
+`UndeclaredTableAccessException` on any table outside the declared set, so these
+reads happen rather than being merely declared: the three later components each
+issue `SELECT ticker FROM security` through `IStageData.ReadAsync` naming that
+table, at `SentimentIngestor.cs:109`, `FlowIngestor.cs:138` and
+`EventsIngestor.cs:128`.
+
+**Reading.** The catalogue is incomplete and the code is doing the only thing it
+can. A per-ticker endpoint needs a ticker list and the universe lives in
+`security`. The Reads column already mixes endpoints and tables elsewhere, C01's
+own row being "Symbol list, `price_daily`, `fundamental_snapshot`", so listing only
+an endpoint is an omission rather than a convention.
+
+The fundamentals row is the one worth a second look. Its two reads serve different
+purposes, the pool from `price_daily` and the rotation order from `security`, and
+the catalogue never said where a pool comes from at all. That silence is what let
+the pool be drawn from `security` and freeze coverage at 679 with no error and
+plausible output.
+
+**2. The rotation does not read `events`, which the catalogue says it does.**
+
+**Observation.** §3 gives `FundamentalsIngestor` the description "Rolling rotation,
+earnings jump the queue" and lists `events` in its Reads.
+`FundamentalsIngestor.ReadSet` does not contain `events` and no code path reads it.
+`CandidatesAsync` at `FundamentalsIngestor.cs:218-268` orders never-fetched first,
+then universe members, then everything else, each group ordinal by ticker, and
+nothing in it consults an earnings date. The deferral reason recorded during the
+build, in the component's own summary at `FundamentalsIngestor.cs:21-23`, was that
+`events` arrived at 1.8, which it has.
+
+**Reading.** The catalogue is right and the code is incomplete. This is unbuilt
+work rather than a deviation to correct in the document, and it is larger than one
+line: a selection that settles on a fixed head once coverage completes, combined
+with the `filing_date_effective` gate, leaves a period unread indefinitely for
+every name outside that head, so a screen ranking a name the week after its results
+would rank on the previous quarter. Whatever the review concludes, that line is not
+struck to match the code.
+
+**The reading as it was formed said "a round-robin rotation", and said the delay was
+weeks.** Finding 5 below establishes that no rotation survives coverage, so the
+phrase is replaced here rather than repeated. The correction makes the consequence
+larger rather than smaller: a round robin would eventually return to every name,
+where a fixed head does not return to the tail at all.
+
+**3. The flow cadence contradicts itself across three documents.**
+
+**Observation.** §3 gives `FlowIngestor` Runs as "Weekly". `NightlyRun.EveningOrder`
+at `NightlyRun.cs:50-59` contains `FlowIngestor` between `FundamentalsIngestor` and
+`EventsIngestor`, so it runs on every night the sequence runs. `RUNBOOK.md` line 17
+reads "17:45 | Fundamentals, flow, events". Line 332 of this file prices the same
+component at "20,000+ | weekly". The code followed `RUNBOOK.md` and no record says
+it chose.
+
+**Reading.** Two authored documents contradict and `CLAUDE.md` §3 says report rather
+than resolve, so the resolution owes a decision either way. On substance, nightly
+looks right for what the component now is: Form 4 filings arrive within two business
+days and the flow screen reads a trailing ninety-day window, so a weekly ingest is
+missing its most recent six days. Weekly was set when the component also carried
+short interest and wrote `flow_daily`, and was not revisited after D-58 and D-61.
+The counter-argument is that the same stage fetches institutional holdings, which
+are reported quarterly and are roughly half its call cost.
+
+This is the reading with the least behind it. It rests on how the ninety-day window
+is actually computed, which this finding does not establish.
+
+**4. Nothing checks a declared read against the catalogue.**
+
+**Observation.** `RegistryNameTests` asserts every registered component name appears
+in §3. `WriteOwnershipConformanceTests` asserts writes against `SCHEMA.md`'s writer
+declarations in both directions, that every component writing a table is named as a
+writer of it and that every table the registry writes has a named writer. `ReadSet`
+is asserted in four places in the whole test project and every one of them is a
+literal in the component's own test file: `SentimentIngestorTests.cs:185`,
+`EventsIngestorTests.cs:187`, `PriceIngestorTests.cs:263` and
+`FlowEngineTests.cs:182`. `FundamentalsIngestorTests` and `FlowIngestorTests` assert
+no read set at all. `ArchitectureDocument` parses component ids and names out of §3
+and does not parse the Reads column.
+
+**Reading.** This is why three of the four deviations above went unnoticed and one
+was caught by eye. Names have a conformance path and writes have one; reads have
+none, and the per-component assertions lock a drifted declaration in rather than
+catching it. Phase 2 adds four more components to a column nothing checks. The test
+itself is batched-pass work and is not built here.
+
+**The reading as it was formed said eleven components rather than four**, and the
+count is corrected here rather than repeated. Layer 2 in figure 1 holds C08, C09,
+C10, C34 and C11, and C34 landed in phase 1 with D-61's ingest, so phase 2 adds
+four. Nothing in the reading turns on the number.
+
+**5. The rotation stops rotating once coverage completes.**
+
+**Observation.** `FundamentalsIngestor.CandidatesAsync` defines `fetched` at
+`FundamentalsIngestor.cs:230` as every ticker with any row in
+`fundamental_snapshot`, off `SELECT DISTINCT ticker FROM fundamental_snapshot`. The
+selection at lines 258 to 261 orders never-fetched, then fetched-and-in-universe,
+then the rest, then by ticker ordinal, and takes `fundamentals.max_tickers_per_run`,
+which is seeded at 500. No date is read anywhere in the selection.
+
+"What the two corrections bought" above records the candidate pool as 3,184 with
+**0 unfetched**. With the never-fetched group empty, the same alphabetically-first
+`max_tickers_per_run` names are selected on every subsequent run.
+
+The class comment at `FundamentalsIngestor.cs:22` states that until `events` arrives
+"the rotation is staleness-ordered only". No staleness ordering exists in the code.
+The comment at lines 251 to 256 names this failure for the coverage phase, "ordering
+by ticker alone re-selects the same head every run", and its clause "Coverage before
+freshness while coverage is incomplete" implies a freshness ordering to follow.
+
+The coverage line the stage writes, at lines 126 to 130, reports the pool size,
+never-fetched and new-in-selection. Both counts read zero once coverage is complete,
+which is the goal state for coverage. Nothing reports how many universe members were
+refreshed.
+
+**Reading.** This is a missing mechanism rather than a stale comment, and it is the
+most material finding of this set. At the measured pool and run size, roughly 500
+names refresh on every run and it is the same 500; the remaining 2,684 hold whatever
+they were first fetched with. The quality and value screen, S1 in figure 3, ranks on
+these figures, so the age of a name's fundamentals would depend on its first letter,
+which is arbitrary but systematic rather than random.
+
+The catalogue's "earnings jump the queue" is the priority rule on top of an ordering
+that does not exist underneath it, so finding 2 and this one are the same gap seen
+from two ends.
+
 ## Open items carried forward
 
 Found and not closed. Each names what triggers it. The pass narratives behind

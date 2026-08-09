@@ -225,6 +225,18 @@ wrong entry in this table before it was committed: 1.14 was written as 86 and it
 commit says 85. `fb4f3dc` states no count at all, and 1.5 is 95 because the next
 commit to state one says "101 tests passing where there were 95".
 
+**A third guessed figure, in `6ab95ae`.** Its body says "5 checks over 62 files".
+The run was real and it passed, but its output was discarded and only the exit code
+was read, so the count was supplied from nowhere. `ci.ps1` at that sha prints
+**65**, which is the 61 of the previous commit plus the four files 1.8 added.
+
+Two corrections in the same phase for the same reason is a practice failing rather
+than a slip. The practice: **a number does not go into a commit message unless it
+was read from output in that step.** Reading the exit code is not reading the
+output. Where a figure is wanted, capture the summary line and paste it; where it
+was not captured, leave it out. Nothing in this corpus needs the number in the
+message, and every one of these has had to be corrected here instead.
+
 ### The provider meters weighted units, not requests, and phase 3 cannot afford the naive plan
 
 **Found by exhausting the daily allowance during 1.5, at roughly 97,000 of 100,000

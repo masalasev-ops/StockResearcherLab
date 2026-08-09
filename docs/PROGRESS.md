@@ -381,6 +381,78 @@ cause and left the next one open. One command that reconstructs the tree from
 scratch closes all three at once, and running it before the commit rather than
 after is the only change that matters.
 
+### C03 drew its pool from the universe, which closed the universe permanently
+
+**Found while trying to close the definition of done's "roughly 2,000 names", which
+stood at 679.** Three consecutive C03 runs wrote an identical 46,376 rows and the
+distinct ticker count in `fundamental_snapshot` did not move off 1,876. The rotation
+was not rotating.
+
+`CandidatesAsync` read `security` and used it as the pool whenever it was populated,
+falling back to the price-and-admitted bootstrap only when it was empty. The doc
+comment flagged the ordering consequence and called it reported rather than closed.
+The consequence is larger than ordering: **a name needs fundamentals to be admitted
+to the universe, and once the universe existed only universe members could be
+fetched.** So the set closed over itself. Whatever the first bootstrap pass happened
+to produce was the universe for ever, and every name outside it was unreachable by
+construction.
+
+It was invisible from the outside because a run that re-fetches 500 covered tickers
+and one that fetches 500 new ones look identical: same row count, same duration,
+status ok, nothing in the log about coverage. The stage now reports the candidate
+pool, how much of it has never been fetched, and how many of the run's own selection
+were new, and that line is what makes the next occurrence visible on the first run
+rather than the twentieth.
+
+**The pool is the candidate set and `security` now decides order only.** Never
+fetched first, then universe members, then the rest, each group ordinal. Coverage
+before freshness while coverage is incomplete, because a name absent from the store
+cannot be screened at all where a name whose figures are a few days old still can.
+
+Measured across seven passes of 500 on 2026-08-05, all of them advancing:
+
+| | Before | After |
+|---|---|---|
+| Tickers in `fundamental_snapshot` | 1,876 | **4,087** |
+| Periods | 134,464 | 289,404 |
+| Tickers with 4 or more clean gaps | 1,026 | **2,193** |
+| Candidate pool reported by the stage | not reported | 8,423, of which 6,562 unfetched at the first corrected run |
+
+The universe has not been rebuilt against this and still reads 679. `security` is
+weekly rather than nightly and C01 spends 10 units per member on a
+`General::Sector` call, so a rebuild over roughly 2,000 names costs about 20,000
+units and the day's allowance was down to about 22,000. Left for the next day's
+allowance, and it is the same per-member sector call already recorded as buying at
+10 units what C03 could carry for nothing, which is an authored decision still owed.
+
+**A second measurement worth keeping.** The newly reached population files far worse
+than the first 1,876: the corrected run's substitution rate was 52.0 percent of
+29,573 periods against the 25 percent alert, and 1,655 of the 4,087 covered tickers
+have zero clean gaps. Phase P measured 41 percent of periods unknown over seven
+names; over 4,087 the picture is worse and D-62's per-ticker substitution is
+carrying more weight than the probe implied.
+
+**The rejection counter conflated two populations and now separates them.** C01
+reported "2,479 below 4 clean filing gaps" where most of those had never been
+fetched at all and had zero clean gaps by absence rather than by measurement. Same
+absent-is-not-zero failure the screens are written to avoid, in the counter that
+reports the exclusion. It now reads "with no fundamentals fetched yet" and "fetched
+but below 4 clean filing gaps" as separate numbers, which is what the definition of
+done means by recorded rather than assumed.
+
+### The provider allowance was overspent against a figure I had already read
+
+Consumption was read at 44,830 and eight further C03 passes were launched without
+multiplying 8 by the 5,000 units a pass costs. The operator stopped it at 63,774
+mid-loop; six of the eight had completed and the day closed at 77,697 of 100,000.
+The reading was true when taken and stale when acted on.
+
+The practice, which is the same shape as the guessed-figure one above: **a spend is
+bounded before it starts, not observed after.** Read the allowance immediately
+before, multiply the per-unit cost by the number of runs, and if the product does
+not fit, run fewer. A loop of provider calls with no computed total is the only
+thing here that cannot be undone by a commit.
+
 ### form4 counts more rows than it sends, and the guard as written cannot complete a universe pass
 
 **Blocker for live flow ingest, found by running C05 over the universe at 1.8 and

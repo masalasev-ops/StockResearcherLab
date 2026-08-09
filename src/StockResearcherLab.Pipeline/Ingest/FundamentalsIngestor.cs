@@ -61,7 +61,8 @@ public sealed class FundamentalsIngestor : IStage
         var widestAlertDays = await LongAsync(context, "fundamentals.widest_gap_alert_days", ct).ConfigureAwait(false);
         var minPrice = await DecimalAsync(context, "universe.min_price", ct).ConfigureAwait(false);
 
-        var tickers = await CandidatesAsync(context, minPrice, maxPerRun, ct).ConfigureAwait(false);
+        var selection = await CandidatesAsync(context, minPrice, maxPerRun, ct).ConfigureAwait(false);
+        var tickers = selection.Tickers;
 
         long rows = 0;
         long periods = 0;
@@ -116,10 +117,24 @@ public sealed class FundamentalsIngestor : IStage
                 wideFilers.Count > 20 ? ", ..." : ""));
         }
 
-        return notes.Count > 0
+        // Coverage before anything else, because the rotation not advancing is
+        // invisible from a row count: three runs each wrote 46,376 rows and covered
+        // the same 500 tickers, and nothing in the log said so [1.8].
+        var coverage = string.Format(
+            CultureInfo.InvariantCulture,
+            "{0:N0} row(s) over {1:N0} ticker(s). Candidate pool {2:N0}, of which {3:N0} have never " +
+            "been fetched; {4:N0} of this run's selection were new",
+            rows, tickers.Count, selection.PoolSize, selection.NeverFetched, selection.NewInSelection);
+
+        notes.Insert(0, coverage);
+
+        return notes.Count > 1
             ? StageResult.Alert(rows, string.Join("; ", notes))
-            : new StageResult(rows);
+            : new StageResult(rows, "ok", coverage);
     }
+
+    private readonly record struct Selection(
+        IReadOnlyList<string> Tickers, int PoolSize, int NeverFetched, int NewInSelection);
 
     private readonly record struct Loaded(
         IReadOnlyList<ResolvedPeriod> Periods, int? WidestCleanGapDays, int SubstitutedCount, long Written);
@@ -197,7 +212,7 @@ public sealed class FundamentalsIngestor : IStage
     /// bootstrap applies only the criteria that need no fundamentals, since the
     /// ones that do are what this stage exists to supply.
     /// </summary>
-    private async Task<IReadOnlyList<string>> CandidatesAsync(
+    private async Task<Selection> CandidatesAsync(
         StageContext context, decimal minPrice, int maxPerRun, CancellationToken ct)
     {
         // Two reads rather than one query joining both tables. IStageData checks the
@@ -214,18 +229,38 @@ public sealed class FundamentalsIngestor : IStage
             "security", "SELECT ticker FROM security WHERE is_active ORDER BY ticker;", ct)
             .ConfigureAwait(false);
 
-        var pool = fromSecurity.Count > 0
-            ? fromSecurity.Select(r => (string) r[0]!).ToList()
-            : await BootstrapPoolAsync(context, minPrice, ct).ConfigureAwait(false);
+        var inUniverse = fromSecurity.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
 
-        // Never fetched first, then the rest, each group ordinal. That is what makes
-        // this a rotation: ordering by ticker alone re-selects the same head every
-        // run and the coverage never advances past the first page.
-        return pool
-            .OrderBy(t => fetched.Contains(t) ? 1 : 0)
+        // **The pool is the candidate set, never the universe** [1.8, measured].
+        // Drawing it from `security` once `security` was populated closed the
+        // universe permanently rather than merely ordering it differently: a name
+        // needs fundamentals to be admitted, so a name outside `security` could
+        // never be fetched and could never be admitted. Three consecutive runs
+        // wrote an identical 46,376 rows and the distinct ticker count did not
+        // move, and the universe stood at 679 against a design estimate of about
+        // 2,000 with 2,479 candidates rejected for clean gaps most of which had
+        // never been fetched at all.
+        //
+        // `security` still decides order and no longer decides membership.
+        var pool = await BootstrapPoolAsync(context, minPrice, ct).ConfigureAwait(false);
+
+        // Never fetched first, then universe members, then everything else, each
+        // group ordinal. That is what makes this a rotation: ordering by ticker
+        // alone re-selects the same head every run and coverage never advances past
+        // the first page. Coverage before freshness while coverage is incomplete,
+        // because a name absent from the store cannot be screened at all, where a
+        // name whose figures are a few days old still can.
+        var selected = pool
+            .OrderBy(t => fetched.Contains(t) ? (inUniverse.Contains(t) ? 1 : 2) : 0)
             .ThenBy(t => t, StringComparer.Ordinal)
             .Take(maxPerRun)
             .ToList();
+
+        return new Selection(
+            selected,
+            pool.Count,
+            pool.Count(t => !fetched.Contains(t)),
+            selected.Count(t => !fetched.Contains(t)));
     }
 
     /// <summary>

@@ -59,6 +59,7 @@ public sealed class UniverseBuilder : IStage
         // names" is not an answer on its own: what was excluded and by which
         // criterion is what makes the number readable [phase 1 done-when].
         var rejectedType = 0;
+        var rejectedNoFundamentals = 0;
         var rejectedCleanGaps = 0;
         var rejectedNoShares = 0;
         var rejectedMarketCap = 0;
@@ -73,7 +74,16 @@ public sealed class UniverseBuilder : IStage
                 continue;
             }
 
-            fundamentals.TryGetValue(p.Ticker, out var f);
+            // Counted apart from the thin ones, because they are not the same
+            // fact and the pooled number is unreadable [1.8]. A ticker C03 has
+            // never fetched has zero clean gaps by absence; a ticker it has
+            // fetched has however many its filings actually carry. Both fail the
+            // floor and only one of them is about the data.
+            if (!fundamentals.TryGetValue(p.Ticker, out var f))
+            {
+                rejectedNoFundamentals++;
+                continue;
+            }
 
             if (f.CleanGaps < minCleanGaps)
             {
@@ -126,10 +136,10 @@ public sealed class UniverseBuilder : IStage
 
         var detail = string.Format(
             CultureInfo.InvariantCulture,
-            "{0:N0} names. Rejected: {1:N0} not common stock, {2:N0} below {3} clean filing gaps, " +
-            "{4:N0} with no readable share count, {5:N0} below the market cap floor. " +
-            "Candidates passing price, liquidity and history: {6:N0}",
-            members.Count, rejectedType, rejectedCleanGaps, minCleanGaps,
+            "{0:N0} names. Rejected: {1:N0} not common stock, {2:N0} with no fundamentals fetched yet, " +
+            "{3:N0} fetched but below {4} clean filing gaps, {5:N0} with no readable share count, " +
+            "{6:N0} below the market cap floor. Candidates passing price, liquidity and history: {7:N0}",
+            members.Count, rejectedType, rejectedNoFundamentals, rejectedCleanGaps, minCleanGaps,
             rejectedNoShares, rejectedMarketCap, liquid.Count);
 
         return new StageResult(written, "ok", detail);

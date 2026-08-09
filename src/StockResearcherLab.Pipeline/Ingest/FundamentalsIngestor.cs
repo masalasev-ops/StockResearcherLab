@@ -60,8 +60,11 @@ public sealed class FundamentalsIngestor : IStage
         var substitutionAlert = await DecimalAsync(context, "fundamentals.substitution_rate_alert", ct).ConfigureAwait(false);
         var widestAlertDays = await LongAsync(context, "fundamentals.widest_gap_alert_days", ct).ConfigureAwait(false);
         var minPrice = await DecimalAsync(context, "universe.min_price", ct).ConfigureAwait(false);
+        var minAdv = await DecimalAsync(context, "universe.min_adv_20d", ct).ConfigureAwait(false);
+        var minHistory = (int) await LongAsync(context, "universe.min_history_days", ct).ConfigureAwait(false);
 
-        var selection = await CandidatesAsync(context, minPrice, maxPerRun, ct).ConfigureAwait(false);
+        var selection = await CandidatesAsync(
+            context, minPrice, minAdv, minHistory, maxPerRun, ct).ConfigureAwait(false);
         var tickers = selection.Tickers;
 
         long rows = 0;
@@ -213,7 +216,8 @@ public sealed class FundamentalsIngestor : IStage
     /// ones that do are what this stage exists to supply.
     /// </summary>
     private async Task<Selection> CandidatesAsync(
-        StageContext context, decimal minPrice, int maxPerRun, CancellationToken ct)
+        StageContext context, decimal minPrice, decimal minAdv, int minHistory,
+        int maxPerRun, CancellationToken ct)
     {
         // Two reads rather than one query joining both tables. IStageData checks the
         // table a caller names and cannot see what the SQL actually touches, so a
@@ -242,7 +246,7 @@ public sealed class FundamentalsIngestor : IStage
         // never been fetched at all.
         //
         // `security` still decides order and no longer decides membership.
-        var pool = await BootstrapPoolAsync(context, minPrice, ct).ConfigureAwait(false);
+        var pool = await BootstrapPoolAsync(context, minPrice, minAdv, minHistory, ct).ConfigureAwait(false);
 
         // Never fetched first, then universe members, then everything else, each
         // group ordinal. That is what makes this a rotation: ordering by ticker
@@ -272,13 +276,48 @@ public sealed class FundamentalsIngestor : IStage
     /// what this stage exists to supply. C01 applies the rest.
     /// </summary>
     private async Task<List<string>> BootstrapPoolAsync(
-        StageContext context, decimal minPrice, CancellationToken ct)
+        StageContext context, decimal minPrice, decimal minAdv, int minHistory, CancellationToken ct)
     {
-        var sql =
-            "SELECT ticker FROM price_daily WHERE date = DATE '" +
-            context.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "' " +
-            "AND close >= " + minPrice.ToString(CultureInfo.InvariantCulture) + " " +
-            "AND ticker NOT LIKE '^%' ORDER BY ticker;";
+        var asOf = context.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        // All three of D-4's price-side criteria, not just the price floor [1.8].
+        // The price floor alone left 8,423 names in the pool where 4,808 clear
+        // liquidity and history, so about 3,600 of them could never be admitted
+        // whatever their filings say, and each one costs 10 units to find that out.
+        //
+        // The same argument the type filter below already makes: this is D-4's own
+        // criteria applied sooner rather than a second filter, and INVARIANT 1
+        // still has absolute filters living only in the universe definition. C01
+        // applies every one of these again and remains the only component that
+        // decides membership [D-5, INVARIANT 1].
+        var sql = $"""
+            WITH bars AS (
+                SELECT ticker, date, close, volume,
+                       row_number() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
+                FROM price_daily
+                WHERE date <= DATE '{asOf}'
+            ),
+            latest AS (SELECT ticker, close FROM bars WHERE rn = 1),
+            mdv AS (
+                SELECT ticker,
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY close * volume) AS median_dollar_volume
+                FROM bars WHERE rn <= 20 AND close IS NOT NULL AND volume IS NOT NULL
+                GROUP BY ticker
+            ),
+            span AS (
+                SELECT ticker, count(*) AS days
+                FROM price_daily WHERE date <= DATE '{asOf}' GROUP BY ticker
+            )
+            SELECT l.ticker
+            FROM latest l
+            JOIN mdv m ON m.ticker = l.ticker
+            JOIN span s ON s.ticker = l.ticker
+            WHERE l.close >= {minPrice.ToString(CultureInfo.InvariantCulture)}
+              AND m.median_dollar_volume >= {minAdv.ToString(CultureInfo.InvariantCulture)}
+              AND s.days >= {minHistory.ToString(CultureInfo.InvariantCulture)}
+              AND l.ticker NOT LIKE '^%'
+            ORDER BY l.ticker;
+            """;
 
         var rows = await context.Data.ReadAsync("price_daily", sql, ct).ConfigureAwait(false);
 

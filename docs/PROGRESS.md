@@ -409,28 +409,59 @@ fetched first, then universe members, then the rest, each group ordinal. Coverag
 before freshness while coverage is incomplete, because a name absent from the store
 cannot be screened at all where a name whose figures are a few days old still can.
 
-Measured across seven passes of 500 on 2026-08-05, all of them advancing:
+### The pool was also three quarters names the universe can never admit
 
-| | Before | After |
+Fixing the pool exposed a second waste in the same place. `BootstrapPoolAsync`
+applied one of D-4's price-side criteria, the price floor, and left out the other
+two. So the pool was 8,423 names where 4,808 clear liquidity and history: about
+3,600 of them could never be admitted whatever their filings said, and each one
+costs 10 units to find that out. At 500 a run that is roughly 36,000 units spent on
+names guaranteed to be rejected.
+
+All three criteria now apply, and the pool reported by the stage fell from **8,423
+to 3,184**, which is exactly the common-stock liquid candidate count C01 reports
+from the other side. Never-fetched fell from 6,562 to 1,571 in the same step.
+
+This is the argument the type filter in the same method already made and is not a
+new one: D-4's own criteria applied sooner rather than a second filter. C01 applies
+every one of them again and stays the only component that decides membership
+[D-5, INVARIANT 1].
+
+### What the two corrections bought
+
+Eleven passes of 500 on 2026-08-05, every one advancing, ending with the candidate
+pool fully covered:
+
+| | Start of day | End of day |
 |---|---|---|
-| Tickers in `fundamental_snapshot` | 1,876 | **4,087** |
-| Periods | 134,464 | 289,404 |
-| Tickers with 4 or more clean gaps | 1,026 | **2,193** |
-| Candidate pool reported by the stage | not reported | 8,423, of which 6,562 unfetched at the first corrected run |
+| Tickers in `fundamental_snapshot` | 1,876 | **5,641** |
+| Periods | 134,464 | 434,518 |
+| Tickers with 4 or more clean gaps | 1,026 | **3,635** |
+| Candidate pool | not reported | 3,184, **0 unfetched** |
+| Liquid candidates with any fundamentals | 1,613 | **3,167** of 4,808 |
+| Liquid, 4+ clean gaps, above the cap floor | 1,447 | **2,840** |
 
-The universe has not been rebuilt against this and still reads 679. `security` is
-weekly rather than nightly and C01 spends 10 units per member on a
-`General::Sector` call, so a rebuild over roughly 2,000 names costs about 20,000
-units and the day's allowance was down to about 22,000. Left for the next day's
-allowance, and it is the same per-member sector call already recorded as buying at
-10 units what C03 could carry for nothing, which is an authored decision still owed.
+**2,840 is the universe's upper bound before the common-stock filter**, which
+rejected 1,624 of 4,808 the last time C01 ran. That puts the rebuilt universe at
+roughly two thousand names, which is what the definition of done asks for and what
+679 was never going to reach.
 
-**A second measurement worth keeping.** The newly reached population files far worse
-than the first 1,876: the corrected run's substitution rate was 52.0 percent of
-29,573 periods against the 25 percent alert, and 1,655 of the 4,087 covered tickers
-have zero clean gaps. Phase P measured 41 percent of periods unknown over seven
-names; over 4,087 the picture is worse and D-62's per-ticker substitution is
-carrying more weight than the probe implied.
+The rebuild itself has not run. C01 spends 10 units per member on a
+`General::Sector` call, so about 20,000 units, and the day closed at 97,711 of
+100,000. Left for the next allowance. It is the same per-member sector call already
+recorded as buying at 10 units what C03 could carry for nothing, and that is an
+authored decision still owed.
+
+**A second measurement worth keeping.** Filing dates are worse across the wider
+population than the probe implied. Per-run substitution rates over the day's passes
+were 52.0, 27.5, 30.9 and 25.5 percent, every one above the 25 percent alert, and
+1,752 of the 5,641 covered tickers have zero clean gaps at all. Phase P measured 41
+percent of periods unknown over seven names. D-62's per-ticker substitution is
+therefore carrying more weight than it was designed against, and the alert has
+fired on every run rather than on an exception, which is the shape of a threshold
+that needs revisiting rather than a provider that has changed. Not revised here:
+loosening a bound because a measurement missed it is what section 11 forbids, and
+the reading is a finding about the population rather than about the bound.
 
 **The rejection counter conflated two populations and now separates them.** C01
 reported "2,479 below 4 clean filing gaps" where most of those had never been
@@ -439,6 +470,18 @@ absent-is-not-zero failure the screens are written to avoid, in the counter that
 reports the exclusion. It now reads "with no fundamentals fetched yet" and "fetched
 but below 4 clean filing gaps" as separate numbers, which is what the definition of
 done means by recorded rather than assumed.
+
+### Sentiment field names, verified live
+
+The 1.6 field names were flagged unverified and are now read off the provider:
+`sentiments` returns per ticker an array of `{"date", "count", "normalized"}`, which
+is exactly what `SentimentIngestor` parses. Two tickers over twelve days, 10 units.
+Sparsity confirmed alongside it, CCS.US returning 4 days and PHAT.US 2 out of the
+twelve, which is the shape D-23 and the probe both describe.
+
+C04 has still not run over the whole universe and `sentiment_daily` is empty. That
+part of the definition of done waits on the universe rebuild, since the stage reads
+`security` for its ticker set.
 
 ### The provider allowance was overspent against a figure I had already read
 

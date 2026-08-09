@@ -22,20 +22,24 @@ Verified column values: `unverified`, `verified <date>`, or `NOT BOUND`.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `universe.min_market_cap` | 300000000 | D-4 | UniverseBuilder | unverified |
-| `universe.min_price` | 5 | D-4 | UniverseBuilder | unverified |
-| `universe.min_adv_20d` | 2000000 | D-4 | UniverseBuilder | unverified |
-| `universe.min_history_days` | 250 | D-4 | UniverseBuilder | unverified |
-| `universe.bucket_large_floor` | 10000000000 | D-4 | UniverseBuilder | unverified |
-| `universe.bucket_mid_floor` | 2000000000 | D-4 | UniverseBuilder | unverified |
+| `universe.min_market_cap` | 300000000 | D-4 | UniverseBuilder | verified 2026-08-09 |
+| `universe.min_price` | 5 | D-4 | UniverseBuilder, FundamentalsIngestor | verified 2026-08-09 |
+| `universe.min_adv_20d` | 2000000 | D-4 | UniverseBuilder, FundamentalsIngestor | verified 2026-08-09 |
+| `universe.min_history_days` | 250 | D-4 | UniverseBuilder, FundamentalsIngestor | verified 2026-08-09 |
+| `universe.bucket_large_floor` | 10000000000 | D-4 | UniverseBuilder | verified 2026-08-09 |
+| `universe.bucket_mid_floor` | 2000000000 | D-4 | UniverseBuilder | verified 2026-08-09 |
 
 ## Fundamentals
+
+**`fundamentals.widest_gap_alert_days` is in the cadence table below** rather than
+here, with the other keys phase 1 wired up.
+
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
 | ~~`fundamentals.filing_date_substitution_days`~~ | ~~65~~ | ~~D-57~~ | ~~FundamentalsIngestor~~ | [superseded, D-62] |
-| `fundamentals.min_clean_gaps_for_substitution` | 4 | D-62 | UniverseBuilder, ~~FundamentalsIngestor~~ [corrected, L.2] | unverified |
-| `fundamentals.substitution_rate_alert` | 0.25 | D-57 | FundamentalsIngestor | unverified |
+| `fundamentals.min_clean_gaps_for_substitution` | 4 | D-62 | UniverseBuilder, ~~FundamentalsIngestor~~ [corrected, L.2] | verified 2026-08-09 |
+| `fundamentals.substitution_rate_alert` | 0.25 | D-57 | FundamentalsIngestor | verified 2026-08-09 |
 
 The substitution window is ~~the widest gap the probe observed, not a mean, because
 being late costs freshness while being early costs correctness~~ [superseded, D-62]
@@ -101,6 +105,28 @@ window returning 22,286 rows across every exchange the provider carries, so the 
 is about what belongs in `events` rather than what it costs. Forward reaches far
 enough for C12's earnings blackout to see the next report; backward reaches far
 enough for C03's rotation to let a name that has just reported jump the queue.
+
+**Three `universe.*` keys have two consumers each and the column says so** [1.8].
+C01 applies `min_price`, `min_adv_20d` and `min_history_days` as three of D-4's six
+absolute criteria, and C03 applies the same three to its candidate pool so a
+per-ticker call is not spent on a name the universe will reject. That is one filter
+read in two places rather than two filters: C03 narrows what it fetches and decides
+no membership, and C01 applies all six again to everything it sees
+[D-5, INVARIANT 1].
+
+It matters for the audit this column exists for. Before 1.8 these read as C01's
+alone, and a later session changing one of them would have looked at the Consumer
+entry, seen a single weekly stage, and missed that it also changes what the nightly
+fundamentals rotation spends its allowance on.
+
+**Every key above and below was confirmed by reading the line that consumes it**,
+not the key name: the eight in this table at `UniverseBuilder.cs:46-52` and
+`FundamentalsIngestor.cs:59-64`, the four freshness keys at
+`FreshnessGuard.cs:82-85`, `price.reload_window_days` at `PriceIngestor.cs:74`,
+the two sentiment keys at `SentimentIngestor.cs:51-52`, the two flow keys at
+`FlowIngestor.cs:59-60`, the lag at `FlowEngine.cs:44`, and the two events windows
+at `EventsIngestor.cs:59-60`. Line numbers go stale; the file and the stage do not,
+and both are given so the next reader can find it either way.
 
 ## Percentiles
 
@@ -224,11 +250,11 @@ value, but changing it to `vs_spy` is a defect and not a tuning option [INVARIAN
 | `monitor.cache_hit_rate_min` | 0.80 | — | CostLedger | unverified |
 | `cost.annual_budget` | 100 | — | CostLedger | unverified |
 | ~~`freshness.row_count_tolerance`~~ | ~~from probe~~ | — | FreshnessGuard | [removed, D-59] |
-| `freshness.row_count_abort_below` | 40000 | D-59 | FreshnessGuard | unverified |
-| `freshness.row_count_alert_below` | 45000 | D-59 | FreshnessGuard | unverified |
-| `freshness.settled_fraction` | 0.95 | D-70 | FreshnessGuard | unverified |
-| `freshness.settled_window_days` | 20 | D-70 | FreshnessGuard | unverified |
-| `price.reload_window_days` | 20 | A10 | PriceIngestor | unverified |
+| `freshness.row_count_abort_below` | 40000 | D-59 | FreshnessGuard | verified 2026-08-09 |
+| `freshness.row_count_alert_below` | 45000 | D-59 | FreshnessGuard | verified 2026-08-09 |
+| `freshness.settled_fraction` | 0.95 | D-70 | FreshnessGuard | verified 2026-08-09 |
+| `freshness.settled_window_days` | 20 | D-70 | FreshnessGuard | verified 2026-08-09 |
+| `price.reload_window_days` | 20 | A10 | PriceIngestor | verified 2026-08-09 |
 
 ~~The freshness tolerance has no default until phase P measures a real bulk end-of-day
 row count.~~ [removed, D-59]

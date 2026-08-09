@@ -14,7 +14,7 @@ Correct them directly. Do not record intentions here.
 |---|---|---|---|
 | P Data probe | DONE | 3099e66 | All five checkpoints landed and all six findings recorded. D-57 to D-63 produced. Closed under the five-step procedure retired at D-67, after two conformance passes and the C, E, G, H, J and K corrections. That record is in the archive |
 | 0 Rails | DONE | d9cb5df | Signed off 2026-08-06. Checkpoints 0.1 to 0.8, plus CI, the sign-off review, and pass O's corrections. 25 tests green. Step 1 was met by running every CI step locally, because no hosted runner has ever picked up a job on this account. Step 2 ran at `d4baeaf` and does not cover pass O's four corrected files. Both gaps are in the phase 0 block below |
-| 1 Ingest and universe | IN PROGRESS | | Pre-flight done: prompt archived, `guards.ps1` comment stripper scoped, `ci.ps1` added, D-68 authored. Checkpoints 1.11 to 1.14 were added to the plan before the phase started, and 1.3 widened by D-65. The CI runner gap is recorded below rather than at sign-off |
+| 1 Ingest and universe | IN PROGRESS | c873e02 | Every checkpoint 1.1 to 1.14 landed, 130 tests. Seven of the twelve definition-of-done lines are met, four wait on a provider allowance and one is blocked on the form4 decision. The walk is below. The CI runner gap is recorded below rather than at sign-off |
 | 2 Compute | NOT STARTED | | |
 | 3 Backfill | NOT STARTED | | |
 | 4 Screens and selection | NOT STARTED | | |
@@ -183,6 +183,36 @@ ingest must not inherit. Also owed and recorded below.
 
 **In progress.** Pre-flight complete. Checkpoint 1.9 done, no other checkpoint
 code yet.
+
+### The definition of done, walked line by line
+
+Read at `c873e02`. Every line quoted from `BUILD_PLAN.md` phase 1 and answered
+against what exists, not against what was built for it: a line is met when
+something runs and produces an observable result, and the test or the measurement
+that produces it is named.
+
+| # | Line | State | What answers it |
+|---|---|---|---|
+| 1 | one night of the whole US market lands | **waits on allowance** | `price_daily` holds 12,642,222 rows over 2025-07-22 to 2026-08-05 and C06 landed live, but no single `run-night` has gone end to end, because C05 halts it |
+| 2 | the universe builds to roughly 2,000 names, with the count excluded by the clean-gap criterion recorded rather than assumed | **waits on allowance** | The count is recorded and is now two counters rather than one, never-fetched apart from fetched-and-thin. The universe still reads 679 from pre-correction data; the upper bound after today's coverage is 2,840 before the common-stock filter, which last rejected 1,624 of 4,808. C01 costs about 20,000 units |
+| 3 | feeding the freshness guard deliberately stale data aborts the run and produces no orders | **met** | `ANewestDateOlderThanTheLastSessionAborts`, and `AGuardAbortLeavesNoRowsInAnyTableALaterStageWrites` for the second half. No stage in this phase writes an order, so the no-orders property also holds by construction |
+| 4 | a date that fails settledness is re-read on a later run rather than skipped [D-65] | **met** | D-70 replaced D-65's re-fetch with C02's trailing reload window: `AShortDateIsToppedUpByALaterRun`, `TheWindowIsCalendarDatesCountingBackFromTheRunDateInclusive`, `AStillFillingDateIsSkippedAndTheDateBeforeItIsUsed`, `TheWalkBackPassesEveryStillFillingDateAndLandsOnTheFirstSettledOne` |
+| 5 | a test asserts no fundamental value is readable before its effective filing date, with the equality, null and negative-gap cases each exercised | **met** | `NoPeriodIsEverReadableOnOrBeforeItsOwnPeriodEnd` over the whole rule, then one per case: `AFilingDateEqualToItsPeriodEndIsUnknownRatherThanUsable`, `ANullFilingDateIsUnknownAndSubstituted`, `AFilingDateBeforeItsPeriodEndIsUnknown`, `AFilingDateAfterItsPeriodEndIsUsedAsItStands`, and `ATickerWithNoCleanGapGetsNoEffectiveDateAtAll` for the population that gets no date at all |
+| 6 | sentiment lands for the whole universe and a name with rows on only a handful of days is ingested without error | **half met, half waits on allowance** | The sparse half is proved and the field names were verified live today: `ADayWithNoRowIsNotFilledWithZero`, `AnAbsentCountOrScoreStaysNull`, `AShapeThatDoesNotMatchYieldsNothingRatherThanEmptyRows`, and `EveryUniverseNameIsAskedForAndNothingIsNarrowed` for the no-narrowing half. `sentiment_daily` is empty: C04 has never run live, and it reads `security`, so it waits on the rebuild |
+| 7 | `insider_transaction` and `institutional_holding` land at their own grain with `transaction_code` retained, and `flow_daily` derives from them at ticker-by-day | **blocked** | The grain is proved by `TwoLinesIdenticalOnEveryAttributeAreStillTwoRows` and `HoldersAreReadFromAnObjectKeyedByPosition`, the code retention by `TransactionCodeAndSideSurviveIntact`, and the derivation against a hand-computed fixture by `TheThreeMetricsReproduceTheHandComputedReference`. Nothing has landed live: C05 fails on the first ticker whose form4 sends fewer rows than it counts |
+| 8 | the endpoint sweep from 1.9 is recorded in `PROGRESS.md` | **met** | The sweep table above, plus the weights, plus the two retractions |
+| 9 | `NoOpStage` is gone and the registry holds no component name `ARCHITECTURE.html` section 3 does not have | **met** | `NoOpStageIsGone`, `EveryRegisteredComponentIsNamedInTheCatalogue`, `AComponentTheCatalogueDoesNotNameIsCaught`, and `NoTestDoubleAnswersToACatalogueComponentName` for the way that check was quietly defeated once |
+| 10 | a stage that COPYs into a table it does not declare throws before a connection is opened | **met** | `AStageBulkLoadingATableItDoesNotDeclareThrowsBeforeAnythingOpens`, and `AStageWritingAColumnItDidNotDeclareThrowsBeforeAnythingOpens` for the column-level case A27 added |
+| 11 | two versions of one config key resolve to the older value for a date between them and the newer for a date after | **met** | `ADateBetweenTwoVersionsResolvesToTheOlder`, `ADateAfterBothVersionsResolvesToTheNewer`, and `ADateBeforeEveryVersionResolvesToNothingRatherThanTheNewest` for the third case the checkpoint added |
+| 12 | one command runs the night end to end, with a guard abort leaving no rows in any table a later stage writes | **half met, half waits on allowance** | `run-night [date]` exists and exits non-zero when the night halts. The abort property is proved by `AGuardAbortLeavesNoRowsInAnyTableALaterStageWrites`, `AWritingStageThatProducesNothingHaltsEverythingAfterIt` and `AStageThatDeclaresNoWritesProducingZeroRowsDoesNotHalt`. No live end-to-end run, same reason as line 1 |
+
+**Seven met, four waiting on a provider allowance, one blocked.** The four are one
+job each and their costs are known: C01 about 20,000 units, C04 about 10,000, and
+lines 1 and 12 are the same `run-night` at roughly 17,000 once those two can run
+inside it. The blocked one is line 7 and it is not a cost, it is the form4 decision
+recorded above.
+
+Nothing on this list is waiting on code that has not been written.
 
 ### Checkpoints landed
 

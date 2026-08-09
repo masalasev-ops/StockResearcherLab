@@ -17,6 +17,15 @@
     scanned, which is the one way this set can be short, and it cannot happen on
     a CI checkout.
 
+    SO STAGE BEFORE RUNNING THIS, if the change adds a file [1.8]. `git ls-files`
+    reads the index, so a brand new file is invisible to every check here until
+    it is at least `git add`ed, and a pre-commit run over an unstaged new file
+    reports a pass it has not earned. That is how 4b53173 was committed with the
+    INVARIANT 16 check red over a file created in the same change, having run
+    green thirty seconds earlier. ci.ps1 does not have the gap, because it checks
+    HEAD out into a worktree where every file is tracked by definition, and it is
+    what caught both occurrences.
+
     COMMENTS ARE STRIPPED before matching. // to end of line, over every
     extension scanned. -- to end of line, over .sql ONLY. Two of the four
     patterns otherwise match the prose that states the invariant, in

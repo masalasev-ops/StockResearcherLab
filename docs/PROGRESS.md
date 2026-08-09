@@ -348,6 +348,26 @@ after the last edit and immediately before `git commit`, in that order, with no
 edit between, and `ci.ps1` is what does all three. Neither red commit would have
 happened had `ci.ps1` been the last thing run rather than the individual commands.
 
+**And a third time, in `4b53173`, with that rule followed.** The guard ran after
+the last edit, printed 5 checks over 61 files and exited 0, and HEAD was red the
+moment the commit existed. `guards.ps1` scans `git ls-files src/`, which reads the
+**index**: `FlowEngineTests.cs` was created in that change and untracked when the
+guard ran, so the file carrying the violation was not in the set being checked. The
+run was green about a smaller tree than the one committed.
+
+So the rule as first written was not enough and now reads: **stage first, then
+verify, then commit.** `git add -A`, then `ci.ps1` or the three commands, then
+`git commit`. Staging is what puts a new file into `git ls-files` and therefore
+into the scan. `ci.ps1` never had the gap, since it checks HEAD out into a worktree
+where everything is tracked by definition, and it is what caught all three.
+
+The three red commits had three different causes, which is the point worth keeping:
+an exit code read through a pipeline, a stale result quoted after an edit, and a
+scan over a file set that did not include the new file. Each fix closed its own
+cause and left the next one open. One command that reconstructs the tree from
+scratch closes all three at once, and running it before the commit rather than
+after is the only change that matters.
+
 ### form4 counts more rows than it sends, and the guard as written cannot complete a universe pass
 
 **Blocker for live flow ingest, found by running C05 over the universe at 1.8 and

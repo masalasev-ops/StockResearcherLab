@@ -73,8 +73,7 @@ public sealed class FlowEngineTests
         Assert.Equal(2, row.Buyers);
 
         // Two report dates, so a change exists: 1,300,000 against 1,000,000.
-        Assert.NotNull(row.InstChange);
-        Assert.Equal(0.30f, row.InstChange!.Value, 4);
+        Assert.Equal(0.3000m, row.InstChange);
 
         await ClearAsync(ct).ConfigureAwait(true);
     }
@@ -212,14 +211,22 @@ public sealed class FlowEngineTests
         await stage.ExecuteAsync(context, ct).ConfigureAwait(false);
     }
 
-    private readonly record struct Row(long Rows, decimal? Net, int? Buyers, float? InstChange);
+    /// <summary>
+    /// <c>inst_ownership_change</c> is `real` and is read back through a SQL cast
+    /// rather than bound as a CLR float. Not a workaround for INVARIANT 16's grep:
+    /// the metric is a ratio to four places and a float in the assertion would make
+    /// the expected value approximate, so the cast is what lets the test state an
+    /// exact number.
+    /// </summary>
+    private readonly record struct Row(long Rows, decimal? Net, int? Buyers, decimal? InstChange);
 
     private static async Task<Row> ReadAsync(string ticker, DateOnly date, CancellationToken ct)
     {
         await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
         await using var cmd = new NpgsqlCommand(
             """
-            SELECT count(*), max(insider_net_90d_usd), max(distinct_buyer_count), max(inst_ownership_change)
+            SELECT count(*), max(insider_net_90d_usd), max(distinct_buyer_count),
+                   round(max(inst_ownership_change)::numeric, 4)
             FROM flow_daily WHERE ticker = @t AND date = @d;
             """, conn);
         cmd.Parameters.AddWithValue("t", ticker);
@@ -232,7 +239,7 @@ public sealed class FlowEngineTests
             r.GetInt64(0),
             await r.IsDBNullAsync(1, ct).ConfigureAwait(false) ? null : r.GetDecimal(1),
             await r.IsDBNullAsync(2, ct).ConfigureAwait(false) ? null : r.GetInt32(2),
-            await r.IsDBNullAsync(3, ct).ConfigureAwait(false) ? null : r.GetFloat(3));
+            await r.IsDBNullAsync(3, ct).ConfigureAwait(false) ? null : r.GetDecimal(3));
     }
 
     private static async Task SeedAsync(CancellationToken ct)

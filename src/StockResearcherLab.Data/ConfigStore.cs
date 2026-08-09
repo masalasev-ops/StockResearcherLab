@@ -99,9 +99,9 @@ public sealed class ConfigSeeder
         new(2020, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>
-    /// Seventeen keys. The count is asserted rather than left to be miscounted: it
-    /// was recorded as nine, corrected to eleven at A5, twelve at A10, fourteen at A14, fifteen at 1.4
-    /// and seventeen at 1.6, and every correction was a key that existed with nothing seeding it.
+    /// Nineteen keys. The count is asserted rather than left to be miscounted: it
+    /// was recorded as nine, corrected to eleven at A5, twelve at A10, fourteen at A14, fifteen at 1.4,
+    /// seventeen at 1.6 and nineteen at 1.7, and every correction was a key that existed with nothing seeding it.
     /// </summary>
     public static IReadOnlyList<(string Key, string Value)> Keys { get; } =
     [
@@ -132,6 +132,12 @@ public sealed class ConfigSeeder
         // 10 and 20 tickers [PROGRESS, endpoint weights].
         ("sentiment.tickers_per_call", "50"),
         ("sentiment.lookback_days", "30"),
+
+        // C05's per-run bound and its page size. form4 is 10 units a page, so a
+        // full universe pass is the most expensive thing in a week and is bounded
+        // the same way C03 is [PROGRESS, endpoint weights].
+        ("flow.max_tickers_per_run", "250"),
+        ("flow.form4_page_size", "50"),
 
         // Freshness. The two row-count floors are D-59 and stand unrevised at
         // D-64's closure. The two settled_* values are D-70's and their reasoning

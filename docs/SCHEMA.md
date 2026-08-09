@@ -120,9 +120,24 @@ and only candidates reach the dossier [D-23].
 Grain: ticker by filing by transaction, the source's own. **Writer: FlowIngestor.**
 Small.
 
-`ticker`, `filed_at`, `transaction_date`, `reporting_owner_name`,
-`transaction_code`, `shares_amount`, `price_per_share`, `total_value`,
-`acquired_or_disposed`.
+`ticker`, `accession_number`, `transaction_side`, `transaction_ordinal`,
+`filed_at`, `transaction_date`, `reporting_owner_cik`, `reporting_owner_name`,
+`transaction_code`, `security_title`, `shares_amount`, `price_per_share`,
+`total_value`, `shares_owned_after`, `acquired_or_disposed`.
+
+**The grain is the filing plus the line's position in it** [D-68 reopened at 1.7].
+A7 proposed a key made of the transaction's own attributes and left 1.7's sweep to
+confirm it against real rows. It does not hold: over 1,069 real transactions across
+eight tickers that tuple collided 172 times, and adding security title, price and
+shares-owned-after still left 5. Two line items in one filing can be identical on
+every value the provider sends, the ordinary case being an option exercise reported
+as common stock acquired and as restricted stock units disposed, same owner, same
+date, same code, same share count.
+
+So `accession_number` plus `transaction_side` plus `transaction_ordinal` is the key,
+which makes "ticker by filing by transaction" literal rather than approximating it
+with attributes. A key derived from values that are legitimately repeatable is not a
+key, and an upsert on one collapses two real transactions into one silently.
 
 `transaction_code` is not optional. The S4 rubric disqualifies option exercises and
 scheduled plan activity, so a count that cannot separate an open-market purchase from

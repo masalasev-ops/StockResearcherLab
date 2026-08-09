@@ -40,6 +40,7 @@ public static class PipelineComposition
             owners.Add(new FundamentalsIngestor(eodhd));
             owners.Add(new UniverseBuilder(eodhd));
             owners.Add(new SentimentIngestor(eodhd));
+            owners.Add(new FlowIngestor(eodhd));
         }
 
         return new StageRegistry(owners);

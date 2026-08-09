@@ -195,6 +195,22 @@ code yet.
 | 1.2 | Bulk end-of-day into `price_daily` over a trailing reload window | 64 |
 | 1.11 | `NoOpStage` retired, registry checked against the catalogue | 68 |
 | 1.3 | Freshness guard, three checks | 79 |
+| 1.14 | Nightly run sequence and the zero-row halt | 85 |
+| 1.4 | Fundamentals, statement fields, D-62 in full | 95 |
+| 1.5 | Universe builder, D-4's six criteria | 95 |
+| 1.6 | Sentiment over the whole universe | 101 |
+| 1.7 | Flow ingest, and D-68's reopening clause fired on measurement | 112 |
+| 1.8 | Events ingest and the derived `flow_daily` | 127 |
+
+C06 ran live for 2026-08-06 and wrote 569 rows over the 679-name universe: 566
+earnings dated 2026-07-30 to 2026-11-04, which is the seven days back and ninety
+forward the two keys ask for, and 3 dividend ex-dates. No split fell on that day.
+`announced_date` is populated on all 3 dividends from `declarationDate` and null on
+all 566 earnings, because the calendar carries no date on which a schedule became
+public. Three calls, 201 units.
+
+C34 has not run live. `insider_transaction` is empty and cannot be filled until the
+form4 blocker below is decided.
 
 **Two figures in commit bodies were guessed and are wrong.** `1b66daf` says
 "5 checks over 38 files" and `5a4ec08` says "over 44 files"; the runs immediately
@@ -203,6 +219,11 @@ commit message cannot be edited and this corpus asks that every number trace to 
 produced it, so the correction lives here. The cause was writing the message from
 memory after the run rather than from its output, and the practice from here is to
 omit a figure rather than recall one.
+
+The column above is read off the commit bodies rather than recalled, which caught a
+wrong entry in this table before it was committed: 1.14 was written as 86 and its
+commit says 85. `fb4f3dc` states no count at all, and 1.5 is 95 because the next
+commit to state one says "101 tests passing where there were 95".
 
 ### The provider meters weighted units, not requests, and phase 3 cannot afford the naive plan
 
@@ -225,6 +246,19 @@ endpoint itself costs nothing, which is what makes the bracket clean. Measured
 | `sec-filings/{t}/form4` | **10** | one page |
 | `exchange-symbol-list/US` | **1** | 51,401 instruments |
 | `calendar/earnings`, `exchange-details` | **1** | |
+| `eod-bulk-last-day/US?type=splits` | **100** | every split on one day, market-wide. 3 rows on 2026-08-06 |
+| `eod-bulk-last-day/US?type=dividends` | **100** | every ex-date on one day, market-wide. 85 rows on 2026-08-05 |
+| `calendar/earnings?from=&to=` | **1** | whatever the range. 22,286 rows over 90 days, every exchange |
+| `splits/{t}`, `div/{t}` | **1** | one name, whole history |
+
+**The last four are 1.8's, measured 2026-08-08 by the same bracket.** They put C06
+in the same shape as C02: a forward-looking calendar is one cheap call for the whole
+market, while splits and dividends have no forward bulk and are read by run date at
+100 units each. Three calls a night, 201 units, where the per-ticker form over a
+2,000-name universe would be 4,000. The backfill reverses it exactly as prices do,
+`splits/{t}` and `div/{t}` returning full history at 1 unit, so five years costs
+about 4,000 units across the universe against 252,000 for the nightly bulk re-run
+over 1,260 sessions.
 
 **A CORRECTION TO WHAT THIS NOTE FIRST SAID.** It claimed D-47's five-year backfill
 was "~126,000 units for prices alone, more than a full day's allowance". That was
@@ -246,8 +280,10 @@ roughly sixty times more than it needs to.
 | C02, 20 dates × 100 | 2,000 | nightly |
 | C03, 500 tickers × 10 | 5,000 | nightly |
 | C04, 2,000 tickers × 5 | 10,000 | nightly |
-| C06, C07 | ~10 | nightly |
-| **Nightly total** | **~17,000** | 17% of the daily allowance |
+| C06, 1 calendar + 2 bulk | 201 | nightly, measured at 1.8 |
+| C07 | ~10 | nightly |
+| C34 | 0 | nightly. Derives from two tables the ingest wrote and calls nothing |
+| **Nightly total** | **~17,200** | 17% of the daily allowance |
 | C05 form4, 2,000 × 10 per page | 20,000+ | weekly, and the one open question |
 | Five-year backfill, prices and fundamentals | ~25,000 | one-off |
 
@@ -311,6 +347,66 @@ The rule taken from it is that the guard, the build and the tests all run again
 after the last edit and immediately before `git commit`, in that order, with no
 edit between, and `ci.ps1` is what does all three. Neither red commit would have
 happened had `ci.ps1` been the last thing run rather than the individual commands.
+
+### form4 counts more rows than it sends, and the guard as written cannot complete a universe pass
+
+**Blocker for live flow ingest, found by running C05 over the universe at 1.8 and
+measured before anything was proposed.** The stage failed on its first ticker with
+`Paged read of 'sec-filings/AAON.US/form4' collected 641 rows against a reported
+total of 643`, which is the check added at 1.1 doing what it was written to do.
+
+Walked page by page, AAON's traversal is not short in the way the check assumes.
+Thirteen pages, `links.next` present on twelve and absent on the thirteenth, offsets
+0 to 600, and the last page returns exactly the 43 rows that 643 minus 600 predicts.
+The server's own pagination window was covered end to end. Page 8 returned 48 rows
+where every other full page returned 50. The two missing rows are inside the window
+and asking again cannot produce them.
+
+**Measured over the first 250 active tickers, 2026-08-08**, walking form4 exactly as
+`EodhdClient.GetAllPagesAsync` does but recording the shortfall instead of throwing:
+
+| | |
+|---|---|
+| Tickers walked | 250 |
+| `collected` equals `meta.total` | 193 |
+| `collected` short of `meta.total` | **43** |
+| No `meta.total` in the payload | 0 |
+| HTTP error | 14, all `404 Symbol not found`, which C05 already treats as a ticker with no filings |
+| Rows collected | 101,325 |
+| Rows the provider counted and did not send | **104**, or 0.10 percent |
+| Short tickers whose traversal stopped **inside** the server's window | **0** |
+| Short tickers that walked the window to its end | **43** |
+
+Worst three by fraction of one ticker's own history: AER 6 of 219, 2.74 percent;
+AMT 11 of 496, 2.22 percent; AEIS 12 of 580, 2.07 percent. Most are 1 or 2 rows.
+
+**The case the check was written for did not occur once.** Its fixture is "an
+endpoint claiming 100 and stopping at 50", which is a loop that stops asking while
+the server still has pages, and that is the failure worth aborting on because what
+was missed is unknown and re-asking would fix it. What happens instead is that the
+server sends fewer rows than it counts, on 17 percent of tickers, and the traversal
+is already complete when it happens. The check cannot tell the two apart, so a
+universe pass fails on whichever short ticker comes first alphabetically.
+
+**Not fixed here, because the rule is authored and this is a build session.** The
+options, none chosen:
+
+- Split the condition. Fail when the traversal stopped inside the server's window,
+  which is the fixture's case and stays fail-closed. Record the shortfall through
+  the run log and continue when the window was walked to its end. Costs 0.10 percent
+  of rows and lets the stage run.
+- Split it and bound it, so a provider degrading from 0.1 percent to 20 percent
+  still aborts. The bound is not proposed here: every candidate value either passes
+  or fails against the distribution above, and choosing one after seeing which is
+  result-shopping whatever the reasoning says [`CLAUDE.md` section 11]. It is a
+  threshold to pre-register.
+- Leave it as it is and accept that C05 cannot run over this universe.
+
+**What it blocks and what it does not.** 1.8 is built and green either way: C06 ran
+live and C34 is proved against a hand-computed fixture. What is blocked is C34's
+live verification, since `insider_transaction` cannot be populated at scale until
+this is decided, and with it phase P's carried obligation on the S4 open-market
+purchase base rate, which is a query against that table once populated.
 
 ### Rename sweeps state their exclusions
 

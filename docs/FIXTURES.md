@@ -29,6 +29,14 @@ fail on purpose, because a conformance test that has never failed has not been t
 | Paged read short of its reported total | 1.1 | An endpoint claiming 100 and stopping at 50. A short read that returns successfully looks identical to a complete one | `EodhdClientTests.APagedReadShortOfItsReportedTotalFailsRatherThanReturning` |
 | Config date before every version | 1.13 | A resolution date earlier than every row's `set_at`. A resolver falling back to `MAX(version)` returns today's config for a historical date and passes every test that stays inside the configured range [INVARIANT 13] | `ConfigResolutionTests.ADateBeforeEveryVersionResolvesToNothingRatherThanTheNewest` |
 | Bulk row dated other than requested | 1.2 | A feed returning a row for a different day than the one asked for. Writing it would file bars under a day they did not belong to, and no later stage could detect it | `PriceIngestorTests.ARowDatedOtherThanTheDateRequestedFailsTheStage` |
+| Two form 4 lines identical on every attribute | 1.7 | One filing, one owner, one code, one date, one share count and two genuinely different lines, reduced from the measured collision: an option exercise reported as Common Stock acquired and as Restricted Stock Units disposed. A7's proposed key collapses them into one and the row count still looks right, which is how D-68 fails silently | `FlowIngestorTests.TwoLinesIdenticalOnEveryAttributeAreStillTwoRows` |
+| Global earnings calendar with an off-exchange row | 1.8 | A `.BSE` symbol beside the US ones. Nothing in the request narrows `calendar/earnings` to an exchange, so a stage that does not narrow writes 22,286 rows across every market the provider carries and every one of them looks like a real event | `EventsIngestorTests.AnExchangeOutsideTheUniverseIsDropped` |
+| Bulk event row keyed by code and exchange separately | 1.8 | `{"code":"NVDA","exchange":"US"}` where the calendar sends `NVDA.US`. A parser reading `code` alone matches nothing against the universe and writes no rows while the stage succeeds | `EventsIngestorTests.TheBulkFeedsTickerIsAssembledFromCodeAndExchange` |
+| Dividend payload carrying four dates | 1.8 | Ex-date, declaration, record and payment, of which exactly one is the event and one is the announcement. The other two are the ones a reader reaches for by name | `EventsIngestorTests.ADividendKeepsTheExDateAndTheDeclarationDateAndDiscardsTheOtherTwo` |
+| Six insider filings of which three count | 1.8 | One ticker with a purchase inside the window, a sale inside it, a purchase before it, a purchase filed after the run date, and an option exercise. The reference answer is hand-computed in the test, so a change to the statement that alters a number fails rather than passing with a different one | `FlowEngineTests.TheThreeMetricsReproduceTheHandComputedReference` |
+| Open-market row with no dollar value | 1.8 | A sale with neither a total nor a price. Dropping it from the sum is adding zero, and zero means insiders traded and netted out | `FlowEngineTests.ATickerWithAnUnpricedOpenMarketRowCarriesNullRatherThanAnUnderstatedTotal` |
+| Ticker with no ingested flow at all | 1.8 | Never through the rotation, against one with holdings but no filings and one with filings but no purchases. Three different facts that a zeroed row would render identical | `FlowEngineTests.ATickerWithNoIngestedFlowGetsNoRowRatherThanZeros` |
+| Institutional report inside its filing lag | 1.8 | A report dated 2026-06-30 read on the 13th and 14th of August, either side of the forty-five day 13F deadline. Reading on `report_date` alone is INVARIANT 12's mistake arriving through the other table with the same shape | `FlowEngineTests.AnInstitutionalReportIsNotReadableUntilTheFilingLagHasPassed` |
 
 ## Fixtures the design already calls for
 
@@ -49,6 +57,10 @@ above when they are written.
 - A fundamental whose filing date precedes its own period end [phase 1]
 - A ticker with fewer than four clean gaps, which the universe must exclude
   [phase 1]
+- An `events` row whose `event_date` was not yet public on the date it is read
+  back for, which is the earnings calendar's point-in-time gap and has no fixture
+  because the source carries no date on which a schedule was announced
+  [BUILD_PLAN carried obligations, 1 owed to 5]
 - A night where the primary digest provider is unavailable and the chain falls
   through [phase 5]
 - A night where no digest provider is healthy and the run halts [phase 5]

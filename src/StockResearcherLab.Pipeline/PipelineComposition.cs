@@ -2,6 +2,7 @@ using StockResearcherLab.Core;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data;
 using StockResearcherLab.Data.Eodhd;
+using StockResearcherLab.Pipeline.Compute;
 using StockResearcherLab.Pipeline.Ingest;
 
 namespace StockResearcherLab.Pipeline;
@@ -28,6 +29,10 @@ public static class PipelineComposition
         {
             // Not a stage. Sits outside the layers and owns run_log.
             new RunLog(connectionString),
+
+            // Layer 2. Derives from two tables the ingest wrote and calls nothing,
+            // so it is registered whether or not a token is present.
+            new FlowEngine(),
         };
 
         if (!string.IsNullOrWhiteSpace(apiToken))
@@ -41,6 +46,7 @@ public static class PipelineComposition
             owners.Add(new UniverseBuilder(eodhd));
             owners.Add(new SentimentIngestor(eodhd));
             owners.Add(new FlowIngestor(eodhd));
+            owners.Add(new EventsIngestor(eodhd));
         }
 
         return new StageRegistry(owners);

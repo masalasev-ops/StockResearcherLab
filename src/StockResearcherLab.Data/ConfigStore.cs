@@ -99,9 +99,9 @@ public sealed class ConfigSeeder
         new(2020, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>
-    /// Nineteen keys. The count is asserted rather than left to be miscounted: it
+    /// Twenty-two keys. The count is asserted rather than left to be miscounted: it
     /// was recorded as nine, corrected to eleven at A5, twelve at A10, fourteen at A14, fifteen at 1.4,
-    /// seventeen at 1.6 and nineteen at 1.7, and every correction was a key that existed with nothing seeding it.
+    /// seventeen at 1.6, nineteen at 1.7 and twenty-two at 1.8, and every correction was a key that existed with nothing seeding it.
     /// </summary>
     public static IReadOnlyList<(string Key, string Value)> Keys { get; } =
     [
@@ -138,6 +138,22 @@ public sealed class ConfigSeeder
         // the same way C03 is [PROGRESS, endpoint weights].
         ("flow.max_tickers_per_run", "250"),
         ("flow.form4_page_size", "50"),
+
+        // How long after a period end an institutional holding is treated as
+        // public. A 13F is due within forty-five days of the quarter it reports,
+        // and institutional_holding.report_date is that period end rather than a
+        // filing date. Reading on report_date alone is the mistake INVARIANT 12
+        // names for fundamentals, arriving through the other table that has the
+        // same shape [C34, 1.8].
+        ("flow.institutional_report_lag_days", "45"),
+
+        // C06's earnings window, forward and back. Two readers want different
+        // halves: C12's earnings blackout needs the next report date, and C03's
+        // rotation lets a name that has just reported jump the queue. The calendar
+        // endpoint is metered at 1 unit whatever the range, so the width costs
+        // nothing and the bound is about what belongs in the table.
+        ("events.earnings_forward_days", "90"),
+        ("events.earnings_backward_days", "7"),
 
         // Freshness. The two row-count floors are D-59 and stand unrevised at
         // D-64's closure. The two settled_* values are D-70's and their reasoning

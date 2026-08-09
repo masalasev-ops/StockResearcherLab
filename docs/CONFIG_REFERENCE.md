@@ -59,6 +59,49 @@ rather than silently widening every read. It survives D-62 unchanged, and its
 Set by column still names D-57 because that is the entry that set it and a
 superseded entry keeps its number.
 
+## Ingest cadence and cost
+
+Every key here bounds how much of the universe one run touches, or how far a window
+reaches. None of them changes a number the screens read: they decide what has been
+looked at, not what it is worth.
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `fundamentals.max_tickers_per_run` | 500 | 1.4 | FundamentalsIngestor | verified 2026-08-08 |
+| `sentiment.tickers_per_call` | 50 | 1.6 | SentimentIngestor | verified 2026-08-08 |
+| `sentiment.lookback_days` | 30 | 1.6 | SentimentIngestor | verified 2026-08-08 |
+| `flow.max_tickers_per_run` | 250 | 1.7 | FlowIngestor | verified 2026-08-08 |
+| `flow.form4_page_size` | 50 | 1.7 | FlowIngestor | verified 2026-08-08 |
+| `flow.institutional_report_lag_days` | 45 | 1.8 | FlowEngine | verified 2026-08-08 |
+| `events.earnings_forward_days` | 90 | 1.8 | EventsIngestor | verified 2026-08-08 |
+| `events.earnings_backward_days` | 7 | 1.8 | EventsIngestor | verified 2026-08-08 |
+
+**The three per-run bounds exist because their endpoints are per ticker and metered
+per call** [PROGRESS, endpoint weights]. Fundamentals is 10 units a ticker and form4
+is 10 units a page, so a full universe pass on either is the most expensive thing in
+a week. Each stage rotates, preferring tickers it has not fetched, so coverage builds
+over several nights rather than a night spending its whole allowance on one stage.
+`sentiment.tickers_per_call` is not one of these: sentiment is metered flat at 5
+units per ticker whatever the batch size, measured at 1, 10 and 20, so that key is a
+latency knob and the whole universe is covered every night [D-23].
+
+**`flow.institutional_report_lag_days` is a point-in-time key, not a cadence one.**
+`institutional_holding.report_date` is a period end and a 13F is due within
+forty-five days of it, so reading on `report_date <= date` makes a quarter's
+ownership readable up to forty-five days before it was filed. That is the mistake
+INVARIANT 12 names for fundamentals, arriving through the other table with the same
+shape. FlowEngine subtracts the key from the run date before either report date is
+visible, so the substitution is inspectable and changeable rather than a literal
+inside a statement. It is not a screen threshold and the tuner does not touch it
+[INVARIANT 14].
+
+**The two `events.*` windows cost nothing and are bounded for a different reason.**
+`calendar/earnings` is metered at 1 unit whatever the range, measured over a 90 day
+window returning 22,286 rows across every exchange the provider carries, so the width
+is about what belongs in `events` rather than what it costs. Forward reaches far
+enough for C12's earnings blackout to see the next report; backward reaches far
+enough for C03's rotation to let a name that has just reported jump the queue.
+
 ## Percentiles
 
 | Key | Default | Set by | Consumer | Verified |

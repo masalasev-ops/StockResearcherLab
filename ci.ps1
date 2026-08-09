@@ -451,7 +451,11 @@ try {
 
     # Both numbers, not just the verdict. How much was checked is as much a result
     # as whether it passed, and a shrinking sweep produces an identical green line.
-    $results['guards.ps1'] = "exit 0, $checks checks over $sweptFiles files, zero each"
+    # "zero each" was true while every check was a grep expecting none. INVARIANT 16
+    # stopped being one at 1.8: it asserts the schema against SCHEMA.md rather than
+    # counting hits, so a summary saying zero each would describe the guard wrongly
+    # while quoting its numbers correctly.
+    $results['guards.ps1'] = "exit 0, $checks checks over $sweptFiles files, four greps finding none and one schema assertion"
 
     # ---- Set up .NET 10. CI's actions/setup-dotnet@v4. --------------------
     Write-Step 'Set up .NET 10'
@@ -508,6 +512,24 @@ try {
         throw "The first migrate failed. Evidence written to $evidence."
     }
     $m1 | ForEach-Object { Write-Host "      $_" }
+    # The database migrate actually connected to, from its own first line. Two
+    # occurrences of the failure below produced two evidence files and no answer,
+    # because nothing in the output said which database it had reached and a
+    # dropped one cannot report every migration as already applied [1.8].
+    $named = @($m1 | Select-String -Pattern 'migrate\s+database\s+(\S+)')
+    if ($named.Count -eq 0) {
+        $evidence = Write-FailureEvidence -Step 'Migrate, from an empty server' -Cs $cs -Output $m1 `
+            -ErrorText 'The migrate output names no database. This assertion cannot be made without it.'
+        throw "The first migrate named no database. Evidence written to $evidence."
+    }
+
+    $reached = $named[0].Matches.Groups[1].Value
+    if ($reached -ne $Database) {
+        $evidence = Write-FailureEvidence -Step 'Migrate, from an empty server' -Cs $cs -Output $m1 `
+            -ErrorText "migrate connected to '$reached' where this run dropped '$Database'. The environment variable this script exports did not reach the child process, so it fell back to a configuration file."
+        throw "The first migrate ran against $reached rather than $Database. Evidence written to $evidence."
+    }
+
     $created = @($m1 | Select-String -Pattern 'created database').Count -gt 0
     $applied = @($m1 | Select-String -Pattern '\.sql\s+applied')
     if (-not $created) {

@@ -52,8 +52,18 @@ string RequireConnectionString()
 
 async Task<int> MigrateAsync()
 {
-    Console.WriteLine("migrate");
-    var applied = await new Migrator(RequireConnectionString(), new SystemClock(), Console.WriteLine)
+    var connectionString = RequireConnectionString();
+
+    // The database is named before anything is applied [1.8]. ci.ps1 drops a
+    // database, confirms it absent, and then asserts that this command created
+    // it; twice that assertion has failed with every migration reported as
+    // already applied, which can only happen against a database that was never
+    // dropped. Nothing in the output said which one it was, so two occurrences
+    // produced two evidence files and no answer. It says now.
+    var database = new Npgsql.NpgsqlConnectionStringBuilder(connectionString).Database;
+    Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"migrate  database {database}"));
+
+    var applied = await new Migrator(connectionString, new SystemClock(), Console.WriteLine)
         .ApplyAsync().ConfigureAwait(false);
 
     Console.WriteLine(applied.Count == 0

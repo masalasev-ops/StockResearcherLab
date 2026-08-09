@@ -297,6 +297,21 @@ reading earlier in this phase. `ci.ps1` does not have this defect, because it ch
 `$LASTEXITCODE` per step rather than chaining, and it is the reason the per-checkpoint
 verification is one command.
 
+**And it happened a second time, in `adf1b07`.** The commit body claims `guards 5
+checks over 58 files` and the guard was in fact red at that sha on the same
+INVARIANT 16 check, over `FlowIngestor.cs`'s two `float?` for
+`institutional_holding.change_pct`. `ci.ps1` caught it at the next checkpoint by
+checking HEAD out into a worktree and running the guard there, which is what it
+exists for, and `adf1b07` was red for about half an hour rather than indefinitely.
+
+What was wrong was not the exit-code reading this time: it was that the guard ran
+before the last edit to that file and the result was carried forward as though it
+still described the tree. **A verification is about a tree, not about a session.**
+The rule taken from it is that the guard, the build and the tests all run again
+after the last edit and immediately before `git commit`, in that order, with no
+edit between, and `ci.ps1` is what does all three. Neither red commit would have
+happened had `ci.ps1` been the last thing run rather than the individual commands.
+
 ### Rename sweeps state their exclusions
 
 A1.a's done condition asked that a repository-wide sweep for the old column name

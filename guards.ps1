@@ -56,8 +56,10 @@ $checks = @(
         What       = 'money is decimal: no float or double in any monetary path'
         Pattern    = '\b(float|double)\b'
         Extensions = @('.cs', '.razor', '.sql')
-        Exclude    = @('src/StockResearcherLab.Pipeline/Ingest/SentimentIngestor.cs')
-        Why        = 'SentimentIngestor writes ticker, date, article_count and sentiment_score, and none of those is money. sentiment_score is declared real in SCHEMA.md, binary COPY is strict about types, so the CLR type has to be float. The invariant is about monetary paths and this file has none. THIS EXCLUSION DOES NOT SCALE: phase 2 adds about forty real columns to indicator_daily and would need forty exclusions, so the general question of how a blunt grep tells a technical float from a monetary one is owed an authored answer before that phase [PROGRESS, INVARIANT 16 and non-monetary floats]'
+        Exclude    = @(
+            'src/StockResearcherLab.Pipeline/Ingest/SentimentIngestor.cs',
+            'src/StockResearcherLab.Pipeline/Ingest/FlowIngestor.cs')
+        Why        = 'Two files, both for the same reason and neither monetary. SentimentIngestor binds sentiment_score and FlowIngestor binds institutional_holding.change_pct, both declared real in 0001 and SCHEMA.md; binary COPY is strict about types, so the CLR type has to be float. Every monetary column each file touches is numeric and binds as decimal, FlowIngestor''s shares, change, price_per_share and total_value included. THIS EXCLUSION DOES NOT SCALE and the count is now two before phase 2 has started: that phase adds about forty real columns to indicator_daily and would need forty entries, so the general question of how a blunt grep tells a technical float from a monetary one is owed an authored answer before it [PROGRESS, INVARIANT 16 and non-monetary floats]'
     },
     @{
         Invariant  = 'INVARIANT 6'

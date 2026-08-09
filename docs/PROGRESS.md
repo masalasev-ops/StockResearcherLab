@@ -14,7 +14,7 @@ Correct them directly. Do not record intentions here.
 |---|---|---|---|
 | P Data probe | DONE | 3099e66 | All five checkpoints landed and all six findings recorded. D-57 to D-63 produced. Closed under the five-step procedure retired at D-67, after two conformance passes and the C, E, G, H, J and K corrections. That record is in the archive |
 | 0 Rails | DONE | d9cb5df | Signed off 2026-08-06. Checkpoints 0.1 to 0.8, plus CI, the sign-off review, and pass O's corrections. 25 tests green. Step 1 was met by running every CI step locally, because no hosted runner has ever picked up a job on this account. Step 2 ran at `d4baeaf` and does not cover pass O's four corrected files. Both gaps are in the phase 0 block below |
-| 1 Ingest and universe | IN PROGRESS | c873e02 | Every checkpoint 1.1 to 1.14 landed, 130 tests. Seven of the twelve definition-of-done lines are met, four wait on a provider allowance and one is blocked on the form4 decision. The walk is below. The CI runner gap is recorded below rather than at sign-off |
+| 1 Ingest and universe | IN PROGRESS | c873e02 | Every checkpoint 1.1 to 1.14 landed, 130 tests. Seven of the twelve definition-of-done lines are met and five wait on a provider allowance. Nothing is blocked: D-71 settled the form4 shortfall and INVARIANT 16 now asserts from the schema. The walk is below. The CI runner gap is recorded below rather than at sign-off |
 | 2 Compute | NOT STARTED | | |
 | 3 Backfill | NOT STARTED | | |
 | 4 Screens and selection | NOT STARTED | | |
@@ -199,20 +199,20 @@ that produces it is named.
 | 4 | a date that fails settledness is re-read on a later run rather than skipped [D-65] | **met** | D-70 replaced D-65's re-fetch with C02's trailing reload window: `AShortDateIsToppedUpByALaterRun`, `TheWindowIsCalendarDatesCountingBackFromTheRunDateInclusive`, `AStillFillingDateIsSkippedAndTheDateBeforeItIsUsed`, `TheWalkBackPassesEveryStillFillingDateAndLandsOnTheFirstSettledOne` |
 | 5 | a test asserts no fundamental value is readable before its effective filing date, with the equality, null and negative-gap cases each exercised | **met** | `NoPeriodIsEverReadableOnOrBeforeItsOwnPeriodEnd` over the whole rule, then one per case: `AFilingDateEqualToItsPeriodEndIsUnknownRatherThanUsable`, `ANullFilingDateIsUnknownAndSubstituted`, `AFilingDateBeforeItsPeriodEndIsUnknown`, `AFilingDateAfterItsPeriodEndIsUsedAsItStands`, and `ATickerWithNoCleanGapGetsNoEffectiveDateAtAll` for the population that gets no date at all |
 | 6 | sentiment lands for the whole universe and a name with rows on only a handful of days is ingested without error | **half met, half waits on allowance** | The sparse half is proved and the field names were verified live today: `ADayWithNoRowIsNotFilledWithZero`, `AnAbsentCountOrScoreStaysNull`, `AShapeThatDoesNotMatchYieldsNothingRatherThanEmptyRows`, and `EveryUniverseNameIsAskedForAndNothingIsNarrowed` for the no-narrowing half. `sentiment_daily` is empty: C04 has never run live, and it reads `security`, so it waits on the rebuild |
-| 7 | `insider_transaction` and `institutional_holding` land at their own grain with `transaction_code` retained, and `flow_daily` derives from them at ticker-by-day | **blocked** | The grain is proved by `TwoLinesIdenticalOnEveryAttributeAreStillTwoRows` and `HoldersAreReadFromAnObjectKeyedByPosition`, the code retention by `TransactionCodeAndSideSurviveIntact`, and the derivation against a hand-computed fixture by `TheThreeMetricsReproduceTheHandComputedReference`. Nothing has landed live: C05 fails on the first ticker whose form4 sends fewer rows than it counts |
+| 7 | `insider_transaction` and `institutional_holding` land at their own grain with `transaction_code` retained, and `flow_daily` derives from them at ticker-by-day | **waits on allowance** | The grain is proved by `TwoLinesIdenticalOnEveryAttributeAreStillTwoRows` and `HoldersAreReadFromAnObjectKeyedByPosition`, the code retention by `TransactionCodeAndSideSurviveIntact`, and the derivation against a hand-computed fixture by `TheThreeMetricsReproduceTheHandComputedReference`. Nothing has landed live. **No longer blocked**: D-71 separated the client stopping early from the server running out, and C05 now records a shortfall and continues |
 | 8 | the endpoint sweep from 1.9 is recorded in `PROGRESS.md` | **met** | The sweep table above, plus the weights, plus the two retractions |
 | 9 | `NoOpStage` is gone and the registry holds no component name `ARCHITECTURE.html` section 3 does not have | **met** | `NoOpStageIsGone`, `EveryRegisteredComponentIsNamedInTheCatalogue`, `AComponentTheCatalogueDoesNotNameIsCaught`, and `NoTestDoubleAnswersToACatalogueComponentName` for the way that check was quietly defeated once |
 | 10 | a stage that COPYs into a table it does not declare throws before a connection is opened | **met** | `AStageBulkLoadingATableItDoesNotDeclareThrowsBeforeAnythingOpens`, and `AStageWritingAColumnItDidNotDeclareThrowsBeforeAnythingOpens` for the column-level case A27 added |
 | 11 | two versions of one config key resolve to the older value for a date between them and the newer for a date after | **met** | `ADateBetweenTwoVersionsResolvesToTheOlder`, `ADateAfterBothVersionsResolvesToTheNewer`, and `ADateBeforeEveryVersionResolvesToNothingRatherThanTheNewest` for the third case the checkpoint added |
 | 12 | one command runs the night end to end, with a guard abort leaving no rows in any table a later stage writes | **half met, half waits on allowance** | `run-night [date]` exists and exits non-zero when the night halts. The abort property is proved by `AGuardAbortLeavesNoRowsInAnyTableALaterStageWrites`, `AWritingStageThatProducesNothingHaltsEverythingAfterIt` and `AStageThatDeclaresNoWritesProducingZeroRowsDoesNotHalt`. No live end-to-end run, same reason as line 1 |
 
-**Seven met, four waiting on a provider allowance, one blocked.** The four are one
-job each and their costs are known: C01 about 20,000 units, C04 about 10,000, and
-lines 1 and 12 are the same `run-night` at roughly 17,000 once those two can run
-inside it. The blocked one is line 7 and it is not a cost, it is the form4 decision
-recorded above.
+**Seven met and five waiting on a provider allowance.** Their costs are known: C01
+about 20,000 units, C04 about 10,000, C05 whatever a universe pass of form4 comes
+to, and lines 1 and 12 are the same `run-night` at roughly 17,000 once the others
+can run inside it.
 
-Nothing on this list is waiting on code that has not been written.
+**Nothing is blocked and nothing waits on code that has not been written.** Line 7
+was blocked at the last walk and D-71 settled it.
 
 ### Checkpoints landed
 
@@ -232,6 +232,8 @@ Nothing on this list is waiting on code that has not been written.
 | 1.7 | Flow ingest, and D-68's reopening clause fired on measurement | 112 |
 | 1.8 | Events ingest and the derived `flow_daily` | 127 |
 | 1.10 | Fixtures registered, and the conformance test reads SCHEMA.md's writers | 130 |
+| D-71 | The form4 shortfall separated from the client stopping early | 134 |
+| INVARIANT 16 | Asserted from `SCHEMA.md` rather than excluded per file | 136 |
 
 C06 ran live for 2026-08-06 and wrote 569 rows over the 679-name universe: 566
 earnings dated 2026-07-30 to 2026-11-04, which is the seven days back and ninety
@@ -566,25 +568,78 @@ server sends fewer rows than it counts, on 17 percent of tickers, and the traver
 is already complete when it happens. The check cannot tell the two apart, so a
 universe pass fails on whichever short ticker comes first alphabetically.
 
-**Not fixed here, because the rule is authored and this is a build session.** The
-options, none chosen:
+**Settled by D-71, authored after the measurement and not against it.** Two
+failures were sharing one exception and they separate on which condition ended the
+loop, which is observable rather than judged. A loop that stops while `links.next`
+is still offered is this client failing to ask and stays fatal at exactly its
+previous strictness. A loop that stops because the endpoint offered no next link
+and is still short of `meta.total` is the provider disagreeing with itself, and is
+recorded while the stage continues.
 
-- Split the condition. Fail when the traversal stopped inside the server's window,
-  which is the fixture's case and stays fail-closed. Record the shortfall through
-  the run log and continue when the window was walked to its end. Costs 0.10 percent
-  of rows and lets the stage run.
-- Split it and bound it, so a provider degrading from 0.1 percent to 20 percent
-  still aborts. The bound is not proposed here: every candidate value either passes
-  or fails against the distribution above, and choosing one after seeing which is
-  result-shopping whatever the reasoning says [`CLAUDE.md` section 11]. It is a
-  threshold to pre-register.
-- Leave it as it is and accept that C05 cannot run over this universe.
+No threshold was set and none is to be added without evidence gathered after the
+decision was written, since every candidate value would have been chosen against
+the table above [`CLAUDE.md` §11].
 
-**What it blocks and what it does not.** 1.8 is built and green either way: C06 ran
-live and C34 is proved against a hand-computed fixture. What is blocked is C34's
-live verification, since `insider_transaction` cannot be populated at scale until
-this is decided, and with it phase P's carried obligation on the S4 open-market
-purchase base rate, which is a query against that table once populated.
+The two conditions were already the two `break` statements in
+`GetAllPagesAsync`, so the change is which of them throws rather than a new
+mechanism. The run log carries the count of tickers that under-delivered and the
+total row shortfall, and the position per affected ticker, derived from the page
+shapes already collected rather than from a second read: a short page before the
+last puts the missing rows inside the history where a trailing-90-day metric
+reaches them, while only a short final page puts them at the oldest end.
+
+**Still owed, and it needs an allowance rather than a decision.** The evidence file
+naming final-or-interior per affected ticker, and the statement here of which
+pattern dominates. If it is the final-page pattern, `insider_net_90d_usd` and
+`distinct_buyer_count` are untouched and phase P's S4 base rate can be answered
+without qualification. AAON.US, the only ticker walked page by page so far, is
+interior: page eight returned 48 where every other full page returned 50, and its
+last page returned exactly the 43 rows that 643 minus 600 predicts. One ticker is
+not a pattern.
+
+### INVARIANT 16 asserts from the schema instead of excluding files
+
+The exclusion list is gone. It had reached two entries with phase 2's forty
+technical `real` columns still to come, and a list like that gets extended until
+the guard is suppressed rather than satisfied.
+
+Two positive checks replace the `float|double` grep, both reading `SCHEMA.md`'s new
+"Columns that are not money" section: every column whose name matches the monetary
+pattern is `numeric` unless the document declares it as not money, and every `real`
+or `double precision` column is declared there. Adding a `real` column now means
+declaring it in the document a reader would look at rather than in a script nobody
+reads.
+
+**The guard reads the migrations, not the database, and that is forced rather than
+preferred.** `ci.yml` runs `guards.ps1` before the migrate step, so there is no
+schema to read at that point. The migrations are the schema's definition and are
+tracked, so the two agree by construction. `SchemaParityTests` makes the same
+assertion against the live database, where one exists, and both read the same
+declaration rather than two copies of it.
+
+Measured at the change: 296 columns over three migrations, 17 matching the monetary
+pattern and `numeric`, 28 `real`, 30 declared, and two of those 30 are name
+collisions rather than floats, `config_rows.value` being `jsonb` and
+`cost_ledger.cost_ledger_id` being `bigint`.
+
+**The expected count of 17 is stated so the check cannot pass over an empty match
+set, and it is not decorative.** The first parser written for this missed `"order"`
+and `"position"`, whose identifiers are quoted because both are reserved words, and
+reported on eleven monetary columns while printing a clean pass. Six were outside
+the set it claimed to cover. The count is asserted in `guards.ps1` and again in
+`SchemaParityTests`, each reading the schema rather than reading each other.
+
+Proved in both directions rather than reasoned about. A scratch migration adding
+`wobble_ratio real` and `entry_price real` made the check exit 1 naming all three
+problems, including `entry_price` twice, once as a monetary name that is not
+`numeric` and once as an undeclared float. Declaring both in `SCHEMA.md` made it
+exit 0. A fourth problem fired alongside them and was not designed for: the scratch
+file was untracked, so the set the check read and the set CI would check out had
+diverged, and the check now says so in both directions.
+
+The summary line changed with it. It reads `5 checks over 65 files, four greps
+finding none of what they look for and one schema assertion over the migrations`,
+because four of the five expect zero and the fifth does not.
 
 ### Rename sweeps state their exclusions
 

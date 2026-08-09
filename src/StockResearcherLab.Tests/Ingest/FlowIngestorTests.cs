@@ -1,5 +1,6 @@
 using System.Text.Json;
 using StockResearcherLab.Core;
+using StockResearcherLab.Data.Eodhd;
 using StockResearcherLab.Pipeline.Ingest;
 using StockResearcherLab.Tests.Corpus;
 using Xunit;
@@ -213,6 +214,50 @@ public sealed class FlowIngestorTests
             using var doc = JsonDocument.Parse(body);
             Assert.Empty(FlowIngestor.ParseHolders("CCS.US", doc.RootElement));
         }
+    }
+
+    // ----------------------------------------------------------- shortfalls ---
+
+    /// <summary>
+    /// D-71 asks the run log for two figures per run, the count of tickers that
+    /// under-delivered and the total row shortfall, and for the position per
+    /// affected ticker. Today's figures are the baseline, so a line that reports
+    /// them wrongly makes the baseline wrong rather than merely untidy.
+    /// </summary>
+    [Fact]
+    public void TheRunLogLineCarriesBothCountsAndAPositionPerTicker()
+    {
+        var line = FlowIngestor.DescribeShortfalls(
+        [
+            new FlowIngestor.Shortfall("NVDA.US", 1, ShortfallPosition.Final),
+            new FlowIngestor.Shortfall("AAON.US", 2, ShortfallPosition.Interior),
+            new FlowIngestor.Shortfall("AEIS.US", 12, ShortfallPosition.Both),
+        ]);
+
+        // The two counts D-71 names.
+        Assert.Contains("3 ticker(s) under-delivered", line, StringComparison.Ordinal);
+        Assert.Contains("15 row(s) short in total", line, StringComparison.Ordinal);
+
+        // Both counts as reachable-by-a-trailing-window, since Both is Interior
+        // plus a short final page and the interior reading governs.
+        Assert.Contains("2 ticker(s) are short inside the history", line, StringComparison.Ordinal);
+        Assert.Contains("1 only at the oldest end", line, StringComparison.Ordinal);
+
+        // Every affected ticker named with its position, ordinal so two runs over
+        // the same data produce the same line.
+        Assert.Contains("AAON.US 2 interior, AEIS.US 12 both, NVDA.US 1 final", line, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A clean run says so rather than saying nothing. A line that is absent when
+    /// there is nothing to report reads the same as a line that was never written,
+    /// and the baseline is only a baseline if its zero is stated.
+    /// </summary>
+    [Fact]
+    public void ARunWithNoShortfallSaysSoRatherThanStayingSilent()
+    {
+        Assert.Contains(
+            "No ticker under-delivered", FlowIngestor.DescribeShortfalls([]), StringComparison.Ordinal);
     }
 
     // ------------------------------------------------------------ declared ---

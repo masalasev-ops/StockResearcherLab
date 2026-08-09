@@ -94,15 +94,16 @@ public sealed class EodhdClientTests
         var handler = new PagedHandler(total: 100, pageSize: 25);
         var client = Client(handler);
 
-        var rows = await client.GetAllPagesAsync(
+        var read = await client.GetAllPagesAsync(
             "sec-filings/CCS.US/form4", [], pageSize: 25,
             TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        Assert.Equal(100, rows.Count);
+        Assert.Equal(100, read.Rows.Count);
         Assert.Equal(4, handler.Calls);
+        Assert.Equal(0, read.Shortfall);
 
         // Distinct, so a loop that re-requested the same offset would fail here.
-        var ids = rows.Select(r => r.GetProperty("id").GetInt32()).ToList();
+        var ids = read.Rows.Select(r => r.GetProperty("id").GetInt32()).ToList();
         Assert.Equal(100, ids.Distinct().Count());
     }
 
@@ -136,23 +137,30 @@ public sealed class EodhdClientTests
         var handler = new PagedHandler(total: 90, pageSize: 25);
         var client = Client(handler);
 
-        var rows = await client.GetAllPagesAsync(
+        var read = await client.GetAllPagesAsync(
             "sec-filings/CCS.US/form4", [], pageSize: 25,
             TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        Assert.Equal(90, rows.Count);
+        Assert.Equal(90, read.Rows.Count);
         Assert.Equal(4, handler.Calls);
+        Assert.Equal(0, read.Shortfall);
     }
 
     /// <summary>
-    /// A20. A short read that returns successfully looks identical to a complete
-    /// one, so it fails the stage rather than being logged.
+    /// D-71, the fatal half. The loop ends while <c>links.next</c> is still being
+    /// offered, which is this client failing to ask rather than the server running
+    /// out. What was missed is unknown and another call would fix it, so it throws
+    /// at exactly the strictness A20 set.
+    ///
+    /// The client only stops with a next link in hand when a page comes back empty,
+    /// so that is what the handler does: it offers a successor and then serves
+    /// nothing.
     /// </summary>
     [Fact]
-    public async Task APagedReadShortOfItsReportedTotalFailsRatherThanReturning()
+    public async Task APagedReadThatStopsWhileTheEndpointStillOffersMoreFails()
     {
-        // Says 100, stops offering a next link after two pages of 25.
-        var handler = new PagedHandler(total: 100, pageSize: 25, stopAfterPages: 2);
+        // Says 100, offers a next link throughout, serves nothing from page three.
+        var handler = new PagedHandler(total: 100, pageSize: 25, emptyFromPage: 3);
         var client = Client(handler);
 
         var ex = await Assert.ThrowsAsync<PagedReadIncompleteException>(
@@ -162,6 +170,60 @@ public sealed class EodhdClientTests
 
         Assert.Equal(50, ex.Collected);
         Assert.Equal(100, ex.ReportedTotal);
+    }
+
+    /// <summary>
+    /// D-71, the recorded half, and the case that was measured: 43 tickers in 250,
+    /// every one of them having walked the server's own pagination to its end.
+    ///
+    /// The endpoint stops offering a next link with rows still unaccounted for.
+    /// Everything available has been asked for and asking again cannot produce the
+    /// rest, so the shortfall comes back for the stage to record rather than
+    /// halting the night.
+    ///
+    /// **This is the assertion that changed direction at D-71** and it is the same
+    /// fixture as before: what used to be proof of a throw is now proof of a
+    /// recorded shortfall, which is the whole content of the decision.
+    /// </summary>
+    [Fact]
+    public async Task APagedReadTheServerRanOutOfIsRecordedRatherThanThrown()
+    {
+        // Says 100, stops offering a next link after two pages of 25.
+        var handler = new PagedHandler(total: 100, pageSize: 25, stopAfterPages: 2);
+
+        var read = await Client(handler).GetAllPagesAsync(
+            "sec-filings/CCS.US/form4", [], pageSize: 25,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.Equal(50, read.Rows.Count);
+        Assert.Equal(100, read.ReportedTotal);
+        Assert.Equal(50, read.Shortfall);
+
+        // Every page served was full, so what is missing sits past the last one.
+        Assert.Equal(ShortfallPosition.Final, read.Position);
+    }
+
+    /// <summary>
+    /// D-71's position rule, which is what decides whether a shortfall can reach a
+    /// trailing-90-day window. A page before the last coming back short puts the
+    /// missing rows inside the history; only a short final page puts them at the
+    /// oldest end.
+    ///
+    /// This is AAON.US reduced to a fixture. Thirteen pages, offsets 0 to 600, the
+    /// last returning exactly the 43 rows that 643 minus 600 predicts, and page
+    /// eight returning 48 where every other full page returned 50.
+    /// </summary>
+    [Fact]
+    public async Task AShortPageBeforeTheLastPutsTheMissingRowsInsideTheHistory()
+    {
+        var handler = new PagedHandler(total: 100, pageSize: 25, shortInteriorPage: 2);
+
+        var read = await Client(handler).GetAllPagesAsync(
+            "sec-filings/CCS.US/form4", [], pageSize: 25,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.Equal(2, read.Shortfall);
+        Assert.Equal(ShortfallPosition.Interior, read.Position);
     }
 
     [Fact]
@@ -242,7 +304,12 @@ public sealed class EodhdClientTests
     /// The provider's {data, meta, links} envelope. Offers links.next until the set
     /// is exhausted, which is what the loop is required to terminate on.
     /// </summary>
-    private sealed class PagedHandler(int total, int pageSize, int? stopAfterPages = null) : HttpMessageHandler
+    /// <param name="stopAfterPages">Stop offering links.next after this many pages, with rows still owing.</param>
+    /// <param name="emptyFromPage">Serve no rows from this page on, while still offering links.next.</param>
+    /// <param name="shortInteriorPage">Serve two rows fewer on this page, which is not the last.</param>
+    private sealed class PagedHandler(
+        int total, int pageSize, int? stopAfterPages = null,
+        int? emptyFromPage = null, int? shortInteriorPage = null) : HttpMessageHandler
     {
         private const string Path = "sec-filings/CCS.US/form4";
 
@@ -263,10 +330,26 @@ public sealed class EodhdClientTests
             var offset = ReadOffset(query);
             var count = Math.Max(0, Math.Min(pageSize, total - offset));
 
+            if (emptyFromPage is int empty && Calls >= empty)
+            {
+                count = 0;
+            }
+            else if (shortInteriorPage is int shortPage && Calls == shortPage)
+            {
+                count = Math.Max(0, count - 2);
+            }
+
             var rows = string.Join(",", Enumerable.Range(offset, count).Select(i => $$"""{"id":{{i}}}"""));
 
-            var served = offset + count;
-            var more = served < total && (stopAfterPages is null || Calls < stopAfterPages);
+            // The offset the client should ask for next, which follows the page
+            // size rather than what this page happened to serve. A short page does
+            // not shift the window, exactly as the real endpoint behaves: AAON's
+            // page eight returned 48 and page nine still began at offset 450.
+            var served = offset + Math.Min(pageSize, Math.Max(0, total - offset));
+
+            var more = served < total
+                       && (stopAfterPages is null || Calls < stopAfterPages)
+                       && (emptyFromPage is null || Calls < emptyFromPage + 1);
 
             // links.next is emitted in exactly the form the client should build for
             // the following page, so the test can compare the two [A22]. `served`

@@ -709,6 +709,43 @@ This removes the ordering constraint the re-fetch implied between C02 and
 C07. `RUNBOOK.md`'s 17:30 and 17:40 stand, and C07 makes one provider call
 rather than two.
 
+**D-71 A short page from an exhausted server is recorded, not fatal.** `ACTIVE`
+`sec-filings/{t}/form4` reports a `meta.total` higher than the number of rows
+it delivers. Measured over 250 tickers: 43 short, 104 rows missing of
+101,325, and all 43 had walked the server's own pagination to its end. The
+case the paging check was written for, a client that stops asking while pages
+remain, occurred zero times.
+
+Two failures were sharing one exception and they separate cleanly.
+
+A loop that terminates while `links.next` is present is this client failing
+to ask. It stays fatal, at exactly its current strictness, because nothing
+about the provider changes what our own defect deserves.
+
+A loop that terminates because `links.next` is absent, having collected fewer
+distinct rows than `meta.total`, is the provider disagreeing with itself.
+Asking again cannot recover the rows, and halting means a universe pass can
+never complete. It is recorded and the stage continues.
+
+No threshold is set and none is to be added later without evidence gathered
+after this decision was written. Every candidate value would have been chosen
+against data already seen, which is what §11 forbids. The rule is structural
+instead: the distinction is which condition ended the loop, and that is
+observable rather than judged.
+
+The run log carries, per run, the count of tickers that under-delivered and
+the total row shortfall. Today's figures are the baseline. Tolerating a
+discrepancy without measuring it is how it stops being visible.
+
+Where the shortfall sits is recorded per affected ticker from the pages
+already collected: a final page below `page[limit]` puts the missing rows at
+the oldest end of a history and outside every trailing-90-day window, while a
+short interior page puts them inside one. If the former dominates,
+`insider_net_90d_usd` and `distinct_buyer_count` are untouched and phase P's
+S4 base rate can be answered without qualification.
+
+---
+
 ---
 
 ## Open

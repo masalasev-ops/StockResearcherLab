@@ -63,27 +63,72 @@ public sealed class FlowIngestor : IStage
 
         long insiderRows = 0;
         long holdingRows = 0;
-        var withFilings = 0;
+
+        // Per affected ticker, because a count alone cannot say whether the missing
+        // rows can reach a trailing window [D-71]. Sorted before rendering, since
+        // the tickers are walked in a fixed order but the list still reaches output.
+        var shortfalls = new List<Shortfall>();
 
         foreach (var ticker in tickers)
         {
-            insiderRows += await LoadInsiderAsync(context, ticker, pageSize, ct).ConfigureAwait(false);
+            insiderRows += await LoadInsiderAsync(context, ticker, pageSize, shortfalls, ct).ConfigureAwait(false);
             holdingRows += await LoadHoldersAsync(context, ticker, ct).ConfigureAwait(false);
-
-            if (insiderRows > 0)
-            {
-                withFilings++;
-            }
         }
 
         var detail = string.Format(
             CultureInfo.InvariantCulture,
             "{0:N0} insider transaction row(s) and {1:N0} institutional holding row(s) over {2:N0} " +
             "ticker(s). Holdings are a top-20 snapshot rather than a series, so inst_ownership_change " +
-            "accumulates forward only [D-69]",
-            insiderRows, holdingRows, tickers.Count);
+            "accumulates forward only [D-69]. {3}",
+            insiderRows, holdingRows, tickers.Count, DescribeShortfalls(shortfalls));
 
         return new StageResult(insiderRows + holdingRows, "ok", detail);
+    }
+
+    /// <param name="Position">
+    /// `interior` means at least one page before the last came back short, so the
+    /// missing rows sit inside the history and a trailing-90-day metric can be
+    /// affected. `final` means they sit at the oldest end, outside every trailing
+    /// window [D-71].
+    /// </param>
+    public readonly record struct Shortfall(string Ticker, int Rows, ShortfallPosition Position);
+
+    /// <summary>
+    /// The two counts D-71 requires in the run log, and the per-ticker positions
+    /// behind them.
+    ///
+    /// **Uncapped**, unlike the wide-filer list C03 renders. The decision asks for
+    /// the position per affected ticker and a truncated list answers it for a
+    /// sample, which is the difference between a record and an impression. At the
+    /// measured rate of 43 tickers in 250 a full universe pass renders a few
+    /// hundred entries into one text column, which is the evidence file rather than
+    /// a summary of it.
+    /// </summary>
+    public static string DescribeShortfalls(IReadOnlyList<Shortfall> shortfalls)
+    {
+        if (shortfalls.Count == 0)
+        {
+            return "No ticker under-delivered against meta.total [D-71]";
+        }
+
+        var ordered = shortfalls
+            .OrderBy(x => x.Ticker, StringComparer.Ordinal)
+            .ToList();
+
+        var interior = ordered.Count(x => x.Position is ShortfallPosition.Interior or ShortfallPosition.Both);
+
+        return string.Format(
+            CultureInfo.InvariantCulture,
+            "{0:N0} ticker(s) under-delivered against meta.total, {1:N0} row(s) short in total, of which " +
+            "{2:N0} ticker(s) are short inside the history where a trailing window can reach them and " +
+            "{3:N0} only at the oldest end [D-71]: {4}",
+            ordered.Count,
+            ordered.Sum(x => x.Rows),
+            interior,
+            ordered.Count - interior,
+            string.Join(", ", ordered.Select(x => string.Format(
+                CultureInfo.InvariantCulture, "{0} {1} {2}",
+                x.Ticker, x.Rows, x.Position.ToString().ToLowerInvariant()))));
     }
 
     private static async Task<IReadOnlyList<string>> UniverseAsync(
@@ -102,18 +147,23 @@ public sealed class FlowIngestor : IStage
     /// Form 4, walked to the end on <c>page[offset]</c> and <c>page[limit]</c>.
     ///
     /// `limit` and `offset` are accepted and silently ignored by this endpoint, so a
-    /// call using them returns one page and looks complete [1.9]. The client asserts
-    /// the collected count against <c>meta.total</c> and fails the stage on a
-    /// mismatch, because a short read that returns successfully is indistinguishable
-    /// from a complete one [A20].
+    /// call using them returns one page and looks complete [1.9].
+    ///
+    /// The client compares the collected count against <c>meta.total</c> and the two
+    /// outcomes are not the same failure [D-71]. Stopping while a next link is still
+    /// offered fails the stage, because what was missed is unknown and asking again
+    /// would fix it. Running the server out of pages and still coming up short is
+    /// the provider disagreeing with itself, and is recorded here rather than
+    /// halting the night: at the measured rate a universe pass would never complete.
     /// </summary>
     private async Task<long> LoadInsiderAsync(
-        StageContext context, string ticker, int pageSize, CancellationToken ct)
+        StageContext context, string ticker, int pageSize, List<Shortfall> shortfalls,
+        CancellationToken ct)
     {
-        IReadOnlyList<JsonElement> filings;
+        PagedRead read;
         try
         {
-            filings = await _client.GetAllPagesAsync(
+            read = await _client.GetAllPagesAsync(
                 "sec-filings/" + ticker + "/form4", [], pageSize, ct).ConfigureAwait(false);
         }
         catch (HttpRequestException)
@@ -123,7 +173,16 @@ public sealed class FlowIngestor : IStage
             return 0;
         }
 
-        var rows = ParseFilings(ticker, filings);
+        // The server ran out of pages with rows still unaccounted for. Recorded and
+        // continued, because asking again cannot produce them and halting means a
+        // universe pass never completes [D-71]. The client throws instead where the
+        // loop stopped while a next link was still on offer.
+        if (read.Shortfall > 0)
+        {
+            shortfalls.Add(new Shortfall(ticker, read.Shortfall, read.Position));
+        }
+
+        var rows = ParseFilings(ticker, read.Rows);
         if (rows.Count == 0)
         {
             return 0;

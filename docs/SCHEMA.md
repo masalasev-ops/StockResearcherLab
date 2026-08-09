@@ -444,6 +444,82 @@ The only table the interface can write. Nothing here touches run data.
 
 ---
 
+## Types
+
+### Columns that are not money
+
+**INVARIANT 16 is asserted from this list rather than from an exclusion list in a
+script** [1.8]. `guards.ps1` parses the tables below and makes two assertions:
+every column whose name matches the monetary pattern is `numeric` unless it appears
+here, and every `real` or `double precision` column in the migrations appears here.
+Adding a `real` column therefore means declaring it in this document, which is where
+a reader would look, rather than in a script, which is where nobody does.
+
+The monetary pattern covers `_usd`, `price`, `value`, `cap`, `cost`, `equity`,
+`pnl`, `dollar` and `amount`, matched against the column name and not the table's.
+Extend the pattern as the schema grows. Do not extend a list of files to skip: that
+was the previous mechanism and it had reached two entries with phase 2's forty
+technical columns still to come, at which point the guard would have been suppressed
+rather than satisfied.
+
+**The count is stated so the check cannot pass over an empty match set.** Seventeen
+columns match the monetary pattern and are `numeric`, and a check finding fewer has
+stopped reading part of the schema rather than found a cleaner one. That is not
+hypothetical: the parser written for this missed `"order"` and `"position"`, whose
+identifiers are quoted because both are reserved words, and six monetary columns
+were silently outside the set it reported on.
+
+Everything below is a measurement, a ratio, an index or a key. None of it is a sum
+of money, and storing a technical measure as a 32-bit float halves the two largest
+tables in the system [O.2].
+
+| Column | Type | What it is |
+|---|---|---|
+| `indicator_daily.atr_pct` | `real` | a percentage of price, not a price |
+| `indicator_daily.adx14` | `real` | an index between 0 and 100 |
+| `indicator_daily.dist_200dma` | `real` | a distance as a fraction |
+| `indicator_daily.dist_52w_high` | `real` | a distance as a fraction |
+| `indicator_daily.rs_change_21d` | `real` | a relative change |
+| `indicator_daily.rs_change_63d` | `real` | a relative change |
+| `indicator_daily.rs_change_vs_sector` | `real` | a relative change |
+| `indicator_daily.volume_vs_50d_avg` | `real` | a ratio of two volumes |
+| `indicator_daily.ma50_200_slope` | `real` | a slope |
+| `valuation_daily.fcf_yield` | `real` | a yield |
+| `valuation_daily.ev_ebit` | `real` | a multiple |
+| `valuation_daily.ev_ebit_vs_own_5y` | `real` | a multiple against its own history |
+| `valuation_daily.roic` | `real` | a return rate |
+| `valuation_daily.roic_4q_change` | `real` | a change in a rate |
+| `valuation_daily.gross_margin_4q_change` | `real` | a change in a margin |
+| `valuation_daily.net_debt_ebitda` | `real` | a ratio of two monetary figures, itself unitless |
+| `valuation_daily.accruals` | `real` | a ratio |
+| `valuation_daily.share_count_change` | `real` | a proportional change in a count |
+| `valuation_daily.revenue_growth_4q_trend` | `real` | a trend in a growth rate |
+| `valuation_daily.last_two_earnings_surprises` | `real` | percentages, `real[]` |
+| `sentiment_daily.sentiment_score` | `real` | a normalised score between -1 and 1 |
+| `institutional_holding.change_pct` | `real` | a percentage change in a share count |
+| `flow_daily.inst_ownership_change` | `real` | a proportional change in a share count |
+| `market_context_daily.breadth` | `real` | a fraction of the market |
+| `market_context_daily.vix` | `real` | an index level |
+| `screen_score_daily.score` | `real` | a screen score |
+| `screen_history.floor_score` | `real` | a screen score |
+| `screen_history.p98_trailing` | `real` | a screen score percentile |
+
+**Two columns whose names collide with the monetary pattern** and are not money.
+They are declared here for the same reason and by the same mechanism, so there is
+one list rather than one per kind of exception.
+
+| Column | Type | What it is |
+|---|---|---|
+| `config_rows.value` | `jsonb` | the config payload. The word is generic and this one is not a sum of money |
+| `cost_ledger.cost_ledger_id` | `bigint` | an identity key that happens to sit on a table about cost |
+
+`median_dollar_volume_20d` is deliberately absent from both tables. It is a dollar
+volume, so it is money, and it is `numeric` for that reason rather than `real`
+despite living among the technical columns [O.2]. A future edit moving it here would
+be the mistake this section exists to make visible.
+
+---
+
 ## Totals
 
 Roughly 5 GB after a five-year backfill, growing about 700 MB a year. Two tables

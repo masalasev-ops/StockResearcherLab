@@ -141,6 +141,40 @@ public static class SchemaDocument
 
     private static readonly Regex Word = new(@"[A-Za-z][A-Za-z0-9]*", RegexOptions.Compiled);
 
+    /// <summary>
+    /// Every `table.column` SCHEMA.md declares as not money, from its "Columns that
+    /// are not money" section [INVARIANT 16, 1.8].
+    ///
+    /// `guards.ps1` parses the same section from the migrations side, before the
+    /// database exists, because CI runs it before the migrate step. This reads the
+    /// same declaration against the live database, which is the assertion the
+    /// decision actually states. Two readers of one list rather than two lists.
+    /// </summary>
+    public static IReadOnlySet<string> NonMonetaryColumns()
+    {
+        var text = File.ReadAllText(Path);
+
+        var section = Section.Match(text);
+        if (!section.Success)
+        {
+            throw new InvalidOperationException(
+                "docs/SCHEMA.md has no 'Columns that are not money' section. INVARIANT 16 is asserted " +
+                "against that list and there is nothing to assert against without it.");
+        }
+
+        return Declared.Matches(section.Groups[1].Value)
+            .Select(m => m.Groups[1].Value)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static readonly Regex Section = new(
+        @"###\s+Columns that are not money(.*?)\r?\n---",
+        RegexOptions.Compiled | RegexOptions.Singleline);
+
+    private static readonly Regex Declared = new(
+        @"^\|\s*`([a-z_0-9]+\.[a-z_0-9]+)`",
+        RegexOptions.Compiled | RegexOptions.Multiline);
+
     /// <summary>Absolute path to SCHEMA.md, found by walking up from the test binary.</summary>
     public static string Path => System.IO.Path.Combine(RepositoryRoot, "docs", "SCHEMA.md");
 

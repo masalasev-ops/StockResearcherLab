@@ -14,7 +14,7 @@ Correct them directly. Do not record intentions here.
 |---|---|---|---|
 | P Data probe | DONE | 3099e66 | All five checkpoints landed and all six findings recorded. D-57 to D-63 produced. Closed under the five-step procedure retired at D-67, after two conformance passes and the C, E, G, H, J and K corrections. That record is in the archive |
 | 0 Rails | DONE | d9cb5df | Signed off 2026-08-06. Checkpoints 0.1 to 0.8, plus CI, the sign-off review, and pass O's corrections. 25 tests green. Step 1 was met by running every CI step locally, because no hosted runner has ever picked up a job on this account. Step 2 ran at `d4baeaf` and does not cover pass O's four corrected files. Both gaps are in the phase 0 block below |
-| 1 Ingest and universe | IN PROGRESS | c873e02 | Every checkpoint 1.1 to 1.14 landed, 130 tests. Seven of the twelve definition-of-done lines are met and five wait on a provider allowance. Nothing is blocked: D-71 settled the form4 shortfall and INVARIANT 16 now asserts from the schema. The walk is below. The CI runner gap is recorded below rather than at sign-off |
+| 1 Ingest and universe | IN PROGRESS | 050d5c7 | Every checkpoint 1.1 to 1.14 landed, 136 tests. All twelve definition-of-done lines met live on 2026-08-09: the universe rebuilt to 2,840 names and `run-night` ran all seven stages end to end. Four findings are open and all four are authored questions, not build work: C01 never deactivates, the universe is 2,840 rather than roughly 2,000, C05 cannot fit any schedule, and CI cannot catch the timeout failure class. The CI runner gap is recorded below rather than at sign-off |
 | 2 Compute | NOT STARTED | | |
 | 3 Backfill | NOT STARTED | | |
 | 4 Screens and selection | NOT STARTED | | |
@@ -193,26 +193,41 @@ that produces it is named.
 
 | # | Line | State | What answers it |
 |---|---|---|---|
-| 1 | one night of the whole US market lands | **waits on allowance** | `price_daily` holds 12,642,222 rows over 2025-07-22 to 2026-08-05 and C06 landed live, but no single `run-night` has gone end to end, because C05 halts it |
-| 2 | the universe builds to roughly 2,000 names, with the count excluded by the clean-gap criterion recorded rather than assumed | **waits on allowance** | The count is recorded and is now two counters rather than one, never-fetched apart from fetched-and-thin. The universe still reads 679 from pre-correction data; the upper bound after today's coverage is 2,840 before the common-stock filter, which last rejected 1,624 of 4,808. C01 costs about 20,000 units |
+| 1 | one night of the whole US market lands | **met** | `run-night 2026-08-09` completed on 2026-08-07 over seven steps for 45,518 units. `price_daily` holds 13,091,293 rows over 274 dates reaching 2026-08-07 |
+| 2 | the universe builds to roughly 2,000 names, with the count excluded by the clean-gap criterion recorded rather than assumed | **met, and the count is 2,840 rather than roughly 2,000** | C01 ran for 2026-08-07 in 677 seconds for 28,401 units and wrote 2,840 names, buckets 962 large, 1,035 mid, 844 small. Recorded rather than assumed: 4,810 candidates passing price, liquidity and history, less 1,623 not common stock, 219 with no fundamentals fetched yet, 39 fetched but below 4 clean filing gaps, 0 with no readable share count, 89 below the market cap floor. See the size note below |
 | 3 | feeding the freshness guard deliberately stale data aborts the run and produces no orders | **met** | `ANewestDateOlderThanTheLastSessionAborts`, and `AGuardAbortLeavesNoRowsInAnyTableALaterStageWrites` for the second half. No stage in this phase writes an order, so the no-orders property also holds by construction |
 | 4 | a date that fails settledness is re-read on a later run rather than skipped [D-65] | **met** | D-70 replaced D-65's re-fetch with C02's trailing reload window: `AShortDateIsToppedUpByALaterRun`, `TheWindowIsCalendarDatesCountingBackFromTheRunDateInclusive`, `AStillFillingDateIsSkippedAndTheDateBeforeItIsUsed`, `TheWalkBackPassesEveryStillFillingDateAndLandsOnTheFirstSettledOne` |
 | 5 | a test asserts no fundamental value is readable before its effective filing date, with the equality, null and negative-gap cases each exercised | **met** | `NoPeriodIsEverReadableOnOrBeforeItsOwnPeriodEnd` over the whole rule, then one per case: `AFilingDateEqualToItsPeriodEndIsUnknownRatherThanUsable`, `ANullFilingDateIsUnknownAndSubstituted`, `AFilingDateBeforeItsPeriodEndIsUnknown`, `AFilingDateAfterItsPeriodEndIsUsedAsItStands`, and `ATickerWithNoCleanGapGetsNoEffectiveDateAtAll` for the population that gets no date at all |
-| 6 | sentiment lands for the whole universe and a name with rows on only a handful of days is ingested without error | **half met, half waits on allowance** | The sparse half is proved and the field names were verified live today: `ADayWithNoRowIsNotFilledWithZero`, `AnAbsentCountOrScoreStaysNull`, `AShapeThatDoesNotMatchYieldsNothingRatherThanEmptyRows`, and `EveryUniverseNameIsAskedForAndNothingIsNarrowed` for the no-narrowing half. `sentiment_daily` is empty: C04 has never run live, and it reads `security`, so it waits on the rebuild |
-| 7 | `insider_transaction` and `institutional_holding` land at their own grain with `transaction_code` retained, and `flow_daily` derives from them at ticker-by-day | **waits on allowance** | The grain is proved by `TwoLinesIdenticalOnEveryAttributeAreStillTwoRows` and `HoldersAreReadFromAnObjectKeyedByPosition`, the code retention by `TransactionCodeAndSideSurviveIntact`, and the derivation against a hand-computed fixture by `TheThreeMetricsReproduceTheHandComputedReference`. Nothing has landed live. **No longer blocked**: D-71 separated the client stopping early from the server running out, and C05 now records a shortfall and continues |
+| 6 | sentiment lands for the whole universe and a name with rows on only a handful of days is ingested without error | **met** | C04 ran over the rebuilt universe and wrote 32,288 rows, 2,760 of 2,841 names returning at least one row over 30 days. The 81 that returned none carry no rows rather than zeros, which is the sparse half holding live [D-12]. Still proved by test: `ADayWithNoRowIsNotFilledWithZero`, `AnAbsentCountOrScoreStaysNull`, `AShapeThatDoesNotMatchYieldsNothingRatherThanEmptyRows`, `EveryUniverseNameIsAskedForAndNothingIsNarrowed` |
+| 7 | `insider_transaction` and `institutional_holding` land at their own grain with `transaction_code` retained, and `flow_daily` derives from them at ticker-by-day | **met over 250 of 2,840 names** | C05 wrote 227,020 insider rows over 226 tickers and 4,922 holdings, and C34 derived 255 `flow_daily` rows. `transaction_code` is retained and spread wide: A 63,698, M 55,938, S 51,733, F 30,324, P 9,085, J 5,791, G 4,304, C 2,928, D 2,237, X 493. The 250 is `flow.max_tickers_per_run`, not a failure; a universe pass is the cost finding below. Grain still proved by `TwoLinesIdenticalOnEveryAttributeAreStillTwoRows` and `HoldersAreReadFromAnObjectKeyedByPosition` |
 | 8 | the endpoint sweep from 1.9 is recorded in `PROGRESS.md` | **met** | The sweep table above, plus the weights, plus the two retractions |
 | 9 | `NoOpStage` is gone and the registry holds no component name `ARCHITECTURE.html` section 3 does not have | **met** | `NoOpStageIsGone`, `EveryRegisteredComponentIsNamedInTheCatalogue`, `AComponentTheCatalogueDoesNotNameIsCaught`, and `NoTestDoubleAnswersToACatalogueComponentName` for the way that check was quietly defeated once |
 | 10 | a stage that COPYs into a table it does not declare throws before a connection is opened | **met** | `AStageBulkLoadingATableItDoesNotDeclareThrowsBeforeAnythingOpens`, and `AStageWritingAColumnItDidNotDeclareThrowsBeforeAnythingOpens` for the column-level case A27 added |
 | 11 | two versions of one config key resolve to the older value for a date between them and the newer for a date after | **met** | `ADateBetweenTwoVersionsResolvesToTheOlder`, `ADateAfterBothVersionsResolvesToTheNewer`, and `ADateBeforeEveryVersionResolvesToNothingRatherThanTheNewest` for the third case the checkpoint added |
-| 12 | one command runs the night end to end, with a guard abort leaving no rows in any table a later stage writes | **half met, half waits on allowance** | `run-night [date]` exists and exits non-zero when the night halts. The abort property is proved by `AGuardAbortLeavesNoRowsInAnyTableALaterStageWrites`, `AWritingStageThatProducesNothingHaltsEverythingAfterIt` and `AStageThatDeclaresNoWritesProducingZeroRowsDoesNotHalt`. No live end-to-end run, same reason as line 1 |
+| 12 | one command runs the night end to end, with a guard abort leaving no rows in any table a later stage writes | **met** | `run-night 2026-08-09` ran all seven steps in order and exited 0. C07 was handed a Sunday and returned 2026-08-07, so the fallback ran live rather than only in a fixture. The abort property stays proved by `AGuardAbortLeavesNoRowsInAnyTableALaterStageWrites`, `AWritingStageThatProducesNothingHaltsEverythingAfterIt` and `AStageThatDeclaresNoWritesProducingZeroRowsDoesNotHalt` |
 
-**Seven met and five waiting on a provider allowance.** Their costs are known: C01
-about 20,000 units, C04 about 10,000, C05 whatever a universe pass of form4 comes
-to, and lines 1 and 12 are the same `run-night` at roughly 17,000 once the others
-can run inside it.
+**All twelve met, on the night of 2026-08-09 against an allowance that had just
+reset.** Nothing is blocked and nothing waits on code that has not been written.
 
-**Nothing is blocked and nothing waits on code that has not been written.** Line 7
-was blocked at the last walk and D-71 settled it.
+Two are met with a qualification stated in the line rather than hidden behind it.
+Line 2 produced 2,840 names where the line asks for roughly 2,000. Line 7 covered
+250 names of 2,840, which is `flow.max_tickers_per_run` doing its job rather than a
+shortfall, and a universe pass is a cost question recorded below.
+
+**Measured cost of the night, read from `/api/user` either side of each step rather
+than estimated:**
+
+| Step | Units | |
+|---|---|---|
+| C02 catch-up | 2,000 | 20 dates at 100, exactly the weight table's figure |
+| C01 rebuild | 28,401 | 2,840 sector calls at 10, plus the symbol list |
+| `run-night` | 45,518 | all seven stages |
+| Wasted | 13,231 | a foreground C01 killed at the 10 minute tool ceiling, below |
+| **Total** | **89,470** | of 100,000, leaving 10,530 |
+
+C01 at 28,401 overran its 20,000 estimate for the same reason line 2 overran its
+own: the estimate assumed a 2,000-name universe and the universe is 2,840. The
+per-member weight of 10 was right.
 
 ### Checkpoints landed
 
@@ -318,23 +333,36 @@ buys every name for one day and is right for a night. Per-ticker buys one name f
 every day and is right for a backfill. Using either for the other's job costs
 roughly sixty times more than it needs to.
 
-**Measured steady-state cost**, on a universe of ~2,000:
+**Steady-state cost.** The estimates below were built on a universe of ~2,000. The
+universe is 2,840 and the whole night ran on 2026-08-09, so the column that matters
+is the measured one.
 
-| | Units | |
-|---|---|---|
-| C02, 20 dates × 100 | 2,000 | nightly |
-| C03, 500 tickers × 10 | 5,000 | nightly |
-| C04, 2,000 tickers × 5 | 10,000 | nightly |
-| C06, 1 calendar + 2 bulk | 201 | nightly, measured at 1.8 |
-| C07 | ~10 | nightly |
-| C34 | 0 | nightly. Derives from two tables the ingest wrote and calls nothing |
-| **Nightly total** | **~17,200** | 17% of the daily allowance |
-| C05 form4, 2,000 × 10 per page | 20,000+ | weekly, and the one open question |
-| Five-year backfill, prices and fundamentals | ~25,000 | one-off |
+| | Estimated | Measured 2026-08-09 | |
+|---|---|---|---|
+| C02, 20 dates × 100 | 2,000 | **2,000** | nightly. The one estimate that was exact |
+| C03, 500 tickers × 10 | 5,000 | ~5,000 | nightly, capped by `fundamentals.max_tickers_per_run` |
+| C04, universe × 5 | 10,000 | ~14,200 | nightly. 2,841 names, not 2,000 |
+| C05, 250 × pages × 10 | not estimated per run | **~22,000** | 250 names, 664 seconds, 227,020 rows |
+| C06, 1 calendar + 2 bulk | 201 | 201 | nightly, measured at 1.8 |
+| C07 | ~10 | ~10 | nightly |
+| C34 | 0 | 0 | derives from two tables the ingest wrote and calls nothing |
+| **Nightly total** | **~17,200** | **45,518** | **46% of the daily allowance, not 17%** |
+| C01 rebuild, per member × 10 | 20,000 | **28,401** | weekly. 2,840 members, not 2,000 |
+| C05 over the whole universe | 20,000+ | **~258,000** | does not fit a day. See the finding above |
+| Five-year backfill, prices and fundamentals | ~25,000 | not yet run | one-off |
+
+**The nightly total is 2.6 times its estimate and the reason is C05.** The estimate
+had no per-run figure for it at all, only the universe-pass number carried in the
+last row, so the nightly line was effectively costed with C05 left out.
 
 **So the allowance is not the constraint it looked like yesterday.** What made
 yesterday expensive was loading a year of prices by date, 18 bulk calls at 100 each
 plus thirteen C03 runs, which is the backfill done the nightly way.
+
+**[Corrected 2026-08-09.]** That reads too comfortably now the night has been
+measured. A night is 46 percent of the allowance rather than 17, and C05 over the
+universe does not fit a day at all. The allowance is not the constraint for prices,
+which was the claim's subject and is still true; it is a constraint on flow.
 
 **Two consequences worth acting on, neither taken here.** `fundamentals/{t}`
 unfiltered costs the same as filtered and carries `General::Sector`, so C01's
@@ -588,14 +616,107 @@ shapes already collected rather than from a second read: a short page before the
 last puts the missing rows inside the history where a trailing-90-day metric
 reaches them, while only a short final page puts them at the oldest end.
 
-**Still owed, and it needs an allowance rather than a decision.** The evidence file
-naming final-or-interior per affected ticker, and the statement here of which
-pattern dominates. If it is the final-page pattern, `insider_net_90d_usd` and
-`distinct_buyer_count` are untouched and phase P's S4 base rate can be answered
-without qualification. AAON.US, the only ticker walked page by page so far, is
-interior: page eight returned 48 where every other full page returned 50, and its
-last page returned exactly the 43 rows that 643 minus 600 predicts. One ticker is
-not a pattern.
+~~**Still owed, and it needs an allowance rather than a decision.** The evidence
+file naming final-or-interior per affected ticker, and the statement here of which
+pattern dominates.~~ **[Answered by the 2026-08-09 run. Interior dominates.]**
+
+**The interior pattern dominates, and that is the unfavourable answer of the two.**
+C05 over 250 names on 2026-08-09: 44 tickers under-delivered against `meta.total`,
+105 rows short of 227,020 written. **Forty-two are short inside the history where a
+trailing window reaches them. Two are short only at the oldest end.** One of the 42,
+AMT.US at 11 rows, is short in both places at once.
+
+The stated consequence therefore lands. It was recorded before the measurement:
+if the final-page pattern dominated, `insider_net_90d_usd` and
+`distinct_buyer_count` would be untouched and phase P's S4 base rate could be
+answered without qualification. It does not, so **both metrics can be understated
+on 42 of 250 names and the S4 base rate carries that qualification** until someone
+decides it does not matter.
+
+**Magnitude, stated alongside the direction, because the direction alone reads
+worse than it is.** 105 rows of 227,020 is 0.046 percent, spread over 44 tickers of
+250, the largest single shortfall being AEIS.US at 12 rows and AMT.US at 11. Whether
+a metric that can be understated by a row or two on 17 percent of names matters is
+a judgement about the screens, not a measurement, and it is not one this session
+takes.
+
+AAON.US, the only ticker walked page by page before the run, was interior. It turned
+out to be representative rather than a coincidence, but that was not knowable from
+one ticker and the note above was right not to claim it.
+
+### The night of 2026-08-09, and four findings it produced
+
+The allowance reset mid-session and the whole of phase 1's remaining live work ran
+against it. What landed is in the definition-of-done walk above. What it exposed is
+here, and **all four are authored questions rather than build work**, so none is
+closed.
+
+#### C02 had stopped working, and it stopped by growth rather than by change
+
+The first run of the night failed at 34.9 seconds with `Exception while reading from
+stream`, which is a transport break rather than a data fault. **No `CommandTimeout`
+was set anywhere, so Npgsql's 30 second default applied to an upsert of about 50,000
+rows into a 13 million row table.** The four `PriceIngestor` runs before it trend
+74.8, 84.4, 94.4 and 98.2 seconds. It worked for 272 dates and stopped working when
+the table got large enough, which is the failure mode that looks like a flake.
+
+Measured at the change: a 50,100 row upsert into `price_daily` takes 19.0 seconds
+against that 30 second ceiling. Set to 300 seconds in operator config and documented
+in `appsettings.Secrets.example.json`, after which C02 wrote 701,957 rows.
+
+**The finding is not the timeout, it is that CI cannot catch this.** `ci.yml` drops
+and rebuilds a database whose tables hold fixture-sized data, so 30 seconds is never
+approached there and a green CI says nothing about it. The value also lives only in
+untracked operator config, so a fresh checkout silently gets the broken default and
+finds out at whatever table size crosses the line. Whether the timeout belongs in
+code where it cannot be forgotten is a decision, and phase 3's five year backfill is
+the reason it is worth taking now.
+
+#### C01 has no path that deactivates a name
+
+`is_active` is written as the literal `true` for every member and nothing anywhere
+sets it false. A ticker that leaves the universe keeps `is_active = true` for good.
+Tonight that is one row of 2,841, arrived at by arithmetic: C01 wrote 2,840 and the
+table holds 2,841, so exactly one prior member was not rewritten.
+
+It matters more than one row suggests, because C04 takes its ticker set from
+`security` and weekly rebuilds accumulate. **The question is what `is_active` means:
+a member now, or a name that was a member once.** Either reading is defensible and
+the code currently implements neither deliberately.
+
+Not to be confused with the eight rows whose `last_seen` predates 2026-08-07. Those
+are correct: `last_seen` is `max(date)` from `price_daily` per ticker, so a thinly
+traded name legitimately carries an older one.
+
+#### The universe is 2,840 where the line asks for roughly 2,000
+
+Not a build error and not a change in the data. The earlier estimate said 2,840 was
+the upper bound *before* the common-stock filter and predicted roughly 2,000 after
+it. The filter is applied earlier than that reasoning assumed: 1,623 were rejected as
+not common stock and 2,840 is what remains. **The estimate applied the same filter
+twice.**
+
+Whether 2,840 satisfies "roughly 2,000" is not a measurement. It is 42 percent above
+the figure the line names, and the line is authored.
+
+#### C05 cannot fit any schedule, and this is now costed rather than estimated
+
+`/api/sec-filings/{t}/form4` ignores `from` and `to`. Confirmed on 2026-08-09 against
+CCS.US for 10 units: `meta.total` reads 325 with the filter and 325 without, 50 rows
+either way. The retraction above was right that the endpoint pages on `page[offset]`
+and wrong to call the whole of the original finding wrong; the date filters really
+are ignored.
+
+So every run walks each ticker's full history. Measured tonight: **250 tickers cost
+664 seconds and produced 227,020 rows.** At 2,840 names that extrapolates to roughly
+258,000 units for one universe pass, against a daily allowance of 100,000 and a
+`FlowEngine` that reads only a trailing 90 days.
+
+**No schedule fixes this, which is why it is a decision and not a tuning problem.**
+Weekly costs the same as nightly, because the cost is per pass and not per day.
+The two shapes that would work both change what the stage does: skip tickers already
+covered and page only what is new, or stop the walk once rows fall out of the
+window. Both make C05 stateful in a way a pure stage currently is not.
 
 ### INVARIANT 16 asserts from the schema instead of excluding files
 

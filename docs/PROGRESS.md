@@ -718,6 +718,30 @@ The two shapes that would work both change what the stage does: skip tickers alr
 covered and page only what is new, or stop the walk once rows fall out of the
 window. Both make C05 stateful in a way a pure stage currently is not.
 
+### The prompts issued during the build were archived at the end, not before
+
+`CLAUDE.md` §3 says a prompt is archived before code, and that one archived at the
+end has been archived after the session already learned things. The phase 1 prompt
+itself went in at the pre-flight as required. **Everything issued after the plan was
+approved did not**, which is sixteen amendments, two authored decisions and every
+operational instruction across four days.
+
+Closed on 2026-08-10 as `prompts/spent/phase-1-ingest-and-universe-build.md`, 35
+prompts in timestamp order across two sessions. Extracted programmatically from the
+transcripts rather than retyped, because a paraphrase of a spent prompt destroys the
+thing it exists to preserve [D-63]. The file states its own lateness in its header
+rather than reading as though it were written at the time.
+
+**It is late and that cannot be undone by filing it.** The companion file was
+assembled while the plan was still being argued and reads as a record. This one was
+assembled by the session it describes, which is the weaker position, and the header
+says so.
+
+**Two gaps in it that filing did not close.** Amendments A16, A17 and A18 appear in
+no surviving transcript and no document cites them, so A15 is followed directly by
+A19 and nobody can now say whether the numbering skipped or the prompts are lost.
+Pass Q's prompt is still unarchived, unchanged since the phase 1 pre-flight named it.
+
 ### INVARIANT 16 asserts from the schema instead of excluding files
 
 The exclusion list is gone. It had reached two entries with phase 2's forty

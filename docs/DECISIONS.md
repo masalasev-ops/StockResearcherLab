@@ -744,6 +744,34 @@ short interior page puts them inside one. If the former dominates,
 `insider_net_90d_usd` and `distinct_buyer_count` are untouched and phase P's
 S4 base rate can be answered without qualification.
 
+**D-72 The store-wide config version is a count, not a maximum.** `ACTIVE`
+Nothing in the corpus defined a store-wide config version; only `MAX(version)`
+per key. Phase 4 stamps one on every attribution row and the tuner segments by
+it, so it has to distinguish configurations.
+
+A maximum over per-key versions does not. Keys at 3, 1, 1 give 3; changing the
+second key gives 3, 2, 1 and still gives 3. Two different configurations share a
+stamp from the second change onward, and segmenting on it would pool results the
+tuner exists to keep apart.
+
+The store-wide version as of a date is ~~the count of rows in `config_rows` whose
+`set_at` is at or before that date~~ [amended, the mechanism counted rows and had
+to count changes] **one plus the count of rows whose `version` is greater than one
+and whose `set_at` is at or before that date**. A key's initial seed carries
+`SeedInstant` and is backdated by design, so counting it would make seeding a new
+key raise the version for every past date, and a backfill re-run would stamp a
+different version on identical data. A seed extends the configuration's schema;
+only a revision changes the configuration in force. Append-only insertion makes it
+rise by exactly one per change, so distinct configurations get distinct values, it
+resolves as-of by the same rule as every key, and no column is added. ~~It begins
+at the seeded key count rather than at 1.~~ [amended with the mechanism] It begins
+at 1 however many keys are seeded.
+
+The null case is not arithmetic and is asserted separately. No row at all in force
+as of the date returns null, because one plus zero revisions is 1 and 1 is a real
+version, so the sum cannot tell a seeded-and-never-revised store from an empty one.
+A date before the seed fails the run rather than being stamped.
+
 ---
 
 ---

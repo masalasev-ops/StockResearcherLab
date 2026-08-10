@@ -218,6 +218,15 @@ still runs over the whole test project with nothing excluded and still finds non
 The `TimeZoneInfo` guard is untouched for the same reason: the test names no
 identifier and resolves no zone of its own.
 
+**Answered on Linux, 2026-08-10.** Run `31418985363` on `ubuntu-latest` at
+`ab649b6` reported `Passed! - Failed: 0, Passed: 157`, and 157 is the count with
+these two in it. So `America/New_York` resolves from tzdata under
+`InvariantGlobalization=true`, `SystemClock.ResolveEastern` returns on its first
+identifier there rather than falling through, and `SystemClock.Today` is a real US
+Eastern date on both platforms this repository runs on. 1.13's "would work on
+Linux" is now "does", and it took a test rather than a run because four green CI
+runs before this one never reached the code.
+
 **Step 2, a review in a session that did not build the phase.** Ran at
 `d4baeaf`, in a session with no involvement in the build and no commit in this
 repository. It found one invariant breach in the whole tree, eight of nineteen
@@ -2048,6 +2057,8 @@ because a gap recorded only beside the code it belongs to is not recorded [`CLAU
 | After the record of the pass | `bda6b35` | Passed 155, Failed 0 | 5 checks over 66 files |
 | With the other three spec documents cleaned | `909f725` | Passed 155, Failed 0 | 5 checks over 66 files |
 | With the CI records corrected and `ci.ps1`'s header rewritten | `c36a74e` | Passed 155, Failed 0 | 5 checks over 66 files |
+| With `SystemClockTests` | `ab649b6` | Passed 157, Failed 0 | 5 checks over 67 files |
+| The same commit on `ubuntu-latest`, run `31418985363` | `ab649b6` | Passed 157, Failed 0 | 5 checks, pwsh |
 
 The six new tests are `TheReadsCellParseFindsTablesRatherThanNothing`,
 `EveryRegisteredStageIsUnderTest`, `EveryTableAStageDeclaresIsNamedInItsReadsCell`,

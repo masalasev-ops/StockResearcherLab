@@ -39,9 +39,35 @@ public sealed record TableWrite(string Table, WriteOperation Operation, IReadOnl
 
 /// <summary>What a stage did. Row counts land in run_log.</summary>
 /// <param name="RowsWritten">Rows this stage wrote. Zero is a legitimate answer and is not an error on its own.</param>
-public readonly record struct StageResult(long RowsWritten)
+/// <param name="Status">
+/// What the runner records. <c>ok</c> for the ordinary case, and a stage may return
+/// something else where completing successfully is not the whole story.
+///
+/// This exists because two components must raise an alert and neither may write the
+/// <c>alert</c> table, which has ConcentrationMonitor as its only writer. Both emit
+/// through the run log instead, exactly as C07 already does for its abort, and a
+/// band that produced a row indistinguishable from a clean one would not be an
+/// alert at all [A3, INVARIANT 10].
+/// </param>
+/// <param name="Detail">
+/// The line worth reading when <see cref="Status"/> is not <c>ok</c>. It lands in
+/// <c>run_log.error</c>, which is the only free-text column that table has.
+/// </param>
+/// <param name="TradingDate">
+/// The date the rest of the run should use, where a stage determines one. Only the
+/// freshness guard does: it is the component that decides which stored date is
+/// usable, and every stage after it works on that date rather than on the date the
+/// run was started for [D-65, D-70].
+///
+/// Null everywhere else, which is the ordinary case.
+/// </param>
+public readonly record struct StageResult(
+    long RowsWritten, string Status = "ok", string? Detail = null, DateOnly? TradingDate = null)
 {
     public static StageResult None => new(0);
+
+    /// <summary>Completed, and something about it is worth an operator's attention.</summary>
+    public static StageResult Alert(long rowsWritten, string detail) => new(rowsWritten, "alert", detail);
 }
 
 /// <summary>
@@ -87,12 +113,14 @@ public interface IWriteOwner
 /// </summary>
 public sealed class StageContext
 {
-    public StageContext(DateOnly date, int configVersion, IStageData data, IClock clock)
+    public StageContext(
+        DateOnly date, int configVersion, IStageData data, IClock clock, Config.IConfigStore config)
     {
         Date = date;
         ConfigVersion = configVersion;
         Data = data;
         Clock = clock;
+        Config = config;
     }
 
     /// <summary>The trading date being processed. A label the exchange gave a session, never a timezone conversion.</summary>
@@ -109,4 +137,14 @@ public sealed class StageContext
 
     /// <summary>Injected. Nothing reads system time outside the clock implementation [INVARIANT 11].</summary>
     public IClock Clock { get; }
+
+    /// <summary>
+    /// Configuration, resolved as of <see cref="Date"/> and never as of now.
+    ///
+    /// It sits here rather than being constructed by a stage so that the date a
+    /// stage resolves against is the date it was handed. A stage building its own
+    /// store could resolve against a different one, and the failure would be a
+    /// plausible number rather than an error [D-43, INVARIANT 13].
+    /// </summary>
+    public Config.IConfigStore Config { get; }
 }

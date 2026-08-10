@@ -58,6 +58,123 @@ public static class SchemaDocument
         return tables;
     }
 
+    /// <summary>
+    /// Table to the components SCHEMA.md declares as writing it [1.10, closing the
+    /// open item that the conformance test read a hardcoded list of splits rather
+    /// than the document's own declarations].
+    ///
+    /// **The declarations are not in one form and cannot be parsed as though they
+    /// were.** Most read `**Writer: X.**`. Two read `**Writers: A inserts, B
+    /// updates.**`. The order group reads `**RiskGate inserts orders. PaperBroker
+    /// inserts fills and inserts positions. PositionManager updates positions to
+    /// closed.**`, with no `Writer:` prefix at all, and three read `configuration`
+    /// or `the UI`, which are not components.
+    ///
+    /// So the rule is the intersection rather than the sentence shape: take every
+    /// bolded span in the section's opening paragraph, and keep the words that
+    /// `ARCHITECTURE.html` section 3 catalogues as component names. That is
+    /// tolerant of every form above and of any future one, and it cannot invent a
+    /// writer, because a name it does not recognise is dropped rather than kept.
+    ///
+    /// The paragraph is joined before matching, because the corpus is hard-wrapped
+    /// and `flow_daily`'s clause breaks across a line. A line-anchored match would
+    /// return no writer for it and the failure would be silent [`CLAUDE.md`
+    /// section 7].
+    /// </summary>
+    public static IReadOnlyDictionary<string, IReadOnlySet<string>> WritersByTable()
+    {
+        var components = ArchitectureDocument.ComponentNames();
+        var lines = File.ReadAllLines(Path);
+        var writers = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (!lines[i].StartsWith("### ", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var heading = lines[i]["### ".Length..].Trim();
+
+            var j = i + 1;
+            while (j < lines.Length && lines[j].Trim().Length == 0)
+            {
+                j++;
+            }
+
+            if (j >= lines.Length || !lines[j].TrimStart().StartsWith("Grain:", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            // The opening paragraph, joined. It ends at the first blank line.
+            var paragraph = new List<string>();
+            for (var k = j; k < lines.Length && lines[k].Trim().Length > 0; k++)
+            {
+                paragraph.Add(lines[k].Trim());
+            }
+
+            var text = string.Join(" ", paragraph);
+            var named = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (Match bold in Bold.Matches(text))
+            {
+                foreach (Match word in Word.Matches(bold.Groups[1].Value))
+                {
+                    if (components.Contains(word.Value))
+                    {
+                        named.Add(word.Value);
+                    }
+                }
+            }
+
+            foreach (var name in heading.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                writers[name] = named;
+            }
+        }
+
+        return writers;
+    }
+
+    private static readonly Regex Bold = new(@"\*\*(.+?)\*\*", RegexOptions.Compiled | RegexOptions.Singleline);
+
+    private static readonly Regex Word = new(@"[A-Za-z][A-Za-z0-9]*", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Every `table.column` SCHEMA.md declares as not money, from its "Columns that
+    /// are not money" section [INVARIANT 16, 1.8].
+    ///
+    /// `guards.ps1` parses the same section from the migrations side, before the
+    /// database exists, because CI runs it before the migrate step. This reads the
+    /// same declaration against the live database, which is the assertion the
+    /// decision actually states. Two readers of one list rather than two lists.
+    /// </summary>
+    public static IReadOnlySet<string> NonMonetaryColumns()
+    {
+        var text = File.ReadAllText(Path);
+
+        var section = Section.Match(text);
+        if (!section.Success)
+        {
+            throw new InvalidOperationException(
+                "docs/SCHEMA.md has no 'Columns that are not money' section. INVARIANT 16 is asserted " +
+                "against that list and there is nothing to assert against without it.");
+        }
+
+        return Declared.Matches(section.Groups[1].Value)
+            .Select(m => m.Groups[1].Value)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static readonly Regex Section = new(
+        @"###\s+Columns that are not money(.*?)\r?\n---",
+        RegexOptions.Compiled | RegexOptions.Singleline);
+
+    private static readonly Regex Declared = new(
+        @"^\|\s*`([a-z_0-9]+\.[a-z_0-9]+)`",
+        RegexOptions.Compiled | RegexOptions.Multiline);
+
     /// <summary>Absolute path to SCHEMA.md, found by walking up from the test binary.</summary>
     public static string Path => System.IO.Path.Combine(RepositoryRoot, "docs", "SCHEMA.md");
 

@@ -81,6 +81,21 @@ clean gap observed before the read date [D-62]. A ticker with fewer than
 `fundamentals.min_clean_gaps_for_substitution` clean gaps observed is excluded from
 the universe rather than given a substituted date.
 
+**The column was ~~`NOT NULL`~~ [struck, 1.4] and is nullable, where null means the
+provider's filing date was unusable and no substitution was derivable either**,
+which is a ticker with zero clean gaps to take a widest from. `NOT NULL` could only
+be satisfied there by writing a date that is not true: `period_end` makes the row
+readable immediately, which is the lookahead D-62 exists to prevent, and a universal
+constant is what D-62 explicitly rejected.
+
+A narrower constraint replaces it, `CHECK (filing_date_effective IS NOT NULL OR
+filing_date_unknown_reason <> 'none')`. That still catches the case `NOT NULL` was
+pointing at, a row losing its date to a bug, while permitting the one case it could
+only handle by fabricating. Every read filters `filing_date_effective <= date`, so a
+null row is unreadable by construction rather than by anyone remembering to exclude
+it, and the zero-clean-gap population is
+`filing_date_unknown_reason <> 'none' AND filing_date_effective IS NULL`.
+
 `filing_date_unknown_reason` records which case fired, one of `null`, `equal`,
 `negative` or `none`. Four distinguishable states rather than a boolean, because
 which one fired is diagnostic: a rise in `null` is the provider dropping the field,
@@ -105,9 +120,24 @@ and only candidates reach the dossier [D-23].
 Grain: ticker by filing by transaction, the source's own. **Writer: FlowIngestor.**
 Small.
 
-`ticker`, `filed_at`, `transaction_date`, `reporting_owner_name`,
-`transaction_code`, `shares_amount`, `price_per_share`, `total_value`,
-`acquired_or_disposed`.
+`ticker`, `accession_number`, `transaction_side`, `transaction_ordinal`,
+`filed_at`, `transaction_date`, `reporting_owner_cik`, `reporting_owner_name`,
+`transaction_code`, `security_title`, `shares_amount`, `price_per_share`,
+`total_value`, `shares_owned_after`, `acquired_or_disposed`.
+
+**The grain is the filing plus the line's position in it** [D-68 reopened at 1.7].
+A7 proposed a key made of the transaction's own attributes and left 1.7's sweep to
+confirm it against real rows. It does not hold: over 1,069 real transactions across
+eight tickers that tuple collided 172 times, and adding security title, price and
+shares-owned-after still left 5. Two line items in one filing can be identical on
+every value the provider sends, the ordinary case being an option exercise reported
+as common stock acquired and as restricted stock units disposed, same owner, same
+date, same code, same share count.
+
+So `accession_number` plus `transaction_side` plus `transaction_ordinal` is the key,
+which makes "ticker by filing by transaction" literal rather than approximating it
+with attributes. A key derived from values that are legitimately repeatable is not a
+key, and an upsert on one collapses two real transactions into one silently.
 
 `transaction_code` is not optional. The S4 rubric disqualifies option exercises and
 scheduled plan activity, so a count that cannot separate an open-market purchase from
@@ -119,14 +149,22 @@ Small.
 
 `ticker`, `report_date`, `holder_name`, `shares`, `change`, `change_pct`.
 
-Quarterly, because that is the grain the filings arrive at. `report_date` is what
-makes this backfillable, and it is the field short interest turned out not to have.
+Quarterly, because that is the grain the filings arrive at. ~~`report_date` is what
+makes this backfillable, and it is the field short interest turned out not to have.~~
+[struck, D-69] Measured false at 1.9. `Holders::Institutions` is a top-20 snapshot
+rather than a series: CCS.US and NVDA.US return 20 entries at a single `report_date`
+and BXC.US 20 across two, `sec-filings/{t}/13f` is a 404, and the filings index
+lists only `10k`, `10q`, `form4` and `8k`. The column is populated, which is why
+the claim survived being written. One or two distinct values per ticker is not a
+history, so `inst_ownership_change` has nothing to compute a change over and
+accumulates forward only. The table still ingests, because a current top-20 holder
+list is a usable static feature; it is the change metric that has no series.
 
 ### flow_daily
 Grain: ticker by day, ~~ticker by week~~ [superseded, D-61]. **Writer: FlowEngine, a
 compute stage, not the ingest.** ~52 MB.
 
-`ticker`, `date`, `insider_net_usd_90d`, `distinct_buyer_count`,
+`ticker`, `date`, ~~`insider_net_usd_90d`~~ [corrected, A1.a] `insider_net_90d_usd`, `distinct_buyer_count`,
 `inst_ownership_change`,
 ~~`week_end`, `publication_date`, `short_interest_pct_float`,
 `short_interest_change`~~ [removed, D-58 and D-61].
@@ -135,6 +173,13 @@ Derived rather than ingested. The two source tables above land at their own grai
 this table is computed from them, exactly as `indicator_daily` is computed from
 `price_daily`. Ingest grain follows the source; consumption grain follows the screen
 [D-61].
+
+**The column was named `insider_net_usd_90d` here and in `0001_snapshot.sql` and
+`insider_net_90d_usd` in `ARCHITECTURE.html` sections 3 and 5 and in D-61** [A1.a].
+The architecture constrains the code and names match the architecture, so this
+document was the wrong one. Renamed in `0002` rather than dropped and recreated:
+the table had never held a row, so either would have done, and a rename says what
+happened where a drop would not.
 
 Short interest is gone: this provider has no series and no as-of date for it, so it is
 not backfillable and the screen ranks on the three fields above [D-58].
@@ -396,6 +441,82 @@ write endpoint** [D-51].
 `provider_order`, `endpoint`, `enabled`, `last_health_check`, `last_loaded_model`.
 
 The only table the interface can write. Nothing here touches run data.
+
+---
+
+## Types
+
+### Columns that are not money
+
+**INVARIANT 16 is asserted from this list rather than from an exclusion list in a
+script** [1.8]. `guards.ps1` parses the tables below and makes two assertions:
+every column whose name matches the monetary pattern is `numeric` unless it appears
+here, and every `real` or `double precision` column in the migrations appears here.
+Adding a `real` column therefore means declaring it in this document, which is where
+a reader would look, rather than in a script, which is where nobody does.
+
+The monetary pattern covers `_usd`, `price`, `value`, `cap`, `cost`, `equity`,
+`pnl`, `dollar` and `amount`, matched against the column name and not the table's.
+Extend the pattern as the schema grows. Do not extend a list of files to skip: that
+was the previous mechanism and it had reached two entries with phase 2's forty
+technical columns still to come, at which point the guard would have been suppressed
+rather than satisfied.
+
+**The count is stated so the check cannot pass over an empty match set.** Seventeen
+columns match the monetary pattern and are `numeric`, and a check finding fewer has
+stopped reading part of the schema rather than found a cleaner one. That is not
+hypothetical: the parser written for this missed `"order"` and `"position"`, whose
+identifiers are quoted because both are reserved words, and six monetary columns
+were silently outside the set it reported on.
+
+Everything below is a measurement, a ratio, an index or a key. None of it is a sum
+of money, and storing a technical measure as a 32-bit float halves the two largest
+tables in the system [O.2].
+
+| Column | Type | What it is |
+|---|---|---|
+| `indicator_daily.atr_pct` | `real` | a percentage of price, not a price |
+| `indicator_daily.adx14` | `real` | an index between 0 and 100 |
+| `indicator_daily.dist_200dma` | `real` | a distance as a fraction |
+| `indicator_daily.dist_52w_high` | `real` | a distance as a fraction |
+| `indicator_daily.rs_change_21d` | `real` | a relative change |
+| `indicator_daily.rs_change_63d` | `real` | a relative change |
+| `indicator_daily.rs_change_vs_sector` | `real` | a relative change |
+| `indicator_daily.volume_vs_50d_avg` | `real` | a ratio of two volumes |
+| `indicator_daily.ma50_200_slope` | `real` | a slope |
+| `valuation_daily.fcf_yield` | `real` | a yield |
+| `valuation_daily.ev_ebit` | `real` | a multiple |
+| `valuation_daily.ev_ebit_vs_own_5y` | `real` | a multiple against its own history |
+| `valuation_daily.roic` | `real` | a return rate |
+| `valuation_daily.roic_4q_change` | `real` | a change in a rate |
+| `valuation_daily.gross_margin_4q_change` | `real` | a change in a margin |
+| `valuation_daily.net_debt_ebitda` | `real` | a ratio of two monetary figures, itself unitless |
+| `valuation_daily.accruals` | `real` | a ratio |
+| `valuation_daily.share_count_change` | `real` | a proportional change in a count |
+| `valuation_daily.revenue_growth_4q_trend` | `real` | a trend in a growth rate |
+| `valuation_daily.last_two_earnings_surprises` | `real` | percentages, `real[]` |
+| `sentiment_daily.sentiment_score` | `real` | a normalised score between -1 and 1 |
+| `institutional_holding.change_pct` | `real` | a percentage change in a share count |
+| `flow_daily.inst_ownership_change` | `real` | a proportional change in a share count |
+| `market_context_daily.breadth` | `real` | a fraction of the market |
+| `market_context_daily.vix` | `real` | an index level |
+| `screen_score_daily.score` | `real` | a screen score |
+| `screen_history.floor_score` | `real` | a screen score |
+| `screen_history.p98_trailing` | `real` | a screen score percentile |
+
+**Two columns whose names collide with the monetary pattern** and are not money.
+They are declared here for the same reason and by the same mechanism, so there is
+one list rather than one per kind of exception.
+
+| Column | Type | What it is |
+|---|---|---|
+| `config_rows.value` | `jsonb` | the config payload. The word is generic and this one is not a sum of money |
+| `cost_ledger.cost_ledger_id` | `bigint` | an identity key that happens to sit on a table about cost |
+
+`median_dollar_volume_20d` is deliberately absent from both tables. It is a dollar
+volume, so it is money, and it is `numeric` for that reason rather than `real`
+despite living among the technical columns [O.2]. A future edit moving it here would
+be the mistake this section exists to make visible.
 
 ---
 

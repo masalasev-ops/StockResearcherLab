@@ -174,28 +174,47 @@ them across phases would leave `flow_daily` declared and unwritten for a phase.
 | # | Scope |
 |---|---|
 | 1.1 | Typed HTTP client: `api_token` query auth, explicit `fmt=json` on every call, the `::` filter form with colons percent-encoded, and the 1,000-requests-a-minute limit |
-| 1.2 | Bulk end-of-day ingest into `price_daily`, plus the settled-day rule: the most recent available day is still accreting and is not valid |
-| 1.3 | Freshness guard on D-59's thresholds, abort below 40,000 and alert below 45,000 |
+| 1.2 | Bulk end-of-day ingest into `price_daily`, plus the settled-day rule: the most recent available day is still accreting and is not valid. C02 re-loads a trailing window of dates every night rather than tonight alone, so a day loaded short tops up on a later run, which is what actually heals accretion; D-68's upsert is what makes that safe. The window length is `price.reload_window_days`, coupled to `freshness.settled_window_days` [A10, A26]. **Its dates are the last N calendar dates counting back from the run date, with an empty response for a non-session tolerated rather than treated as a fault** [A26]: there is no trading calendar until 1.3, a weekend returns an empty array rather than an error, and keying on calendar dates does not trip 1.14's zero-row halt, which counts the stage total rather than any one date |
+| 1.3 | Freshness guard ~~on D-59's thresholds, abort below 40,000 and alert below 45,000~~ [widened, D-65]: recency against the exchange calendar, completeness on D-59's unchanged thresholds, and settledness as a relative test, the date's row count at or above a configured fraction of the median count of the last N dates strictly before it, computed from `price_daily` alone and on first sight [A10]. ~~settledness by comparing a re-fetch against the rows already stored~~ [replaced, A10: a stage is a pure function of its date and config version, and a guard reading what it saw on a previous wall-clock run is not, so two databases with identical `price_daily` contents would disagree]. The guard owns all three, writes nothing, makes exactly one provider call, and returns the trading date the rest of the run uses. C02 loads what the provider offers; C07 decides what is usable. **With fewer than `freshness.settled_window_days` prior dates in `price_daily` there is no median to compare against, and settledness is not evaluated: the date passes that check and the run log records that it was skipped for want of history** [A26]. Neither alternative is right on its own. Aborting means the first run ever cannot bootstrap; passing silently turns the guard off during exactly the period the data is least trustworthy. Skipping visibly is neither, because recency and completeness still apply and D-64 gives the absolute floors precisely that job, answering whether a file is catastrophically short. The guard is degraded during bootstrap rather than absent, and the run log says so |
 | 1.4 | Fundamentals ingest keyed on `filing_date_effective`, implementing D-62's per-ticker substitution, setting `filing_date_unknown_reason` across its four states, and recording enough for the count to be computed downstream. The exclusion itself is 1.5's, not this checkpoint's [D-4, INVARIANT 1] |
 | 1.5 | Universe builder applying D-4, including the clean filing-gap exclusion computed for the date being built rather than read from any stored total [D-62, M.1], with 20-day median dollar volume computed from `price_daily` rather than any provider average |
 | 1.6 | Sentiment ingest for the whole universe, tolerating a series with rows only on days carrying news |
-| 1.7 | Flow ingest from `sec-filings/form4` and not the legacy endpoint, into `insider_transaction` and `institutional_holding` at natural grain per D-61, with `transaction_code` retained so open-market purchases are separable |
+| 1.7 | Flow ingest from `sec-filings/form4` and not the legacy endpoint, into `insider_transaction` and `institutional_holding` at natural grain per D-61, with `transaction_code` retained so open-market purchases are separable. Paged on `page[offset]` and `page[limit]`, which is the form the endpoint accepts; `limit` and `offset` are silently ignored and a call using them returns one page and looks complete [1.9]. The two halves differ in what they can promise: form4 is fully backfillable, `meta.total` matching the filings index on every ticker checked, while `Holders::Institutions` is a top-20 snapshot at one or two report dates with no 13f endpoint, so `inst_ownership_change` accumulates forward only [1.9, D-69] |
 | 1.8 | Events ingest, and the derived `flow_daily` at ticker-by-day |
 | 1.9 | Endpoint sweep at phase start, recording what the subscription reaches |
 | 1.10 | Tests: no fundamental readable before its effective filing date; the substitution and exclusion fixtures registered in `FIXTURES.md`; a stale end-of-day file aborts the run |
+| 1.11 | Layer folders in `Pipeline` per `CLAUDE.md` §4, and `NoOpStage` retired at the first real stage that replaces it. Its trespassing-stage fixture re-anchors onto a test-local stage, since that fixture proves the guard rather than the registry |
+| 1.12 | A bulk load path on `IStageData`, declared-access-checked exactly as the other two routes are, over Npgsql binary COPY, with row order into the stream explicitly sorted [`ARCHITECTURE.html` §19] |
+| 1.13 | As-of config resolution in `Core`, resolving a key for a simulated date as `MAX(version)` among rows set at or before it, and the ~~nine~~ [corrected, A5 then A10 then A14] **fourteen** keys this phase consumes seeded through `seed.ps1`: six `universe.*`, three `fundamentals.*` including `widest_gap_alert_days`, four `freshness.*` including `settled_fraction` and `settled_window_days`, and `price.reload_window_days`. Seeded rows carry a `set_at` at or before the earliest date the system will ever resolve for, and version 1 inserts `ON CONFLICT DO NOTHING` so a second run is a no-op [A9]. `Worker`'s hardcoded config version goes [D-43, INVARIANT 13] |
+| 1.14 | The nightly run sequence: stages in declared order, a failure or a writing stage producing zero rows halting everything after it, and the trading date the guard returned carried into every stage after it [RUNBOOK failure table, D-65] |
+
+Four of these were not in the phase as first authored. The phase assumes rails
+phase 0 did not build: there is no bulk load path though `ARCHITECTURE.html` §19
+specifies binary COPY, no as-of config resolution though this phase brings the
+first nine real keys, no layer folders though `CLAUDE.md` §4 requires them, and
+`StageRunner` runs one named stage, so 1.3's abort has no run to abort. Numbers
+are appended rather than inserted because a checkpoint number is a plan
+reference and not an execution order, which 1.9 already establishes.
 
 **Done when:** one night of the whole US market lands; the universe builds to
 roughly 2,000 names, with the count of names excluded by the clean-gap criterion
 recorded rather than assumed; feeding the freshness guard deliberately stale data
-aborts the run and produces no orders; a test asserts no fundamental value is
+aborts the run and produces no orders; a date that fails settledness is re-read on a
+later run rather than skipped [D-65]; a test asserts no fundamental value is
 readable before its ~~filing date~~ [corrected, D-62] effective filing date, with the
 equality, null and negative-gap cases each exercised; sentiment lands for the whole
 universe and a name with rows on only a handful of days in the window is ingested
 without error; `insider_transaction` and `institutional_holding` land at their own
 grain with `transaction_code` retained, and `flow_daily` derives from them at
-ticker-by-day; the endpoint sweep from 1.9 is recorded in `PROGRESS.md`.
+ticker-by-day; the endpoint sweep from 1.9 is recorded in `PROGRESS.md`;
+`NoOpStage` is gone and the registry holds no component name `ARCHITECTURE.html`
+§3 does not have; a stage that COPYs into a table it does not declare throws
+before a connection is opened; two versions of one config key resolve to the
+older value for a date between them and the newer for a date after; and one
+command runs the night end to end, with a guard abort leaving no rows in any
+table a later stage writes.
 
-**Invariants at risk:** 1, 10, 11, 12.
+**Invariants at risk:** 1, 10, 11, 12, 13.
 
 **Carried obligation:** whatever the probe found about news depth and flow coverage
 constrains what this phase can promise downstream. Record it.
@@ -367,7 +386,16 @@ in a phase prompt.
 | 0 | all | The write-ownership test must be extended as each phase adds tables |
 | 0 | 9 | The Ui references the Api project, so Data and Npgsql are in its compiled closure. A contracts assembly is the fix and is worth doing when the real UI is built, not before |
 | 0 | 1 | `NoOpStage` is a registered component name `ARCHITECTURE.html` §3 does not have. It proved the rails and must not survive the first real stage |
-| 0 | 1 | `TableWrite.Columns` is declared and asserted by nothing. Column-level write ownership is unenforced until a component declares a partial write, which C21 ForwardReturnFiller is the first to need |
+| 0 | 1 | ~~`TableWrite.Columns` is declared and asserted by nothing. Column-level write ownership is unenforced until a component declares a partial write, which C21 ForwardReturnFiller is the first to need~~ **Closed at 1.12** [A27]. The staged bulk route is the first place a stage states in code exactly which columns it writes, so it is where the declaration became enforceable, and it did not need to wait for C21. `DeclaredAccess.EnsureColumnsDeclared` runs before the connection opens, alongside the table check |
 | 0 | 1 | Five patterns in the phase P probe that phase 1's ingest must not inherit. All five were read in the deleted source before it went: an unguarded `.First()` selecting the control ticker, which throws mid-run and loses a transcript written only at the end; `?? 0` on `shares_amount` and `price_per_share` feeding a dollar total, so an absent price contributes zero to money [`CLAUDE.md` §6]; a superseded constant surviving in executable code, D-57's 65 days classifying gaps after D-62 replaced it, corrected at K.2 and found by a conformance pass rather than by a test; a clean-gap list built before the `g < 1` test, so gaps D-62 calls unknown counted toward the widest gap and toward the floor of four; and a paged endpoint read with one `limit=1000` call and no offset loop, which silently returns a cap rather than a count |
+| 1 | 3 | `security` is one row per ticker carrying a single `size_bucket` and `market_cap`. C11 PercentileEngine ranks within size bucket, so a backfill of a 2021 date reads 2026's bucket for every name. `first_seen`, `last_seen` and `delisted_date` make membership reconstructable per date [D-48]; bucket and market cap are not |
+| 1 | 4 | D-69. `inst_ownership_change` has no history from this source, `Holders::Institutions` being a top-20 snapshot at one or two report dates with no 13f endpoint. S4's other two inputs are fully backfillable. Decide before screen floors are drawn, since a floor from a two-input backfill against a three-input live screen is what D-58 rejected |
+| 1 | 7 | `order`, `fill`, `position` and `trade_outcome` have no upsertable grain, and the reason matters more than the fact. **They are event records, where every other store in this system is a snapshot keyed on an entity and a date**, which is why a natural grain falls out of those and not these. Two identical orders on one night are not a duplicate to be collapsed; they are two orders. So a unique index on the row's own attributes is the wrong instrument, and reaching for one is how the phase starts badly. The **likely** mechanism is idempotence by run scope, deleting and reinserting the rows a given portfolio and date own, rather than idempotence by row identity. Likely and not decided: phase 7 authors it when it can see the shape of a fill [D-68, 1.12 audit] |
+| 1 | 4 | `alert` is an event record too, so the note above applies to it rather than the snapshot grain the other layer-3 stores have |
+| 1 | 5 | `headline` is an event record, same distinction |
+| 1 | 6 | `cost_ledger` is an event record, same distinction. `dossier` is not: it has a grain, but its two unique indexes are partial, so `ON CONFLICT` can use them only where the statement repeats their `WHERE` clause |
+| 1 | 8 | `researcher_memory` has no upsertable grain and is not an event record, so it needs a grain decided rather than a scope. `run_log` also has none and needs nothing: C27 appends and never re-runs, so it is append-only by design rather than by omission, and it is not an outstanding gap |
+| 1 | 5 | `events` carries no date on which an earnings date became public, because `calendar/earnings` sends none. `announced_date` is populated for dividends, where `declarationDate` is exactly that, and null for earnings and splits. Live accumulation is point-in-time correct by construction, since a row appears the night the calendar first lists it, but nothing records that: the table has no first-seen column, so a backfilled row and a live-accumulated one are indistinguishable and a re-scheduled report overwrites its old date without trace. C12's earnings blackout and C15's `days_to_next_earnings` are the readers. Exposure is bounded rather than open, because a schedule is usually published two to four weeks ahead and a blackout narrower than that behaves the same either way, but it is a lookahead in a backfill and phase 5 is where it is decided |
+| 1 | 4 | `inst_ownership_change` is a change in the **top twenty** holders' total, not in institutional ownership. When a holder enters or leaves the top twenty between report dates, composition change and ownership change are added together and the metric cannot separate them. This is the same source problem as D-69 seen from the other side, and it belongs with that decision rather than beside it |
 | 4 | 8 | Config version must be stamped on attribution rows from the first write, or the tuner cannot segment history |
 | 6 | 10 | Cost ledger recording per model before the first full night |

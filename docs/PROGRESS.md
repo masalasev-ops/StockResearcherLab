@@ -14,7 +14,7 @@ Correct them directly. Do not record intentions here.
 |---|---|---|---|
 | P Data probe | DONE | 3099e66 | All five checkpoints landed and all six findings recorded. D-57 to D-63 produced. Closed under the five-step procedure retired at D-67, after two conformance passes and the C, E, G, H, J and K corrections. That record is in the archive |
 | 0 Rails | DONE | d9cb5df | Signed off 2026-08-06. Checkpoints 0.1 to 0.8, plus CI, the sign-off review, and pass O's corrections. 25 tests green. Step 1 was met by running every CI step locally, because no hosted runner has ever picked up a job on this account. Step 2 ran at `d4baeaf` and does not cover pass O's four corrected files. Both gaps are in the phase 0 block below |
-| 1 Ingest and universe | NOT STARTED | | |
+| 1 Ingest and universe | IN PROGRESS | 050d5c7 | Every checkpoint 1.1 to 1.14 landed, 136 tests. All twelve definition-of-done lines met live on 2026-08-09: the universe rebuilt to 2,840 names and `run-night` ran all seven stages end to end. Four findings are open and all four are authored questions, not build work: C01 never deactivates, the universe is 2,840 rather than roughly 2,000, C05 cannot fit any schedule, and CI cannot catch the timeout failure class. The CI runner gap is recorded below rather than at sign-off |
 | 2 Compute | NOT STARTED | | |
 | 3 Backfill | NOT STARTED | | |
 | 4 Screens and selection | NOT STARTED | | |
@@ -179,6 +179,1649 @@ test extending as each phase adds tables, the Ui's contracts assembly,
 `NoOpStage`'s name, `TableWrite.Columns`, and the five probe patterns phase 1's
 ingest must not inherit. Also owed and recorded below.
 
+## Phase 1, ingest and universe
+
+**In progress.** Pre-flight complete. Checkpoint 1.9 done, no other checkpoint
+code yet.
+
+### The definition of done, walked line by line
+
+Read at `c873e02`. Every line quoted from `BUILD_PLAN.md` phase 1 and answered
+against what exists, not against what was built for it: a line is met when
+something runs and produces an observable result, and the test or the measurement
+that produces it is named.
+
+| # | Line | State | What answers it |
+|---|---|---|---|
+| 1 | one night of the whole US market lands | **met** | `run-night 2026-08-09` completed on 2026-08-07 over seven steps for 45,518 units. `price_daily` holds 13,091,293 rows over 274 dates reaching 2026-08-07 |
+| 2 | the universe builds to roughly 2,000 names, with the count excluded by the clean-gap criterion recorded rather than assumed | **met, and the count is 2,840 rather than roughly 2,000** | C01 ran for 2026-08-07 in 677 seconds for 28,401 units and wrote 2,840 names, buckets 962 large, 1,035 mid, 844 small. Recorded rather than assumed: 4,810 candidates passing price, liquidity and history, less 1,623 not common stock, 219 with no fundamentals fetched yet, 39 fetched but below 4 clean filing gaps, 0 with no readable share count, 89 below the market cap floor. See the size note below |
+| 3 | feeding the freshness guard deliberately stale data aborts the run and produces no orders | **met** | `ANewestDateOlderThanTheLastSessionAborts`, and `AGuardAbortLeavesNoRowsInAnyTableALaterStageWrites` for the second half. No stage in this phase writes an order, so the no-orders property also holds by construction |
+| 4 | a date that fails settledness is re-read on a later run rather than skipped [D-65] | **met** | D-70 replaced D-65's re-fetch with C02's trailing reload window: `AShortDateIsToppedUpByALaterRun`, `TheWindowIsCalendarDatesCountingBackFromTheRunDateInclusive`, `AStillFillingDateIsSkippedAndTheDateBeforeItIsUsed`, `TheWalkBackPassesEveryStillFillingDateAndLandsOnTheFirstSettledOne` |
+| 5 | a test asserts no fundamental value is readable before its effective filing date, with the equality, null and negative-gap cases each exercised | **met** | `NoPeriodIsEverReadableOnOrBeforeItsOwnPeriodEnd` over the whole rule, then one per case: `AFilingDateEqualToItsPeriodEndIsUnknownRatherThanUsable`, `ANullFilingDateIsUnknownAndSubstituted`, `AFilingDateBeforeItsPeriodEndIsUnknown`, `AFilingDateAfterItsPeriodEndIsUsedAsItStands`, and `ATickerWithNoCleanGapGetsNoEffectiveDateAtAll` for the population that gets no date at all |
+| 6 | sentiment lands for the whole universe and a name with rows on only a handful of days is ingested without error | **met** | C04 ran over the rebuilt universe and wrote 32,288 rows, 2,760 of 2,841 names returning at least one row over 30 days. The 81 that returned none carry no rows rather than zeros, which is the sparse half holding live [D-12]. Still proved by test: `ADayWithNoRowIsNotFilledWithZero`, `AnAbsentCountOrScoreStaysNull`, `AShapeThatDoesNotMatchYieldsNothingRatherThanEmptyRows`, `EveryUniverseNameIsAskedForAndNothingIsNarrowed` |
+| 7 | `insider_transaction` and `institutional_holding` land at their own grain with `transaction_code` retained, and `flow_daily` derives from them at ticker-by-day | **met over 250 of 2,840 names** | C05 wrote 227,020 insider rows over 226 tickers and 4,922 holdings, and C34 derived 255 `flow_daily` rows. `transaction_code` is retained and spread wide: A 63,698, M 55,938, S 51,733, F 30,324, P 9,085, J 5,791, G 4,304, C 2,928, D 2,237, X 493. The 250 is `flow.max_tickers_per_run`, not a failure; a universe pass is the cost finding below. Grain still proved by `TwoLinesIdenticalOnEveryAttributeAreStillTwoRows` and `HoldersAreReadFromAnObjectKeyedByPosition` |
+| 8 | the endpoint sweep from 1.9 is recorded in `PROGRESS.md` | **met** | The sweep table above, plus the weights, plus the two retractions |
+| 9 | `NoOpStage` is gone and the registry holds no component name `ARCHITECTURE.html` section 3 does not have | **met** | `NoOpStageIsGone`, `EveryRegisteredComponentIsNamedInTheCatalogue`, `AComponentTheCatalogueDoesNotNameIsCaught`, and `NoTestDoubleAnswersToACatalogueComponentName` for the way that check was quietly defeated once |
+| 10 | a stage that COPYs into a table it does not declare throws before a connection is opened | **met** | `AStageBulkLoadingATableItDoesNotDeclareThrowsBeforeAnythingOpens`, and `AStageWritingAColumnItDidNotDeclareThrowsBeforeAnythingOpens` for the column-level case A27 added |
+| 11 | two versions of one config key resolve to the older value for a date between them and the newer for a date after | **met** | `ADateBetweenTwoVersionsResolvesToTheOlder`, `ADateAfterBothVersionsResolvesToTheNewer`, and `ADateBeforeEveryVersionResolvesToNothingRatherThanTheNewest` for the third case the checkpoint added |
+| 12 | one command runs the night end to end, with a guard abort leaving no rows in any table a later stage writes | **met** | `run-night 2026-08-09` ran all seven steps in order and exited 0. C07 was handed a Sunday and returned 2026-08-07, so the fallback ran live rather than only in a fixture. The abort property stays proved by `AGuardAbortLeavesNoRowsInAnyTableALaterStageWrites`, `AWritingStageThatProducesNothingHaltsEverythingAfterIt` and `AStageThatDeclaresNoWritesProducingZeroRowsDoesNotHalt` |
+
+**All twelve met, on the night of 2026-08-09 against an allowance that had just
+reset.** Nothing is blocked and nothing waits on code that has not been written.
+
+Two are met with a qualification stated in the line rather than hidden behind it.
+Line 2 produced 2,840 names where the line asks for roughly 2,000. Line 7 covered
+250 names of 2,840, which is `flow.max_tickers_per_run` doing its job rather than a
+shortfall, and a universe pass is a cost question recorded below.
+
+**Measured cost of the night, read from `/api/user` either side of each step rather
+than estimated:**
+
+| Step | Units | |
+|---|---|---|
+| C02 catch-up | 2,000 | 20 dates at 100, exactly the weight table's figure |
+| C01 rebuild | 28,401 | 2,840 sector calls at 10, plus the symbol list |
+| `run-night` | 45,518 | all seven stages |
+| Wasted | 13,231 | a foreground C01 killed at the 10 minute tool ceiling, below |
+| **Total** | **89,470** | of 100,000, leaving 10,530 |
+
+C01 at 28,401 overran its 20,000 estimate for the same reason line 2 overran its
+own: the estimate assumed a 2,000-name universe and the universe is 2,840. The
+per-member weight of 10 was right.
+
+### Checkpoints landed
+
+| # | What | Tests after |
+|---|---|---|
+| 1.9 | Endpoint sweep, and the Finding 2 retraction below | 25 |
+| 1.13 | As-of config resolution, fourteen keys seeded | 36 |
+| 1.1 | Typed HTTP client, request form pinned, paging on `page[offset]` | 46 |
+| 1.12 | Staged bulk load path, `TEMP` staging inside one connection | 56 |
+| 1.2 | Bulk end-of-day into `price_daily` over a trailing reload window | 64 |
+| 1.11 | `NoOpStage` retired, registry checked against the catalogue | 68 |
+| 1.3 | Freshness guard, three checks | 79 |
+| 1.14 | Nightly run sequence and the zero-row halt | 85 |
+| 1.4 | Fundamentals, statement fields, D-62 in full | 95 |
+| 1.5 | Universe builder, D-4's six criteria | 95 |
+| 1.6 | Sentiment over the whole universe | 101 |
+| 1.7 | Flow ingest, and D-68's reopening clause fired on measurement | 112 |
+| 1.8 | Events ingest and the derived `flow_daily` | 127 |
+| 1.10 | Fixtures registered, and the conformance test reads SCHEMA.md's writers | 130 |
+| D-71 | The form4 shortfall separated from the client stopping early | 134 |
+| INVARIANT 16 | Asserted from `SCHEMA.md` rather than excluded per file | 136 |
+
+C06 ran live for 2026-08-06 and wrote 569 rows over the 679-name universe: 566
+earnings dated 2026-07-30 to 2026-11-04, which is the seven days back and ninety
+forward the two keys ask for, and 3 dividend ex-dates. No split fell on that day.
+`announced_date` is populated on all 3 dividends from `declarationDate` and null on
+all 566 earnings, because the calendar carries no date on which a schedule became
+public. Three calls, 201 units.
+
+C34 has not run live. `insider_transaction` is empty and cannot be filled until the
+form4 blocker below is decided.
+
+**Two figures in commit bodies were guessed and are wrong.** `1b66daf` says
+"5 checks over 38 files" and `5a4ec08` says "over 44 files"; the runs immediately
+above each commit printed **40** and **42**. Nothing rests on either number, but a
+commit message cannot be edited and this corpus asks that every number trace to what
+produced it, so the correction lives here. The cause was writing the message from
+memory after the run rather than from its output, and the practice from here is to
+omit a figure rather than recall one.
+
+The column above is read off the commit bodies rather than recalled, which caught a
+wrong entry in this table before it was committed: 1.14 was written as 86 and its
+commit says 85. `fb4f3dc` states no count at all, and 1.5 is 95 because the next
+commit to state one says "101 tests passing where there were 95".
+
+**A third guessed figure, in `6ab95ae`.** Its body says "5 checks over 62 files".
+The run was real and it passed, but its output was discarded and only the exit code
+was read, so the count was supplied from nowhere. `ci.ps1` at that sha prints
+**65**, which is the 61 of the previous commit plus the four files 1.8 added.
+
+Two corrections in the same phase for the same reason is a practice failing rather
+than a slip. The practice: **a number does not go into a commit message unless it
+was read from output in that step.** Reading the exit code is not reading the
+output. Where a figure is wanted, capture the summary line and paste it; where it
+was not captured, leave it out. Nothing in this corpus needs the number in the
+message, and every one of these has had to be corrected here instead.
+
+### The provider meters weighted units, not requests, and phase 3 cannot afford the naive plan
+
+**Found by exhausting the daily allowance during 1.5, at roughly 97,000 of 100,000
+units against about 9,000 actual requests.** Nothing in the corpus had a figure for
+this and every estimate in it counts requests.
+
+The provider prices a call by endpoint rather than counting one per request.
+**`/api/user` reports the running total, so the weights are measured rather than
+inferred**, by bracketing one call of each kind between two reads of it. The user
+endpoint itself costs nothing, which is what makes the bracket clean. Measured
+2026-08-09:
+
+| Endpoint | Units | What one call buys |
+|---|---|---|
+| `eod-bulk-last-day/US?date=` | **100** | ~50,000 rows, one day, every name |
+| `eod/{t}` | **1** | one name, five years |
+| `fundamentals/{t}` | **10** | one name, every period. Filtered and unfiltered cost the same |
+| `sentiments` | **5 per ticker** | flat per ticker: 1, 10 and 20 tickers cost 5, 50 and 100 |
+| `sec-filings/{t}/form4` | **10** | one page |
+| `exchange-symbol-list/US` | **1** | 51,401 instruments |
+| `calendar/earnings`, `exchange-details` | **1** | |
+| `eod-bulk-last-day/US?type=splits` | **100** | every split on one day, market-wide. 3 rows on 2026-08-06 |
+| `eod-bulk-last-day/US?type=dividends` | **100** | every ex-date on one day, market-wide. 85 rows on 2026-08-05 |
+| `calendar/earnings?from=&to=` | **1** | whatever the range. 22,286 rows over 90 days, every exchange |
+| `splits/{t}`, `div/{t}` | **1** | one name, whole history |
+
+**The last four are 1.8's, measured 2026-08-08 by the same bracket.** They put C06
+in the same shape as C02: a forward-looking calendar is one cheap call for the whole
+market, while splits and dividends have no forward bulk and are read by run date at
+100 units each. Three calls a night, 201 units, where the per-ticker form over a
+2,000-name universe would be 4,000. The backfill reverses it exactly as prices do,
+`splits/{t}` and `div/{t}` returning full history at 1 unit, so five years costs
+about 4,000 units across the universe against 252,000 for the nightly bulk re-run
+over 1,260 sessions.
+
+**A CORRECTION TO WHAT THIS NOTE FIRST SAID.** It claimed D-47's five-year backfill
+was "~126,000 units for prices alone, more than a full day's allowance". That was
+wrong, and wrong because it assumed the backfill would use bulk-by-date. It should
+not, and `ARCHITECTURE.html` §19 already says so: historical price ingest partitions
+by **ticker**. At 1 unit for a name's whole history, five years over ~2,500 tickers
+including delisted names is about **2,500 units**, not 126,000. The architecture had
+it right and the note had it wrong.
+
+The two endpoints are for different jobs and the weights say which. Bulk-by-date
+buys every name for one day and is right for a night. Per-ticker buys one name for
+every day and is right for a backfill. Using either for the other's job costs
+roughly sixty times more than it needs to.
+
+**Steady-state cost.** The estimates below were built on a universe of ~2,000. The
+universe is 2,840 and the whole night ran on 2026-08-09, so the column that matters
+is the measured one.
+
+| | Estimated | Measured 2026-08-09 | |
+|---|---|---|---|
+| C02, 20 dates × 100 | 2,000 | **2,000** | nightly. The one estimate that was exact |
+| C03, 500 tickers × 10 | 5,000 | ~5,000 | nightly, capped by `fundamentals.max_tickers_per_run` |
+| C04, universe × 5 | 10,000 | ~14,200 | nightly. 2,841 names, not 2,000 |
+| C05, 250 × pages × 10 | not estimated per run | **~22,000** | 250 names, 664 seconds, 227,020 rows |
+| C06, 1 calendar + 2 bulk | 201 | 201 | nightly, measured at 1.8 |
+| C07 | ~10 | ~10 | nightly |
+| C34 | 0 | 0 | derives from two tables the ingest wrote and calls nothing |
+| **Nightly total** | **~17,200** | **45,518** | **46% of the daily allowance, not 17%** |
+| C01 rebuild, per member × 10 | 20,000 | **28,401** | weekly. 2,840 members, not 2,000 |
+| C05 over the whole universe | 20,000+ | **~258,000** | does not fit a day. See the finding above |
+| Five-year backfill, prices and fundamentals | ~25,000 | not yet run | one-off |
+
+**The nightly total is 2.6 times its estimate and the reason is C05.** The estimate
+had no per-run figure for it at all, only the universe-pass number carried in the
+last row, so the nightly line was effectively costed with C05 left out.
+
+**So the allowance is not the constraint it looked like yesterday.** What made
+yesterday expensive was loading a year of prices by date, 18 bulk calls at 100 each
+plus thirteen C03 runs, which is the backfill done the nightly way.
+
+**[Corrected 2026-08-09.]** That reads too comfortably now the night has been
+measured. A night is 46 percent of the allowance rather than 17, and C05 over the
+universe does not fit a day at all. The allowance is not the constraint for prices,
+which was the claim's subject and is still true; it is a constraint on flow.
+
+**Two consequences worth acting on, neither taken here.** `fundamentals/{t}`
+unfiltered costs the same as filtered and carries `General::Sector`, so C01's
+per-member sector call is buying at 10 units what C03 could carry for nothing. And
+`sentiment.tickers_per_call` is a latency knob rather than a cost one, since
+sentiment is flat per ticker; the comment introduced with it at 1.6 said otherwise
+and is corrected.
+
+**Also owed:** `ARCHITECTURE.html` §17 and the cost model estimate an annual spend
+built on model tokens. They carry no provider-call line at all, and on these weights
+the data provider is a real constraint on what the system can do in a day rather
+than a flat subscription cost.
+
+### INVARIANT 16's grep cannot tell a technical float from a monetary one
+
+Found at 1.6, when `SentimentIngestor` became the first C# to use `float` and
+`guards.ps1` failed on it.
+
+**It is not a breach.** `sentiment_score` is declared `real` in `SCHEMA.md`, a
+sentiment score is not money, and binary COPY is strict about types, so the CLR
+type has to be `float`. The invariant is about monetary paths and that file has
+none. The grep is a deliberate approximation and cannot make the distinction.
+
+The file is excluded with that reason stated, which is the pattern `SystemClock.cs`
+already sets for two other checks. **The exclusion does not scale and should not be
+copied.** `indicator_daily` carries about forty `real` columns and phase 2 writes
+them, so the same argument would produce forty file exclusions and the check would
+be excluding most of the code it exists to check.
+
+**Owed before phase 2**, as an authored answer rather than another exclusion.
+Candidates, none chosen here: scope the check to files that write a money column
+by reading the declared column sets, which the stage registry now makes possible;
+or name the monetary columns in `SCHEMA.md` and check the writes against that list;
+or accept the grep is spent and replace it with a test over `TableWrite.Columns`.
+The last is the only one that gets stronger rather than weaker as the system grows.
+
+**Also recorded: the guard was red in commit `5fadcde` and I committed anyway.**
+The command was `guards.ps1 | tail -1 && git commit`, and a pipeline's exit code is
+the last command's, so `&&` saw `tail` succeed. The same shape caused a wrong exit
+reading earlier in this phase. `ci.ps1` does not have this defect, because it checks
+`$LASTEXITCODE` per step rather than chaining, and it is the reason the per-checkpoint
+verification is one command.
+
+**And it happened a second time, in `adf1b07`.** The commit body claims `guards 5
+checks over 58 files` and the guard was in fact red at that sha on the same
+INVARIANT 16 check, over `FlowIngestor.cs`'s two `float?` for
+`institutional_holding.change_pct`. `ci.ps1` caught it at the next checkpoint by
+checking HEAD out into a worktree and running the guard there, which is what it
+exists for, and `adf1b07` was red for about half an hour rather than indefinitely.
+
+What was wrong was not the exit-code reading this time: it was that the guard ran
+before the last edit to that file and the result was carried forward as though it
+still described the tree. **A verification is about a tree, not about a session.**
+The rule taken from it is that the guard, the build and the tests all run again
+after the last edit and immediately before `git commit`, in that order, with no
+edit between, and `ci.ps1` is what does all three. Neither red commit would have
+happened had `ci.ps1` been the last thing run rather than the individual commands.
+
+**And a third time, in `4b53173`, with that rule followed.** The guard ran after
+the last edit, printed 5 checks over 61 files and exited 0, and HEAD was red the
+moment the commit existed. `guards.ps1` scans `git ls-files src/`, which reads the
+**index**: `FlowEngineTests.cs` was created in that change and untracked when the
+guard ran, so the file carrying the violation was not in the set being checked. The
+run was green about a smaller tree than the one committed.
+
+So the rule as first written was not enough and now reads: **stage first, then
+verify, then commit.** `git add -A`, then `ci.ps1` or the three commands, then
+`git commit`. Staging is what puts a new file into `git ls-files` and therefore
+into the scan. `ci.ps1` never had the gap, since it checks HEAD out into a worktree
+where everything is tracked by definition, and it is what caught all three.
+
+The three red commits had three different causes, which is the point worth keeping:
+an exit code read through a pipeline, a stale result quoted after an edit, and a
+scan over a file set that did not include the new file. Each fix closed its own
+cause and left the next one open. One command that reconstructs the tree from
+scratch closes all three at once, and running it before the commit rather than
+after is the only change that matters.
+
+### C03 drew its pool from the universe, which closed the universe permanently
+
+**Found while trying to close the definition of done's "roughly 2,000 names", which
+stood at 679.** Three consecutive C03 runs wrote an identical 46,376 rows and the
+distinct ticker count in `fundamental_snapshot` did not move off 1,876. The rotation
+was not rotating.
+
+`CandidatesAsync` read `security` and used it as the pool whenever it was populated,
+falling back to the price-and-admitted bootstrap only when it was empty. The doc
+comment flagged the ordering consequence and called it reported rather than closed.
+The consequence is larger than ordering: **a name needs fundamentals to be admitted
+to the universe, and once the universe existed only universe members could be
+fetched.** So the set closed over itself. Whatever the first bootstrap pass happened
+to produce was the universe for ever, and every name outside it was unreachable by
+construction.
+
+It was invisible from the outside because a run that re-fetches 500 covered tickers
+and one that fetches 500 new ones look identical: same row count, same duration,
+status ok, nothing in the log about coverage. The stage now reports the candidate
+pool, how much of it has never been fetched, and how many of the run's own selection
+were new, and that line is what makes the next occurrence visible on the first run
+rather than the twentieth.
+
+**The pool is the candidate set and `security` now decides order only.** Never
+fetched first, then universe members, then the rest, each group ordinal. Coverage
+before freshness while coverage is incomplete, because a name absent from the store
+cannot be screened at all where a name whose figures are a few days old still can.
+
+### The pool was also three quarters names the universe can never admit
+
+Fixing the pool exposed a second waste in the same place. `BootstrapPoolAsync`
+applied one of D-4's price-side criteria, the price floor, and left out the other
+two. So the pool was 8,423 names where 4,808 clear liquidity and history: about
+3,600 of them could never be admitted whatever their filings said, and each one
+costs 10 units to find that out. At 500 a run that is roughly 36,000 units spent on
+names guaranteed to be rejected.
+
+All three criteria now apply, and the pool reported by the stage fell from **8,423
+to 3,184**, which is exactly the common-stock liquid candidate count C01 reports
+from the other side. Never-fetched fell from 6,562 to 1,571 in the same step.
+
+This is the argument the type filter in the same method already made and is not a
+new one: D-4's own criteria applied sooner rather than a second filter. C01 applies
+every one of them again and stays the only component that decides membership
+[D-5, INVARIANT 1].
+
+### What the two corrections bought
+
+Eleven passes of 500 on 2026-08-05, every one advancing, ending with the candidate
+pool fully covered:
+
+| | Start of day | End of day |
+|---|---|---|
+| Tickers in `fundamental_snapshot` | 1,876 | **5,641** |
+| Periods | 134,464 | 434,518 |
+| Tickers with 4 or more clean gaps | 1,026 | **3,635** |
+| Candidate pool | not reported | 3,184, **0 unfetched** |
+| Liquid candidates with any fundamentals | 1,613 | **3,167** of 4,808 |
+| Liquid, 4+ clean gaps, above the cap floor | 1,447 | **2,840** |
+
+**2,840 is the universe's upper bound before the common-stock filter**, which
+rejected 1,624 of 4,808 the last time C01 ran. That puts the rebuilt universe at
+roughly two thousand names, which is what the definition of done asks for and what
+679 was never going to reach.
+
+The rebuild itself has not run. C01 spends 10 units per member on a
+`General::Sector` call, so about 20,000 units, and the day closed at 97,711 of
+100,000. Left for the next allowance. It is the same per-member sector call already
+recorded as buying at 10 units what C03 could carry for nothing, and that is an
+authored decision still owed.
+
+**A second measurement worth keeping.** Filing dates are worse across the wider
+population than the probe implied. Per-run substitution rates over the day's passes
+were 52.0, 27.5, 30.9 and 25.5 percent, every one above the 25 percent alert, and
+1,752 of the 5,641 covered tickers have zero clean gaps at all. ~~Phase P measured 41
+percent of periods unknown over seven names.~~ [misattributed, corrected below]
+D-62's per-ticker substitution is
+therefore carrying more weight than it was designed against, and the alert has
+fired on every run rather than on an exception, which is the shape of a threshold
+that needs revisiting rather than a provider that has changed. Not revised here:
+loosening a bound because a measurement missed it is what section 11 forbids, and
+the reading is a finding about the population rather than about the bound.
+
+**The 41 percent was phase 1's own live figure attributed to phase P, and there are
+now four numbers measuring four populations.** The 41.3 is 100 less the 58.7 percent
+`none` this store returned on the day of the passes above, so it is this phase's
+reading of everything it had fetched by 2026-08-05 and not the probe's. Phase P's own
+table, above under "Filing dates over every quarter returned", gives 77 equal and 7
+null of 538 periods, which is **15.6 percent** across the **eight** names that table
+covers; restricted to the probe's own seven, excluding RJET.US, it is 49 of 465 and
+**10.5 percent**. The sign-off obligation read the store again on 2026-08-10 and
+returned **44.60 percent** of all 435,475 periods across 5,653 tickers, and **25.00
+percent** restricted to names actually in `security`.
+
+The four are not in conflict and the sentence above was right for the wrong reason.
+They measure the probe's sample, this phase's whole fetched set at two dates, and the
+universe, and the spread between 10.5 and 44.60 is the finding: the probe's names
+were better behaved than the population, and the population is better behaved than
+the tail C03 reaches once coverage completes. What the screens actually meet is the
+universe figure, 25.00 percent [sign-off finding D].
+
+**The rejection counter conflated two populations and now separates them.** C01
+reported "2,479 below 4 clean filing gaps" where most of those had never been
+fetched at all and had zero clean gaps by absence rather than by measurement. Same
+absent-is-not-zero failure the screens are written to avoid, in the counter that
+reports the exclusion. It now reads "with no fundamentals fetched yet" and "fetched
+but below 4 clean filing gaps" as separate numbers, which is what the definition of
+done means by recorded rather than assumed.
+
+### Sentiment field names, verified live
+
+The 1.6 field names were flagged unverified and are now read off the provider:
+`sentiments` returns per ticker an array of `{"date", "count", "normalized"}`, which
+is exactly what `SentimentIngestor` parses. Two tickers over twelve days, 10 units.
+Sparsity confirmed alongside it, CCS.US returning 4 days and PHAT.US 2 out of the
+twelve, which is the shape D-23 and the probe both describe.
+
+C04 has still not run over the whole universe and `sentiment_daily` is empty. That
+part of the definition of done waits on the universe rebuild, since the stage reads
+`security` for its ticker set.
+
+### The provider allowance was overspent against a figure I had already read
+
+Consumption was read at 44,830 and eight further C03 passes were launched without
+multiplying 8 by the 5,000 units a pass costs. The operator stopped it at 63,774
+mid-loop; six of the eight had completed and the day closed at 77,697 of 100,000.
+The reading was true when taken and stale when acted on.
+
+The practice, which is the same shape as the guessed-figure one above: **a spend is
+bounded before it starts, not observed after.** Read the allowance immediately
+before, multiply the per-unit cost by the number of runs, and if the product does
+not fit, run fewer. A loop of provider calls with no computed total is the only
+thing here that cannot be undone by a commit.
+
+### form4 counts more rows than it sends, and the guard as written cannot complete a universe pass
+
+**Blocker for live flow ingest, found by running C05 over the universe at 1.8 and
+measured before anything was proposed.** The stage failed on its first ticker with
+`Paged read of 'sec-filings/AAON.US/form4' collected 641 rows against a reported
+total of 643`, which is the check added at 1.1 doing what it was written to do.
+
+Walked page by page, AAON's traversal is not short in the way the check assumes.
+Thirteen pages, `links.next` present on twelve and absent on the thirteenth, offsets
+0 to 600, and the last page returns exactly the 43 rows that 643 minus 600 predicts.
+The server's own pagination window was covered end to end. Page 8 returned 48 rows
+where every other full page returned 50. The two missing rows are inside the window
+and asking again cannot produce them.
+
+**Measured over the first 250 active tickers, 2026-08-08**, walking form4 exactly as
+`EodhdClient.GetAllPagesAsync` does but recording the shortfall instead of throwing:
+
+| | |
+|---|---|
+| Tickers walked | 250 |
+| `collected` equals `meta.total` | 193 |
+| `collected` short of `meta.total` | **43** |
+| No `meta.total` in the payload | 0 |
+| HTTP error | 14, all `404 Symbol not found`, which C05 already treats as a ticker with no filings |
+| Rows collected | 101,325 |
+| Rows the provider counted and did not send | **104**, or 0.10 percent |
+| Short tickers whose traversal stopped **inside** the server's window | **0** |
+| Short tickers that walked the window to its end | **43** |
+
+Worst three by fraction of one ticker's own history: AER 6 of 219, 2.74 percent;
+AMT 11 of 496, 2.22 percent; AEIS 12 of 580, 2.07 percent. Most are 1 or 2 rows.
+
+**The case the check was written for did not occur once.** Its fixture is "an
+endpoint claiming 100 and stopping at 50", which is a loop that stops asking while
+the server still has pages, and that is the failure worth aborting on because what
+was missed is unknown and re-asking would fix it. What happens instead is that the
+server sends fewer rows than it counts, on 17 percent of tickers, and the traversal
+is already complete when it happens. The check cannot tell the two apart, so a
+universe pass fails on whichever short ticker comes first alphabetically.
+
+**Settled by D-71, authored after the measurement and not against it.** Two
+failures were sharing one exception and they separate on which condition ended the
+loop, which is observable rather than judged. A loop that stops while `links.next`
+is still offered is this client failing to ask and stays fatal at exactly its
+previous strictness. A loop that stops because the endpoint offered no next link
+and is still short of `meta.total` is the provider disagreeing with itself, and is
+recorded while the stage continues.
+
+No threshold was set and none is to be added without evidence gathered after the
+decision was written, since every candidate value would have been chosen against
+the table above [`CLAUDE.md` §11].
+
+The two conditions were already the two `break` statements in
+`GetAllPagesAsync`, so the change is which of them throws rather than a new
+mechanism. The run log carries the count of tickers that under-delivered and the
+total row shortfall, and the position per affected ticker, derived from the page
+shapes already collected rather than from a second read: a short page before the
+last puts the missing rows inside the history where a trailing-90-day metric
+reaches them, while only a short final page puts them at the oldest end.
+
+~~**Still owed, and it needs an allowance rather than a decision.** The evidence
+file naming final-or-interior per affected ticker, and the statement here of which
+pattern dominates.~~ **[Answered by the 2026-08-09 run. Interior dominates.]**
+
+**The interior pattern dominates, and that is the unfavourable answer of the two.**
+C05 over 250 names on 2026-08-09: 44 tickers under-delivered against `meta.total`,
+105 rows short of 227,020 written. **Forty-two are short inside the history where a
+trailing window reaches them. Two are short only at the oldest end.** One of the 42,
+AMT.US at 11 rows, is short in both places at once.
+
+The stated consequence therefore lands. It was recorded before the measurement:
+if the final-page pattern dominated, `insider_net_90d_usd` and
+`distinct_buyer_count` would be untouched and phase P's S4 base rate could be
+answered without qualification. It does not, so **both metrics can be understated
+on 42 of 250 names and the S4 base rate carries that qualification** until someone
+decides it does not matter.
+
+**Magnitude, stated alongside the direction, because the direction alone reads
+worse than it is.** ~~105 rows of 227,020 is 0.046 percent~~ [corrected below],
+spread over 44 tickers of 250, the largest single shortfall being AEIS.US at 12 rows
+and AMT.US at 11. Whether a metric that can be understated by a row or two on 17
+percent of names matters is a judgement about the screens, not a measurement, and it
+is not one this session takes.
+
+**The corrected magnitude is about 0.10 percent, and the error was a unit.**
+`meta.total` counts **filings**, so `PagedRead.Shortfall` and the 105 are filings.
+227,020 is the row count of `insider_transaction`, which counts **transactions**, and
+this file already establishes that a form4 filing is not a transaction. The two
+figures measured over roughly the same 250 tickers, 101,325 filings against 227,020
+transaction rows, imply about 2.2 transactions per filing, so 105 missing filings is
+nearer 235 missing transaction rows. Like for like it is 104 of 101,325 and 105 of
+about 101,000, which is the 0.10 percent the 1.7 table already reported and the
+figure to read. The mistake made the shortfall look half its size, on the one finding
+whose own text says the direction is unfavourable [sign-off finding C].
+
+AAON.US, the only ticker walked page by page before the run, was interior. It turned
+out to be representative rather than a coincidence, but that was not knowable from
+one ticker and the note above was right not to claim it.
+
+### The night of 2026-08-09, and four findings it produced
+
+The allowance reset mid-session and the whole of phase 1's remaining live work ran
+against it. What landed is in the definition-of-done walk above. What it exposed is
+here, and **all four are authored questions rather than build work**, so none is
+closed.
+
+#### C02 had stopped working, and it stopped by growth rather than by change
+
+The first run of the night failed at 34.9 seconds with `Exception while reading from
+stream`, which is a transport break rather than a data fault. **No `CommandTimeout`
+was set anywhere, so Npgsql's 30 second default applied to an upsert of about 50,000
+rows into a 13 million row table.** The four `PriceIngestor` runs before it trend
+74.8, 84.4, 94.4 and 98.2 seconds. It worked for 272 dates and stopped working when
+the table got large enough, which is the failure mode that looks like a flake.
+
+Measured at the change: a 50,100 row upsert into `price_daily` takes 19.0 seconds
+against that 30 second ceiling. Set to 300 seconds in operator config and documented
+in `appsettings.Secrets.example.json`, after which C02 wrote 701,957 rows.
+
+**The finding is not the timeout, it is that CI cannot catch this.** `ci.yml` drops
+and rebuilds a database whose tables hold fixture-sized data, so 30 seconds is never
+approached there and a green CI says nothing about it. The value also lives only in
+untracked operator config, so a fresh checkout silently gets the broken default and
+finds out at whatever table size crosses the line. Whether the timeout belongs in
+code where it cannot be forgotten is a decision, and phase 3's five year backfill is
+the reason it is worth taking now.
+
+#### C01 has no path that deactivates a name
+
+`is_active` is written as the literal `true` for every member and nothing anywhere
+sets it false. A ticker that leaves the universe keeps `is_active = true` for good.
+Tonight that is one row of 2,841, arrived at by arithmetic: C01 wrote 2,840 and the
+table holds 2,841, so exactly one prior member was not rewritten.
+
+It matters more than one row suggests, because C04 takes its ticker set from
+`security` and weekly rebuilds accumulate. **The question is what `is_active` means:
+a member now, or a name that was a member once.** Either reading is defensible and
+the code currently implements neither deliberately.
+
+Not to be confused with the eight rows whose `last_seen` predates 2026-08-07. Those
+are correct: `last_seen` is `max(date)` from `price_daily` per ticker, so a thinly
+traded name legitimately carries an older one.
+
+#### The universe is 2,840 where the line asks for roughly 2,000
+
+Not a build error and not a change in the data. The earlier estimate said 2,840 was
+the upper bound *before* the common-stock filter and predicted roughly 2,000 after
+it. The filter is applied earlier than that reasoning assumed: 1,623 were rejected as
+not common stock and 2,840 is what remains. **The estimate applied the same filter
+twice.**
+
+Whether 2,840 satisfies "roughly 2,000" is not a measurement. It is 42 percent above
+the figure the line names, and the line is authored.
+
+#### C05 cannot fit any schedule, and this is now costed rather than estimated
+
+`/api/sec-filings/{t}/form4` ignores `from` and `to`. Confirmed on 2026-08-09 against
+CCS.US for 10 units: `meta.total` reads 325 with the filter and 325 without, 50 rows
+either way. The retraction above was right that the endpoint pages on `page[offset]`
+and wrong to call the whole of the original finding wrong; the date filters really
+are ignored.
+
+So every run walks each ticker's full history. Measured tonight: **250 tickers cost
+664 seconds and produced 227,020 rows.** At 2,840 names that extrapolates to roughly
+258,000 units for one universe pass, against a daily allowance of 100,000 and a
+`FlowEngine` that reads only a trailing 90 days.
+
+**No schedule fixes this, which is why it is a decision and not a tuning problem.**
+Weekly costs the same as nightly, because the cost is per pass and not per day.
+The two shapes that would work both change what the stage does: skip tickers already
+covered and page only what is new, or stop the walk once rows fall out of the
+window. Both make C05 stateful in a way a pure stage currently is not.
+
+### The prompts issued during the build were archived at the end, not before
+
+`CLAUDE.md` §3 says a prompt is archived before code, and that one archived at the
+end has been archived after the session already learned things. The phase 1 prompt
+itself went in at the pre-flight as required. **Everything issued after the plan was
+approved did not**, which is sixteen amendments, two authored decisions and every
+operational instruction across four days.
+
+Closed on 2026-08-10 as `prompts/spent/phase-1-ingest-and-universe-build.md`, 35
+prompts in timestamp order across two sessions. Extracted programmatically from the
+transcripts rather than retyped, because a paraphrase of a spent prompt destroys the
+thing it exists to preserve [D-63]. The file states its own lateness in its header
+rather than reading as though it were written at the time.
+
+**It is late and that cannot be undone by filing it.** The companion file was
+assembled while the plan was still being argued and reads as a record. This one was
+assembled by the session it describes, which is the weaker position, and the header
+says so.
+
+**Two gaps in it that filing did not close.** Amendments A16, A17 and A18 appear in
+no surviving transcript and no document cites them, so A15 is followed directly by
+A19 and nobody can now say whether the numbering skipped or the prompts are lost.
+Pass Q's prompt is still unarchived, unchanged since the phase 1 pre-flight named it.
+
+### INVARIANT 16 asserts from the schema instead of excluding files
+
+The exclusion list is gone. It had reached two entries with phase 2's forty
+technical `real` columns still to come, and a list like that gets extended until
+the guard is suppressed rather than satisfied.
+
+Two positive checks replace the `float|double` grep, both reading `SCHEMA.md`'s new
+"Columns that are not money" section: every column whose name matches the monetary
+pattern is `numeric` unless the document declares it as not money, and every `real`
+or `double precision` column is declared there. Adding a `real` column now means
+declaring it in the document a reader would look at rather than in a script nobody
+reads.
+
+**The guard reads the migrations, not the database, and that is forced rather than
+preferred.** `ci.yml` runs `guards.ps1` before the migrate step, so there is no
+schema to read at that point. The migrations are the schema's definition and are
+tracked, so the two agree by construction. `SchemaParityTests` makes the same
+assertion against the live database, where one exists, and both read the same
+declaration rather than two copies of it.
+
+Measured at the change: 296 columns over three migrations, 17 matching the monetary
+pattern and `numeric`, 28 `real`, 30 declared, and two of those 30 are name
+collisions rather than floats, `config_rows.value` being `jsonb` and
+`cost_ledger.cost_ledger_id` being `bigint`.
+
+**The expected count of 17 is stated so the check cannot pass over an empty match
+set, and it is not decorative.** The first parser written for this missed `"order"`
+and `"position"`, whose identifiers are quoted because both are reserved words, and
+reported on eleven monetary columns while printing a clean pass. Six were outside
+the set it claimed to cover. The count is asserted in `guards.ps1` and again in
+`SchemaParityTests`, each reading the schema rather than reading each other.
+
+Proved in both directions rather than reasoned about. A scratch migration adding
+`wobble_ratio real` and `entry_price real` made the check exit 1 naming all three
+problems, including `entry_price` twice, once as a monetary name that is not
+`numeric` and once as an undeclared float. Declaring both in `SCHEMA.md` made it
+exit 0. A fourth problem fired alongside them and was not designed for: the scratch
+file was untracked, so the set the check read and the set CI would check out had
+diverged, and the check now says so in both directions.
+
+The summary line changed with it. It reads `5 checks over 65 files, four greps
+finding none of what they look for and one schema assertion over the migrations`,
+because four of the five expect zero and the fifth does not.
+
+### Rename sweeps state their exclusions
+
+A1.a's done condition asked that a repository-wide sweep for the old column name
+return nothing. It cannot, and forcing it would have meant editing two files the
+corpus forbids editing.
+
+**Four categories legitimately keep the old name**, and writing the exclusions out
+made it clear that a repository-wide text sweep is the wrong instrument rather than
+one needing a longer list:
+
+| Keeps the old name | Why |
+|---|---|
+| `prompts/spent/` | A spent prompt records what was asked and is never edited except to match the text issued [D-63] |
+| `0001_snapshot.sql` | Snapshot-first: a change adds a numbered file beside one that has run rather than editing it, and the ledger records its hash |
+| Struck text in `SCHEMA.md` | A fact removed from an authored document is struck and pointed at what replaced it, not deleted [`CLAUDE.md` §13] |
+| `0002`, and prose describing the rename | **A rename must name what it renames.** `ALTER TABLE ... RENAME COLUMN insider_net_usd_90d` cannot avoid the old name, and neither can a sentence explaining why it moved |
+
+The fourth is the one that settles it. Once the migration performing the rename and
+the prose recording it are both excluded, a text sweep is asserting almost nothing,
+and padding the list further would have produced a green line over an empty set,
+which is the failure this phase keeps meeting in other forms.
+
+**The check that means something is over live code and live schema**, where the old
+name must not appear at all:
+
+    git ls-files 'src/**/*.cs' 'src/**/*.razor'  ->  no match
+    information_schema.columns                   ->  flow_daily.insider_net_90d_usd only
+
+Both run clean. **A sweep that cannot return zero is not a done condition**, and the
+fix is to sweep the thing the rename actually had to change rather than to enumerate
+everything it did not.
+
+### 1.9, the endpoint sweep
+
+Run 2026-08-07 from a scratch file-based app outside the repository, as phase P's
+probe was. Transcript at `docs/evidence/phase-1/endpoint-sweep-20260807.txt`, 137
+lines, checked for token leakage before committing. Entitlement is per endpoint
+and invisible in the account payload, so this is what was called rather than what
+a field claims.
+
+**Every endpoint phase 1 needs returns 200.** No entitlement gap blocks any
+checkpoint. Three answers change what the phase builds and two of them are
+findings rather than measurements.
+
+| Endpoint | HTTP | What came back |
+|---|---|---|
+| `eod-bulk-last-day/US` | 200 | 44,204 rows, the still-accreting day |
+| `eod-bulk-last-day/US?date=` | 200 | Works. 50,229 for a settled day. Measured when settledness was still a re-fetch; D-70 dropped that, and the parameter is now what C02's trailing re-load window uses |
+| `exchange-symbol-list/US` | 200 | 51,413 |
+| `exchange-details/US` | 200 | `TradingHours` with `WorkingDays` Mon-Fri and 09:30-16:00, 11 dated `ExchangeHolidays`, `ActiveTickers` 51,547 |
+| `eod/{t}` | 200 | 22 rows over 30 days |
+| `fundamentals/{t}` | 200 | 12 top-level blocks |
+| `fundamentals` `::` filters | 200 | `General::Sector`, `Highlights`, `Financials::Balance_Sheet::quarterly` (55 periods), `Holders::Institutions` (object keyed `0`,`1`,…), `SharesStats` all resolve percent-encoded |
+| `sentiments` | 200 | Object keyed by ticker |
+| `news` | 200 | 10 rows at `limit=10` |
+| `sec-filings/{t}` | 200 | An **index**, not rows: per form type a count, a latest date and a URL |
+| `sec-filings/{t}/form4` | 200 | Fixed 20 filings. See below |
+| `insider-transactions` (legacy) | 200 | 0 rows, confirming the probe |
+| `calendar/earnings` | 200 | Object, and `symbols=` narrows it |
+| `splits/{t}` | 200 | 0 for CCS over five years |
+| `div/{t}` | 200 | 20 rows |
+
+**Row counts by date, which is D-65's mechanism measured.** Requested against
+`eod-bulk-last-day/US?date=`:
+
+| Date | Rows | Reading |
+|---|---|---|
+| 2026-08-06 | 44,204 | In the 40,000 to 45,000 alert band, above the abort floor |
+| 2026-08-05 | 50,172 | Settled |
+| 2026-08-04 | **50,228** | Settled |
+| 2026-08-03 | 50,151 | Settled |
+| 2026-08-01, 08-02 | 0 | Weekend. A non-session returns an empty array rather than an error |
+| 2026-07-31 | 50,227 | Settled |
+| 2026-07-30 | 50,244 | Settled |
+
+**2026-08-04 finished at 50,228.** The probe read it three times on the evening of
+2026-08-05 at 44,665, 44,686 and 44,708 and stopped rather than converged, and
+that reading is what D-64 was opened about. It settled into the ordinary range.
+D-64 declined to revise D-59's thresholds on the grounds that a day still
+accreting says nothing about where a bound for settled days belongs, and the
+finished count is the evidence that was right: nothing was wrong with the
+threshold, the day was simply not done.
+
+**Finding 1, and it contradicts the build plan.** Reading the same date twice
+inside one run does not detect accretion. 2026-08-06 read back to back returned
+44,204 then 44,204, and 08-05 and 08-03 were likewise stable, because accretion
+runs over hours while two calls are seconds apart. The plan states that C02 at
+17:30 followed by C07 at 17:40 supplies the stored-and-fetched pair inside one
+evening. It does not. Settledness can only be evaluated against a count stored by
+an **earlier run**, which means a date is unsettled on first sight by
+construction and becomes settled at the first later run whose re-fetch matches.
+That in turn constrains the order of C02 and C07, because a count C02 has already
+overwritten this run cannot be compared against.
+
+**Closed by D-70,** which dropped the re-fetch rather than repairing it. A count
+stored by an earlier run was rejected as the replacement for the same reason the
+re-fetch failed differently: a stage is a pure function of its date and config
+version, and a guard whose verdict depends on a previous wall-clock run is not.
+Settledness is now relative to the trailing population and computed from
+`price_daily` alone, which removes the ordering constraint entirely, so
+`RUNBOOK.md`'s 17:30 and 17:40 stand untouched and C07 makes one provider call.
+
+~~**Finding 2, and it is a constraint on what this phase can promise.**
+`/api/sec-filings/{t}/form4` ignores `from`, `to`, `limit` and `offset`. Every
+combination returns the same fixed 20 most-recent filings... So insider flow is
+not backfillable beyond the most recent 20 filings per ticker.~~
+**[RETRACTED, and it was wrong rather than incomplete. See Finding 2 corrected.]**
+
+**Finding 2, corrected. Insider flow is fully backfillable.**
+`/api/sec-filings/{t}/form4` **pages on `page[offset]` and `page[limit]`**, which
+is the JSON:API form. It does ignore `limit` and `offset`, which is what the first
+sitting tested and why it concluded the endpoint was unpageable. A `422` on a
+`page=2` probe named the real syntax: *Page must be an array:
+`&page[offset]=0&page[limit]=...`*.
+
+Walked at `page[limit]=50`, CCS.US returns 200 distinct filings over four pages
+reaching back to **2019-04-22**, and `meta` reports `{"total":324,...}` with a
+`links.next` URL. `meta.total` matches the index count exactly on three tickers:
+CCS.US 324, NVDA.US 590, PHAT.US 171. There is no 20-filing ceiling and no date
+restriction. Nothing in D-61, S4 or phase 3's backfill is constrained by this
+endpoint.
+
+**The error and what inherited it.** The retracted finding is in the body of
+commit `6cb0a4f`, which cannot be edited, and that commit's message should be read
+against this block. No code was written against it and no decision was authored on
+it, so nothing else inherited it. The cause was testing two plausible parameter
+names and concluding from their failure rather than reading what the endpoint
+said when asked wrongly.
+
+**Finding 3, and this one is the real constraint.** `Holders::Institutions` is a
+**top-20 snapshot, not a series.** CCS.US and NVDA.US each return 20 entries at a
+single `date`, 2026-03-31; BXC.US returns 20 across two, 2026-03-31 and
+2026-06-30. There is no 13f endpoint: `sec-filings/{t}/13f` is a 404, and the
+filings index lists only `10k`, `10q`, `form4` and `8k`.
+
+`SCHEMA.md` says of `institutional_holding` that "`report_date` is what makes this
+backfillable, and it is the field short interest turned out not to have". Against
+this source that is false. The column exists and is populated, which is why the
+claim survived, but one or two distinct values per ticker is not a series, and
+`inst_ownership_change` therefore has no history to compute over. It can be
+accumulated forward from tonight and nothing more.
+
+So the flow screen's three inputs stand as: `insider_net_90d_usd` and
+`distinct_buyer_count` backfillable from form4, and `inst_ownership_change`
+forward-only. That is the inverse of what the retracted finding said, and it is
+the carried obligation from phase P about flow coverage, now answered.
+
+The probe's separate result that transaction code P was zero on all seven names
+over 90 days is untouched by any of this and still bears on `distinct_buyer_count`.
+
+**The legacy `insider-transactions` endpoint, measured rather than assumed.** It
+is alive market-wide: no `code` and `limit=1000` returns 1,000 rows. It is stale,
+the newest being 2026-04-24 against a 2026-08-07 run, which is the staleness the
+probe inferred from per-ticker zeros. Per ticker it is thin: NVDA.US 115 rows,
+CCS.US 1 row without a date range and 4 with a five-year one. Its payload also
+carries US Congress member trades, which are not Form 4 insider filings. It stays
+unused, as checkpoint 1.7 already requires, and now for measured reasons.
+
+**A form4 filing is not a transaction.** It carries `accession_number`,
+`filed_at`, `period_of_report`, and `non_derivative`, `derivative` and `footnotes`
+arrays, with the transactions nested inside the first two. `accession_number` is
+therefore part of any natural key for `insider_transaction`, which is narrower
+than the tuple A7 provisionally named. On the four NVDA filings inspected each
+side held exactly one transaction, so no collision was observed, but one filing
+carrying two rows for one owner on one date under one code is not ruled out by
+four filings. D-68's reopening clause is the route if it appears.
+
+**A4's calendar source is confirmed reachable.** `exchange-details/US` returns
+`WorkingDays` and a dated holiday list, which is what 1.3's recency check needs
+and what the checkpoint chose over deriving the session from `price_daily`.
+
+### 1.13, and a correction to its own commit message
+
+`9750a37`'s body states that under `InvariantGlobalization` .NET "cannot resolve
+any timezone id at all". **That is too strong and the commit message cannot be
+edited, so the correction lives here.**
+
+What is true: the IANA id `America/New_York` does not resolve on Windows under
+`InvariantGlobalization=true`, because Windows keeps timezone data in the registry
+and the IANA-to-Windows mapping is the part ICU supplies. The Windows id `Eastern
+Standard Time` still resolves. `SystemClock.ResolveEastern` already tries the IANA
+id and then the Windows one, in that order, so `SystemClock.Today` works on this
+machine and would work on Linux where the IANA id resolves from tzdata. Verified
+by running `run NoOpStage` with no date argument, which is the path that reads
+`Today`: it returned 2026-08-07 rather than throwing.
+
+The off-by-one in the seed instant is unaffected and stands as recorded. So does
+the conclusion that config's Eastern conversion belongs in SQL, though the reason
+is narrower than stated: not that .NET cannot convert, but that the conversion
+already has to happen in the query that filters on `set_at`, and doing it twice in
+two places is how the two would drift.
+
+**The rule, with its exception in the same sentence** [A23]. Every US Eastern
+conversion happens in SQL, where Postgres carries its own tzdata, **except
+`SystemClock`, which is the single place permitted to read the ambient clock and is
+therefore the single place permitted to convert it.** A rule stated without its
+exception invites the exception to be read as a breach, and this one is neither
+accidental nor tolerated: the component that answers what today means in market
+terms is exactly the component that has to know.
+
+**A fifth guard** enforces that boundary and its exclusion list is the enforcement.
+It greps for `TimeZoneInfo` over `src/` and excludes `SystemClock.cs` and nothing
+else, on the same reasoning that excludes it from the ambient-clock check. A21
+asked for the guard to exclude nothing, which cannot ship green while the
+legitimate user exists, and a guard that ships red is a guard everyone learns to
+ignore [O.1].
+
+**The CI runner gap, recorded now rather than at sign-off** [A6]. Phase 0 was
+signed off with step 1 met by running every `ci.yml` step by hand. The same gap
+applies to this phase and the decision is taken here so it is not taken under
+pressure later.
+
+Hosted runners are still not being allocated to this account. The repository's
+total run count is 1: one run queued on the merge of `phase-0-rails`, sat
+fifteen minutes unassigned, and was cancelled by GitHub. It is not the YAML, the
+triggers, the registration or the repository permissions, all of which were
+checked at phase 0, and it is not minute exhaustion, the repository being public.
+
+**A self-hosted runner does not close it,** which is why one was not added.
+`ci.yml` is `runs-on: ubuntu-latest` with a `services: postgres:18` container,
+so it needs a Linux runner with Docker. A Windows runner would need the workflow
+rewritten against a locally installed database, and that loses the empty-server
+property the two migrate steps exist to prove.
+
+**What was done instead.** `ci.ps1` at the repository root, added at `db5863c`.
+It runs `ci.yml`'s steps in their own order against a git worktree at HEAD, which
+is tracked files only and therefore carries no secrets file, and against a
+dedicated database dropped first. It exits non-zero on the first failure and
+prints the same seven results phase 0 recorded by hand. Sign-off step 1 asks that
+nothing be recorded by hand that a run can record, and this is what makes the
+local path a run. `ci.yml` is unchanged and works the moment runners are
+allocated.
+
+**What this still does not cover.** `ci.ps1` runs on Windows against an installed
+Postgres; `ci.yml` runs on Linux against a container. A defect that only appears
+on the other platform is invisible to both, since one of them has never executed.
+Phase 1 sign-off records `ci.ps1` output, and states this line alongside it.
+
+**Two defects found while building `ci.ps1`,** both recorded because both are the
+silent kind. `guards.ps1` reports through `Write-Host`, which does not reach the
+pipeline in Windows PowerShell, so the first version of `ci.ps1` captured nothing
+and recorded "0 checks" while the guard output still appeared on the console; a
+zero check count now throws rather than being recorded. Separately, one run
+reported a successful database drop and then found the schema already present,
+which would have recorded "migrate ran clean from empty" against a database that
+was never empty. The drop now reads the database back and fails at that step if it
+survived.
+
+**That second one has recurred and is still unexplained.** Two occurrences in
+roughly nine runs, the second after the readback was added. Both surfaced the same
+way: the migrate step asserting it had not created the database, the run exiting
+non-zero, and no result recorded. Five consecutive runs since, including three back
+to back, have all passed with the drop confirming absence and migrate creating the
+database.
+
+**Occurrence three arrived with evidence, and it narrows the cause without closing
+it.** Evidence at `docs/evidence/phase-1/ci-failure-20260807-161935.txt`, written by
+the mechanism added for exactly this. What it rules out is the obvious reading:
+
+  drop step        reported "dropped, confirmed absent", having read `pg_database`
+                   back after the DROP
+  schema applied   `meta.schema_migration.applied_at` = 16:19:35 UTC
+  failure stamped  16:19:38 UTC, three seconds later
+  captured output  "already applied / nothing to apply, schema already current"
+
+So the database **was** dropped and **was** created and migrated. The drop is not
+failing silently, and `stockresearcherlab_ci` is not surviving the DROP. What
+actually failed is the correspondence between the output `ci.ps1` captured for the
+migrate step and the invocation that did the work: the captured text is a
+second-run shape, reading a ledger row that already existed, while the ledger row
+was written seconds earlier. `pg_stat_activity` at the moment of failure showed no
+session attached to the target and no session on `template1`, so both of the two
+candidates recorded in advance are eliminated.
+
+That is as far as the evidence goes. It is a narrower question than before, which
+was the point of collecting it, and it is left open rather than guessed at.
+
+No root cause is claimed. What can be said is the shape of the risk rather than its
+cause: **the failure mode is a loud stop, not a false green.** Two independent
+checks stand between it and a wrong record. The drop reads the database back and
+exits non-zero if it survived, and the migrate step asserts it created the database
+rather than trusting that it did. A run that cannot prove it started from an empty
+server records nothing at all. Left open here rather than closed, because an
+intermittent fault in the script that verifies everything else is worth carrying
+visibly until it either recurs often enough to diagnose or stops.
+
+### Upsertable grain, every store
+
+Run once at 1.12 over all thirty-three tables in `public`, with the table filter
+removed from the conflict-target audit. D-68 requires every stage write to be
+idempotent on the table's own grain, and `ON CONFLICT` needs a `PRIMARY KEY` or
+`UNIQUE` index matching the target exactly. A column filled by
+`GENERATED ALWAYS AS IDENTITY` cannot be supplied by a bulk write, so a unique
+index covering only such a column is not a usable grain.
+
+**Recorded to be known, not to be pre-built.** No migration is added by this
+table. Each phase adds the index for the tables it writes, in the migration that
+first writes them, as this phase does at 1.4 for `events` and
+`insider_transaction`.
+
+| Store | Upsertable grain today | Surrogate key |
+|---|---|---|
+| `alert` | **none** | `alert_id` |
+| `attribution` | `ticker` + `date` | - |
+| `calibration` | `model_id` + `screen_id` + `report_date` | - |
+| `candidate_set` | `ticker` + `date` | - |
+| `config_rows` | `key` + `version` | - |
+| `cost_ledger` | **none** | `cost_ledger_id` |
+| `dossier` | `date` where `ticker IS NULL`; `date` + `ticker` where not. Both partial | `dossier_id` |
+| `events` | **none** | `event_id` |
+| `fill` | **none** | `fill_id` |
+| `flow_daily` | `ticker` + `date` | - |
+| `fundamental_snapshot` | `ticker` + `period_end` + `period_type` | - |
+| `gate_result` | `ticker` + `date` | - |
+| `headline` | **none** | `headline_id` |
+| `indicator_daily` | `ticker` + `date` | - |
+| `insider_transaction` | **none** | `insider_transaction_id` |
+| `institutional_holding` | `ticker` + `report_date` + `holder_name` | - |
+| `local_model_config` | `provider_order` | - |
+| `market_context_daily` | `date` | - |
+| `news_digest` | `ticker` + `date` | - |
+| `order` | **none** | `order_id` |
+| `portfolio` | `portfolio_id` | - |
+| `portfolio_selection` | `portfolio_id` + `date` + `ticker` | - |
+| `position` | **none** | `position_id` |
+| `price_daily` | `ticker` + `date` | - |
+| `proposal` | `ticker` + `date` + `model_id` | - |
+| `researcher_memory` | **none** | `researcher_memory_id` |
+| `run_log` | **none** | `run_log_id` |
+| `screen_history` | `screen_id` + `date` | - |
+| `screen_score_daily` | `ticker` + `screen_id` + `date` | - |
+| `security` | `ticker` | - |
+| `sentiment_daily` | `ticker` + `date` | - |
+| `trade_outcome` | **none** | `trade_outcome_id` |
+| `valuation_daily` | `ticker` + `date` | - |
+
+**Eleven stores have no upsertable grain**, and each lands on the phase that first
+writes it. This phase owns two of them, `events` and `insider_transaction`, and
+1.4's migration gives both a `UNIQUE NULLS NOT DISTINCT` index [A11]. The other
+nine are phase 4's `alert`, phase 5's `headline`, phase 6's `cost_ledger`, phase
+7's `order`, `fill`, `position` and `trade_outcome`, phase 8's
+`researcher_memory`, and `run_log`.
+
+**Which kind of problem it is matters more than the count.** Most of the nine are
+**event records**, where every other store in this system is a snapshot keyed on an
+entity and a date. That is why a natural grain falls out of the snapshots and not
+out of these: two identical orders on one night are not a duplicate to be
+collapsed, they are two orders. A unique index on the row's own attributes is
+therefore the wrong instrument, and the likely mechanism is idempotence by run
+scope, deleting and reinserting the rows a portfolio and date own, rather than
+idempotence by row identity. Likely rather than decided, since the phase that
+writes them authors that when it can see the shape of a fill.
+
+`order`, `fill`, `position`, `trade_outcome`, `alert`, `headline` and `cost_ledger`
+are all event records. `researcher_memory` is not, so it needs a grain decided
+rather than a scope. **`run_log` needs nothing at all**: C27 appends and never
+re-runs, so it is append-only by design rather than by omission, and it should not
+be read later as an outstanding gap.
+
+Each of these is a carried obligation row in `BUILD_PLAN.md` rather than only a
+line here, because that table is where the phase that owns it will look.
+
+**`dossier` is the case a table-level reading gets wrong.** Its two unique indexes
+are partial, one for the nightly prefix where `ticker IS NULL` and one per
+candidate block. `ON CONFLICT` can use a partial index only when the statement
+repeats its `WHERE` clause, so phase 6 has a grain but not a plain one. It reads
+as "none" to any query that filters partial indexes out, which the first pass of
+this audit did.
+
+**The eight this phase writes match their checkpoints**, with the two exceptions
+above which 1.4 closes.
+
+### Five findings on the ingest components and the `ARCHITECTURE.html` §3 catalogue
+
+**These are findings and not fixes, because the corpus is not amended ahead of the
+review that checks the code against it.**
+
+Each entry keeps two things apart. The **observation** is checkable from the files
+it names and was read at `ee9cbd1`. The **reading** is one judgement, and the
+sign-off review's own conclusion is what settles it: a reviewer can disagree with a
+reading without anything having to be undone, because nothing was changed on the
+strength of one. No decision is authored here, no carried obligation is added, and
+nothing is struck.
+
+**1. Four ingest components read a table the catalogue does not give them.**
+
+**Observation.** `FundamentalsIngestor.ReadSet` is `["price_daily", "security"]` at
+`FundamentalsIngestor.cs:52`. `SentimentIngestor`, `FlowIngestor` and
+`EventsIngestor` each declare `["security"]`, at `SentimentIngestor.cs:44`,
+`FlowIngestor.cs:49` and `EventsIngestor.cs:52`. §3 gives their Reads as, in order,
+"Fundamentals endpoint, `events`"; "Sentiment endpoint"; "Insider, ownership";
+"Calendar, splits, dividends". `DeclaredAccess.EnsureCanRead` throws
+`UndeclaredTableAccessException` on any table outside the declared set, so these
+reads happen rather than being merely declared: the three later components each
+issue `SELECT ticker FROM security` through `IStageData.ReadAsync` naming that
+table, at `SentimentIngestor.cs:109`, `FlowIngestor.cs:138` and
+`EventsIngestor.cs:128`.
+
+**Reading.** The catalogue is incomplete and the code is doing the only thing it
+can. A per-ticker endpoint needs a ticker list and the universe lives in
+`security`. The Reads column already mixes endpoints and tables elsewhere, C01's
+own row being "Symbol list, `price_daily`, `fundamental_snapshot`", so listing only
+an endpoint is an omission rather than a convention.
+
+The fundamentals row is the one worth a second look. Its two reads serve different
+purposes, the pool from `price_daily` and the rotation order from `security`, and
+the catalogue never said where a pool comes from at all. That silence is what let
+the pool be drawn from `security` and freeze coverage at 679 with no error and
+plausible output.
+
+**2. The rotation does not read `events`, which the catalogue says it does.**
+
+**Observation.** §3 gives `FundamentalsIngestor` the description "Rolling rotation,
+earnings jump the queue" and lists `events` in its Reads.
+`FundamentalsIngestor.ReadSet` does not contain `events` and no code path reads it.
+`CandidatesAsync` at `FundamentalsIngestor.cs:218-268` orders never-fetched first,
+then universe members, then everything else, each group ordinal by ticker, and
+nothing in it consults an earnings date. The deferral reason recorded during the
+build, in the component's own summary at `FundamentalsIngestor.cs:21-23`, was that
+`events` arrived at 1.8, which it has.
+
+**Reading.** The catalogue is right and the code is incomplete. This is unbuilt
+work rather than a deviation to correct in the document, and it is larger than one
+line: a selection that settles on a fixed head once coverage completes, combined
+with the `filing_date_effective` gate, leaves a period unread indefinitely for
+every name outside that head, so a screen ranking a name the week after its results
+would rank on the previous quarter. Whatever the review concludes, that line is not
+struck to match the code.
+
+**The reading as it was formed said "a round-robin rotation", and said the delay was
+weeks.** Finding 5 below establishes that no rotation survives coverage, so the
+phrase is replaced here rather than repeated. The correction makes the consequence
+larger rather than smaller: a round robin would eventually return to every name,
+where a fixed head does not return to the tail at all.
+
+**3. The flow cadence contradicts itself across three documents.**
+
+**Observation.** §3 gives `FlowIngestor` Runs as "Weekly". `NightlyRun.EveningOrder`
+at `NightlyRun.cs:50-59` contains `FlowIngestor` between `FundamentalsIngestor` and
+`EventsIngestor`, so it runs on every night the sequence runs. `RUNBOOK.md` line 17
+reads "17:45 | Fundamentals, flow, events". Line 332 of this file prices the same
+component at "20,000+ | weekly". The code followed `RUNBOOK.md` and no record says
+it chose.
+
+**Reading.** Two authored documents contradict and `CLAUDE.md` §3 says report rather
+than resolve, so the resolution owes a decision either way. On substance, nightly
+looks right for what the component now is: Form 4 filings arrive within two business
+days and the flow screen reads a trailing ninety-day window, so a weekly ingest is
+missing its most recent six days. Weekly was set when the component also carried
+short interest and wrote `flow_daily`, and was not revisited after D-58 and D-61.
+The counter-argument is that the same stage fetches institutional holdings, which
+are reported quarterly and are roughly half its call cost.
+
+This is the reading with the least behind it. It rests on how the ninety-day window
+is actually computed, which this finding does not establish.
+
+**4. Nothing checks a declared read against the catalogue.**
+
+**Observation.** `RegistryNameTests` asserts every registered component name appears
+in §3. `WriteOwnershipConformanceTests` asserts writes against `SCHEMA.md`'s writer
+declarations in both directions, that every component writing a table is named as a
+writer of it and that every table the registry writes has a named writer. `ReadSet`
+is asserted in four places in the whole test project and every one of them is a
+literal in the component's own test file: `SentimentIngestorTests.cs:185`,
+`EventsIngestorTests.cs:187`, `PriceIngestorTests.cs:263` and
+`FlowEngineTests.cs:182`. `FundamentalsIngestorTests` and `FlowIngestorTests` assert
+no read set at all. `ArchitectureDocument` parses component ids and names out of §3
+and does not parse the Reads column.
+
+**Reading.** This is why three of the four deviations above went unnoticed and one
+was caught by eye. Names have a conformance path and writes have one; reads have
+none, and the per-component assertions lock a drifted declaration in rather than
+catching it. Phase 2 adds four more components to a column nothing checks. The test
+itself is batched-pass work and is not built here.
+
+**The reading as it was formed said eleven components rather than four**, and the
+count is corrected here rather than repeated. Layer 2 in figure 1 holds C08, C09,
+C10, C34 and C11, and C34 landed in phase 1 with D-61's ingest, so phase 2 adds
+four. Nothing in the reading turns on the number.
+
+**5. The rotation stops rotating once coverage completes.**
+
+**Observation.** `FundamentalsIngestor.CandidatesAsync` defines `fetched` at
+`FundamentalsIngestor.cs:230` as every ticker with any row in
+`fundamental_snapshot`, off `SELECT DISTINCT ticker FROM fundamental_snapshot`. The
+selection at lines 258 to 261 orders never-fetched, then fetched-and-in-universe,
+then the rest, then by ticker ordinal, and takes `fundamentals.max_tickers_per_run`,
+which is seeded at 500. No date is read anywhere in the selection.
+
+"What the two corrections bought" above records the candidate pool as 3,184 with
+**0 unfetched**. With the never-fetched group empty, the same alphabetically-first
+`max_tickers_per_run` names are selected on every subsequent run.
+
+The class comment at `FundamentalsIngestor.cs:22` states that until `events` arrives
+"the rotation is staleness-ordered only". No staleness ordering exists in the code.
+The comment at lines 251 to 256 names this failure for the coverage phase, "ordering
+by ticker alone re-selects the same head every run", and its clause "Coverage before
+freshness while coverage is incomplete" implies a freshness ordering to follow.
+
+The coverage line the stage writes, at lines 126 to 130, reports the pool size,
+never-fetched and new-in-selection. Both counts read zero once coverage is complete,
+which is the goal state for coverage. Nothing reports how many universe members were
+refreshed.
+
+**Reading.** This is a missing mechanism rather than a stale comment, and it is the
+most material finding of this set. At the measured pool and run size, roughly 500
+names refresh on every run and it is the same 500; the remaining 2,684 hold whatever
+they were first fetched with. The quality and value screen, S1 in figure 3, ranks on
+these figures, so the age of a name's fundamentals would depend on its first letter,
+which is arbitrary but systematic rather than random.
+
+The catalogue's "earnings jump the queue" is the priority rule on top of an ordering
+that does not exist underneath it, so finding 2 and this one are the same gap seen
+from two ends.
+
+### The sign-off review, step 2
+
+Ran on 2026-08-10 in a session with no commit in this repository and no part in the
+build. Read at `130fd36`, which is `878ae56` plus one documentation commit: the diff
+between them touches `PROGRESS.md` and one archived prompt and no source file, so
+step 1's results carry.
+
+**Step 1 was reproduced rather than taken on trust.** `ci.ps1` was run independently
+at `878ae56` and returned `guards.ps1` 5 checks over 65 files, 0 warnings and 0
+errors, 3 migrations applied from an empty server, nothing to apply on the second,
+and **Passed 136, Failed 0**. Counting `[Fact]`, `[Theory]` and `[InlineData]` over
+the tracked test sources also comes to 136, so the reported count is the count. All
+29 test names cited in the definition-of-done walk exist in tracked source and were
+located by name.
+
+The three questions follow. **Nothing here is corrected and no document is amended.**
+
+#### Does the code match the architecture sections phase 1 implements
+
+Largely, and the four catalogue deviations the build recorded above are real. Each
+was checked against the files it names and each stands as observed. On the readings
+the build left for this review to settle: finding 1's is right, the catalogue's Reads
+column being incomplete rather than the code being wrong; finding 2's is right, and it
+is unbuilt work rather than a line to strike; finding 5's is right and is confirmed by
+measurement below. Finding 3's cadence contradiction is real and is smaller than it
+looks, for the reason in finding B.
+
+Two further deviations were not in that set, and both are about an invariant rather
+than a catalogue line.
+
+**A. INVARIANT 10 is asserted mechanically over two of the nine registered
+components.**
+
+*Observation.* `WriteOwnershipConformanceTests.RealRegistry()` at
+`WriteOwnershipConformanceTests.cs:44` calls
+`PipelineComposition.BuildRegistry(TestDatabase.ConnectionString)`. That method's
+`apiToken` parameter defaults to null at `PipelineComposition.cs:26`, and the seven
+provider-backed stages are added only inside `if (!string.IsNullOrWhiteSpace(apiToken))`
+at line 38. Run directly: with a token the registry lists nine owners, and with a
+blank one it lists exactly two, `FlowEngine` and `RunLog`. All six assertions in that
+file build the registry the second way, so the tables actually checked are
+`flow_daily` and `run_log`. `price_daily`, `security`, `fundamental_snapshot`,
+`sentiment_daily`, `insider_transaction`, `institutional_holding` and `events` are
+outside every one of them, including
+`EveryWritingComponentIsNamedAsAWriterInSchemaDocument`, which is the assertion 1.10
+was written to add. `SCHEMA.md` does name a writer for each of those seven, so the
+parse is not the gap.
+
+`PipelineComposition.AllOwnersForConformance` exists for precisely this, passes a
+placeholder token, and is used by `RegistryNameTests` at lines 43 and 90 and by
+nothing else. So the name check sees all nine components and the write-ownership
+check sees two.
+
+*Reading.* This is the most material finding of the review. `CLAUDE.md` §5 gives the
+registry test as what makes INVARIANT 10 enforceable rather than aspirational, and
+phase 1 added seven of the eight writing components the registry now holds.
+The tests are correctly written and are pointed at the wrong registry, which is why
+they pass and why nothing about them reads as wrong. Phase 2 adds four more
+components to the same blind spot. Whether the fix is one call or a guard inside
+`BuildRegistry` is an authored question and this review takes neither.
+
+**B. C05 narrows the universe by count, and the narrowing is fixed rather than
+rotating.**
+
+*Observation.* `FlowIngestor.UniverseAsync` at `FlowIngestor.cs:137-141` reads
+`SELECT ticker FROM security WHERE is_active ORDER BY ticker LIMIT 250`. There is no
+coverage term, no staleness term and no rotation: the selection is the ordinal-first
+`flow.max_tickers_per_run` names of the active universe on every run. Measured
+against the live database on 2026-08-10: `security` holds 2,841 active rows,
+`insider_transaction` holds 226 distinct tickers, **every one of them inside ordinal
+ranks 1 to 250, and zero outside**. `flow_daily` holds 247 distinct tickers of 2,841.
+
+`CONFIG_REFERENCE.md` line 86 states of the per-run bounds that "Each stage rotates,
+preferring tickers it has not fetched, so coverage builds over several nights". C03
+does, at `FundamentalsIngestor.cs:257-261`, and its coverage did build, to 5,653
+tickers. C05 does not and its coverage cannot.
+
+*Reading.* INVARIANT 1 puts absolute filters in the universe definition and says no
+component downstream narrows by rank, score or count. C03's cap is a rate limit,
+because the ordering advances and coverage completes. C05's is not: a name is
+reachable only if it sorts within the first 250, so `insider_net_90d_usd`,
+`distinct_buyer_count` and `inst_ownership_change` are computable for 247 names of
+2,841 and the selector is ticker spelling. That is the shape `ARCHITECTURE.html` §20
+records for the news ingest, where sentiment was pulled for the top 400 by prior
+screen score and a thinly covered name could never be found, with an ordinal head in
+place of a score.
+
+It also reframes finding 3. Whether C05 runs nightly or weekly changes nothing while
+the head is fixed, because either cadence re-walks the same 250 names, so the cadence
+contradiction is the smaller half of the question and the reachable population is the
+larger one. The build's own C05 note reaches the neighbouring conclusion from the
+cost side and stops at cost: "no schedule fixes this". The coverage consequence is
+not stated there and is what phase 4 will feel, since D-58 rejected drawing a floor
+from a backfill that differs from the live screen and this is that difference in the
+population rather than in the inputs.
+
+Neither A nor B is a blocker for closing phase 1 on its own terms. Both are findings
+for a human, and both are the kind that produce no error.
+
+#### Does every number trace to something that produced it
+
+Almost all of them do, and two do not.
+
+**C. "105 rows of 227,020 is 0.046 percent" divides one unit by another.**
+`EodhdClient.GetAllPagesAsync` compares `meta.total` against the elements of the
+`data` array of `sec-filings/{t}/form4`, and those elements are **filings**, so
+`PagedRead.Shortfall` and the 105 are counted in filings. 227,020 is the row count
+of `insider_transaction`, which is counted in **transactions**. This file already
+establishes that the two are not the same thing, at "A form4 filing is not a
+transaction". The 1.7 measurement in the same phase gives 104 short of 101,325
+filings, which is 0.10 percent and is like for like; 227,020 transactions over
+roughly the same 250 tickers implies about 2.2 transactions per filing, so 105
+missing filings is nearer 235 missing transaction rows. The stated 0.046 percent is
+low by about that factor, and it is the magnitude attached to the one finding whose
+own text says the direction is unfavourable.
+
+**D. "Phase P measured 41 percent of periods unknown over seven names" traces to
+nothing.** A whitespace-tolerant multiline sweep for `41\s+percent|41\s*%` over
+`docs/` returns three hits: the claim itself, this block, and an unrelated hit rate
+in `ARCHITECTURE.html` §13. The pattern matters here rather than being ceremony. The
+claim is hard-wrapped, "41" ending line 518 and "percent" opening line 519, so a
+line-anchored sweep misses it and reports a clean pass, which is the silent failure
+`CLAUDE.md` §7 names. The filing-date table three hundred lines above that
+sentence gives 538 periods, 77 equal and 7 null across eight names, which is 15.6
+percent unknown, or 49 of 465 and 10.5 percent across the seven excluding RJET.US.
+The sentence it supports, that filing dates are worse across the wider population
+than the probe implied, is true on the measurement below; the figure it is supported
+with is not one this corpus contains.
+
+A third, smaller: that same table's Clean gaps column is periods minus equal minus
+null, while its Min column shows -4 for NVDA.US and -16 for RJET.US, so periods D-62
+classifies as negative are inside the 454. Nothing downstream reads 454, and D-62's
+floor of four is per ticker rather than off that total, so this is noted and not
+pursued.
+
+Everything else checked traces. D-71's 43 short, 104 rows of 101,325 matches the 1.7
+table exactly. The 2026-08-09 shortfall arithmetic is consistent, 42 interior plus 2
+final-only being 44 with AMT.US counted as interior, which is what
+`DescribeShortfalls` does with `ShortfallPosition.Both`. The endpoint weights are
+bracketed reads and say so. The three guessed commit figures are already corrected
+here.
+
+#### Did the build resolve any contradiction silently
+
+Mostly no, and this record is unusually forthcoming: three red commits with three
+distinct causes, two guessed figures, an allowance overspent against a stale reading,
+a retracted finding, and the late prompt archive in `130fd36` are all self-reported
+with the mechanism stated. One clause was not.
+
+**E. Checkpoint 1.13 asks that "`Worker`'s hardcoded config version goes" and it has
+not gone.** `const int configVersion = 1;` stands at `Program.cs:84` and again at
+`Program.cs:150`, in both `run-night` and `run`. What changed is the comment beside
+it, which now reads "Passed in rather than resolved inside a stage [D-43, INVARIANT
+13]". That is a true statement and it is not the clause. Nothing reads
+`StageContext.ConfigVersion`: every stage resolves through
+`context.Config.RequireAsync(key, context.Date)`, so the field is carried and unused,
+and the plan clause was answered by making it harmless rather than by removing it.
+The checkpoints-landed table records 1.13 as landed with no note that a clause of it
+is open. INVARIANT 13 itself is not breached, because as-of resolution is real,
+correct and tested in all three directions.
+
+Adjacent and from the same checkpoint: the clause says fourteen keys and
+`ConfigSeeder.Keys` holds twenty-two. The class comment tracks the growth key by key,
+but `CLAUDE.md` §7 is explicit that a code comment is not a record, and the table
+above still says "fourteen keys seeded".
+
+**F. `CONFIG_REFERENCE.md`'s rotation sentence is contradicted by the code it
+describes**, per finding B. The Consumer column for `flow.max_tickers_per_run` is
+correct and verified; it is the prose beside it that asserts a behaviour
+`FlowIngestor` does not have.
+
+**G. A27's closure is narrower than the carried-obligation row now reads.**
+`DeclaredAccess.EnsureColumnsDeclared` is called from exactly one place,
+`StageData.cs:106`, inside `BulkUpsertAsync`. `StageData.WriteAsync` checks the table
+and the operation at line 56 and does not check columns. `FlowEngine` is the one
+stage in this phase that writes through `WriteAsync` with a declared column set, at
+`FlowEngine.cs:46-54`, and its declaration is therefore unenforced. The build plan's
+closed row says the obligation "did not need to wait for C21", and C21
+ForwardReturnFiller is an Update, which is the route that is not checked. Enforced on
+the COPY path and unenforced on the SQL path is the accurate state.
+
+#### The two carried obligations owed to this sign-off, answered
+
+Both are queries against tables this phase populated, read here rather than measured
+by any new instrument.
+
+**The base rate of unknown filing dates across the whole population** [P owes 1].
+Over all 435,475 periods in `fundamental_snapshot` across 5,653 tickers: `none`
+241,232 at 55.40 percent, `equal` 168,858 at 38.78 percent, `null` 23,989 at 5.51
+percent, `negative` 1,396 at 0.32 percent. **44.60 percent of periods carry a filing
+date D-62 calls unknown.** Per ticker, 1,753 of 5,653 have zero clean gaps at all and
+3,645 have four or more. Restricted to names actually in `security`, 67,938 of
+271,731 periods are substituted, **25.00 percent**.
+
+So D-62's exclusion rule removes a meaningful slice rather than a handful: 31 percent
+of fetched tickers can never be admitted, and inside the universe one period in four
+reads late by that ticker's own widest gap. The probe's seven names could not have
+shown this. It also confirms the substitution-rate alert will fire on essentially
+every run, which the build already recorded and correctly declined to loosen.
+
+**The S4 open-market purchase base rate** [P owes 4]. Over `insider_transaction` as
+it stands, code P is present: 9,085 rows across 204 tickers, against A 63,698, M
+55,938, S 51,733 and F 30,324. Over the trailing 90 days to the newest `filed_at` of
+2026-08-07, of the 218 tickers with any row in that window, **35 have at least one P
+and 13 have two or more distinct P buyers.** So `distinct_buyer_count` does have
+something to rank on, and phase P's zero across seven names was the sample rather
+than the market, but the discriminating tail is thin: roughly one name in six shows
+any open-market purchase in a quarter and one in seventeen shows more than one buyer.
+
+**Both figures carry the same qualification and it is not a small one.** The
+population is the 226 tickers of finding B, which is the ordinal-first block of the
+universe rather than a sample of it, so neither is a universe base rate. D-71's
+interior shortfall applies on top, on 42 of 250 names.
+
+#### Smaller things, noted and not pursued
+
+The phase status table still reads `IN PROGRESS | 050d5c7`, two commits behind. The
+guard-abort definition-of-done line is proved by two tests that each cover one half,
+`ANewestDateOlderThanTheLastSessionAborts` over the real guard and
+`AGuardAbortLeavesNoRowsInAnyTableALaterStageWrites` over doubles, with the real
+guard inside the real `EveningOrder` never exercised together; the live `run-night`
+is what stands behind the joined path. Open items 4 and 5, both triggered at this
+sign-off, are unchanged: 1.8's events half and 1.1's request-form properties are
+still reachable from the definition of done only through "one night lands".
+
+`UniverseBuilder` writes `is_active` as the literal `true` and nothing sets it false,
+which the build already records; worth adding only that finding B's head is taken
+from `WHERE is_active`, so the two interact and a growing `security` shifts which 250
+names are reachable.
+
+### The correction pass on findings A, B and E
+
+Three of the sign-off findings were fixed on 2026-08-10, in the session that found
+them and at the operator's instruction. **That session is disqualified from reviewing
+its own corrections**, which is the same gap phase 0 recorded when pass O amended
+code the review had already looked at. What stands behind these three is the run
+below rather than a second reading.
+
+**Verified against the working tree rather than HEAD**, because `ci.ps1` checks out
+HEAD into a worktree and these changes are uncommitted. Its steps were run in their
+own order against the same dedicated database: `guards.ps1` **5 checks over 65
+files**, build **0 warnings 0 errors**, migrate reporting the schema already current,
+and `dotnet test` **Passed 146, Failed 0**, up from 136 by the ten tests below. The
+platform line phase 0 recorded still applies: this is Windows against an installed
+Postgres, and `ci.yml` has still never executed.
+
+**A. The write-ownership test now sees the whole registry, and nothing was hiding in
+the part it could not see.** `RealRegistry()` calls
+`AllOwnersForConformance`, which is what `RegistryNameTests` already used, so all six
+assertions now run over nine owners and nine tables rather than two. **They pass.**
+That is the result worth recording either way: the narrow scan had not been
+concealing a conflict, so INVARIANT 10 held on its own and only its enforcement was
+short. `EveryRegisteredComponentIsUnderTest` states the expected owner count as 9 and
+names the seven provider-backed stages, on the same reasoning as `guards.ps1`'s
+expected monetary count: a conformance run over two components and one over nine
+print the same green line. Phase 2 adds four components and moves that number
+deliberately.
+
+**B. C05 rotates.** `FlowIngestor.SelectionFor` applies C03's ordering, never fetched
+first then the rest then ticker ordinal, and the `LIMIT` moved out of the SQL into
+`Take(maxPerRun)` so the pool is the whole active universe. The run log now reports
+pool size, never-fetched and new-in-selection as C03's does. Five tests, over a pure
+function so no provider or database is needed: two consecutive passes select disjoint
+heads, coverage completes rather than stopping at the first page, the counts are
+reported, the ordering is ordinal rather than culture-dependent, and a name that
+returned no rows is offered again.
+
+That last one is the residue and it is asserted rather than left to be discovered. A
+ticker answering `404 Symbol not found` writes nothing, stays never-fetched, and is
+re-offered every run; 14 of 250 did so on 2026-08-08. Coverage still advances by
+every name that does return rows, so this is not an invariant breach, and the
+high-water mark that would close it is a separate decision and was not built here.
+`CONFIG_REFERENCE.md`'s claim that these stages rotate is now true of both, and the
+document was not edited to make it so.
+
+**Not fixed, and stated so it is not read as closed:** the 226 tickers already in
+`insider_transaction` stay the ordinal head until enough passes have run. The store
+is not rebuilt by this change; it is unblocked. At 250 a run against 2,841 names,
+coverage completes in about twelve passes, and the cost of those passes is the C05
+finding above rather than this one.
+
+**E. The hardcoded config version is gone.** Both sites in `Worker` resolve it
+through `ConfigStore.RequireVersionAsync`, and no literal remains. ~~The store-wide
+version is defined as the highest version any key had reached by the date being run,
+which is `CLAUDE.md` §8's per-key `MAX(version)` lifted to the whole store~~
+[superseded, D-72 as amended: **it is one plus the count of rows whose version is
+greater than one and whose `set_at` is at or before the date**]. It is
+resolved as of the simulated date for the reason INVARIANT 13 gives. That definition
+was new here and nothing in the corpus stated it before, which is why it was reported
+rather than treated as settled, and reporting it is what produced D-72.
+
+**The maximum was wrong and the reason is worth keeping.** A maximum over per-key
+versions does not distinguish configurations, which is the one job the stamp has.
+Keys at 3, 1, 1 give 3; changing the second key gives 3, 2, 1 and still gives 3, so
+two different configurations carry the same stamp from the second change onward and
+the tuner segmenting on it would pool exactly what it exists to keep apart. The
+failure is the silent kind this system is full of: every row still carries a number
+and every query still groups. D-72 replaced it with the count, which rises by one per
+change because insertion is append-only.
+
+Nothing had been stamped with the maximum: `config_version` exists only on
+`attribution` and `screen_score_daily`, both phase 4's, and phase 1 persists it
+nowhere. The wrong definition lived for one working session and no row inherited it.
+
+Absence fails the run rather than defaulting.
+`ConfigVersionNotInForceException` is separate from `ConfigNotInForceException`
+because the two say different things, one naming an unseeded key and the other saying
+the whole store post-dates the run. **Null rather than a number when nothing is in
+force**, and under the amended mechanism that is not derivable from the arithmetic:
+one plus zero revisions is 1, which is a real version, so the rows in force are
+counted separately and only an empty set returns null. A resolver that returned the
+sum alone would answer 1 for a date before the seed and the caller would stamp a run
+that had no configuration at all [`CLAUDE.md` §6].
+
+Proved in the binary rather than only in tests: `run FlowEngine 2026-08-07` against a
+seeded database prints ~~**`config v22`**, which is the seeded key count~~
+[amended] **`config v1`**, because every seeded row is version 1 and none of them is a
+change, and `run FlowEngine 2019-01-01` throws and exits non-zero. Seven tests cover
+the store-wide rule. Two carry the decision.
+`ChangingAKeyOtherThanTheHighestVersionedOneStillMovesTheStoreWideVersion` moves a key
+that is not the highest-versioned one and asserts both that the version moves, 3 to 4,
+and alongside it that a maximum would have returned the same number twice.
+`SeedingAnAdditionalKeyLeavesEveryPriorDatesVersionUnchanged` adds a key backdated
+exactly as the seeder backdates and asserts four prior dates are unmoved, and alongside
+it that a row count would have moved. Asserting what each rejected rule does, rather
+than describing it, is what stops the next session reinstating either.
+
+**One of these tests failed first and the failure was mine, not the code's.** The
+as-of assertion was hand-computed at three rows where four were in force, which is
+the same practice failure as the guessed commit figures above: a number written from
+reasoning rather than read from output. The test caught it before anything was
+recorded.
+
+#### Seeding a new key raises the count for every past date. **Closed by D-72's amendment**
+
+**Found by auditing D-72 rather than by running it, reported rather than fixed because
+D-72 is authored, and closed the same day by the operator amending its mechanism in
+place: the version now counts changes rather than rows.** The finding is kept in full
+below rather than deleted, because it is the reasoning the amendment rests on and a
+closure that removes it reads as though the mechanism had been obvious.
+
+`ConfigSeeder.SeedInstant` is the fixed literal `2020-01-01T12:00Z` and every seeded
+key carries it, at `ConfigStore.cs:116` and `:220`. That is deliberate and A9's
+reasoning for it stands: a wall-clock stamp would put every backfill date before every
+row. But the key list grows phase by phase. It was nine, then eleven, twelve, fourteen,
+fifteen, seventeen, nineteen and now **22**, and `CONFIG_REFERENCE.md` documents **74**
+live key rows, two of which are `screens.<id>.*` templates that expand once per screen.
+So roughly fifty more rows are still to be seeded, each stamped 2020-01-01.
+
+Under a count, seeding a key **raises the store-wide version for every date from
+2020-01-01 onward**, retroactively. Phase 2 seeds `percentile.cell_min_members` and a
+2021 date that resolved to 22 yesterday resolves to 23 today. Under a maximum this was
+inert, because a new key enters at version 1 and cannot raise a maximum already at 1 or
+above. ~~**The count is the definition that distinguishes configurations; the maximum
+was the one that was stable. Neither is both, and the trade was made deliberately in
+the direction the tuner needs.**~~ [answered by the closure below: counting revisions
+is both, and the trade did not have to be made]
+
+What it does not break: the tuner reads the stamp stored on the row rather than
+re-resolving the date, and attribution rows are never re-written [`CLAUDE.md` §12,
+INVARIANT 4], so segmentation still works and no stored row changes. Rows either side
+of a seeding carry different stamps, which is correct rather than spurious, because the
+store genuinely differed.
+
+~~What it does touch, and what the decision is owed on: D-72 says the count "rises by
+exactly one per change". Seeding a phase's keys raises it by however many that phase
+adds, at once, and for dates in the past. Phase 3's backfill is where it bites: rows
+stamped during a backfill record the count as it stood at backfill time, and a later
+phase's seeding makes a fresh resolution of the same date disagree with them. The
+disagreement is invisible, because both numbers are plausible integers.~~ [closed
+below; seeding now moves nothing, so phase 3's backfill is not touched]
+
+~~Two shapes would close it and neither is taken here. Seed with `set_at` at the date
+the key is genuinely introduced rather than at the window start, which trades the
+retroactivity for A9's original failure and needs A9 re-read first. Or stamp from a
+counter that only ever moves forward. **This is an authored question and phase 2 is the
+first phase that would trip it**, since it is the next one to seed a key.~~
+
+**Closed by a third shape neither of those saw.** D-72's amendment keeps `SeedInstant`
+exactly as A9 set it and changes what is counted instead: one plus the rows whose
+version is greater than one. A seed enters at version 1 and is therefore not counted,
+so seeding a key moves nothing, at any date. **A seed extends the configuration's
+schema; only a revision changes the configuration in force**, and that distinction is
+what the row count did not make. The property D-72 was written for is untouched, since
+a revision is exactly what the tuner does and exactly what has to be distinguishable.
+
+`SeedingAnAdditionalKeyLeavesEveryPriorDatesVersionUnchanged` asserts it directly over
+four dates, and asserts alongside that a row count would have moved. The store-wide
+version now begins at 1 rather than at 22, and `run FlowEngine 2026-08-07` prints
+`config v1`.
+
+**One consequence worth recording rather than leaving to be noticed.**
+`WORKED_EXAMPLE.md` stamps an attribution row `config_version` v7, which the row count
+made unreachable against 22 seeded keys and which one-plus-revisions permits: it is a
+store that has been revised six times. So the document needs no edit, and nobody has
+made one.
+
+That sentence first read as though it were closing a note raised at the sign-off. **No
+such note exists in this file.** The observation was made in conversation and never
+written here, and a claim in a chat is not a record [`CLAUDE.md` §7]. Corrected rather
+than quietly reworded, because inventing a citation to a finding that was never filed
+is exactly the failure the rule names.
+
+#### What the amended rule rests on, which is the seeder rather than the schema
+
+The amended mechanism was attacked rather than accepted, by executing candidate append
+sequences against the compiled `ResolveVersion` instead of reasoning about them. It
+holds in the direction D-72 was written for and three residues are worth carrying. None
+is a defect in the code as it stands, and **all three become live the moment a second
+writer of `config_rows` exists**, which is phase 4's tuner. `0001_snapshot.sql:449`
+already names it: "Writer: configuration and ScreenTuner".
+
+**1. Distinctness is guaranteed by `ConfigSeeder` being the only writer, not by the
+rule.** `config_rows` carries `PRIMARY KEY (key, version)` and nothing else: no check
+that a key's first version is 1, that versions are contiguous, or that version order
+follows `set_at` order. `ResolveVersion` treats `version > 1` as a proxy for "revision"
+and the schema does not enforce that reading. A new key inserted at version 1 with a
+current `set_at`, which is the natural thing for a tuner adding a sixth screen to do,
+changes what is configured from that date and moves the stamp not at all, so two dates
+with different configurations share a version. The row count did move on that case. It
+was executed: two dates, versions equal, configurations different.
+
+**2. A revision backdated before `SeedInstant` also collapses the null guard.** Rows in
+force are counted for the null test and seeds count toward that, so a pre-seed date
+with one backdated revision returns a version instead of null and
+`RequireVersionAsync` stops throwing for the date it exists to refuse. Also executed.
+
+**3. "Rises by exactly one per change" is true of rows appended, not of changes made.**
+A tuner run rewriting slots across two screens writes two rows and moves the version by
+two. Harmless to segmentation, since the dates still differ, and it contradicts D-72's
+wording rather than its property. Two further sequences move the version while the
+configuration in force does not change at all: a revert, where a value returns to what
+it was, and a revision backdated behind an existing one, where the row is never the
+resolved row on any date and still counts. **Both over-segment rather than pool**,
+which is the safe direction and is not the failure D-72 exists to prevent.
+
+**What is owed, and to whom.** Phase 4 writes the tuner and phase 4 is where all three
+land. ~~The obligation is on that writer: a revision is appended at a version above one
+with a `set_at` at or after every row already present.~~ [replaced with a resolver form]
+**The obligation is on the resolver instead: the store-wide version as of a date is the
+count of distinct `set_at` instants at or before that date.**
+
+**That is the better shape and the reason is section 5's.** A rule the writer has to
+obey is a rule someone has to remember, and nothing in `config_rows` would catch a
+tuner that forgot; a rule the resolver applies cannot be forgotten by anyone. Preferring
+to make a mistake impossible over documenting that it is wrong is what the stage
+pattern already rests on.
+
+Walked against the three residues rather than asserted. **Residue 1 closes**: a new key
+inserted at version 1 with a current `set_at` is a new distinct instant, so the stamp
+moves where `version > 1` counting left it still, and that was the serious one.
+**Residue 3 closes**: one tuner run rewriting slots across two screens writes two rows
+at one instant, which is one distinct instant and a rise of exactly one, so "rises by
+exactly one per change" becomes true of changes rather than of rows appended. **The
+revert is unchanged** and still over-segments, which is the safe direction. **Seeding
+still moves nothing**, and this is the part worth stating precisely, because a phase 4
+note that is approximately right is how phase 4 gets it wrong.
+
+**The constraint is not that every seed shares one instant.** A seed at a current
+instant is fine and correct, since it moves only dates from then on, which is when that
+key genuinely came into force. What breaks it is a seed **backdated to a new early
+instant**, which would sit before every backfill date and move all of them by one. So
+the rule is that no seed introduces a new backdated instant, and `SeedInstant` being a
+single fixed literal is one way of satisfying that rather than the requirement itself.
+
+Three things a session adopting it has to do, none of them mechanical.
+**`ConfigRow` carries a `DateOnly` and not an instant.** `SetOn` is `set_at` already
+reduced to a US Eastern date in SQL, so two tuner runs on one day are one value and the
+resolver cannot see the two instants it is being asked to count. The instant has to
+reach the record alongside the date, with the date filter left exactly as it is.
+**The null case stops being a separate branch.** Zero rows in force is zero distinct
+instants, and zero is not a version, so null falls out of the arithmetic where D-72 as
+amended needs a second counter for it. **And D-72 says something else.** Its mechanism
+is one plus the rows whose version is greater than one, which this replaces rather than
+refines, so adopting it is an amendment to D-72 and not an implementation detail. The
+code follows the decision here, not this note.
+
+Recorded rather than built, and recorded here rather than only in conversation.
+
+**Two errors of mine that the same check caught**, both corrected above rather than
+argued with. The summary on the discrimination test stated the row count's answers, 5
+and 6, three lines above assertions of 3 and 4, which is the rejected mechanism left
+standing as the stated reason for a passing test. And the `WORKED_EXAMPLE.md` paragraph
+cited a sign-off note that does not exist in this file: the observation was made in
+conversation and never written down, which `CLAUDE.md` §7 names exactly.
+
+**Finding G is not fixed** and is the one left open of the code findings.
+`EnsureColumnsDeclared` still runs on the bulk route only, and C21 is an Update on
+the route that does not check. **Findings C and D are corrected in place above**,
+struck with the correction stated, per `CLAUDE.md` §13.
+
 ## Open items carried forward
 
 Found and not closed. Each names what triggers it. The pass narratives behind
@@ -192,7 +1835,7 @@ them are in `docs/archive/process-2026-08.md`.
 | 4 | Checkpoint 1.8's events-ingest half is not reachable from phase 1's definition of done | Phase 1 sign-off |
 | 5 | Checkpoint 1.1 is reachable from phase 1's definition of done only through "one night lands", which exercises the HTTP client without asserting the token auth, the explicit `fmt`, the encoded filter form or the rate limit | Phase 1 sign-off |
 | 6 | `ARCHITECTURE.html` states writes three times over, in its own Written-by column, in the §3 catalogue and in `SCHEMA.md`. Every write-column defect in passes K through N came from that duplication. Its stated trigger, phase 0 proving the registry and its test, has fired | An authored change to `ARCHITECTURE.html` |
-| 7 | The 0.4 conformance test asserts the registry against `SCHEMA.md`'s table list and against a hardcoded list of the three permitted splits, not against `SCHEMA.md`'s own writer declarations, which are stated in prose that varies in form | Phase 1, when real components make the check worth something |
+| 7 | ~~The 0.4 conformance test asserts the registry against `SCHEMA.md`'s table list and against a hardcoded list of the three permitted splits, not against `SCHEMA.md`'s own writer declarations, which are stated in prose that varies in form~~ **Closed at 1.10.** The prose does vary in form, so the parse does not read a sentence shape: it takes every bolded span in a table's opening paragraph and keeps the words `ARCHITECTURE.html` section 3 catalogues as components. That is tolerant of `Writer: X`, of `Writers: A inserts, B updates`, and of the order group's three sentences with no prefix, and it cannot invent a writer because an unrecognised word is dropped. It found exactly the five split tables the literal had, and it added the assertion the literal could not make, that every component writing a table is named as a writer of it. One limit stated at the reference site: `order`, `fill` and `position` share a paragraph, so within that group membership is asserted of the group rather than of the table | Closed |
 | 8 | 0.5 has no permanent fixture for its failure path, and no test exercises `/api/runs` or renders the viewer. Both are code and belong to a phase rather than to a correction pass | Phase 9, or the next phase touching either |
-| 9 | `TheCompiledApiCarriesNoPipelineDependency` reads `deps.json` from disk. Its stale-artifact defect was closed by having the test project reference the Api, which holds only while the build succeeds: after a failed build, `dotnet test --no-build` reads the previous artifact and the assertion passes against it. CI is not exposed, because its Build step gates Test | Phase 9, with item 10 |
+| 9 | ~~`TheCompiledApiCarriesNoPipelineDependency` reads `deps.json` from disk. Its stale-artifact defect was closed by having the test project reference the Api, which holds only while the build succeeds: after a failed build, `dotnet test --no-build` reads the previous artifact and the assertion passes against it. CI is not exposed, because its Build step gates Test~~ **Observed rather than predicted at 1.12**, where `dotnet test --no-build` reported 56 passing against a stale binary after a build that had just failed with four errors. Mitigated at 1.12 by making `ci.ps1` the per-checkpoint verification command instead of a three-command sequence: it runs the same steps in the same order and exits non-zero on the first failure, so it cannot reach the test step after a failed build. Proved by committing a deliberate syntax error and running it, which exited 1 at the Build step and printed no test count. **The hazard itself is unchanged** for anyone running `dotnet test --no-build` by hand; what changed is that nothing in the corpus now tells them to | Phase 9, with item 10 |
 | 10 | The Api's `appsettings.Secrets.json` flows into the test output directory through the 0.5 project reference, so a local test run can take its connection string from a file other than the test project's own. All four are byte identical today | Whenever the two need to differ |

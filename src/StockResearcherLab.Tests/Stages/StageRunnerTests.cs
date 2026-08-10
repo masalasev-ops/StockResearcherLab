@@ -16,30 +16,40 @@ public sealed class StageRunnerTests
         new DateTimeOffset(2026, 8, 6, 23, 0, 0, TimeSpan.Zero),
         new DateOnly(2026, 8, 6));
 
+    /// <summary>
+    /// The whole path: declaration, guard, execution, run_log row. It ran against
+    /// the registered NoOpStage until 1.11 retired that, and now runs against a
+    /// test-local stage instead.
+    ///
+    /// The subject was never the stage. It was the runner, and a stage registered
+    /// in the product purely so a test had something to call is a component name
+    /// `ARCHITECTURE.html` section 3 does not have [carried obligation 0 to 1].
+    /// </summary>
     [Fact]
-    public async Task TheNoOpStageRunsAndLogsOk()
+    public async Task AStageThatWritesNothingRunsAndLogsOk()
     {
         var ct = TestContext.Current.CancellationToken;
         var cs = TestDatabase.ConnectionString;
         var runLog = new RunLog(cs);
-        var registry = PipelineComposition.BuildRegistry(cs);
 
-        var before = (await runLog.RecentAsync(500, ct).ConfigureAwait(true))
-            .Count(r => string.Equals(r.Stage, "NoOpStage", StringComparison.Ordinal));
+        var stageName = "Quiet-" + Guid.NewGuid().ToString("N")[..8];
+        var registry = new StageRegistry([new QuietStage(stageName), new RunLog(cs)]);
 
         var result = await new StageRunner(registry, runLog, Clock, cs)
-            .RunAsync("NoOpStage", Clock.Today, configVersion: 1, ct).ConfigureAwait(true);
+            .RunAsync(stageName, Clock.Today, configVersion: 1, ct).ConfigureAwait(true);
 
         Assert.Equal(0, result.RowsWritten);
 
         var rows = (await runLog.RecentAsync(500, ct).ConfigureAwait(true))
-            .Where(r => string.Equals(r.Stage, "NoOpStage", StringComparison.Ordinal))
+            .Where(r => string.Equals(r.Stage, stageName, StringComparison.Ordinal))
             .ToList();
 
-        Assert.Equal(before + 1, rows.Count);
-
-        var latest = rows[0];
+        var latest = Assert.Single(rows);
         Assert.Equal("ok", latest.Status);
+
+        // Zero rows is a legitimate result and not an error on its own. It is
+        // recorded as zero rather than as unknown, which is what a stage that threw
+        // records [CLAUDE.md section 6].
         Assert.Equal(0, latest.RowsWritten);
         Assert.Null(latest.Error);
         Assert.NotNull(latest.DurationMs);
@@ -83,6 +93,28 @@ public sealed class StageRunnerTests
             .ConfigureAwait(true);
 
         Assert.Contains("is registered", ex.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Reads through the declared route, writes nothing, returns zero rows. It
+    /// reads rather than doing nothing at all, because taking the route is what is
+    /// being proved.
+    /// </summary>
+    private sealed class QuietStage(string name) : IStage
+    {
+        public string Name { get; } = name;
+
+        public IReadOnlyList<string> ReadSet { get; } = ["run_log"];
+
+        public IReadOnlyList<TableWrite> WriteSet { get; } = [];
+
+        public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
+        {
+            _ = await context.Data
+                .ReadAsync("run_log", "SELECT count(*) FROM run_log;", ct).ConfigureAwait(false);
+
+            return StageResult.None;
+        }
     }
 
     /// <summary>Declares run_log and reads security. Both tables exist, so without the guard this succeeds.</summary>

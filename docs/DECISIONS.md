@@ -575,6 +575,205 @@ push [O.1]. The cost of the removed steps was days per phase and eleven
 correction passes on phase P alone. What replaces them is mechanical and
 runs every time rather than once.
 
+**D-64 ~~The row count alert threshold is not revised, and the question is
+deferred until settled counts exist.~~ The absolute row-count floors stand.**
+`ACTIVE`
+The deferral is closed at the foot of this entry. The original reasoning is
+kept rather than replaced, because it was the reasoning that turned out to be
+right and a closure that deletes it reads as though the answer was obvious.
+D-59 alerts below 45,000 rows. The probe's 2026-08-04 finished at 44,708,
+which would alert, and that looks like a bound set too high.
+
+It is not evidence of that. The day was read three times in one evening at
+44,665, 44,686 and 44,708, rising each time, and the reads stopped rather
+than converged. Its final count is unknown. A day still accreting says
+nothing about where a threshold for settled days belongs, and revising the
+bound on it would be loosening a bound because a measurement missed it,
+which CLAUDE.md section 11 prohibits.
+
+D-65's settledness check is what produces the evidence, since a count is
+only meaningful once the day is known to be final. The question is asked
+again after phase 1 has accumulated settled counts, read at sign-off. It is
+a query against price_daily, not a measurement task.
+
+**Closed at 1.9, and the floors stand.** 2026-08-04 finished at 50,228 rows.
+The probe read it at 44,665, 44,686 and 44,708 and stopped rather than
+converged. Settled days now read 50,029, 50,148, 50,204 and 50,228, a spread
+of 0.4 percent.
+
+D-59's floors are unchanged. 44,708 sat above the 40,000 abort floor and
+inside the 40,000 to 45,000 alert band, so no movement of those floors would
+have caught that day without also rejecting settled days. The absolute floors
+answer "is this file catastrophically short". They were never the tool for
+"is this file still filling", which is D-70's check.
+
+**D-70's two values, seeded at 1.13.**
+
+`freshness.settled_fraction` = 0.95. The separation corridor runs from 89.2
+percent, the measured part-settled ceiling, to 99.7 percent, the lowest
+settled observation. The part-settled side is measured across three readings;
+the settled side is four consecutive summer sessions and its true spread is
+unknown. The bound therefore sits near the measured side, six points above
+it, leaving five points for settled variation not yet observed. The asymmetry
+supports this rather than opposing it: a false fail costs one stale day and
+self-corrects through the fallback, while a false pass runs the night on an
+11 percent short universe and looks normal.
+
+`freshness.settled_window_days` = 20. A median, not a mean, and 20 rather
+than a handful, because a day loaded short is still in the trailing window
+until C02's reload tops it up, and it would drag the reference down exactly
+when the test should not loosen. A median over 20 is unmoved by one such day.
+20 also matches the window already used for median dollar volume.
+
+**Watch item, recorded rather than rediscovered.** The first low-volume
+holiday week is what would move 0.95. If a genuinely settled session between
+Christmas and New Year comes in below it, the value is too high and rises
+with that observation recorded. Written here before the week arrives, because
+`CLAUDE.md` §11 forbids loosening a bound because a measurement missed it,
+and the difference between that and a bound set on an unobserved regime is
+the reasoning being on record first.
+
+**D-65 The freshness guard checks recency, completeness and settledness,
+and these are three different things.** `ACTIVE`
+ARCHITECTURE.html section 4 asserts the latest price date equals today.
+Checkpoint 1.2 rejects the most recent available day as still accreting.
+Both cannot hold, and the architecture is the half that is wrong: it was
+written before the probe found a session accreting for hours and into the
+following evening.
+
+Recency. The newest date in price_daily is not older than the most recent
+completed trading session. This catches a provider that has not updated and
+a run that was missed. It does not assert today, which the settled-day rule
+makes false.
+
+Completeness. D-59's thresholds are unchanged, abort below 40,000 and alert
+below 45,000, subject to D-64.
+
+Settledness. ~~A date is unsettled if re-fetching it returns more rows than
+are stored for it.~~ [superseded, D-70] Both figures already exist, so this is a comparison
+rather than a threshold and no new bound is introduced. The probe's
+2026-08-04 fails it three times within one evening.
+
+Ingest loads the newest date passing all three. A date failing settledness
+is re-read on a later run rather than discarded, because it is incomplete
+rather than wrong.
+
+**D-68 Every stage write is idempotent on the table's own grain.** `ACTIVE`
+The rails define no unit of work. `StageData` opens a connection per call
+and `StageRunner` wraps nothing in a transaction, so a stage that throws
+leaves its writes committed while `run_log` records `rows_written` as
+unknown. `ARCHITECTURE.html` section 4 states that any stage can be re-run
+against an earlier night without side effects, and `CLAUDE.md` section 6
+states that a stage completes or it fails the run. Neither was enforceable,
+and phase 1 builds seven writing stages.
+
+A re-run of any stage over any date replaces rather than duplicates. Where
+a table carries a surrogate identity key the grain is declared as a unique
+index in the migration that first writes it, because naming a conflict
+target is not enough: `ON CONFLICT` against a table with no matching
+constraint raises before a row is written. `insider_transaction` and
+`events` are the two such tables in this phase, and `0002` gives each one.
+
+A transaction per stage is the alternative and is rejected. Phase 3 runs
+these same stages over five years, and one transaction spanning twelve
+million rows is its own failure mode. Idempotence costs an index and
+survives being interrupted; a long transaction costs nothing until the
+first time it does not complete.
+
+A future multi-table stage with no natural key reopens this. So does a
+provider that files two rows a stage cannot tell apart, which is why 1.7's
+sweep answers whether its tuple is genuinely unique against real rows
+rather than by assumption.
+
+**D-70 Settledness is measured against the trailing population, not by
+re-fetching.** `ACTIVE`
+Supersedes the settledness mechanism in D-65. D-65 otherwise stands: recency
+and completeness are unchanged and the three checks remain three.
+
+Re-fetching a date inside one run detects nothing. 2026-08-06 read back to
+back returned 44,204 both times, because accretion runs over hours while two
+calls are seconds apart. Repairing it with a count stored by an earlier run
+was rejected: a stage is a pure function of its date and config version
+[`CLAUDE.md` §5, §6], and a guard whose verdict depends on what it saw during
+a previous wall-clock run is not. Two databases holding identical
+`price_daily` contents would disagree.
+
+A date is settled when its row count in `price_daily` is at or above
+`freshness.settled_fraction` of the median row count of the last
+`freshness.settled_window_days` dates strictly before it. Computed from
+`price_daily` alone, on first sight, with no dependence on run history. The
+fallback is unchanged: walk back from the newest date until one passes all
+three checks, and return it.
+
+This removes the ordering constraint the re-fetch implied between C02 and
+C07. `RUNBOOK.md`'s 17:30 and 17:40 stand, and C07 makes one provider call
+rather than two.
+
+**D-71 A short page from an exhausted server is recorded, not fatal.** `ACTIVE`
+`sec-filings/{t}/form4` reports a `meta.total` higher than the number of rows
+it delivers. Measured over 250 tickers: 43 short, 104 rows missing of
+101,325, and all 43 had walked the server's own pagination to its end. The
+case the paging check was written for, a client that stops asking while pages
+remain, occurred zero times.
+
+Two failures were sharing one exception and they separate cleanly.
+
+A loop that terminates while `links.next` is present is this client failing
+to ask. It stays fatal, at exactly its current strictness, because nothing
+about the provider changes what our own defect deserves.
+
+A loop that terminates because `links.next` is absent, having collected fewer
+distinct rows than `meta.total`, is the provider disagreeing with itself.
+Asking again cannot recover the rows, and halting means a universe pass can
+never complete. It is recorded and the stage continues.
+
+No threshold is set and none is to be added later without evidence gathered
+after this decision was written. Every candidate value would have been chosen
+against data already seen, which is what §11 forbids. The rule is structural
+instead: the distinction is which condition ended the loop, and that is
+observable rather than judged.
+
+The run log carries, per run, the count of tickers that under-delivered and
+the total row shortfall. Today's figures are the baseline. Tolerating a
+discrepancy without measuring it is how it stops being visible.
+
+Where the shortfall sits is recorded per affected ticker from the pages
+already collected: a final page below `page[limit]` puts the missing rows at
+the oldest end of a history and outside every trailing-90-day window, while a
+short interior page puts them inside one. If the former dominates,
+`insider_net_90d_usd` and `distinct_buyer_count` are untouched and phase P's
+S4 base rate can be answered without qualification.
+
+**D-72 The store-wide config version is a count, not a maximum.** `ACTIVE`
+Nothing in the corpus defined a store-wide config version; only `MAX(version)`
+per key. Phase 4 stamps one on every attribution row and the tuner segments by
+it, so it has to distinguish configurations.
+
+A maximum over per-key versions does not. Keys at 3, 1, 1 give 3; changing the
+second key gives 3, 2, 1 and still gives 3. Two different configurations share a
+stamp from the second change onward, and segmenting on it would pool results the
+tuner exists to keep apart.
+
+The store-wide version as of a date is ~~the count of rows in `config_rows` whose
+`set_at` is at or before that date~~ [amended, the mechanism counted rows and had
+to count changes] **one plus the count of rows whose `version` is greater than one
+and whose `set_at` is at or before that date**. A key's initial seed carries
+`SeedInstant` and is backdated by design, so counting it would make seeding a new
+key raise the version for every past date, and a backfill re-run would stamp a
+different version on identical data. A seed extends the configuration's schema;
+only a revision changes the configuration in force. Append-only insertion makes it
+rise by exactly one per change, so distinct configurations get distinct values, it
+resolves as-of by the same rule as every key, and no column is added. ~~It begins
+at the seeded key count rather than at 1.~~ [amended with the mechanism] It begins
+at 1 however many keys are seeded.
+
+The null case is not arithmetic and is asserted separately. No row at all in force
+as of the date returns null, because one plus zero revisions is 1 and 1 is a real
+version, so the sum cannot tell a seeded-and-never-revised store from an empty one.
+A date before the seed fails the run rather than being stamped.
+
+---
+
 ---
 
 ## Open
@@ -590,39 +789,60 @@ rejection rate per model, which is available much sooner. The letters were the
 naming in use before D-36 set the four portfolio names, and they survived the
 rename here [M.3].
 
-**D-64 The freshness guard's abort floor against a part-settled file.** `OPEN`
-Owed to checkpoint 1.3.
+~~**D-64 The freshness guard's abort floor against a part-settled file.** `OPEN`~~
+[answered, and now stated in full above as `ACTIVE`]. The body is not repeated
+here, because a decision stated twice is a decision that can disagree with
+itself. The number is kept in place so that the register shows it was open and
+where it went.
 
-D-59 sets the floor at 40,000 and the alert band at 40,000 to 45,000, on
-settled days measuring 50,029 to 50,204 and sessions still in progress
-measuring 3,544 and 9,072. Those two populations are far apart and the floor
-separates them.
+~~**D-65 What the freshness guard asserts about the latest price date.** `OPEN`~~
+[answered, and now stated in full above as `ACTIVE`]. Same handling, same
+reason.
 
-2026-08-04 is the case neither figure covers. It was read three times across
-the evening of 2026-08-05 at 44,665, 44,686 and 44,708, still gaining rows
-after it had stopped being the most recent day. 44,708 is 11 percent below the
-lowest settled count, above the abort floor, and inside the alert band. A
-part-settled file of that shape passes the guard and produces orders on a day
-whose bars are incomplete, which is the failure the guard exists to prevent.
+**D-69 Whether the flow screen survives an unbackfillable institutional
+ownership source.** `OPEN`
+Owed to phase 4, not phase 1. Recorded on the corrected 1.9 measurements, not
+on the retracted ones: the subject is `inst_ownership_change`, and insider
+data is not the problem.
 
-What is open is what to do about it, not what the numbers are. Raising the
-floor toward the settled range narrows the margin against a legitimately
-short day, a half session or a holiday-shortened one, and a bound is not
-loosened or tightened because a measurement missed it [`CLAUDE.md` §11].
-Phase 1 decides from a wider sample than three readings of one day.
+`Holders::Institutions` is a top-20 snapshot rather than a series. CCS.US and
+NVDA.US each return 20 entries at a single `date`, 2026-03-31; BXC.US returns
+20 across two, 2026-03-31 and 2026-06-30. `sec-filings/{t}/13f` is a 404 and
+the filings index lists only `10k`, `10q`, `form4` and `8k`. `SCHEMA.md` says
+`report_date` is what makes this table backfillable, and against this source
+that is false: the column is populated, which is why the claim survived, but
+one or two distinct values per ticker is not a history.
 
-**D-65 What the freshness guard asserts about the latest price date.** `OPEN`
-Owed to checkpoints 1.2 and 1.3.
+So S4's third input has no past. `insider_net_90d_usd` and
+`distinct_buyer_count` are unaffected and fully backfillable, form4 paging on
+`page[offset]` and `page[limit]` with `meta.total` matching the filings index
+on every ticker checked, CCS.US 324, NVDA.US 590, PHAT.US 171.
 
-`ARCHITECTURE.html` §4 requires the latest price date to equal today.
-Checkpoint 1.2's settled-day rule rejects the most recent available day as
-still accreting. Both cannot hold: the day whose date equals today is the day
-1.2 will not use.
+D-58 already removed `short_interest_change` from S4 for the same reason in a
+different form, that a screen whose backfill scores come from a different
+population than its live scores has a floor drawn from a distribution the live
+screen does not share. This is the second of three inputs to meet it.
 
-Two readings and neither is chosen here. Either the guard asserts against the
-newest settled date rather than today, which makes the assertion agree with
-what the ingest actually loads, or the run is expected to see today's date
-because it runs after the session has settled, which makes 1.2's rule the
-narrower statement of the same thing. The measurement that would separate them
-is when a US day stops accreting, which phase 1 sees every night and the probe
-saw once.
+Options, none chosen here. Run S4 on its two insider inputs and drop
+`inst_ownership_change`, which keeps the screen backfillable and costs the one
+input that is not insider-derived. Keep all three and accept that S4's floor is
+drawn from a two-input distribution during backfill and a three-input one
+live, which D-58 rejected. Or source ownership from SEC EDGAR 13F, free and
+complete, at the cost of a second provider and a real ingest.
+
+The timeboxed check A12 asked for was run and is in the same transcript. The
+subscription exposes no dated or market-wide institutional feed. It does expose
+a market-wide legacy `insider-transactions` endpoint, 1,000 rows in one call,
+but it is stale by roughly three months and thin per ticker, and it is not
+needed now that form4 pages.
+
+**Recorded alongside whichever way it goes** [A15]. After this, both of S4's
+surviving inputs come from one endpoint, so a single provider change takes the
+whole screen rather than one input. The screen was designed with four inputs
+from three sources; D-58 removed one and this removes or isolates another, and
+the concentration that leaves is a property of the screen rather than of either
+decision on its own.
+
+`institutional_holding` still ingests and 1.7's institutional half still builds.
+A top-20 current-holders snapshot is a usable static feature. It is only the
+change metric that has no series behind it.

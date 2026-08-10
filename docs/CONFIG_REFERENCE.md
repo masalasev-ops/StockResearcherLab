@@ -22,20 +22,24 @@ Verified column values: `unverified`, `verified <date>`, or `NOT BOUND`.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `universe.min_market_cap` | 300000000 | D-4 | UniverseBuilder | unverified |
-| `universe.min_price` | 5 | D-4 | UniverseBuilder | unverified |
-| `universe.min_adv_20d` | 2000000 | D-4 | UniverseBuilder | unverified |
-| `universe.min_history_days` | 250 | D-4 | UniverseBuilder | unverified |
-| `universe.bucket_large_floor` | 10000000000 | D-4 | UniverseBuilder | unverified |
-| `universe.bucket_mid_floor` | 2000000000 | D-4 | UniverseBuilder | unverified |
+| `universe.min_market_cap` | 300000000 | D-4 | UniverseBuilder | verified 2026-08-09 |
+| `universe.min_price` | 5 | D-4 | UniverseBuilder, FundamentalsIngestor | verified 2026-08-09 |
+| `universe.min_adv_20d` | 2000000 | D-4 | UniverseBuilder, FundamentalsIngestor | verified 2026-08-09 |
+| `universe.min_history_days` | 250 | D-4 | UniverseBuilder, FundamentalsIngestor | verified 2026-08-09 |
+| `universe.bucket_large_floor` | 10000000000 | D-4 | UniverseBuilder | verified 2026-08-09 |
+| `universe.bucket_mid_floor` | 2000000000 | D-4 | UniverseBuilder | verified 2026-08-09 |
 
 ## Fundamentals
+
+**`fundamentals.widest_gap_alert_days` is in the cadence table below** rather than
+here, with the other keys phase 1 wired up.
+
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
 | ~~`fundamentals.filing_date_substitution_days`~~ | ~~65~~ | ~~D-57~~ | ~~FundamentalsIngestor~~ | [superseded, D-62] |
-| `fundamentals.min_clean_gaps_for_substitution` | 4 | D-62 | UniverseBuilder, ~~FundamentalsIngestor~~ [corrected, L.2] | unverified |
-| `fundamentals.substitution_rate_alert` | 0.25 | D-57 | FundamentalsIngestor | unverified |
+| `fundamentals.min_clean_gaps_for_substitution` | 4 | D-62 | UniverseBuilder, ~~FundamentalsIngestor~~ [corrected, L.2] | verified 2026-08-09 |
+| `fundamentals.substitution_rate_alert` | 0.25 | D-57 | FundamentalsIngestor | verified 2026-08-09 |
 
 The substitution window is ~~the widest gap the probe observed, not a mean, because
 being late costs freshness while being early costs correctness~~ [superseded, D-62]
@@ -58,6 +62,71 @@ The alert exists so that a provider change making equality universal is visible
 rather than silently widening every read. It survives D-62 unchanged, and its
 Set by column still names D-57 because that is the entry that set it and a
 superseded entry keeps its number.
+
+## Ingest cadence and cost
+
+Every key here bounds how much of the universe one run touches, or how far a window
+reaches. None of them changes a number the screens read: they decide what has been
+looked at, not what it is worth.
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `fundamentals.max_tickers_per_run` | 500 | 1.4 | FundamentalsIngestor | verified 2026-08-08 |
+| `sentiment.tickers_per_call` | 50 | 1.6 | SentimentIngestor | verified 2026-08-08 |
+| `sentiment.lookback_days` | 30 | 1.6 | SentimentIngestor | verified 2026-08-08 |
+| `flow.max_tickers_per_run` | 250 | 1.7 | FlowIngestor | verified 2026-08-08 |
+| `flow.form4_page_size` | 50 | 1.7 | FlowIngestor | verified 2026-08-08 |
+| `flow.institutional_report_lag_days` | 45 | 1.8 | FlowEngine | verified 2026-08-08 |
+| `events.earnings_forward_days` | 90 | 1.8 | EventsIngestor | verified 2026-08-08 |
+| `events.earnings_backward_days` | 7 | 1.8 | EventsIngestor | verified 2026-08-08 |
+
+**The three per-run bounds exist because their endpoints are per ticker and metered
+per call** [PROGRESS, endpoint weights]. Fundamentals is 10 units a ticker and form4
+is 10 units a page, so a full universe pass on either is the most expensive thing in
+a week. Each stage rotates, preferring tickers it has not fetched, so coverage builds
+over several nights rather than a night spending its whole allowance on one stage.
+`sentiment.tickers_per_call` is not one of these: sentiment is metered flat at 5
+units per ticker whatever the batch size, measured at 1, 10 and 20, so that key is a
+latency knob and the whole universe is covered every night [D-23].
+
+**`flow.institutional_report_lag_days` is a point-in-time key, not a cadence one.**
+`institutional_holding.report_date` is a period end and a 13F is due within
+forty-five days of it, so reading on `report_date <= date` makes a quarter's
+ownership readable up to forty-five days before it was filed. That is the mistake
+INVARIANT 12 names for fundamentals, arriving through the other table with the same
+shape. FlowEngine subtracts the key from the run date before either report date is
+visible, so the substitution is inspectable and changeable rather than a literal
+inside a statement. It is not a screen threshold and the tuner does not touch it
+[INVARIANT 14].
+
+**The two `events.*` windows cost nothing and are bounded for a different reason.**
+`calendar/earnings` is metered at 1 unit whatever the range, measured over a 90 day
+window returning 22,286 rows across every exchange the provider carries, so the width
+is about what belongs in `events` rather than what it costs. Forward reaches far
+enough for C12's earnings blackout to see the next report; backward reaches far
+enough for C03's rotation to let a name that has just reported jump the queue.
+
+**Three `universe.*` keys have two consumers each and the column says so** [1.8].
+C01 applies `min_price`, `min_adv_20d` and `min_history_days` as three of D-4's six
+absolute criteria, and C03 applies the same three to its candidate pool so a
+per-ticker call is not spent on a name the universe will reject. That is one filter
+read in two places rather than two filters: C03 narrows what it fetches and decides
+no membership, and C01 applies all six again to everything it sees
+[D-5, INVARIANT 1].
+
+It matters for the audit this column exists for. Before 1.8 these read as C01's
+alone, and a later session changing one of them would have looked at the Consumer
+entry, seen a single weekly stage, and missed that it also changes what the nightly
+fundamentals rotation spends its allowance on.
+
+**Every key above and below was confirmed by reading the line that consumes it**,
+not the key name: the eight in this table at `UniverseBuilder.cs:46-52` and
+`FundamentalsIngestor.cs:59-64`, the four freshness keys at
+`FreshnessGuard.cs:82-85`, `price.reload_window_days` at `PriceIngestor.cs:74`,
+the two sentiment keys at `SentimentIngestor.cs:51-52`, the two flow keys at
+`FlowIngestor.cs:59-60`, the lag at `FlowEngine.cs:44`, and the two events windows
+at `EventsIngestor.cs:59-60`. Line numbers go stale; the file and the stage do not,
+and both are given so the next reader can find it either way.
 
 ## Percentiles
 
@@ -181,8 +250,11 @@ value, but changing it to `vs_spy` is a defect and not a tuning option [INVARIAN
 | `monitor.cache_hit_rate_min` | 0.80 | — | CostLedger | unverified |
 | `cost.annual_budget` | 100 | — | CostLedger | unverified |
 | ~~`freshness.row_count_tolerance`~~ | ~~from probe~~ | — | FreshnessGuard | [removed, D-59] |
-| `freshness.row_count_abort_below` | 40000 | D-59 | FreshnessGuard | unverified |
-| `freshness.row_count_alert_below` | 45000 | D-59 | FreshnessGuard | unverified |
+| `freshness.row_count_abort_below` | 40000 | D-59 | FreshnessGuard | verified 2026-08-09 |
+| `freshness.row_count_alert_below` | 45000 | D-59 | FreshnessGuard | verified 2026-08-09 |
+| `freshness.settled_fraction` | 0.95 | D-70 | FreshnessGuard | verified 2026-08-09 |
+| `freshness.settled_window_days` | 20 | D-70 | FreshnessGuard | verified 2026-08-09 |
+| `price.reload_window_days` | 20 | A10 | PriceIngestor | verified 2026-08-09 |
 
 ~~The freshness tolerance has no default until phase P measures a real bulk end-of-day
 row count.~~ [removed, D-59]
@@ -193,3 +265,61 @@ tolerance was replaced by a floor and an alert because the two populations are f
 enough apart that a wide floor separates them with no false positives, while a tight
 band would fire on the 11 percent day and teach the operator to ignore it. There is no
 upper bound: no failure mode produces too many rows.
+
+~~**The guard has three checks and only one of them has a key** [D-65]. The two keys
+above are completeness. Recency reads the exchange calendar for the most recent
+completed trading session, and settledness compares a re-fetch of a date against the
+rows already stored for it. Neither is a threshold, so neither gets a key, and adding
+one would invent a bound where the decision deliberately introduced none.~~
+[superseded, D-70]
+
+**The guard has three checks and two of them carry keys.**
+`freshness.row_count_*` are completeness. `freshness.settled_*` are settledness,
+which became a threshold when the re-fetch was dropped: a date is settled when its
+count is at or above `settled_fraction` of the median of the last
+`settled_window_days` dates before it, computed from `price_daily` alone [D-70].
+Recency still has no key, because it reads the exchange calendar for the most
+recent completed session and compares dates rather than crossing a bound.
+
+The two values and their reasoning are in D-64's closure rather than here,
+including why 0.95 sits six points above the measured part-settled ceiling rather
+than midway between the populations, and the holiday-week watch item that would
+move it.
+
+`price.reload_window_days` belongs to C02 rather than to the guard. C02 re-loads a
+trailing window of dates every night rather than tonight alone, so a day loaded
+short tops up on a later run, which is what actually heals accretion; D-68's
+idempotent upsert is what makes re-loading safe. Without it a part-settled day
+stays part-settled in `price_daily` for ever, and settledness would keep failing it
+with nothing able to fix it.
+
+**`price.reload_window_days` and `freshness.settled_window_days` are coupled, and
+lowering the first is not a local change** [A26]. The reload window decides how far
+back C02 tops a short day up. The settled window decides how far back C07 takes its
+median. A date that settles more slowly than the reload window ages out of C02's
+reach while still short, stays short for ever, and then sits inside C07's median
+dragging the reference down. The guard gets quieter rather than louder, which is the
+wrong direction for a guard, and it degrades silently.
+
+**The two count different things and both are 20** [A28].
+`price.reload_window_days` counts **calendar days** back from the run date, with a
+non-session returning an empty response that is tolerated rather than treated as a
+fault, because C02 has no trading calendar to consult until C07 exists.
+`freshness.settled_window_days` counts **dates present in `price_daily`**, which are
+trading dates by construction, since a date with no session never lands a row.
+
+**The requirement is not that the two windows match.** It is that a date finishes
+settling before it ages out of reload reach. Twenty calendar days is about fourteen
+trading dates, against an observed settling period of more than twenty-four hours,
+so the margin is large and deliberate rather than incidental: 2026-08-04 was still
+gaining rows more than a day after its session closed and finished well inside
+either window.
+
+This is also the second reason the settled window takes a median rather than a mean,
+and the stronger of the two: a median over twenty is unmoved by one stuck day, so
+the failure above is bounded even if it happens. A mean would absorb it in
+proportion to its shortfall.
+
+A later session lowering `price.reload_window_days` for call-volume reasons should
+read this paragraph first. Twenty dates against one bulk call each is not the
+expensive part of a night.

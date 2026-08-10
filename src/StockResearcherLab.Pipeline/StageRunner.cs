@@ -43,7 +43,12 @@ public sealed class StageRunner
 
         var access = _registry.AccessFor(stage);
         var data = new StageData(_connectionString, access);
-        var context = new StageContext(date, configVersion, data, _clock);
+
+        // Config resolves as of the date being processed. Constructed here rather
+        // than by the stage, so a stage cannot resolve against a date other than
+        // the one it was handed [D-43, INVARIANT 13].
+        var config = new ConfigStore(_connectionString);
+        var context = new StageContext(date, configVersion, data, _clock, config);
 
         // started_at comes from the injected clock. The duration comes from a
         // stopwatch, which measures elapsed time rather than reading the time of
@@ -56,9 +61,13 @@ public sealed class StageRunner
             var result = await stage.ExecuteAsync(context, ct).ConfigureAwait(false);
             stopwatch.Stop();
 
+            // The stage's own status, not a hardcoded "ok". A stage that completed
+            // and still has something an operator should read says so here, because
+            // the two components that must alert cannot write the alert table
+            // [A3, INVARIANT 10].
             await _runLog.RecordAsync(
-                date, stage.Name, "ok", startedAt,
-                stopwatch.ElapsedMilliseconds, result.RowsWritten, null, ct).ConfigureAwait(false);
+                date, stage.Name, result.Status, startedAt,
+                stopwatch.ElapsedMilliseconds, result.RowsWritten, result.Detail, ct).ConfigureAwait(false);
 
             return result;
         }

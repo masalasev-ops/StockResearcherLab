@@ -1822,6 +1822,123 @@ conversation and never written down, which `CLAUDE.md` §7 names exactly.
 the route that does not check. **Findings C and D are corrected in place above**,
 struck with the correction stated, per `CLAUDE.md` §13.
 
+## Post phase 1 reconciliation, 2026-08-10
+
+Human-directed. The sign-off review had already settled every reading in the five
+catalogue findings above, so this session transcribed rather than judged. It is not a
+phase and not a lettered correction pass: the session opened by inventing the letter Q
+and was told to drop it, which is recorded in the archived prompt so that a letter
+invented by a session does not later read as authored.
+
+**Prompt** `prompts/spent/post-phase-1-reconciliation.md`, archived before any file
+changed.
+
+**Authored** D-73 to D-76, taking the register on from D-72. D-73 splits the
+supersession convention by what a document is for, specs clean and records keeping
+their strikes, and reopens `CHANGELOG.md` to hold what the clean edits remove. D-74
+puts the source of a stage's ticker list in the Reads column, closing finding 1. D-75
+makes `FlowIngestor` nightly, closing finding 3, and records `Weekly` as the text it
+replaced. D-76 drops the store matrix's Written-by and Read-by columns and closes
+open item 6, which is struck in the table below.
+
+**`CLAUDE.md` §13** amended for D-73, in the file's own strike convention, since
+`CLAUDE.md` is not one of the four documents D-73 names for cleaning.
+
+**`ARCHITECTURE.html`.** Four Reads cells now name `security`, C03's also naming
+`price_daily` and saying which read is the pool and which the rotation order. C05
+runs `Daily 17:45` and is the only Runs cell that changed. §16 has three columns and
+carries a line pointing at §3 and `SCHEMA.md`. Before the pass `grep -c "<s>"`
+returned 17 and `grep -o "<s>" | wc -l` returned 23, the two differing because four
+lines carried more than one strike; both return 0 now.
+`grep -c "earnings[[:space:]]\+jump[[:space:]]\+the[[:space:]]\+queue"` returns 1,
+unchanged: the architecture is right about the earnings queue and the code is
+incomplete, so that line was not touched.
+
+**Every removal's prior text is in `CHANGELOG.md`**, verbatim, which is now the only
+place it exists.
+
+### Four citations that do not name what they removed
+
+The sweep's condition was that no strike is removed until its cited decision names
+what it removed. Four failed it, and all four were deleted with their prior text
+recorded rather than left in place, which is what D-73 asks for. They are recorded
+here because a citation pointing at nothing is a worse defect than the duplication
+D-76 closed, and nothing else would have found them.
+
+**N.3, cited by three write-column strikes**: `run_log` on C07 FreshnessGuard,
+`run_log` on C32 LocalModelClient, `cost_ledger` on C16 ResearcherClient. Pass N's
+narrative in `docs/archive/process-2026-08.md` says "Three write-column mismatches
+between sections 3 and 16 resolved toward the store matrix" and names none of the
+three tables. The count matches and the direction is stated, so the reading is not in
+doubt; what is missing is the naming. No clause list for pass N exists anywhere in
+the corpus: the archive names N.4, N.5, N.6, N.8, N.9, N.10 and N.11 and never N.1,
+N.2 or N.3.
+
+**O.8, cited by the completeness row in §18**: no record anywhere. A grep for `O.8`
+over every `.md`, `.html`, `.cs` and `.ps1` in the tree returned exactly one hit, the
+citation itself. Pass O is described in the phase 0 block above as having corrected
+four review findings and changed four source files, and its clauses are numbered
+nowhere.
+
+**N.1 is the one that passes**, cited by C25's Writes and by the store matrix. The
+pass N narrative names it in full: `order` has one writer, RiskGate for all four
+portfolios, with PortfolioRunner persisting to `portfolio_selection` rather than
+writing orders.
+
+### Reads get a conformance path
+
+Nothing compared a declared `ReadSet` against the catalogue in either direction, which
+is why the reconciliation was needed rather than found by a test.
+`ArchitectureDocument` parsed component id and name only, and `ReadSet` was asserted
+against hardcoded literals in `PriceIngestorTests`, `SentimentIngestorTests`,
+`EventsIngestorTests` and `FlowEngineTests` while `FundamentalsIngestor` and
+`FlowIngestor`, the two components whose declarations the catalogue contradicted,
+asserted nothing at all.
+
+`ArchitectureDocument.ReadTablesByComponent` reads the Reads cell of all 34 catalogue
+rows. A table reference there is a `code` element, which is the document's own
+typography and the only thing separating a table from an endpoint; reading bare words
+instead would take "for rotation order" in C03's own cell for the `order` table. The
+intersection with `SCHEMA.md`'s table list is the second filter, which is what drops
+C33's `digest_provider`.
+
+`ReadDeclarationConformanceTests` asserts both directions over the eight registered
+stages, with a fabricated-stage fixture proving each direction fires and the other
+stays silent. Checked rather than assumed: adding `alert` to `SentimentIngestor`'s
+read set and running the suite failed
+`EveryTableAStageDeclaresIsNamedInItsReadsCell` naming `SentimentIngestor -> alert`,
+and the edit was reverted.
+
+**One recorded deviation, and it is asserted to still be one.** C03's Reads cell names
+`events` and `FundamentalsIngestor` does not declare it, which is finding 2 above:
+unbuilt work rather than a document defect. Declaring `events` without reading it
+would make the declaration meaningless and the test green over behaviour that does not
+exist, and removing it from the catalogue is the move `CLAUDE.md` §13 forbids. So it
+is listed, and `EveryRecordedDeviationIsStillADeviation` fails the day the gap closes
+and says to delete the entry. Carried in `BUILD_PLAN.md` from phase 1 to phase 3,
+because a gap recorded only beside the code it belongs to is not recorded [`CLAUDE.md`
+§7].
+
+### What ran
+
+`ci.ps1` twice, both green, both against a dropped database from a worktree at HEAD.
+
+| At | Commit | Tests | Guards |
+|---|---|---|---|
+| After the reconciliation, before the conformance commit | `ff55da0` | Passed 149, Failed 0 | 5 checks over 65 files |
+| With the conformance commit | `69df60f` | Passed 155, Failed 0 | 5 checks over 66 files |
+
+The six new tests are `TheReadsCellParseFindsTablesRatherThanNothing`,
+`EveryRegisteredStageIsUnderTest`, `EveryTableAStageDeclaresIsNamedInItsReadsCell`,
+`EveryTableAReadsCellNamesIsDeclaredByItsStage`,
+`EveryRecordedDeviationIsStillADeviation` and
+`BothDirectionsFailOnAStageThatDisagreesWithTheCatalogue`.
+
+**No code outside the test project changed.** D-74 states the document begins
+describing what the code already does, and it does.
+
+---
+
 ## Open items carried forward
 
 Found and not closed. Each names what triggers it. The pass narratives behind

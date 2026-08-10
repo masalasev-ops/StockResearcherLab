@@ -159,3 +159,141 @@ record is how it stops being one.
 
 What replaces it: nothing. A document change is a commit, the commit says what it
 changed and why, and `PROGRESS.md` says what is built.
+
+---
+
+## Reopened — 2026-08-10
+
+**D-73 reopens this file, for a different job.** The entry above closed it because a
+version number bumped by hand recorded that documents had changed without recording
+what a reader could not already see from the diff. That reason stands and nothing
+undoes it: no version number is resumed, no sign-off step produces these entries, and
+the headings below are dates rather than versions.
+
+What comes back is the file, holding one thing it did not hold before. D-73 makes a
+removal from a spec document a clean edit rather than a strike, and a clean edit
+destroys the only copy of the prior wording unless something else keeps it. This is
+that something else. The rule from here: text deleted from `ARCHITECTURE.html`,
+`SCHEMA.md`, `CONFIG_REFERENCE.md` or `RUNBOOK.md` is recorded here before it goes,
+and this is the only place it survives.
+
+The closing entry above says this is the last entry and that the file is not appended
+to again. It was appended to, here. That entry is a record and stands as written
+[`CLAUDE.md` §13].
+
+---
+
+## 2026-08-10, post phase 1 reconciliation
+
+`ARCHITECTURE.html` reconciled with the code phase 1 built and with decisions already
+in the register, then left with no struck text in it. Four decisions, one document,
+no code change. The conformance test that would have caught the Reads drift is a
+separate commit and is recorded in `PROGRESS.md` rather than here.
+
+### The decisions
+
+- **D-73** splits the supersession convention by what a document is for. Specs are
+  clean and records keep their strikes, and this file holds what the clean edits
+  removed. Amends `CLAUDE.md` §13
+- **D-74** puts the source of a stage's ticker list in §3's Reads column. Four ingest
+  components had endpoints there and nothing else, while `DeclaredAccess` enforced
+  read sets the catalogue never mentioned. No code change: the document begins
+  describing what the code already does
+- **D-75** makes `FlowIngestor` nightly, against `RUNBOOK.md`'s 17:45, on coverage
+  latency rather than filing latency. A universe pass is about twelve runs at
+  `flow.max_tickers_per_run`, which is twelve days nightly and three months weekly
+  against a ninety-day trailing window
+- **D-76** drops the Written-by and Read-by columns from §16's store matrix and
+  closes open item 6. Writes are stated in §3 and in `SCHEMA.md`, which a test holds
+  against each other, and the third statement was checked by nothing
+
+### What §3 and §16 now say
+
+- C03, C04, C05 and C06 name `security` in Reads, C03 also naming `price_daily`,
+  each cited to D-74
+- C05 runs `Daily 17:45` rather than `Weekly`, cited to D-75. This is the only Runs
+  cell that changed
+- §16 has three columns, Store, Grain and After backfill, and carries a line under
+  the table pointing at §3 and `SCHEMA.md`
+
+### Text removed from `ARCHITECTURE.html`, verbatim
+
+Every deletion this pass made, with the citation left at the point of change. Three
+of them cite a correction-pass clause that does not name what it removed and one
+cites a clause with no record anywhere in the corpus; those four are marked, and they
+are the reason this list exists rather than a courtesy.
+
+**§3, C05 description** [D-58]
+> Short interest keyed on publication date, not settlement date
+
+**§3, C05 Reads** [D-58]
+> short interest,
+
+**§3, C05 Writes** [D-61]
+> flow_daily
+
+**§3, C07 FreshnessGuard Writes** [N.3, **which does not name it**]
+> run_log
+
+**§3, C32 LocalModelClient Writes** [N.3, **which does not name it**]
+> run_log
+
+**§3, C16 ResearcherClient Writes** [N.3, **which does not name it**]
+> cost_ledger
+
+**§3, C25 PortfolioRunner Writes** [N.1]
+> order
+
+**§4, the C07 node in the nightly flow figure** [D-65]
+> The latest price date must equal today and the row count must be within tolerance.
+> On failure the run aborts and no orders are produced.
+
+**§5, the S4 node in the screen figure** [D-58]
+> short interest change
+
+**§5, the screen input table, S4 row** [D-58]
+> short_interest_change
+
+**§7, the S5 mean reversion disqualifier** [D-60]
+> Also no digest available while the decline exceeds 35 percent, because at that
+> magnitude the absence of information is itself the reason to pass.
+
+**§7, the note headed "The harder ceiling was not tokens"** [D-18]
+> The output is BUY or PASS, a conviction integer from one to five, a stop and a
+> target. That is a low-bandwidth decision, and past some point extra evidence moves
+> an internal judgment from 3.4 to 3.6 while the recorded answer stays 3. The
+> coarseness of what is asked for caps the usefulness of what is supplied. If richer
+> input is ever wanted, the thing to widen is the conviction scale, not the block.
+
+**§7, the candidate block metric table, Flow row** [D-58]
+> short_interest_pct_float · short_interest_change
+
+**§14, the backfill hazard table, lookahead row** [D-62]
+> filing_date
+
+**§14, the backfill hazard table, an entire row** [D-58]
+> | Short interest timing | Settlement date precedes publication by days, so using
+> it reads data before it existed. | Key on publication date |
+
+**§16, the store matrix, `flow_daily` grain** [D-61]
+> ticker × week
+
+**§16, the store matrix, the Written-by column** [D-61, N.1]
+> `flow_daily` read `C34, C05` with `C05` struck, and `order / fill / position` read
+> `C18 C19 C20 C25` with `C25` struck. Both went with the column at D-76, along with
+> every other cell in it and in Read-by
+
+**§18, the failure table, recency row** [D-65]
+> The latest price date must equal today.
+
+**§18, the failure table, completeness row** [O.8, **which has no record anywhere in
+the corpus**]
+> Settled days measured 50,029 to 50,204 against part-settled sessions at 3,544 and
+> 9,072, so the two populations are an order of magnitude apart and a wide floor
+> separates them with no false positives.
+
+**§18, the failure table, completeness row** [D-64, D-65]
+> The populations meet: 44,708 is 11 percent below the lowest settled count and sits
+> above the 40,000 abort floor and inside the 40,000 to 45,000 alert band. A
+> part-settled file of that shape passes the guard. Owed to phase 1 as **D-64**, and
+> the assertion that the latest price date equals today is owed as **D-65**.

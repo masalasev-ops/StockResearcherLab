@@ -37,16 +37,14 @@ here, with the other keys phase 1 wired up.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| ~~`fundamentals.filing_date_substitution_days`~~ | ~~65~~ | ~~D-57~~ | ~~FundamentalsIngestor~~ | [superseded, D-62] |
-| `fundamentals.min_clean_gaps_for_substitution` | 4 | D-62 | UniverseBuilder, ~~FundamentalsIngestor~~ [corrected, L.2] | verified 2026-08-09 |
+| `fundamentals.min_clean_gaps_for_substitution` | 4 | D-62 | UniverseBuilder [L.2] | verified 2026-08-09 |
 | `fundamentals.substitution_rate_alert` | 0.25 | D-57 | FundamentalsIngestor | verified 2026-08-09 |
 
-The substitution window is ~~the widest gap the probe observed, not a mean, because
-being late costs freshness while being early costs correctness~~ [superseded, D-62]
-each ticker's own widest clean gap observed before the read date. There is no
-universal constant left to configure: the per-ticker value is derived from that
-ticker's filing history rather than set here, so it gets no key. What is
-configurable is the floor beneath which no substitution is attempted at all. Below
+The substitution window is each ticker's own widest clean gap observed before the
+read date [D-62]. There is no universal constant left to configure: the per-ticker
+value is derived from that ticker's filing history rather than set here, so it gets
+no key. What is configurable is the floor beneath which no substitution is attempted
+at all. Below
 `fundamentals.min_clean_gaps_for_substitution` observed clean gaps the name leaves
 the universe rather than being assigned a guess.
 
@@ -249,31 +247,21 @@ value, but changing it to `vs_spy` is a defect and not a tuning option [INVARIAN
 | `monitor.distinct_tickers_60d_min` | 250 | — | ConcentrationMonitor | unverified |
 | `monitor.cache_hit_rate_min` | 0.80 | — | CostLedger | unverified |
 | `cost.annual_budget` | 100 | — | CostLedger | unverified |
-| ~~`freshness.row_count_tolerance`~~ | ~~from probe~~ | — | FreshnessGuard | [removed, D-59] |
 | `freshness.row_count_abort_below` | 40000 | D-59 | FreshnessGuard | verified 2026-08-09 |
 | `freshness.row_count_alert_below` | 45000 | D-59 | FreshnessGuard | verified 2026-08-09 |
 | `freshness.settled_fraction` | 0.95 | D-70 | FreshnessGuard | verified 2026-08-09 |
 | `freshness.settled_window_days` | 20 | D-70 | FreshnessGuard | verified 2026-08-09 |
 | `price.reload_window_days` | 20 | A10 | PriceIngestor | verified 2026-08-09 |
 
-~~The freshness tolerance has no default until phase P measures a real bulk end-of-day
-row count.~~ [removed, D-59]
+Phase P measured the bulk end-of-day row count [D-59]: about 50,000 rows on a settled
+day, one settled day 11 percent below its neighbours, and part-settled sessions an
+order of magnitude lower. A single tolerance was replaced by a floor and an alert
+because the two populations are far enough apart that a wide floor separates them
+with no false positives, while a tight band would fire on the 11 percent day and
+teach the operator to ignore it. There is no upper bound: no failure mode produces
+too many rows.
 
-Phase P measured it: about 50,000 rows on a settled day, one settled day 11 percent
-below its neighbours, and part-settled sessions an order of magnitude lower. A single
-tolerance was replaced by a floor and an alert because the two populations are far
-enough apart that a wide floor separates them with no false positives, while a tight
-band would fire on the 11 percent day and teach the operator to ignore it. There is no
-upper bound: no failure mode produces too many rows.
-
-~~**The guard has three checks and only one of them has a key** [D-65]. The two keys
-above are completeness. Recency reads the exchange calendar for the most recent
-completed trading session, and settledness compares a re-fetch of a date against the
-rows already stored for it. Neither is a threshold, so neither gets a key, and adding
-one would invent a bound where the decision deliberately introduced none.~~
-[superseded, D-70]
-
-**The guard has three checks and two of them carry keys.**
+**The guard has three checks and two of them carry keys** [D-70].
 `freshness.row_count_*` are completeness. `freshness.settled_*` are settledness,
 which became a threshold when the re-fetch was dropped: a date is settled when its
 count is at or above `settled_fraction` of the median of the last

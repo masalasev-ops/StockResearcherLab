@@ -297,3 +297,104 @@ the corpus**]
 > above the 40,000 abort floor and inside the 40,000 to 45,000 alert band. A
 > part-settled file of that shape passes the guard. Owed to phase 1 as **D-64**, and
 > the assertion that the latest price date equals today is owed as **D-65**.
+
+### Text removed from the other three spec documents, verbatim
+
+D-73 names four documents and only `ARCHITECTURE.html` conformed. `SCHEMA.md`,
+`CONFIG_REFERENCE.md` and `RUNBOOK.md` carried eighteen removals between them,
+swept under the same procedure and the same safety condition. `grep -c "~~"` returns
+0 for all three.
+
+**Four rows were removed rather than left empty**, each named below, because a strike
+covering every cell of a row leaves nothing the row was for.
+
+**Three sentences were rebuilt rather than trimmed**, because the strike carried the
+subject and deleting it alone would have left prose that does not parse. Each is
+named at its entry with what the sentence now says, and none of them adds a claim:
+`SCHEMA.md`'s nullable column, its `report_date` sentence, and
+`CONFIG_REFERENCE.md`'s "Phase P measured it".
+
+#### `SCHEMA.md`
+
+**The ownership preamble** [INVARIANT 10, L.3]
+> and two tables are documented exceptions
+
+**`security`, the clean gap count** [M.1]
+> as `clean_gap_count`, maintained by FundamentalsIngestor
+
+**`fundamental_snapshot`, the effective-date column** [1.4, **which does not name
+it**]. The sentence was rebuilt: it opened "The column was ~~`NOT NULL`~~ and is
+nullable, where null means ..." and now opens "The column is nullable, where null
+means ...", with the rest of the paragraph unchanged.
+> The column was `NOT NULL`
+
+**`institutional_holding`** [D-69]. Rebuilt: the struck claim was followed by
+"Measured false at 1.9", which had nothing left to refer to, so the sentence now
+states the negation D-69 states, "**`report_date` does not make this backfillable**
+[D-69], measured false at 1.9". The evidence after it is unchanged.
+> `report_date` is what makes this backfillable, and it is the field short interest
+> turned out not to have.
+
+**`flow_daily`, grain** [D-61]
+> ticker by week
+
+**`flow_daily`, the column list** [A1.a]
+> `insider_net_usd_90d`
+
+**`flow_daily`, the column list** [D-58, D-61]
+> `week_end`, `publication_date`, `short_interest_pct_float`, `short_interest_change`
+
+**`indicator_daily`, the column list** [O.2, **which has no record anywhere in the
+corpus**]
+> , `median_dollar_volume_20d`
+
+**`attribution`** [INVARIANT 10 as amended]
+> **This is the only table with two writers, and it is deliberate.**
+
+**`proposal`** [INVARIANT 10 as amended]
+> Second deliberate two-writer pair
+
+**`order / fill / position`** [N.1]
+> RiskGate and PortfolioRunner both insert orders and are the one pair that shares an
+> operation on a table. They are separated by portfolio: the runner writes for every
+> non-research portfolio off the shared candidate set, the gate writes for the
+> research portfolios after arbitration.
+
+#### `CONFIG_REFERENCE.md`
+
+**The fundamentals key table, an entire row removed rather than left empty** [D-62].
+Every cell of it was struck, so nothing remained to keep.
+> | `fundamentals.filing_date_substitution_days` | 65 | D-57 | FundamentalsIngestor | [superseded, D-62] |
+
+**The same table, the Consumer column of
+`fundamentals.min_clean_gaps_for_substitution`** [L.2, **which has no record anywhere
+in the corpus**]
+> , FundamentalsIngestor
+
+**The substitution window paragraph** [D-62]
+> the widest gap the probe observed, not a mean, because being late costs freshness
+> while being early costs correctness
+
+**The freshness key table, an entire row removed rather than left empty** [D-59].
+Key and default were both struck and the Set by column was already a dash.
+> | `freshness.row_count_tolerance` | from probe | — | FreshnessGuard | [removed, D-59] |
+
+**The paragraph above the freshness keys** [D-59]. Rebuilt: the sentence after it
+read "Phase P measured it", whose "it" was the struck row count, and now reads "Phase
+P measured the bulk end-of-day row count [D-59]". The measurements after it are
+unchanged.
+> The freshness tolerance has no default until phase P measures a real bulk
+> end-of-day row count.
+
+**The guard-keys paragraph** [D-70]
+> **The guard has three checks and only one of them has a key** [D-65]. The two keys
+> above are completeness. Recency reads the exchange calendar for the most recent
+> completed trading session, and settledness compares a re-fetch of a date against
+> the rows already stored for it. Neither is a threshold, so neither gets a key, and
+> adding one would invent a bound where the decision deliberately introduced none.
+
+#### `RUNBOOK.md`
+
+**The failure table, an entire row removed rather than left empty** [D-65]. Every
+cell of it was struck and the three rows D-65 split it into sit directly below.
+> | End-of-day file stale or short | FreshnessGuard | Abort. No orders | Check the provider. Rerun when fresh. A skipped night costs nothing |

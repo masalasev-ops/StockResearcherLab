@@ -1854,16 +1854,34 @@ lines carried more than one strike; both return 0 now.
 unchanged: the architecture is right about the earnings queue and the code is
 incomplete, so that line was not touched.
 
-**Every removal's prior text is in `CHANGELOG.md`**, verbatim, which is now the only
-place it exists.
+**`SCHEMA.md`, `CONFIG_REFERENCE.md` and `RUNBOOK.md`**, swept in a second commit
+under the same procedure and the same safety condition. D-73 names four documents and
+only one of them conformed after the first commit. Eighteen removals: eleven, six and
+one. `grep -c "~~"` returned 16, 9 and 1 lines before and returns 0 for all three
+after, and `grep -c "<s>" docs/ARCHITECTURE.html` still returns 0.
 
-### Four citations that do not name what they removed
+**Four of those were whole rows** and the row was removed rather than left empty,
+because a strike covering every cell leaves nothing the row was for: two key rows in
+`CONFIG_REFERENCE.md`, one failure-table row in `RUNBOOK.md`, and none in
+`SCHEMA.md`. **Three were sentences whose strike carried the subject**, so the
+sentence was rebuilt rather than trimmed and each rebuild is named in `CHANGELOG.md`
+with what it now says. None of the three adds a claim: `SCHEMA.md`'s `report_date`
+sentence states the negation D-69 states, and the other two restate the live half of
+a was-and-is construction.
+
+**Every removal's prior text is in `CHANGELOG.md`**, verbatim, which is now the only
+place it exists. Twenty-one entries from the first commit and eighteen from the
+second.
+
+### Seven citations that do not name what they removed
 
 The sweep's condition was that no strike is removed until its cited decision names
-what it removed. Four failed it, and all four were deleted with their prior text
-recorded rather than left in place, which is what D-73 asks for. They are recorded
-here because a citation pointing at nothing is a worse defect than the duplication
-D-76 closed, and nothing else would have found them.
+what it removed. Seven failed it across the four documents, and all seven were
+deleted with their prior text recorded rather than left in place, which is what D-73
+asks for. They are recorded here because a citation pointing at nothing is a worse
+defect than the duplication D-76 closed, and nothing else would have found them.
+
+Four are in `ARCHITECTURE.html` and three in the other spec documents, below.
 
 **N.3, cited by three write-column strikes**: `run_log` on C07 FreshnessGuard,
 `run_log` on C32 LocalModelClient, `cost_ledger` on C16 ResearcherClient. Pass N's
@@ -1884,6 +1902,42 @@ nowhere.
 pass N narrative names it in full: `order` has one writer, RiskGate for all four
 portfolios, with PortfolioRunner persisting to `portfolio_selection` rather than
 writing orders.
+
+**L.2, cited by the Consumer column of
+`fundamentals.min_clean_gaps_for_substitution`**: no clause record. A grep for `L.2`
+over the tree returns two hits, both inside `CONFIG_REFERENCE.md`, one of them the
+citation itself. The other is that document's own prose two paragraphs below, which
+states the substance, and D-4 is co-cited there and does name UniverseBuilder as
+where the exclusion is applied. So the removal is backed; the clause reference is
+not.
+
+**O.2, cited by `indicator_daily`'s column list**: no clause record, the same
+condition as O.8. A grep returns four hits, all inside `SCHEMA.md`, of which three
+are that document stating the substance about `median_dollar_volume_20d` being
+`numeric` rather than a 32-bit float.
+
+**1.4, cited by `fundamental_snapshot`'s effective-date column**: the checkpoint
+exists and does not name what was removed. `BUILD_PLAN.md`'s 1.4 line covers keying
+on `filing_date_effective`, the four unknown-reason states and what 1.5 owns, and
+says nothing about `NOT NULL`. What does name it is `0002_statement_fields_and_grains.sql`,
+whose comment gives the reason in full above `ALTER COLUMN filing_date_effective DROP
+NOT NULL`, and the surviving `SCHEMA.md` prose immediately after the removal.
+
+**L.3 and M.1 were expected to fail and do not.** Neither has a clause list either,
+but each is named by content in a document that is the record. L.3's removal, the
+two-documented-exceptions rule, is struck in `CLAUDE.md` INVARIANT 10 with `[amended,
+L.3]` against it and is described in `CHANGELOG.md` 0.2.1. M.1's removal, a stored
+`clean_gap_count` maintained by FundamentalsIngestor, is named by D-4, which says the
+count is computed rather than stored and why, and by `CHANGELOG.md` 0.2.1. A1.a is
+recorded in full in `prompts/spent/phase-1-ingest-and-universe.md` and names the
+column swap exactly.
+
+**The pattern across all seven.** No pass L, M or O clause list exists anywhere in
+the corpus, and the archive's clause records for pass N start at N.4. A reference of
+the form `letter.number` is therefore not by itself evidence that a clause was
+written down, and five of the seven failures are that form. Where the substance
+survived, it survived in a decision, an invariant, a migration comment or the same
+document's own prose, never in the thing being cited.
 
 ### Reads get a conformance path
 

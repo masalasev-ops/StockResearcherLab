@@ -2032,6 +2032,7 @@ because a gap recorded only beside the code it belongs to is not recorded [`CLAU
 | With the conformance commit | `69df60f` | Passed 155, Failed 0 | 5 checks over 66 files |
 | After the record of the pass | `bda6b35` | Passed 155, Failed 0 | 5 checks over 66 files |
 | With the other three spec documents cleaned | `909f725` | Passed 155, Failed 0 | 5 checks over 66 files |
+| With the CI records corrected and `ci.ps1`'s header rewritten | `c36a74e` | Passed 155, Failed 0 | 5 checks over 66 files |
 
 The six new tests are `TheReadsCellParseFindsTablesRatherThanNothing`,
 `EveryRegisteredStageIsUnderTest`, `EveryTableAStageDeclaresIsNamedInItsReadsCell`,

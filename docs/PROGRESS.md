@@ -198,10 +198,25 @@ its result is never used.
 That matters because `InvariantGlobalization` is `true` for every project
 [`Directory.Build.props:22`], which is the condition that stopped
 `America/New_York` resolving on Windows at 1.13. Whether it also stops it on
-Linux, where the id comes from tzdata rather than from ICU, is untested here. One
-test reading `new SystemClock().Today` would settle it on the next CI run, and it
-is not written, because a session does not add a measurement to its own scope
-[`CLAUDE.md` §3].
+Linux, where the id comes from tzdata rather than from ICU, was reasoned about and
+never run.
+
+**`SystemClockTests` makes it run, added on the operator's instruction** rather
+than by a session widening its own scope [`CLAUDE.md` §3]. Two tests, both through
+`SystemClock`'s own surface. `TheEasternZoneResolvesOnThisPlatform` fails as a
+`TypeInitializationException` wrapping `ResolveEastern`'s throw if neither
+identifier resolves, which is the case that was never exercised.
+`TodayIsTheUtcDateOrTheDayBefore` asserts the resolved zone is behind UTC by at
+most a day, which US Eastern is and a wrong zone would not be. Both bounds are
+read off the same clock, before and after, so a run crossing UTC midnight between
+the two reads widens the window rather than failing.
+
+**They read the real clock, which every other test here avoids** [INVARIANT 11].
+The ambient read is the thing under test, and it is reached through `SystemClock`
+rather than through `DateTimeOffset.UtcNow`, so `guards.ps1`'s INVARIANT 11 grep
+still runs over the whole test project with nothing excluded and still finds none.
+The `TimeZoneInfo` guard is untouched for the same reason: the test names no
+identifier and resolves no zone of its own.
 
 **Step 2, a review in a session that did not build the phase.** Ran at
 `d4baeaf`, in a session with no involvement in the build and no commit in this

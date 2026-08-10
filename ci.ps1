@@ -1,20 +1,23 @@
 #requires -Version 5.1
 <#
-    ci.ps1 - the steps of .github/workflows/ci.yml, run locally, as a run.
+    ci.ps1 - the local gate. The steps of .github/workflows/ci.yml, run against a
+    worktree at HEAD, before a checkpoint is pushed.
 
-    WHY THIS EXISTS. No hosted runner has ever picked up a job on this account.
-    One run was queued and cancelled unassigned; the repository's total run count
-    is 1. Phase 0 was signed off by running every CI step by hand and recording
-    the seven results in PROGRESS.md. Sign-off step 1 asks that nothing be
-    recorded by hand that a run can record, so this makes the local path a run
-    [A6, BUILD_PLAN sign-off].
+    WHY THIS EXISTS, AND IT IS NOT TO STAND IN FOR CI. Hosted runners are being
+    allocated and ci.yml runs on every pull request and every push to main,
+    observed 2026-08-10 with the run list in PROGRESS.md. Two reasons remain and
+    both are local.
 
-    A SELF-HOSTED RUNNER DOES NOT CLOSE IT. ci.yml is `runs-on: ubuntu-latest`
-    with a `services: postgres:18` container, which needs a Linux runner with
-    Docker. A Windows runner would need the workflow rewritten against a local
-    database, which loses the empty-server property the two migrate steps prove.
-    So ci.yml is left untouched and works the moment runners are allocated, and
-    this script stands in until then.
+    FIRST, `dotnet test --no-build` reports green off a stale binary after a build
+    that failed. Observed at 1.12: 56 passing against the previous artifact after
+    a build that had just failed with four errors. Running ci.yml's steps in
+    ci.yml's order and exiting non-zero on the first failure cannot reach the test
+    step after a failed build, which is what makes this the per-checkpoint
+    verification command rather than a three-command sequence typed from memory.
+
+    SECOND, CI runs on push and this repository commits per checkpoint. A
+    checkpoint whose only check is CI is a checkpoint checked after it is public.
+    This is the check before the push; ci.yml is the check after it.
 
     WHAT IT RUNS AGAINST. A git worktree at HEAD, not this working tree. That is
     what CI checks out: tracked files only, no ignored files, so no
@@ -27,9 +30,11 @@
     commit-per-checkpoint convention rather than fighting it.
 
     THE DATABASE. Dropped first, so the first migrate genuinely runs against an
-    empty server. It is a dedicated database, not the one you develop against:
-    dropping that on every CI run would be hostile, and the property being proved
-    is identical either way. Override with -Database or CI_DATABASE.
+    empty server. CI gets that property from a fresh postgres:18 service
+    container per job; there is no container locally, so the drop is how the same
+    property is obtained. It is a dedicated database, not the one you develop
+    against: dropping that on every run would be hostile, and the property being
+    proved is identical either way. Override with -Database or CI_DATABASE.
 
     Nothing here writes to the repository and nothing is left behind. The
     worktree is removed in the finally block whether the run passes or fails.
@@ -73,7 +78,7 @@ function Assert-MirrorsWorkflow {
         counterpart here.
 
         WHY. The step list was matched by hand once and nothing re-checked it. The
-        script whose whole purpose is to stand in for CI is the last place a silent
+        script whose whole purpose is to run CI's steps early is the last place a silent
         divergence should be possible, and this is the same correction made to the
         guard count one level out: read the thing being mirrored rather than
         re-deriving it, and fail loudly when the source is not where it was expected.
@@ -125,7 +130,7 @@ function Assert-MirrorsWorkflow {
     }
 
     # Each entry is a step of this script and the substring that identifies the
-    # ci.yml command it stands in for.
+    # ci.yml command it corresponds to.
     $mirrors = @(
         @{ Step = 'Guards';                          Match = 'guards.ps1' },
         @{ Step = 'Restore';                         Match = 'dotnet restore' },
@@ -143,7 +148,7 @@ function Assert-MirrorsWorkflow {
     if ($orphans.Count -gt 0) {
         throw ("ci.yml runs a command this script does not mirror:`n  " +
             ($orphans -join "`n  ") +
-            "`nAdd the step here, or this script has stopped standing in for CI while still reporting green.")
+            "`nAdd the step here, or this gate has stopped covering what CI will run and still reports green.")
     }
 
     $unused = @($mirrors | Where-Object {

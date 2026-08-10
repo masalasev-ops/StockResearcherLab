@@ -134,9 +134,10 @@ against a database dropped first:
   migrate again                 nothing to apply, gate passed
   dotnet test --no-build        Passed 25, Failed 0
 
-**The line CI does not cover, and why.** All of them, because **no CI run has
-ever executed a step of this workflow.** The sequence, since the diagnosis
-changed twice:
+**The line CI does not cover, and why.** All of them, because ~~**no CI run has
+ever executed a step of this workflow.**~~ [struck 2026-08-10, see the observation
+below] no CI run had executed a step of this workflow when this was written. The
+sequence, since the diagnosis changed twice:
 
   Nothing registered while `ci.yml` sat only on `phase-0-rails`, because GitHub
   discovers workflows from the default branch. Merging `phase-0-rails` at
@@ -147,8 +148,8 @@ changed twice:
   type hosted even after multiple attempts*. `runner_name` empty, zero steps,
   nothing checked out. It says nothing about the code either way.
 
-  Merging pull request 2 queued nothing at all. The repository's total run count
-  is 1.
+  Merging pull request 2 queued nothing at all. ~~The repository's total run count
+  is 1.~~ [struck 2026-08-10] It was 1 when this was written.
 
 So hosted runners are not being allocated to this account. Actions is enabled
 with `allowed_actions: all`, the YAML parses with valid triggers, and the
@@ -156,6 +157,75 @@ workflow is registered and active, so it is none of those. The billing endpoint
 needs a token scope this session does not have and the condition was not read
 directly. Both pull requests were merged with the gap stated rather than with
 `CLAUDE.md` §10 quietly satisfied.
+
+**Observed 2026-08-10: runners are being allocated, and no cause is claimed.** The
+two present-tense claims above are struck and the reasoning around them is left as
+written, because accepting local evidence was correct on what was known then and
+the gap it recorded was real when recorded. `gh run list` returns five runs:
+
+| Created, UTC | Branch | Event | Head | Result | Run |
+|---|---|---|---|---|---|
+| 2026-08-06 20:32 | `main` | push | `8fb6a6e` | cancelled unassigned | `31127684749` |
+| 2026-08-10 04:08 | `phase-1-ingest` | pull_request | `ce42b3d` | success | `31354548657` |
+| 2026-08-10 04:08 | `main` | push | `742606c` | success | `31354562844` |
+| 2026-08-10 17:53 | `architecture-reconciliation` | pull_request | `bda6b35` | success | `31416323507` |
+| 2026-08-10 18:06 | `architecture-reconciliation` | pull_request | `221a487` | success | `31417394884` |
+
+The first is the one described above and is unchanged. The other four ran to
+completion and passed, and two of them predate this session: allocation resumed at
+the phase 1 merge rather than at anything done here. **No cause is known and none
+is claimed.** Nothing was done to the account, the workflow file or the repository
+between the sixth and the tenth that this record can point at, so what changed is
+the observation and not an explanation.
+
+`CLAUDE.md` §10's "CI green before merge" can be satisfied literally from here on.
+The phase 0 and phase 1 sign-offs stand as written, because a record states what
+was true when it was taken.
+
+**What the Linux runs do and do not retire.** They execute `guards.ps1` under
+pwsh, restore, build with warnings as errors, `migrate` twice against a
+`postgres:18` service container, and the whole test suite, on `ubuntu-latest`.
+They do **not** execute `SystemClock.ResolveEastern`, so the timezone question
+1.13 left open is not retired by them and is stated here rather than assumed
+closed. `Migrator` reads `_clock.UtcNow` and never `Today`
+[`Migrator.cs:87`], and every test uses `FixedClock` or a local double, so nothing
+on either path reads `SystemClock.Today`. `PipelineComposition` does construct
+`new SystemClock()` when no clock is passed [`PipelineComposition.cs:41`], which
+the conformance tests do, but `Eastern` is a `beforefieldinit` static field that
+nothing on that path reads, so the resolution is not guaranteed to have run and
+its result is never used.
+
+That matters because `InvariantGlobalization` is `true` for every project
+[`Directory.Build.props:22`], which is the condition that stopped
+`America/New_York` resolving on Windows at 1.13. Whether it also stops it on
+Linux, where the id comes from tzdata rather than from ICU, was reasoned about and
+never run.
+
+**`SystemClockTests` makes it run, added on the operator's instruction** rather
+than by a session widening its own scope [`CLAUDE.md` §3]. Two tests, both through
+`SystemClock`'s own surface. `TheEasternZoneResolvesOnThisPlatform` fails as a
+`TypeInitializationException` wrapping `ResolveEastern`'s throw if neither
+identifier resolves, which is the case that was never exercised.
+`TodayIsTheUtcDateOrTheDayBefore` asserts the resolved zone is behind UTC by at
+most a day, which US Eastern is and a wrong zone would not be. Both bounds are
+read off the same clock, before and after, so a run crossing UTC midnight between
+the two reads widens the window rather than failing.
+
+**They read the real clock, which every other test here avoids** [INVARIANT 11].
+The ambient read is the thing under test, and it is reached through `SystemClock`
+rather than through `DateTimeOffset.UtcNow`, so `guards.ps1`'s INVARIANT 11 grep
+still runs over the whole test project with nothing excluded and still finds none.
+The `TimeZoneInfo` guard is untouched for the same reason: the test names no
+identifier and resolves no zone of its own.
+
+**Answered on Linux, 2026-08-10.** Run `31418985363` on `ubuntu-latest` at
+`ab649b6` reported `Passed! - Failed: 0, Passed: 157`, and 157 is the count with
+these two in it. So `America/New_York` resolves from tzdata under
+`InvariantGlobalization=true`, `SystemClock.ResolveEastern` returns on its first
+identifier there rather than falling through, and `SystemClock.Today` is a real US
+Eastern date on both platforms this repository runs on. 1.13's "would work on
+Linux" is now "does", and it took a test rather than a run because four green CI
+runs before this one never reached the code.
 
 **Step 2, a review in a session that did not build the phase.** Ran at
 `d4baeaf`, in a session with no involvement in the build and no commit in this
@@ -1028,9 +1098,12 @@ signed off with step 1 met by running every `ci.yml` step by hand. The same gap
 applies to this phase and the decision is taken here so it is not taken under
 pressure later.
 
-Hosted runners are still not being allocated to this account. The repository's
+~~Hosted runners are still not being allocated to this account. The repository's
 total run count is 1: one run queued on the merge of `phase-0-rails`, sat
-fifteen minutes unassigned, and was cancelled by GitHub. It is not the YAML, the
+fifteen minutes unassigned, and was cancelled by GitHub.~~ [struck 2026-08-10, and
+the observation with its run list is in the phase 0 block above. It was true when
+written and the reasoning below it stands unchanged, since a self-hosted runner
+was not the answer either way] It is not the YAML, the
 triggers, the registration or the repository permissions, all of which were
 checked at phase 0, and it is not minute exhaustion, the repository being public.
 
@@ -1822,6 +1895,182 @@ conversation and never written down, which `CLAUDE.md` §7 names exactly.
 the route that does not check. **Findings C and D are corrected in place above**,
 struck with the correction stated, per `CLAUDE.md` §13.
 
+## Post phase 1 reconciliation, 2026-08-10
+
+Human-directed. The sign-off review had already settled every reading in the five
+catalogue findings above, so this session transcribed rather than judged. It is not a
+phase and not a lettered correction pass: the session opened by inventing the letter Q
+and was told to drop it, which is recorded in the archived prompt so that a letter
+invented by a session does not later read as authored.
+
+**Prompt** `prompts/spent/post-phase-1-reconciliation.md`, archived before any file
+changed.
+
+**Authored** D-73 to D-76, taking the register on from D-72. D-73 splits the
+supersession convention by what a document is for, specs clean and records keeping
+their strikes, and reopens `CHANGELOG.md` to hold what the clean edits remove. D-74
+puts the source of a stage's ticker list in the Reads column, closing finding 1. D-75
+makes `FlowIngestor` nightly, closing finding 3, and records `Weekly` as the text it
+replaced. D-76 drops the store matrix's Written-by and Read-by columns and closes
+open item 6, which is struck in the table below.
+
+**`CLAUDE.md` §13** amended for D-73, in the file's own strike convention, since
+`CLAUDE.md` is not one of the four documents D-73 names for cleaning.
+
+**`ARCHITECTURE.html`.** Four Reads cells now name `security`, C03's also naming
+`price_daily` and saying which read is the pool and which the rotation order. C05
+runs `Daily 17:45` and is the only Runs cell that changed. §16 has three columns and
+carries a line pointing at §3 and `SCHEMA.md`. Before the pass `grep -c "<s>"`
+returned 17 and `grep -o "<s>" | wc -l` returned 23, the two differing because four
+lines carried more than one strike; both return 0 now.
+`grep -c "earnings[[:space:]]\+jump[[:space:]]\+the[[:space:]]\+queue"` returns 1,
+unchanged: the architecture is right about the earnings queue and the code is
+incomplete, so that line was not touched.
+
+**`SCHEMA.md`, `CONFIG_REFERENCE.md` and `RUNBOOK.md`**, swept in a second commit
+under the same procedure and the same safety condition. D-73 names four documents and
+only one of them conformed after the first commit. Eighteen removals: eleven, six and
+one. `grep -c "~~"` returned 16, 9 and 1 lines before and returns 0 for all three
+after, and `grep -c "<s>" docs/ARCHITECTURE.html` still returns 0.
+
+**Four of those were whole rows** and the row was removed rather than left empty,
+because a strike covering every cell leaves nothing the row was for: two key rows in
+`CONFIG_REFERENCE.md`, one failure-table row in `RUNBOOK.md`, and none in
+`SCHEMA.md`. **Three were sentences whose strike carried the subject**, so the
+sentence was rebuilt rather than trimmed and each rebuild is named in `CHANGELOG.md`
+with what it now says. None of the three adds a claim: `SCHEMA.md`'s `report_date`
+sentence states the negation D-69 states, and the other two restate the live half of
+a was-and-is construction.
+
+**Every removal's prior text is in `CHANGELOG.md`**, verbatim, which is now the only
+place it exists. Twenty-one entries from the first commit and eighteen from the
+second.
+
+### Seven citations that do not name what they removed
+
+The sweep's condition was that no strike is removed until its cited decision names
+what it removed. Seven failed it across the four documents, and all seven were
+deleted with their prior text recorded rather than left in place, which is what D-73
+asks for. They are recorded here because a citation pointing at nothing is a worse
+defect than the duplication D-76 closed, and nothing else would have found them.
+
+Four are in `ARCHITECTURE.html` and three in the other spec documents, below.
+
+**N.3, cited by three write-column strikes**: `run_log` on C07 FreshnessGuard,
+`run_log` on C32 LocalModelClient, `cost_ledger` on C16 ResearcherClient. Pass N's
+narrative in `docs/archive/process-2026-08.md` says "Three write-column mismatches
+between sections 3 and 16 resolved toward the store matrix" and names none of the
+three tables. The count matches and the direction is stated, so the reading is not in
+doubt; what is missing is the naming. No clause list for pass N exists anywhere in
+the corpus: the archive names N.4, N.5, N.6, N.8, N.9, N.10 and N.11 and never N.1,
+N.2 or N.3.
+
+**O.8, cited by the completeness row in §18**: no record anywhere. A grep for `O.8`
+over every `.md`, `.html`, `.cs` and `.ps1` in the tree returned exactly one hit, the
+citation itself. Pass O is described in the phase 0 block above as having corrected
+four review findings and changed four source files, and its clauses are numbered
+nowhere.
+
+**N.1 is the one that passes**, cited by C25's Writes and by the store matrix. The
+pass N narrative names it in full: `order` has one writer, RiskGate for all four
+portfolios, with PortfolioRunner persisting to `portfolio_selection` rather than
+writing orders.
+
+**L.2, cited by the Consumer column of
+`fundamentals.min_clean_gaps_for_substitution`**: no clause record. A grep for `L.2`
+over the tree returns two hits, both inside `CONFIG_REFERENCE.md`, one of them the
+citation itself. The other is that document's own prose two paragraphs below, which
+states the substance, and D-4 is co-cited there and does name UniverseBuilder as
+where the exclusion is applied. So the removal is backed; the clause reference is
+not.
+
+**O.2, cited by `indicator_daily`'s column list**: no clause record, the same
+condition as O.8. A grep returns four hits, all inside `SCHEMA.md`, of which three
+are that document stating the substance about `median_dollar_volume_20d` being
+`numeric` rather than a 32-bit float.
+
+**1.4, cited by `fundamental_snapshot`'s effective-date column**: the checkpoint
+exists and does not name what was removed. `BUILD_PLAN.md`'s 1.4 line covers keying
+on `filing_date_effective`, the four unknown-reason states and what 1.5 owns, and
+says nothing about `NOT NULL`. What does name it is `0002_statement_fields_and_grains.sql`,
+whose comment gives the reason in full above `ALTER COLUMN filing_date_effective DROP
+NOT NULL`, and the surviving `SCHEMA.md` prose immediately after the removal.
+
+**L.3 and M.1 were expected to fail and do not.** Neither has a clause list either,
+but each is named by content in a document that is the record. L.3's removal, the
+two-documented-exceptions rule, is struck in `CLAUDE.md` INVARIANT 10 with `[amended,
+L.3]` against it and is described in `CHANGELOG.md` 0.2.1. M.1's removal, a stored
+`clean_gap_count` maintained by FundamentalsIngestor, is named by D-4, which says the
+count is computed rather than stored and why, and by `CHANGELOG.md` 0.2.1. A1.a is
+recorded in full in `prompts/spent/phase-1-ingest-and-universe.md` and names the
+column swap exactly.
+
+**The pattern across all seven.** No pass L, M or O clause list exists anywhere in
+the corpus, and the archive's clause records for pass N start at N.4. A reference of
+the form `letter.number` is therefore not by itself evidence that a clause was
+written down, and five of the seven failures are that form. Where the substance
+survived, it survived in a decision, an invariant, a migration comment or the same
+document's own prose, never in the thing being cited.
+
+### Reads get a conformance path
+
+Nothing compared a declared `ReadSet` against the catalogue in either direction, which
+is why the reconciliation was needed rather than found by a test.
+`ArchitectureDocument` parsed component id and name only, and `ReadSet` was asserted
+against hardcoded literals in `PriceIngestorTests`, `SentimentIngestorTests`,
+`EventsIngestorTests` and `FlowEngineTests` while `FundamentalsIngestor` and
+`FlowIngestor`, the two components whose declarations the catalogue contradicted,
+asserted nothing at all.
+
+`ArchitectureDocument.ReadTablesByComponent` reads the Reads cell of all 34 catalogue
+rows. A table reference there is a `code` element, which is the document's own
+typography and the only thing separating a table from an endpoint; reading bare words
+instead would take "for rotation order" in C03's own cell for the `order` table. The
+intersection with `SCHEMA.md`'s table list is the second filter, which is what drops
+C33's `digest_provider`.
+
+`ReadDeclarationConformanceTests` asserts both directions over the eight registered
+stages, with a fabricated-stage fixture proving each direction fires and the other
+stays silent. Checked rather than assumed: adding `alert` to `SentimentIngestor`'s
+read set and running the suite failed
+`EveryTableAStageDeclaresIsNamedInItsReadsCell` naming `SentimentIngestor -> alert`,
+and the edit was reverted.
+
+**One recorded deviation, and it is asserted to still be one.** C03's Reads cell names
+`events` and `FundamentalsIngestor` does not declare it, which is finding 2 above:
+unbuilt work rather than a document defect. Declaring `events` without reading it
+would make the declaration meaningless and the test green over behaviour that does not
+exist, and removing it from the catalogue is the move `CLAUDE.md` §13 forbids. So it
+is listed, and `EveryRecordedDeviationIsStillADeviation` fails the day the gap closes
+and says to delete the entry. Carried in `BUILD_PLAN.md` from phase 1 to phase 3,
+because a gap recorded only beside the code it belongs to is not recorded [`CLAUDE.md`
+§7].
+
+### What ran
+
+`ci.ps1` twice, both green, both against a dropped database from a worktree at HEAD.
+
+| At | Commit | Tests | Guards |
+|---|---|---|---|
+| After the reconciliation, before the conformance commit | `ff55da0` | Passed 149, Failed 0 | 5 checks over 65 files |
+| With the conformance commit | `69df60f` | Passed 155, Failed 0 | 5 checks over 66 files |
+| After the record of the pass | `bda6b35` | Passed 155, Failed 0 | 5 checks over 66 files |
+| With the other three spec documents cleaned | `909f725` | Passed 155, Failed 0 | 5 checks over 66 files |
+| With the CI records corrected and `ci.ps1`'s header rewritten | `c36a74e` | Passed 155, Failed 0 | 5 checks over 66 files |
+| With `SystemClockTests` | `ab649b6` | Passed 157, Failed 0 | 5 checks over 67 files |
+| The same commit on `ubuntu-latest`, run `31418985363` | `ab649b6` | Passed 157, Failed 0 | 5 checks, pwsh |
+
+The six new tests are `TheReadsCellParseFindsTablesRatherThanNothing`,
+`EveryRegisteredStageIsUnderTest`, `EveryTableAStageDeclaresIsNamedInItsReadsCell`,
+`EveryTableAReadsCellNamesIsDeclaredByItsStage`,
+`EveryRecordedDeviationIsStillADeviation` and
+`BothDirectionsFailOnAStageThatDisagreesWithTheCatalogue`.
+
+**No code outside the test project changed.** D-74 states the document begins
+describing what the code already does, and it does.
+
+---
+
 ## Open items carried forward
 
 Found and not closed. Each names what triggers it. The pass narratives behind
@@ -1834,7 +2083,7 @@ them are in `docs/archive/process-2026-08.md`.
 | 3 | `CLAUDE.md` §9 carries the same wording | The next authored amendment to §9 |
 | 4 | Checkpoint 1.8's events-ingest half is not reachable from phase 1's definition of done | Phase 1 sign-off |
 | 5 | Checkpoint 1.1 is reachable from phase 1's definition of done only through "one night lands", which exercises the HTTP client without asserting the token auth, the explicit `fmt`, the encoded filter form or the rate limit | Phase 1 sign-off |
-| 6 | `ARCHITECTURE.html` states writes three times over, in its own Written-by column, in the §3 catalogue and in `SCHEMA.md`. Every write-column defect in passes K through N came from that duplication. Its stated trigger, phase 0 proving the registry and its test, has fired | An authored change to `ARCHITECTURE.html` |
+| 6 | ~~`ARCHITECTURE.html` states writes three times over, in its own Written-by column, in the §3 catalogue and in `SCHEMA.md`. Every write-column defect in passes K through N came from that duplication. Its stated trigger, phase 0 proving the registry and its test, has fired~~ **Closed by D-76** at the post phase 1 reconciliation. §16's store matrix loses both the Written-by and the Read-by column, leaving three: Store, Grain, After backfill. Writes are stated in §3 and in `SCHEMA.md` and nowhere else, and the 1.10 conformance test holds those two against each other in both directions, which is why two statements are acceptable where three were not. The third was checked by nothing | Closed |
 | 7 | ~~The 0.4 conformance test asserts the registry against `SCHEMA.md`'s table list and against a hardcoded list of the three permitted splits, not against `SCHEMA.md`'s own writer declarations, which are stated in prose that varies in form~~ **Closed at 1.10.** The prose does vary in form, so the parse does not read a sentence shape: it takes every bolded span in a table's opening paragraph and keeps the words `ARCHITECTURE.html` section 3 catalogues as components. That is tolerant of `Writer: X`, of `Writers: A inserts, B updates`, and of the order group's three sentences with no prefix, and it cannot invent a writer because an unrecognised word is dropped. It found exactly the five split tables the literal had, and it added the assertion the literal could not make, that every component writing a table is named as a writer of it. One limit stated at the reference site: `order`, `fill` and `position` share a paragraph, so within that group membership is asserted of the group rather than of the table | Closed |
 | 8 | 0.5 has no permanent fixture for its failure path, and no test exercises `/api/runs` or renders the viewer. Both are code and belong to a phase rather than to a correction pass | Phase 9, or the next phase touching either |
 | 9 | ~~`TheCompiledApiCarriesNoPipelineDependency` reads `deps.json` from disk. Its stale-artifact defect was closed by having the test project reference the Api, which holds only while the build succeeds: after a failed build, `dotnet test --no-build` reads the previous artifact and the assertion passes against it. CI is not exposed, because its Build step gates Test~~ **Observed rather than predicted at 1.12**, where `dotnet test --no-build` reported 56 passing against a stale binary after a build that had just failed with four errors. Mitigated at 1.12 by making `ci.ps1` the per-checkpoint verification command instead of a three-command sequence: it runs the same steps in the same order and exits non-zero on the first failure, so it cannot reach the test step after a failed build. Proved by committing a deliberate syntax error and running it, which exited 1 at the Build step and printed no test count. **The hazard itself is unchanged** for anyone running `dotnet test --no-build` by hand; what changed is that nothing in the corpus now tells them to | Phase 9, with item 10 |

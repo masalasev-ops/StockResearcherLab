@@ -5,12 +5,11 @@ declaration is not documentation. It is the contract the conformance test in pha
 asserts against the stage registry, which is how INVARIANT 10 is enforced mechanically
 rather than by review.
 
-**Ownership is per operation, not per table** ~~and two tables are documented
-exceptions~~ [amended, INVARIANT 10 and L.3]. The registry declares component, table,
-operation and column set, and the test asserts no two components claim the same
-triple. Where a heading below reads **Writer: X**, X owns every operation on that
-table. Where it names several, each declares the operation and the columns it owns,
-and nothing else may write there at all.
+**Ownership is per operation, not per table** [INVARIANT 10, L.3]. The registry
+declares component, table, operation and column set, and the test asserts no two
+components claim the same triple. Where a heading below reads **Writer: X**, X owns
+every operation on that table. Where it names several, each declares the operation
+and the columns it owns, and nothing else may write there at all.
 
 The exception list was the wrong shape rather than too short. `attribution`,
 `proposal`, and `order` with `fill` and `position` each had more than one writer from
@@ -40,11 +39,10 @@ Size buckets: large-and-above at $10B or more, mid $2B to $10B, small $300M to $
 universe must be reconstructable per date including names that no longer exist
 [D-48].
 
-**The clean gap count is computed, never stored** ~~as `clean_gap_count`, maintained
-by FundamentalsIngestor~~ [reversed, M.1]. UniverseBuilder counts rows in
-`fundamental_snapshot` for that ticker whose `filing_date_unknown_reason` is `none`
-and whose `filing_date_effective` is at or before the date being built, and excludes
-below `fundamentals.min_clean_gaps_for_substitution` [D-62, D-4].
+**The clean gap count is computed, never stored** [M.1]. UniverseBuilder counts rows
+in `fundamental_snapshot` for that ticker whose `filing_date_unknown_reason` is
+`none` and whose `filing_date_effective` is at or before the date being built, and
+excludes below `fundamentals.min_clean_gaps_for_substitution` [D-62, D-4].
 
 A stored scalar would have been wrong in the permissive direction. The count is
 as-of: a ticker has more clean gaps now than it had three years ago, so a backfill
@@ -81,12 +79,12 @@ clean gap observed before the read date [D-62]. A ticker with fewer than
 `fundamentals.min_clean_gaps_for_substitution` clean gaps observed is excluded from
 the universe rather than given a substituted date.
 
-**The column was ~~`NOT NULL`~~ [struck, 1.4] and is nullable, where null means the
-provider's filing date was unusable and no substitution was derivable either**,
-which is a ticker with zero clean gaps to take a widest from. `NOT NULL` could only
-be satisfied there by writing a date that is not true: `period_end` makes the row
-readable immediately, which is the lookahead D-62 exists to prevent, and a universal
-constant is what D-62 explicitly rejected.
+**The column is nullable, where null means the provider's filing date was unusable
+and no substitution was derivable either** [1.4], which is a ticker with zero clean
+gaps to take a widest from. `NOT NULL` could only be satisfied there by writing a
+date that is not true: `period_end` makes the row readable immediately, which is the
+lookahead D-62 exists to prevent, and a universal constant is what D-62 explicitly
+rejected.
 
 A narrower constraint replaces it, `CHECK (filing_date_effective IS NOT NULL OR
 filing_date_unknown_reason <> 'none')`. That still catches the case `NOT NULL` was
@@ -149,25 +147,22 @@ Small.
 
 `ticker`, `report_date`, `holder_name`, `shares`, `change`, `change_pct`.
 
-Quarterly, because that is the grain the filings arrive at. ~~`report_date` is what
-makes this backfillable, and it is the field short interest turned out not to have.~~
-[struck, D-69] Measured false at 1.9. `Holders::Institutions` is a top-20 snapshot
-rather than a series: CCS.US and NVDA.US return 20 entries at a single `report_date`
-and BXC.US 20 across two, `sec-filings/{t}/13f` is a 404, and the filings index
-lists only `10k`, `10q`, `form4` and `8k`. The column is populated, which is why
-the claim survived being written. One or two distinct values per ticker is not a
-history, so `inst_ownership_change` has nothing to compute a change over and
+Quarterly, because that is the grain the filings arrive at. **`report_date` does not
+make this backfillable** [D-69], measured false at 1.9. `Holders::Institutions` is a
+top-20 snapshot rather than a series: CCS.US and NVDA.US return 20 entries at a
+single `report_date` and BXC.US 20 across two, `sec-filings/{t}/13f` is a 404, and
+the filings index lists only `10k`, `10q`, `form4` and `8k`. The column is populated,
+which is why the claim survived being written. One or two distinct values per ticker
+is not a history, so `inst_ownership_change` has nothing to compute a change over and
 accumulates forward only. The table still ingests, because a current top-20 holder
 list is a usable static feature; it is the change metric that has no series.
 
 ### flow_daily
-Grain: ticker by day, ~~ticker by week~~ [superseded, D-61]. **Writer: FlowEngine, a
-compute stage, not the ingest.** ~52 MB.
+Grain: ticker by day [D-61]. **Writer: FlowEngine, a compute stage, not the ingest.**
+~52 MB.
 
-`ticker`, `date`, ~~`insider_net_usd_90d`~~ [corrected, A1.a] `insider_net_90d_usd`, `distinct_buyer_count`,
-`inst_ownership_change`,
-~~`week_end`, `publication_date`, `short_interest_pct_float`,
-`short_interest_change`~~ [removed, D-58 and D-61].
+`ticker`, `date`, `insider_net_90d_usd` [A1.a], `distinct_buyer_count`,
+`inst_ownership_change` [D-58, D-61].
 
 Derived rather than ingested. The two source tables above land at their own grain and
 this table is computed from them, exactly as `indicator_daily` is computed from
@@ -200,7 +195,7 @@ Grain: ticker by day. **Writer: IndicatorEngine.** ~1.2 GB, the second largest t
 Roughly forty technical columns plus their percentiles. `atr_pct`, `adx14`,
 `dist_200dma`, `dist_52w_high`, `rs_change_21d`, `rs_change_63d`,
 `rs_change_vs_sector`, `volume_vs_50d_avg`, `ma50_200_slope`,
-`base_breakout_flag`~~, `median_dollar_volume_20d`~~ [moved out of this list, O.2].
+`base_breakout_flag` [O.2].
 
 Store as 32-bit floats. No technical indicator needs fifteen significant figures and
 it halves the table.
@@ -274,8 +269,7 @@ ForwardReturnFiller updates.** ~9 MB.
 `return_5d_raw`, `return_5d_vs_spy`, `return_5d_vs_peers`, and the same triple at
 21 and 63 days.
 
-~~**This is the only table with two writers, and it is deliberate.**~~ [superseded,
-INVARIANT 10 as amended] Two components, one operation each. **CandidateAllocator
+Two components, one operation each [INVARIANT 10 as amended]. **CandidateAllocator
 owns the insert**, writing the row with scores frozen and return columns empty.
 **ForwardReturnFiller owns the update**, and only of the nine return columns. Neither
 may perform the other's operation, and no third component writes here at all, which
@@ -318,10 +312,9 @@ updates status.** Grows ~30 MB/yr.
 `counter_argument`, `primary_driver`, `stop_pct`, `target_pct`, `horizon_days`,
 `status`, `rejection_reason`.
 
-~~Second deliberate two-writer pair~~ [superseded, INVARIANT 10 as amended]. Two
-components, one operation each. **ResearcherClient owns the insert.**
-**ProposalValidator owns the update**, and only of `status` and `rejection_reason`.
-Nothing else writes here.
+Two components, one operation each [INVARIANT 10 as amended]. **ResearcherClient owns
+the insert.** **ProposalValidator owns the update**, and only of `status` and
+`rejection_reason`. Nothing else writes here.
 
 ---
 
@@ -366,14 +359,10 @@ was restated per operation rather than extended by one more exception. The regis
 declares the operation and column set for each, and the conformance test asserts no
 two components claim the same triple.
 
-~~RiskGate and PortfolioRunner both insert orders and are the one pair that shares an
-operation on a table. They are separated by portfolio: the runner writes for every
-non-research portfolio off the shared candidate set, the gate writes for the research
-portfolios after arbitration.~~ [reversed, N.1] No operation on these tables is shared
-by two components. The runner writes `portfolio_selection` and the gate turns
-selections into orders for every portfolio, so sizing, stops and caps exist in exactly
-one place. A split by portfolio class would have put them in two, and INVARIANT 8 says
-that voids the comparison.
+No operation on these tables is shared by two components [N.1]. The runner writes
+`portfolio_selection` and the gate turns selections into orders for every portfolio,
+so sizing, stops and caps exist in exactly one place. A split by portfolio class
+would have put them in two, and INVARIANT 8 says that voids the comparison.
 
 ### trade_outcome
 Grain: per closed trade. **Writer: PositionManager.** Small.

@@ -479,12 +479,21 @@ security. Doubt about one quoted price excludes that quote.
   narrative.
 - **Never renumber a decision.** A superseded entry keeps its number and gains a status
   pointing at its replacement.
-- **Supersede visibly, never silently.** A fact removed from an authored document is
-  struck and pointed at whatever replaced it, not deleted. A superseded decision keeps
-  its number and gains a status naming its replacement. A corrected figure is struck
-  with the correction stated. The runtime prompts in `prompts/` are the sole
-  exception: the model reads them at execution time and cannot tell struck text from
-  live, so removals there are clean deletions and the record lives in `DECISIONS.md`.
+- **Supersede visibly, never silently.** ~~A fact removed from an authored document is
+  struck and pointed at whatever replaced it, not deleted.~~ [amended, D-73] **Specs are
+  clean and records keep their strikes.** In a document read to know the current state,
+  a removal is a clean edit: delete the superseded text, keep the decision citation at
+  the point of change, and record the prior wording in `CHANGELOG.md`. Those documents
+  are `ARCHITECTURE.html`, `SCHEMA.md`, `CONFIG_REFERENCE.md` and `RUNBOOK.md`. In a
+  document that is the record, the strike stays, because a superseded entry must keep
+  the reasoning its successor replaced and a log's corrections are its content. Those
+  are `DECISIONS.md` and `PROGRESS.md`. Anything the decision does not name keeps the
+  strikes it already carries, this file included. A superseded decision keeps its
+  number and gains a status naming its replacement. A corrected figure is struck with
+  the correction stated. The runtime prompts in `prompts/` are ~~the sole exception~~
+  [amended, D-73] clean for a different reason: the model reads them at execution time
+  and cannot tell struck text from live, so removals there are clean deletions and the
+  record lives in `DECISIONS.md` rather than in `CHANGELOG.md`.
 
 ### Who writes what
 

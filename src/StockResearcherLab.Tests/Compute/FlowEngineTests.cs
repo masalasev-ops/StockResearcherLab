@@ -344,5 +344,13 @@ public sealed class FlowEngineTests
 
         public async Task<ConfigRow> RequireAsync(string key, DateOnly asOf, CancellationToken ct = default)
             => (await ResolveAsync(key, asOf, ct).ConfigureAwait(false))!;
+
+        // A stage resolves keys, never the store-wide version: that is the runner's
+        // to resolve and the stage's to be handed [checkpoint 1.13].
+        public Task<int?> ResolveVersionAsync(DateOnly asOf, CancellationToken ct = default)
+            => throw new NotSupportedException("A stage does not resolve the store-wide config version.");
+
+        public Task<int> RequireVersionAsync(DateOnly asOf, CancellationToken ct = default)
+            => throw new NotSupportedException("A stage does not resolve the store-wide config version.");
     }
 }

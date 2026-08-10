@@ -40,8 +40,61 @@ public sealed class WriteOwnershipConformanceTests
             .Select(kv => kv.Key)
             .ToHashSet(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Every registered component, not the subset a missing provider token leaves
+    /// behind [sign-off finding A].
+    ///
+    /// This called `BuildRegistry(connectionString)` until now, whose `apiToken`
+    /// defaults to null, and the seven provider-backed stages are added only inside
+    /// a `!IsNullOrWhiteSpace(apiToken)` branch. So every assertion in this file ran
+    /// over `FlowEngine` and `RunLog` alone, and `price_daily`, `security`,
+    /// `fundamental_snapshot`, `sentiment_daily`, `insider_transaction`,
+    /// `institutional_holding` and `events` were outside all of them. The tests were
+    /// right and were pointed at the wrong registry, which is why they passed and
+    /// why nothing about them read as wrong.
+    ///
+    /// `AllOwnersForConformance` exists for exactly this and was already used by
+    /// `RegistryNameTests`, so the name check saw nine components while the write
+    /// check saw two.
+    /// </summary>
     private static StageRegistry RealRegistry()
-        => PipelineComposition.BuildRegistry(TestDatabase.ConnectionString);
+        => new(PipelineComposition.AllOwnersForConformance(TestDatabase.ConnectionString));
+
+    /// <summary>
+    /// Stated in advance so the assertions below cannot pass over a set that shrank,
+    /// which is the same device `guards.ps1` uses for its monetary column count and
+    /// for the same reason: five checks finding nothing over two components produce a
+    /// line indistinguishable from five checks finding nothing over nine.
+    ///
+    /// It moves deliberately when a phase adds a component. Phase 2 adds four.
+    /// </summary>
+    private const int ExpectedOwners = 9;
+
+    /// <summary>
+    /// The assertion that keeps the rest of this file meaningful. A conformance test
+    /// is only as wide as the registry it is handed, and nothing said how wide that
+    /// was.
+    /// </summary>
+    [Fact]
+    public void EveryRegisteredComponentIsUnderTest()
+    {
+        var owners = RealRegistry().Owners;
+
+        Assert.Equal(ExpectedOwners, owners.Count);
+
+        // Named rather than left to the count, because the specific failure is a
+        // registry built without a provider token: it holds RunLog and FlowEngine,
+        // both of which are real, so a count alone would read as a smaller system
+        // rather than as a narrower scan.
+        foreach (var provider in new[]
+                 {
+                     "PriceIngestor", "FreshnessGuard", "FundamentalsIngestor",
+                     "UniverseBuilder", "SentimentIngestor", "FlowIngestor", "EventsIngestor",
+                 })
+        {
+            Assert.Contains(owners, o => string.Equals(o.Name, provider, StringComparison.Ordinal));
+        }
+    }
 
     [Fact]
     public void NoTwoComponentsClaimTheSameTableAndOperation()

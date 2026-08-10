@@ -65,6 +65,71 @@ public static class ConfigResolution
 
         return best;
     }
+
+    /// <summary>
+    /// The store-wide config version in force on <paramref name="asOf"/>, being **one
+    /// plus the count of rows whose version is greater than one** and whose
+    /// <see cref="ConfigRow.SetOn"/> is at or before that date. Null when there are no
+    /// rows at all [D-72].
+    ///
+    /// **This is the stamp `attribution.config_version` carries**, which is the only
+    /// thing that lets history be segmented rather than pooled after a screen
+    /// definition changes [`CLAUDE.md` §8, INVARIANT 4]. It therefore has to
+    /// distinguish configurations, and that is the whole of why it counts.
+    ///
+    /// **A maximum over per-key versions does not distinguish them** [D-72]. Keys at
+    /// 3, 1, 1 give 3; changing the second key gives 3, 2, 1 and still gives 3. Two
+    /// different configurations share a stamp from the second change onward, and the
+    /// tuner segmenting on it would pool exactly the results it exists to keep apart.
+    /// The failure is silent: every row still carries a number and the query still
+    /// groups.
+    ///
+    /// **Revisions are counted and seeds are not, which is the difference between
+    /// counting changes and counting rows** [D-72 as amended]. A key's initial seed
+    /// carries the seeder's fixed <c>SeedInstant</c> and is backdated by design, so
+    /// counting it would make seeding a new key raise the version for every past date
+    /// and a backfill re-run would stamp a different version on identical data. A seed
+    /// extends the configuration's schema; only a revision changes the configuration
+    /// in force. So it begins at 1 however many keys are seeded, and rises by exactly
+    /// one per change.
+    ///
+    /// **Null rather than 1 when nothing is in force, and that cannot be inferred from
+    /// the arithmetic.** One plus zero revisions is 1, which is a real version, so the
+    /// sum alone cannot tell a seeded-and-never-revised store from an empty one. The
+    /// rows in force are counted separately for exactly that reason. A version nothing
+    /// was written under is absent rather than 1, and the caller's answer is to fail
+    /// the run rather than stamp it [CLAUDE.md section 6].
+    ///
+    /// **As of the date, not as of now**, by the same rule as every key: stamping a
+    /// backfilled row with today's version would say a night ran under configuration
+    /// that did not exist yet, and the tuner would segment on it [D-43, INVARIANT 13].
+    /// </summary>
+    public static int? ResolveVersion(IEnumerable<ConfigRow> rows, DateOnly asOf)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+
+        var inForce = 0;
+        var revisions = 0;
+
+        foreach (var row in rows)
+        {
+            if (row.SetOn > asOf)
+            {
+                continue;
+            }
+
+            inForce++;
+
+            if (row.Version > 1)
+            {
+                revisions++;
+            }
+        }
+
+        // Counted rather than accumulated into a maximum, so enumeration order cannot
+        // reach the result at all [CLAUDE.md section 6].
+        return inForce == 0 ? null : revisions + 1;
+    }
 }
 
 /// <summary>
@@ -93,6 +158,29 @@ public sealed class ConfigNotInForceException : InvalidOperationException
 }
 
 /// <summary>
+/// Thrown when no config row at all had come into force for the date being
+/// processed, so there is no version to stamp a run with.
+///
+/// Named and separate from <see cref="ConfigNotInForceException"/> because the two
+/// say different things: that one names a key nobody seeded, this one says the whole
+/// store post-dates the date being run. Both fail rather than defaulting, since a
+/// literal version at a call site is the hardcoded constant checkpoint 1.13 removed.
+/// </summary>
+public sealed class ConfigVersionNotInForceException : InvalidOperationException
+{
+    public ConfigVersionNotInForceException(DateOnly asOf)
+        : base($"No config row was in force on " +
+               $"{asOf.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}, " +
+               "so there is no config version to run under. Config resolves as of the simulated date " +
+               "and never as of now, and a run stamped with a version that did not exist on its own " +
+               "date is what makes history unsegmentable later [D-43, INVARIANT 13]. Seed with a " +
+               "set_at at or before the earliest date the system will resolve for.")
+        => AsOf = asOf;
+
+    public DateOnly AsOf { get; }
+}
+
+/// <summary>
 /// Reads configuration as of a date. The only route a stage has to a configured
 /// value; nothing reads <c>MAX(version)</c> unconditionally.
 /// </summary>
@@ -106,4 +194,18 @@ public interface IConfigStore
     /// silent default. A stage completes or it fails [CLAUDE.md section 6].
     /// </summary>
     Task<ConfigRow> RequireAsync(string key, DateOnly asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// The store-wide version in force on <paramref name="asOf"/>, being one plus the
+    /// count of revisions set at or before it, or null when no row is [D-72]. See
+    /// <see cref="ConfigResolution.ResolveVersion"/> for why it counts changes rather
+    /// than rows, and why neither is a maximum.
+    /// </summary>
+    Task<int?> ResolveVersionAsync(DateOnly asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// As <see cref="ResolveVersionAsync"/>, but absence fails the run rather than
+    /// falling back to a literal.
+    /// </summary>
+    Task<int> RequireVersionAsync(DateOnly asOf, CancellationToken ct = default);
 }

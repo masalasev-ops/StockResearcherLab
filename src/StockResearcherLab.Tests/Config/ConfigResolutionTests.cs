@@ -106,6 +106,195 @@ public sealed class ConfigResolutionTests
         Assert.Equal("8", row!.Value);
     }
 
+    // ------------------------------ the store-wide version, checkpoint 1.13 ---
+    //
+    // `Worker` carried `const int configVersion = 1` at both call sites until this
+    // pass, which the checkpoint said would go. Nothing read it in phase 1, so
+    // nothing failed; phase 4 stamps it onto every attribution row, and a literal 1
+    // would have said every night ran under the same configuration whatever the
+    // tuner had done, which is the segmentation CLAUDE.md section 8 exists to keep.
+
+    /// <summary>
+    /// Three keys. `screens.s1.slots` has reached version 3 and the other two are
+    /// still at version 1, which is the 3, 1, 1 shape D-72 names.
+    /// </summary>
+    private static readonly ConfigRow[] ThreeOneOne =
+    [
+        new(Key, 1, "8", new DateOnly(2020, 1, 1)),
+        new(Key, 2, "10", new DateOnly(2021, 1, 1)),
+        new(Key, 3, "12", new DateOnly(2022, 1, 1)),
+        new("universe.min_price", 1, "5", new DateOnly(2020, 1, 1)),
+        new("tuner.slot_floor", 1, "4", new DateOnly(2020, 1, 1)),
+    ];
+
+    /// <summary>The same store after `tuner.slot_floor` moves to version 2, so 3, 2, 1.</summary>
+    private static readonly ConfigRow[] ThreeTwoOne =
+    [
+        .. ThreeOneOne,
+        new("tuner.slot_floor", 2, "5", new DateOnly(2023, 6, 1)),
+    ];
+
+    /// <summary>
+    /// **The case D-72 exists for, and the one a maximum gets wrong.**
+    ///
+    /// The changed key is deliberately not the highest-versioned one: `tuner.slot_floor`
+    /// goes from 1 to 2 while `screens.s1.slots` stays at 3. A maximum answers 3 both
+    /// times, so two different configurations would carry the same stamp and the tuner
+    /// segmenting on it would pool them. One plus revisions answers 3 then 4.
+    ///
+    /// Both rejected mechanisms are computed here rather than described, so this test
+    /// states what each of them did instead of asserting only that the current one
+    /// works. **It is the only test in this file that fails under a reversion to the
+    /// maximum**, which is why it carries them both.
+    /// </summary>
+    [Fact]
+    public void ChangingAKeyOtherThanTheHighestVersionedOneStillMovesTheStoreWideVersion()
+    {
+        var date = new DateOnly(2026, 8, 7);
+
+        var before = ConfigResolution.ResolveVersion(ThreeOneOne, date);
+        var after = ConfigResolution.ResolveVersion(ThreeTwoOne, date);
+
+        // Two revisions of one key, so 3; then a third revision on another key, so 4.
+        Assert.Equal(3, before);
+        Assert.Equal(4, after);
+        Assert.NotEqual(before, after);
+
+        // The maximum: identical across the change, which is the defect D-72 names.
+        Assert.Equal(
+            ThreeOneOne.Max(r => r.Version),
+            ThreeTwoOne.Max(r => r.Version));
+
+        // **The discriminator is that the version moves and the maximum does not**,
+        // not the absolute numbers: `before` is 3 and so is the maximum, coincidentally,
+        // because this fixture's highest key version happens to equal its revision
+        // count plus one. Asserting the movement rather than the value is what makes
+        // this test fail on a reversion.
+        Assert.NotEqual(
+            ThreeOneOne.Max(r => r.Version),
+            ThreeTwoOne.Max(r => r.Version) + (after - before));
+
+        // The row count moves here too, so this fixture alone does not separate the
+        // current rule from the row count. `SeedingAnAdditionalKeyLeavesEveryPriorDates
+        // VersionUnchanged` is what does, and the two tests are a pair rather than
+        // either one covering both.
+        Assert.Equal(5, ThreeOneOne.Count(r => r.SetOn <= date));
+        Assert.Equal(6, ThreeTwoOne.Count(r => r.SetOn <= date));
+    }
+
+    [Fact]
+    public void TheStoreWideVersionCountsRevisionsRatherThanRows()
+    {
+        // Five rows are in force and three of them are initial seeds, so the version
+        // is one plus the two revisions rather than five [D-72 as amended]. A seed
+        // extends the configuration's schema; only a revision changes the
+        // configuration in force.
+        Assert.Equal(3, ConfigResolution.ResolveVersion(ThreeOneOne, new DateOnly(2026, 8, 7)));
+    }
+
+    /// <summary>
+    /// **The amendment's whole point, asserted directly.**
+    ///
+    /// Every key is seeded at version 1 with one fixed backdated instant, so counting
+    /// rows would make a phase seeding its keys raise the version for every date from
+    /// the window start onward. A backfill re-run would then stamp a different version
+    /// on identical data, and both numbers would look like plausible integers.
+    /// </summary>
+    [Fact]
+    public void SeedingAnAdditionalKeyLeavesEveryPriorDatesVersionUnchanged()
+    {
+        // A key introduced by a later phase, backdated exactly as the seeder backdates.
+        ConfigRow[] withANewKey =
+        [
+            .. ThreeTwoOne,
+            new("percentile.cell_min_members", 1, "15", new DateOnly(2020, 1, 1)),
+        ];
+
+        foreach (var date in new[]
+                 {
+                     new DateOnly(2020, 1, 1), new DateOnly(2021, 6, 1),
+                     new DateOnly(2023, 1, 1), new DateOnly(2026, 8, 7),
+                 })
+        {
+            Assert.Equal(
+                ConfigResolution.ResolveVersion(ThreeTwoOne, date),
+                ConfigResolution.ResolveVersion(withANewKey, date));
+        }
+
+        // And a row count would not have been unchanged, computed here rather than
+        // described, so the test states what the rejected mechanism did.
+        Assert.NotEqual(
+            ThreeTwoOne.Count(r => r.SetOn <= new DateOnly(2021, 6, 1)),
+            withANewKey.Count(r => r.SetOn <= new DateOnly(2021, 6, 1)));
+    }
+
+    [Fact]
+    public void TheStoreWideVersionIsAsOfTheDateRatherThanAsOfNow()
+    {
+        // The same failure Resolve has, one level up. A backfilled 2020 night stamped
+        // with the version a 2022 change produced would say it ran under
+        // configuration that did not exist yet [D-43, INVARIANT 13].
+        //
+        // Three seeds are in force through 2020 and none of them is a change, so the
+        // store is at 1. The key's version 2 lands in 2021 and its version 3 in 2022.
+        Assert.Equal(1, ConfigResolution.ResolveVersion(ThreeOneOne, new DateOnly(2020, 6, 1)));
+        Assert.Equal(2, ConfigResolution.ResolveVersion(ThreeOneOne, new DateOnly(2021, 6, 1)));
+        Assert.Equal(3, ConfigResolution.ResolveVersion(ThreeOneOne, new DateOnly(2022, 6, 1)));
+
+        // And the 2023 change is invisible to a date before it.
+        Assert.Equal(3, ConfigResolution.ResolveVersion(ThreeTwoOne, new DateOnly(2023, 1, 1)));
+    }
+
+    [Fact]
+    public void ADateBeforeEveryRowHasNoStoreWideVersionRatherThanOne()
+    {
+        // **Null, and it cannot be inferred from the arithmetic** [D-72 as amended].
+        // One plus zero revisions is 1, which is a real version, so a resolver that
+        // returned the sum alone would answer 1 for a date before the seed and the
+        // caller would stamp a run that had no configuration at all. The rows in force
+        // are counted separately for exactly this case.
+        Assert.Null(ConfigResolution.ResolveVersion(ThreeOneOne, new DateOnly(2019, 12, 31)));
+
+        // The neighbouring date is 1 rather than null, which is what makes the case
+        // above a separate check rather than a boundary of the same one.
+        Assert.Equal(1, ConfigResolution.ResolveVersion(ThreeOneOne, new DateOnly(2020, 1, 1)));
+    }
+
+    [Fact]
+    public void TheBoundaryDateCountsTheRowSetOnIt()
+    {
+        // "At or before", matching Resolve. A row set on the date governs the date, so
+        // the three seeds are in force and the store is at 1 rather than absent.
+        Assert.Equal(1, ConfigResolution.ResolveVersion(ThreeOneOne, new DateOnly(2020, 1, 1)));
+    }
+
+    [Fact]
+    public async Task TheStoreResolvesAVersionAndRefusesADateBeforeTheSeed()
+    {
+        var seeder = new ConfigSeeder(TestDatabase.ConnectionString);
+        await seeder.SeedAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        var store = new ConfigStore(TestDatabase.ConnectionString);
+
+        var version = await store.RequireVersionAsync(
+            new DateOnly(2026, 8, 7), TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        // **1 immediately after seeding, whatever the key count** [D-72 as amended].
+        // Every seeded row is version 1, so none of them is a change and the store is
+        // at its first version. This is the assertion that would have to be edited if
+        // seeding ever started counting again, which is why it is stated as the
+        // literal 1 rather than derived from the seeder.
+        Assert.Equal(1, version);
+
+        Assert.Null(await store.ResolveVersionAsync(
+            new DateOnly(2019, 12, 31), TestContext.Current.CancellationToken).ConfigureAwait(true));
+
+        await Assert.ThrowsAsync<ConfigVersionNotInForceException>(
+            () => store.RequireVersionAsync(
+                new DateOnly(2019, 12, 31),
+                TestContext.Current.CancellationToken)).ConfigureAwait(true);
+    }
+
     [Fact]
     public void TheSeederCoversEveryKeyPhaseOneConsumes()
     {

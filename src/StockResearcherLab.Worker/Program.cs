@@ -79,14 +79,21 @@ async Task<int> RunNightAsync()
         ? DateOnly.ParseExact(args[1], "yyyy-MM-dd", CultureInfo.InvariantCulture)
         : clock.Today;
 
-    // Config version 1 until the tuner writes another. Passed in rather than
-    // resolved inside a stage [D-43, INVARIANT 13].
-    const int configVersion = 1;
+    var connectionString = RequireConnectionString();
+
+    // Resolved as of the date being run, never assumed [checkpoint 1.13, D-43,
+    // INVARIANT 13]. It was the literal 1 until this pass, which would have
+    // stamped every attribution row with version 1 whatever the tuner had done,
+    // and the tuner cannot segment history it cannot tell apart [CLAUDE.md
+    // section 8]. Resolved here rather than inside a stage, so a stage cannot
+    // resolve against a date other than the one it was handed.
+    var configVersion = await new ConfigStore(connectionString)
+        .RequireVersionAsync(date).ConfigureAwait(false);
 
     Console.WriteLine($"run-night  {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}  config v{configVersion}");
 
     var night = NightlyRun.For(
-        RequireConnectionString(), config["Eodhd:ApiToken"], clock, Console.WriteLine);
+        connectionString, config["Eodhd:ApiToken"], clock, Console.WriteLine);
 
     var result = await night.ExecuteAsync(date, configVersion).ConfigureAwait(false);
 
@@ -144,10 +151,9 @@ async Task<int> RunStageAsync()
         ? DateOnly.ParseExact(args[2], "yyyy-MM-dd", CultureInfo.InvariantCulture)
         : clock.Today;
 
-    // Config version 1 until config_rows is seeded. Passed in rather than
-    // resolved inside the stage, because config resolves as of the simulated
-    // date and never as of now [D-43, INVARIANT 13].
-    const int configVersion = 1;
+    // As in run-night: resolved as of the date, never a literal [checkpoint 1.13].
+    var configVersion = await new ConfigStore(connectionString)
+        .RequireVersionAsync(date).ConfigureAwait(false);
 
     Console.WriteLine($"run {args[1]}  date {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}  config v{configVersion}");
 

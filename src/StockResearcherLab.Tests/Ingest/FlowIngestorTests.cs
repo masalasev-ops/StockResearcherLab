@@ -281,6 +281,107 @@ public sealed class FlowIngestorTests
         Assert.DoesNotContain(stage.WriteSet, w => w.Table == "flow_daily");
     }
 
+    // ------------------------------------------------- the rotation, finding B ---
+    //
+    // The selection was `ORDER BY ticker LIMIT 250` with no coverage term, so the
+    // same 250 names were walked on every pass and the other 2,591 were never
+    // reached. A cap every name eventually passes through is a rate limit; a cap no
+    // name passes through twice is a filter, and INVARIANT 1 puts filters in the
+    // universe definition only.
+
+    private static IReadOnlyList<string> Pool(int n)
+        => Enumerable.Range(1, n).Select(i => string.Format(
+            System.Globalization.CultureInfo.InvariantCulture, "T{0:D2}.US", i)).ToList();
+
+    [Fact]
+    public void TwoConsecutivePassesOverAnUnchangedUniverseSelectDisjointHeads()
+    {
+        var pool = Pool(10);
+        var fetched = new HashSet<string>(StringComparer.Ordinal);
+
+        var first = FlowIngestor.SelectionFor(pool, fetched, 4);
+        foreach (var t in first.Tickers)
+        {
+            fetched.Add(t);
+        }
+
+        var second = FlowIngestor.SelectionFor(pool, fetched, 4);
+
+        Assert.Equal(["T01.US", "T02.US", "T03.US", "T04.US"], first.Tickers);
+        Assert.Equal(["T05.US", "T06.US", "T07.US", "T08.US"], second.Tickers);
+        Assert.Empty(first.Tickers.Intersect(second.Tickers, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void CoverageCompletesRatherThanStoppingAtTheFirstPage()
+    {
+        var pool = Pool(10);
+        var fetched = new HashSet<string>(StringComparer.Ordinal);
+
+        for (var pass = 0; pass < 3; pass++)
+        {
+            foreach (var t in FlowIngestor.SelectionFor(pool, fetched, 4).Tickers)
+            {
+                fetched.Add(t);
+            }
+        }
+
+        // Every name reached, which the truncating version could never do.
+        Assert.Equal(pool.Count, fetched.Count);
+        Assert.Equal(0, FlowIngestor.SelectionFor(pool, fetched, 4).NeverFetched);
+    }
+
+    [Fact]
+    public void TheCoverageCountsAreReportedTheWayCThreeReportsThem()
+    {
+        var pool = Pool(10);
+        var fetched = new HashSet<string>(StringComparer.Ordinal) { "T01.US", "T02.US" };
+
+        var selection = FlowIngestor.SelectionFor(pool, fetched, 4);
+
+        Assert.Equal(10, selection.PoolSize);
+        Assert.Equal(8, selection.NeverFetched);
+
+        // The whole selection is new, because two fetched names sort behind eight
+        // unfetched ones rather than ahead of them.
+        Assert.Equal(4, selection.NewInSelection);
+        Assert.Equal(["T03.US", "T04.US", "T05.US", "T06.US"], selection.Tickers);
+    }
+
+    [Fact]
+    public void ANameThatReturnedNoRowsIsOfferedAgainRatherThanSkipped()
+    {
+        // The residue a high-water mark would close, asserted so it is a known
+        // property rather than a surprise: 14 of 250 answer 404 and write nothing,
+        // so they stay never-fetched. Coverage still advances by every name that
+        // does return rows, which is why this is not an invariant breach.
+        var pool = Pool(10);
+        var fetched = new HashSet<string>(StringComparer.Ordinal);
+
+        var first = FlowIngestor.SelectionFor(pool, fetched, 4);
+
+        // T01 answered 404, so nothing was written for it.
+        foreach (var t in first.Tickers.Where(t => t != "T01.US"))
+        {
+            fetched.Add(t);
+        }
+
+        Assert.Equal("T01.US", FlowIngestor.SelectionFor(pool, fetched, 4).Tickers[0]);
+    }
+
+    [Fact]
+    public void TheOrderingIsOrdinalRatherThanCultureDependent()
+    {
+        // Two runs of one stage over one pool must select the same set
+        // [CLAUDE.md section 6].
+        var pool = new[] { "ZZ.US", "aa.US", "AA.US", "BB.US" };
+        var fetched = new HashSet<string>(StringComparer.Ordinal);
+
+        var selection = FlowIngestor.SelectionFor(pool, fetched, 3);
+
+        Assert.Equal(["AA.US", "BB.US", "ZZ.US"], selection.Tickers);
+    }
+
     private static StockResearcherLab.Data.Eodhd.EodhdClient EodhdClientDouble()
         => new(new HttpClient(new NeverCalled()), "fake-token", new FixedClock(
             new DateTimeOffset(2026, 8, 9, 3, 0, 0, TimeSpan.Zero), new DateOnly(2026, 8, 9)));

@@ -28,24 +28,42 @@ public sealed class ConfigStore : IConfigStore
         => await ResolveAsync(key, asOf, ct).ConfigureAwait(false)
            ?? throw new ConfigNotInForceException(key, asOf);
 
-    private async Task<IReadOnlyList<ConfigRow>> ReadAsync(string key, CancellationToken ct)
+    public async Task<int?> ResolveVersionAsync(DateOnly asOf, CancellationToken ct = default)
+    {
+        var rows = await ReadAsync(key: null, ct).ConfigureAwait(false);
+        return ConfigResolution.ResolveVersion(rows, asOf);
+    }
+
+    public async Task<int> RequireVersionAsync(DateOnly asOf, CancellationToken ct = default)
+        => await ResolveVersionAsync(asOf, ct).ConfigureAwait(false)
+           ?? throw new ConfigVersionNotInForceException(asOf);
+
+    /// <param name="key">
+    /// One key, or null for every row in the store. The store-wide version spans
+    /// keys by definition, so it cannot be answered from one key's rows.
+    /// </param>
+    private async Task<IReadOnlyList<ConfigRow>> ReadAsync(string? key, CancellationToken ct)
     {
         // set_at is a timestamptz and every question asked of config is asked
         // about a trading date, so it is reduced to one here. US Eastern rather
         // than UTC or the server's zone, because all market semantics in this
         // system are US Eastern and a trading date is the label the exchange gave
         // a session [CLAUDE.md section 6].
+        // @key IS NULL selects every row, which is what the store-wide version
+        // needs. Written as one statement rather than two so both paths reduce
+        // set_at to a US Eastern date the same way; two statements is how the
+        // conversion drifts between them.
         const string sql = """
             SELECT key, version, value::text, (set_at AT TIME ZONE 'America/New_York')::date
             FROM config_rows
-            WHERE key = @key
-            ORDER BY version;
+            WHERE @key::text IS NULL OR key = @key::text
+            ORDER BY key, version;
             """;
 
         await using var conn = new NpgsqlConnection(_connectionString);
         await conn.OpenAsync(ct).ConfigureAwait(false);
         await using var cmd = new NpgsqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("key", key);
+        cmd.Parameters.AddWithValue("key", (object?) key ?? DBNull.Value);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
 

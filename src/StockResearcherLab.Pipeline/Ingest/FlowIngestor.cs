@@ -59,7 +59,8 @@ public sealed class FlowIngestor : IStage
         var maxPerRun = (int) await LongAsync(context, "flow.max_tickers_per_run", ct).ConfigureAwait(false);
         var pageSize = (int) await LongAsync(context, "flow.form4_page_size", ct).ConfigureAwait(false);
 
-        var tickers = await UniverseAsync(context, maxPerRun, ct).ConfigureAwait(false);
+        var selection = await UniverseAsync(context, maxPerRun, ct).ConfigureAwait(false);
+        var tickers = selection.Tickers;
 
         long insiderRows = 0;
         long holdingRows = 0;
@@ -75,15 +76,27 @@ public sealed class FlowIngestor : IStage
             holdingRows += await LoadHoldersAsync(context, ticker, ct).ConfigureAwait(false);
         }
 
+        // Coverage first, exactly as C03 reports it. A run that re-walks the same
+        // 250 names and one that reaches 250 new ones look identical from a row
+        // count, which is how the truncation below went unseen until sign-off.
         var detail = string.Format(
             CultureInfo.InvariantCulture,
             "{0:N0} insider transaction row(s) and {1:N0} institutional holding row(s) over {2:N0} " +
-            "ticker(s). Holdings are a top-20 snapshot rather than a series, so inst_ownership_change " +
-            "accumulates forward only [D-69]. {3}",
-            insiderRows, holdingRows, tickers.Count, DescribeShortfalls(shortfalls));
+            "ticker(s). Candidate pool {3:N0}, of which {4:N0} have never been fetched; {5:N0} of this " +
+            "run's selection were new. Holdings are a top-20 snapshot rather than a series, so " +
+            "inst_ownership_change accumulates forward only [D-69]. {6}",
+            insiderRows, holdingRows, tickers.Count,
+            selection.PoolSize, selection.NeverFetched, selection.NewInSelection,
+            DescribeShortfalls(shortfalls));
 
         return new StageResult(insiderRows + holdingRows, "ok", detail);
     }
+
+    /// <param name="PoolSize">The whole active universe, which is the pool here.</param>
+    /// <param name="NeverFetched">Pool members with no row in <c>insider_transaction</c> yet.</param>
+    /// <param name="NewInSelection">How many of this run's selection were among them.</param>
+    public readonly record struct Selection(
+        IReadOnlyList<string> Tickers, int PoolSize, int NeverFetched, int NewInSelection);
 
     /// <param name="Position">
     /// `interior` means at least one page before the last came back short, so the
@@ -131,16 +144,71 @@ public sealed class FlowIngestor : IStage
                 x.Ticker, x.Rows, x.Position.ToString().ToLowerInvariant()))));
     }
 
-    private static async Task<IReadOnlyList<string>> UniverseAsync(
+    /// <summary>
+    /// Tickers to walk this run, ordered so coverage advances rather than repeating.
+    ///
+    /// **This was `ORDER BY ticker LIMIT 250` and that made the cap a filter rather
+    /// than a rate limit** [sign-off finding B]. The same 250 names were selected on
+    /// every pass, so `insider_transaction` held 226 tickers of a 2,841 name universe
+    /// with every one of them inside ordinal ranks 1 to 250 and none outside, and
+    /// which names the flow screen could ever see was decided by ticker spelling.
+    /// INVARIANT 1 puts absolute filters in the universe definition and nowhere else;
+    /// a cap every name eventually passes through is a bound on a night's spend,
+    /// which is what this now is.
+    ///
+    /// The ordering is C03's, at `FundamentalsIngestor.CandidatesAsync`: never
+    /// fetched first, then the rest, then ticker ordinal. C03's middle group,
+    /// fetched-and-in-universe against fetched-and-outside-it, collapses here
+    /// because the pool is the universe.
+    /// </summary>
+    private static async Task<Selection> UniverseAsync(
         StageContext context, int maxPerRun, CancellationToken ct)
     {
         var rows = await context.Data.ReadAsync(
-            "security",
-            "SELECT ticker FROM security WHERE is_active ORDER BY ticker LIMIT " +
-            maxPerRun.ToString(CultureInfo.InvariantCulture) + ";",
-            ct).ConfigureAwait(false);
+            "security", "SELECT ticker FROM security WHERE is_active ORDER BY ticker;", ct)
+            .ConfigureAwait(false);
 
-        return rows.Select(r => (string) r[0]!).ToList();
+        var pool = rows.Select(r => (string) r[0]!).ToList();
+
+        // Reading what it writes, which DeclaredAccess permits without a second
+        // declaration: the read set would otherwise say this stage reads a table it
+        // owns, which is not what a read set means.
+        var already = await context.Data.ReadAsync(
+            "insider_transaction", "SELECT DISTINCT ticker FROM insider_transaction;", ct)
+            .ConfigureAwait(false);
+
+        var fetched = already.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
+
+        return SelectionFor(pool, fetched, maxPerRun);
+    }
+
+    /// <summary>
+    /// The ordering, as a pure function so two consecutive passes can be asserted
+    /// without a provider or a database.
+    ///
+    /// **A name that returns no rows stays never-fetched and is offered again.** For
+    /// the 14 of 250 that answer `404 Symbol not found` that is a re-ask every run,
+    /// and it is the residue a high-water mark would close. Not built here: it is a
+    /// separate decision and its absence does not breach an invariant, because
+    /// coverage still advances by every name that does return rows.
+    /// </summary>
+    public static Selection SelectionFor(
+        IReadOnlyList<string> pool, IReadOnlySet<string> fetched, int maxPerRun)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(fetched);
+
+        var selected = pool
+            .OrderBy(t => fetched.Contains(t) ? 1 : 0)
+            .ThenBy(t => t, StringComparer.Ordinal)
+            .Take(maxPerRun)
+            .ToList();
+
+        return new Selection(
+            selected,
+            pool.Count,
+            pool.Count(t => !fetched.Contains(t)),
+            selected.Count(t => !fetched.Contains(t)));
     }
 
     /// <summary>

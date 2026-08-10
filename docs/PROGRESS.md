@@ -515,13 +515,32 @@ authored decision still owed.
 **A second measurement worth keeping.** Filing dates are worse across the wider
 population than the probe implied. Per-run substitution rates over the day's passes
 were 52.0, 27.5, 30.9 and 25.5 percent, every one above the 25 percent alert, and
-1,752 of the 5,641 covered tickers have zero clean gaps at all. Phase P measured 41
-percent of periods unknown over seven names. D-62's per-ticker substitution is
+1,752 of the 5,641 covered tickers have zero clean gaps at all. ~~Phase P measured 41
+percent of periods unknown over seven names.~~ [misattributed, corrected below]
+D-62's per-ticker substitution is
 therefore carrying more weight than it was designed against, and the alert has
 fired on every run rather than on an exception, which is the shape of a threshold
 that needs revisiting rather than a provider that has changed. Not revised here:
 loosening a bound because a measurement missed it is what section 11 forbids, and
 the reading is a finding about the population rather than about the bound.
+
+**The 41 percent was phase 1's own live figure attributed to phase P, and there are
+now four numbers measuring four populations.** The 41.3 is 100 less the 58.7 percent
+`none` this store returned on the day of the passes above, so it is this phase's
+reading of everything it had fetched by 2026-08-05 and not the probe's. Phase P's own
+table, above under "Filing dates over every quarter returned", gives 77 equal and 7
+null of 538 periods, which is **15.6 percent** across the **eight** names that table
+covers; restricted to the probe's own seven, excluding RJET.US, it is 49 of 465 and
+**10.5 percent**. The sign-off obligation read the store again on 2026-08-10 and
+returned **44.60 percent** of all 435,475 periods across 5,653 tickers, and **25.00
+percent** restricted to names actually in `security`.
+
+The four are not in conflict and the sentence above was right for the wrong reason.
+They measure the probe's sample, this phase's whole fetched set at two dates, and the
+universe, and the spread between 10.5 and 44.60 is the finding: the probe's names
+were better behaved than the population, and the population is better behaved than
+the tail C03 reaches once coverage completes. What the screens actually meet is the
+universe figure, 25.00 percent [sign-off finding D].
 
 **The rejection counter conflated two populations and now separates them.** C01
 reported "2,479 below 4 clean filing gaps" where most of those had never been
@@ -634,11 +653,22 @@ on 42 of 250 names and the S4 base rate carries that qualification** until someo
 decides it does not matter.
 
 **Magnitude, stated alongside the direction, because the direction alone reads
-worse than it is.** 105 rows of 227,020 is 0.046 percent, spread over 44 tickers of
-250, the largest single shortfall being AEIS.US at 12 rows and AMT.US at 11. Whether
-a metric that can be understated by a row or two on 17 percent of names matters is
-a judgement about the screens, not a measurement, and it is not one this session
-takes.
+worse than it is.** ~~105 rows of 227,020 is 0.046 percent~~ [corrected below],
+spread over 44 tickers of 250, the largest single shortfall being AEIS.US at 12 rows
+and AMT.US at 11. Whether a metric that can be understated by a row or two on 17
+percent of names matters is a judgement about the screens, not a measurement, and it
+is not one this session takes.
+
+**The corrected magnitude is about 0.10 percent, and the error was a unit.**
+`meta.total` counts **filings**, so `PagedRead.Shortfall` and the 105 are filings.
+227,020 is the row count of `insider_transaction`, which counts **transactions**, and
+this file already establishes that a form4 filing is not a transaction. The two
+figures measured over roughly the same 250 tickers, 101,325 filings against 227,020
+transaction rows, imply about 2.2 transactions per filing, so 105 missing filings is
+nearer 235 missing transaction rows. Like for like it is 104 of 101,325 and 105 of
+about 101,000, which is the 0.10 percent the 1.7 table already reported and the
+figure to read. The mistake made the shortfall look half its size, on the one finding
+whose own text says the direction is unfavourable [sign-off finding C].
 
 AAON.US, the only ticker walked page by page before the run, was interior. It turned
 out to be representative rather than a coincidence, but that was not knowable from
@@ -1300,6 +1330,497 @@ which is arbitrary but systematic rather than random.
 The catalogue's "earnings jump the queue" is the priority rule on top of an ordering
 that does not exist underneath it, so finding 2 and this one are the same gap seen
 from two ends.
+
+### The sign-off review, step 2
+
+Ran on 2026-08-10 in a session with no commit in this repository and no part in the
+build. Read at `130fd36`, which is `878ae56` plus one documentation commit: the diff
+between them touches `PROGRESS.md` and one archived prompt and no source file, so
+step 1's results carry.
+
+**Step 1 was reproduced rather than taken on trust.** `ci.ps1` was run independently
+at `878ae56` and returned `guards.ps1` 5 checks over 65 files, 0 warnings and 0
+errors, 3 migrations applied from an empty server, nothing to apply on the second,
+and **Passed 136, Failed 0**. Counting `[Fact]`, `[Theory]` and `[InlineData]` over
+the tracked test sources also comes to 136, so the reported count is the count. All
+29 test names cited in the definition-of-done walk exist in tracked source and were
+located by name.
+
+The three questions follow. **Nothing here is corrected and no document is amended.**
+
+#### Does the code match the architecture sections phase 1 implements
+
+Largely, and the four catalogue deviations the build recorded above are real. Each
+was checked against the files it names and each stands as observed. On the readings
+the build left for this review to settle: finding 1's is right, the catalogue's Reads
+column being incomplete rather than the code being wrong; finding 2's is right, and it
+is unbuilt work rather than a line to strike; finding 5's is right and is confirmed by
+measurement below. Finding 3's cadence contradiction is real and is smaller than it
+looks, for the reason in finding B.
+
+Two further deviations were not in that set, and both are about an invariant rather
+than a catalogue line.
+
+**A. INVARIANT 10 is asserted mechanically over two of the nine registered
+components.**
+
+*Observation.* `WriteOwnershipConformanceTests.RealRegistry()` at
+`WriteOwnershipConformanceTests.cs:44` calls
+`PipelineComposition.BuildRegistry(TestDatabase.ConnectionString)`. That method's
+`apiToken` parameter defaults to null at `PipelineComposition.cs:26`, and the seven
+provider-backed stages are added only inside `if (!string.IsNullOrWhiteSpace(apiToken))`
+at line 38. Run directly: with a token the registry lists nine owners, and with a
+blank one it lists exactly two, `FlowEngine` and `RunLog`. All six assertions in that
+file build the registry the second way, so the tables actually checked are
+`flow_daily` and `run_log`. `price_daily`, `security`, `fundamental_snapshot`,
+`sentiment_daily`, `insider_transaction`, `institutional_holding` and `events` are
+outside every one of them, including
+`EveryWritingComponentIsNamedAsAWriterInSchemaDocument`, which is the assertion 1.10
+was written to add. `SCHEMA.md` does name a writer for each of those seven, so the
+parse is not the gap.
+
+`PipelineComposition.AllOwnersForConformance` exists for precisely this, passes a
+placeholder token, and is used by `RegistryNameTests` at lines 43 and 90 and by
+nothing else. So the name check sees all nine components and the write-ownership
+check sees two.
+
+*Reading.* This is the most material finding of the review. `CLAUDE.md` §5 gives the
+registry test as what makes INVARIANT 10 enforceable rather than aspirational, and
+phase 1 added seven of the eight writing components the registry now holds.
+The tests are correctly written and are pointed at the wrong registry, which is why
+they pass and why nothing about them reads as wrong. Phase 2 adds four more
+components to the same blind spot. Whether the fix is one call or a guard inside
+`BuildRegistry` is an authored question and this review takes neither.
+
+**B. C05 narrows the universe by count, and the narrowing is fixed rather than
+rotating.**
+
+*Observation.* `FlowIngestor.UniverseAsync` at `FlowIngestor.cs:137-141` reads
+`SELECT ticker FROM security WHERE is_active ORDER BY ticker LIMIT 250`. There is no
+coverage term, no staleness term and no rotation: the selection is the ordinal-first
+`flow.max_tickers_per_run` names of the active universe on every run. Measured
+against the live database on 2026-08-10: `security` holds 2,841 active rows,
+`insider_transaction` holds 226 distinct tickers, **every one of them inside ordinal
+ranks 1 to 250, and zero outside**. `flow_daily` holds 247 distinct tickers of 2,841.
+
+`CONFIG_REFERENCE.md` line 86 states of the per-run bounds that "Each stage rotates,
+preferring tickers it has not fetched, so coverage builds over several nights". C03
+does, at `FundamentalsIngestor.cs:257-261`, and its coverage did build, to 5,653
+tickers. C05 does not and its coverage cannot.
+
+*Reading.* INVARIANT 1 puts absolute filters in the universe definition and says no
+component downstream narrows by rank, score or count. C03's cap is a rate limit,
+because the ordering advances and coverage completes. C05's is not: a name is
+reachable only if it sorts within the first 250, so `insider_net_90d_usd`,
+`distinct_buyer_count` and `inst_ownership_change` are computable for 247 names of
+2,841 and the selector is ticker spelling. That is the shape `ARCHITECTURE.html` §20
+records for the news ingest, where sentiment was pulled for the top 400 by prior
+screen score and a thinly covered name could never be found, with an ordinal head in
+place of a score.
+
+It also reframes finding 3. Whether C05 runs nightly or weekly changes nothing while
+the head is fixed, because either cadence re-walks the same 250 names, so the cadence
+contradiction is the smaller half of the question and the reachable population is the
+larger one. The build's own C05 note reaches the neighbouring conclusion from the
+cost side and stops at cost: "no schedule fixes this". The coverage consequence is
+not stated there and is what phase 4 will feel, since D-58 rejected drawing a floor
+from a backfill that differs from the live screen and this is that difference in the
+population rather than in the inputs.
+
+Neither A nor B is a blocker for closing phase 1 on its own terms. Both are findings
+for a human, and both are the kind that produce no error.
+
+#### Does every number trace to something that produced it
+
+Almost all of them do, and two do not.
+
+**C. "105 rows of 227,020 is 0.046 percent" divides one unit by another.**
+`EodhdClient.GetAllPagesAsync` compares `meta.total` against the elements of the
+`data` array of `sec-filings/{t}/form4`, and those elements are **filings**, so
+`PagedRead.Shortfall` and the 105 are counted in filings. 227,020 is the row count
+of `insider_transaction`, which is counted in **transactions**. This file already
+establishes that the two are not the same thing, at "A form4 filing is not a
+transaction". The 1.7 measurement in the same phase gives 104 short of 101,325
+filings, which is 0.10 percent and is like for like; 227,020 transactions over
+roughly the same 250 tickers implies about 2.2 transactions per filing, so 105
+missing filings is nearer 235 missing transaction rows. The stated 0.046 percent is
+low by about that factor, and it is the magnitude attached to the one finding whose
+own text says the direction is unfavourable.
+
+**D. "Phase P measured 41 percent of periods unknown over seven names" traces to
+nothing.** A whitespace-tolerant multiline sweep for `41\s+percent|41\s*%` over
+`docs/` returns three hits: the claim itself, this block, and an unrelated hit rate
+in `ARCHITECTURE.html` §13. The pattern matters here rather than being ceremony. The
+claim is hard-wrapped, "41" ending line 518 and "percent" opening line 519, so a
+line-anchored sweep misses it and reports a clean pass, which is the silent failure
+`CLAUDE.md` §7 names. The filing-date table three hundred lines above that
+sentence gives 538 periods, 77 equal and 7 null across eight names, which is 15.6
+percent unknown, or 49 of 465 and 10.5 percent across the seven excluding RJET.US.
+The sentence it supports, that filing dates are worse across the wider population
+than the probe implied, is true on the measurement below; the figure it is supported
+with is not one this corpus contains.
+
+A third, smaller: that same table's Clean gaps column is periods minus equal minus
+null, while its Min column shows -4 for NVDA.US and -16 for RJET.US, so periods D-62
+classifies as negative are inside the 454. Nothing downstream reads 454, and D-62's
+floor of four is per ticker rather than off that total, so this is noted and not
+pursued.
+
+Everything else checked traces. D-71's 43 short, 104 rows of 101,325 matches the 1.7
+table exactly. The 2026-08-09 shortfall arithmetic is consistent, 42 interior plus 2
+final-only being 44 with AMT.US counted as interior, which is what
+`DescribeShortfalls` does with `ShortfallPosition.Both`. The endpoint weights are
+bracketed reads and say so. The three guessed commit figures are already corrected
+here.
+
+#### Did the build resolve any contradiction silently
+
+Mostly no, and this record is unusually forthcoming: three red commits with three
+distinct causes, two guessed figures, an allowance overspent against a stale reading,
+a retracted finding, and the late prompt archive in `130fd36` are all self-reported
+with the mechanism stated. One clause was not.
+
+**E. Checkpoint 1.13 asks that "`Worker`'s hardcoded config version goes" and it has
+not gone.** `const int configVersion = 1;` stands at `Program.cs:84` and again at
+`Program.cs:150`, in both `run-night` and `run`. What changed is the comment beside
+it, which now reads "Passed in rather than resolved inside a stage [D-43, INVARIANT
+13]". That is a true statement and it is not the clause. Nothing reads
+`StageContext.ConfigVersion`: every stage resolves through
+`context.Config.RequireAsync(key, context.Date)`, so the field is carried and unused,
+and the plan clause was answered by making it harmless rather than by removing it.
+The checkpoints-landed table records 1.13 as landed with no note that a clause of it
+is open. INVARIANT 13 itself is not breached, because as-of resolution is real,
+correct and tested in all three directions.
+
+Adjacent and from the same checkpoint: the clause says fourteen keys and
+`ConfigSeeder.Keys` holds twenty-two. The class comment tracks the growth key by key,
+but `CLAUDE.md` §7 is explicit that a code comment is not a record, and the table
+above still says "fourteen keys seeded".
+
+**F. `CONFIG_REFERENCE.md`'s rotation sentence is contradicted by the code it
+describes**, per finding B. The Consumer column for `flow.max_tickers_per_run` is
+correct and verified; it is the prose beside it that asserts a behaviour
+`FlowIngestor` does not have.
+
+**G. A27's closure is narrower than the carried-obligation row now reads.**
+`DeclaredAccess.EnsureColumnsDeclared` is called from exactly one place,
+`StageData.cs:106`, inside `BulkUpsertAsync`. `StageData.WriteAsync` checks the table
+and the operation at line 56 and does not check columns. `FlowEngine` is the one
+stage in this phase that writes through `WriteAsync` with a declared column set, at
+`FlowEngine.cs:46-54`, and its declaration is therefore unenforced. The build plan's
+closed row says the obligation "did not need to wait for C21", and C21
+ForwardReturnFiller is an Update, which is the route that is not checked. Enforced on
+the COPY path and unenforced on the SQL path is the accurate state.
+
+#### The two carried obligations owed to this sign-off, answered
+
+Both are queries against tables this phase populated, read here rather than measured
+by any new instrument.
+
+**The base rate of unknown filing dates across the whole population** [P owes 1].
+Over all 435,475 periods in `fundamental_snapshot` across 5,653 tickers: `none`
+241,232 at 55.40 percent, `equal` 168,858 at 38.78 percent, `null` 23,989 at 5.51
+percent, `negative` 1,396 at 0.32 percent. **44.60 percent of periods carry a filing
+date D-62 calls unknown.** Per ticker, 1,753 of 5,653 have zero clean gaps at all and
+3,645 have four or more. Restricted to names actually in `security`, 67,938 of
+271,731 periods are substituted, **25.00 percent**.
+
+So D-62's exclusion rule removes a meaningful slice rather than a handful: 31 percent
+of fetched tickers can never be admitted, and inside the universe one period in four
+reads late by that ticker's own widest gap. The probe's seven names could not have
+shown this. It also confirms the substitution-rate alert will fire on essentially
+every run, which the build already recorded and correctly declined to loosen.
+
+**The S4 open-market purchase base rate** [P owes 4]. Over `insider_transaction` as
+it stands, code P is present: 9,085 rows across 204 tickers, against A 63,698, M
+55,938, S 51,733 and F 30,324. Over the trailing 90 days to the newest `filed_at` of
+2026-08-07, of the 218 tickers with any row in that window, **35 have at least one P
+and 13 have two or more distinct P buyers.** So `distinct_buyer_count` does have
+something to rank on, and phase P's zero across seven names was the sample rather
+than the market, but the discriminating tail is thin: roughly one name in six shows
+any open-market purchase in a quarter and one in seventeen shows more than one buyer.
+
+**Both figures carry the same qualification and it is not a small one.** The
+population is the 226 tickers of finding B, which is the ordinal-first block of the
+universe rather than a sample of it, so neither is a universe base rate. D-71's
+interior shortfall applies on top, on 42 of 250 names.
+
+#### Smaller things, noted and not pursued
+
+The phase status table still reads `IN PROGRESS | 050d5c7`, two commits behind. The
+guard-abort definition-of-done line is proved by two tests that each cover one half,
+`ANewestDateOlderThanTheLastSessionAborts` over the real guard and
+`AGuardAbortLeavesNoRowsInAnyTableALaterStageWrites` over doubles, with the real
+guard inside the real `EveningOrder` never exercised together; the live `run-night`
+is what stands behind the joined path. Open items 4 and 5, both triggered at this
+sign-off, are unchanged: 1.8's events half and 1.1's request-form properties are
+still reachable from the definition of done only through "one night lands".
+
+`UniverseBuilder` writes `is_active` as the literal `true` and nothing sets it false,
+which the build already records; worth adding only that finding B's head is taken
+from `WHERE is_active`, so the two interact and a growing `security` shifts which 250
+names are reachable.
+
+### The correction pass on findings A, B and E
+
+Three of the sign-off findings were fixed on 2026-08-10, in the session that found
+them and at the operator's instruction. **That session is disqualified from reviewing
+its own corrections**, which is the same gap phase 0 recorded when pass O amended
+code the review had already looked at. What stands behind these three is the run
+below rather than a second reading.
+
+**Verified against the working tree rather than HEAD**, because `ci.ps1` checks out
+HEAD into a worktree and these changes are uncommitted. Its steps were run in their
+own order against the same dedicated database: `guards.ps1` **5 checks over 65
+files**, build **0 warnings 0 errors**, migrate reporting the schema already current,
+and `dotnet test` **Passed 146, Failed 0**, up from 136 by the ten tests below. The
+platform line phase 0 recorded still applies: this is Windows against an installed
+Postgres, and `ci.yml` has still never executed.
+
+**A. The write-ownership test now sees the whole registry, and nothing was hiding in
+the part it could not see.** `RealRegistry()` calls
+`AllOwnersForConformance`, which is what `RegistryNameTests` already used, so all six
+assertions now run over nine owners and nine tables rather than two. **They pass.**
+That is the result worth recording either way: the narrow scan had not been
+concealing a conflict, so INVARIANT 10 held on its own and only its enforcement was
+short. `EveryRegisteredComponentIsUnderTest` states the expected owner count as 9 and
+names the seven provider-backed stages, on the same reasoning as `guards.ps1`'s
+expected monetary count: a conformance run over two components and one over nine
+print the same green line. Phase 2 adds four components and moves that number
+deliberately.
+
+**B. C05 rotates.** `FlowIngestor.SelectionFor` applies C03's ordering, never fetched
+first then the rest then ticker ordinal, and the `LIMIT` moved out of the SQL into
+`Take(maxPerRun)` so the pool is the whole active universe. The run log now reports
+pool size, never-fetched and new-in-selection as C03's does. Five tests, over a pure
+function so no provider or database is needed: two consecutive passes select disjoint
+heads, coverage completes rather than stopping at the first page, the counts are
+reported, the ordering is ordinal rather than culture-dependent, and a name that
+returned no rows is offered again.
+
+That last one is the residue and it is asserted rather than left to be discovered. A
+ticker answering `404 Symbol not found` writes nothing, stays never-fetched, and is
+re-offered every run; 14 of 250 did so on 2026-08-08. Coverage still advances by
+every name that does return rows, so this is not an invariant breach, and the
+high-water mark that would close it is a separate decision and was not built here.
+`CONFIG_REFERENCE.md`'s claim that these stages rotate is now true of both, and the
+document was not edited to make it so.
+
+**Not fixed, and stated so it is not read as closed:** the 226 tickers already in
+`insider_transaction` stay the ordinal head until enough passes have run. The store
+is not rebuilt by this change; it is unblocked. At 250 a run against 2,841 names,
+coverage completes in about twelve passes, and the cost of those passes is the C05
+finding above rather than this one.
+
+**E. The hardcoded config version is gone.** Both sites in `Worker` resolve it
+through `ConfigStore.RequireVersionAsync`, and no literal remains. ~~The store-wide
+version is defined as the highest version any key had reached by the date being run,
+which is `CLAUDE.md` §8's per-key `MAX(version)` lifted to the whole store~~
+[superseded, D-72 as amended: **it is one plus the count of rows whose version is
+greater than one and whose `set_at` is at or before the date**]. It is
+resolved as of the simulated date for the reason INVARIANT 13 gives. That definition
+was new here and nothing in the corpus stated it before, which is why it was reported
+rather than treated as settled, and reporting it is what produced D-72.
+
+**The maximum was wrong and the reason is worth keeping.** A maximum over per-key
+versions does not distinguish configurations, which is the one job the stamp has.
+Keys at 3, 1, 1 give 3; changing the second key gives 3, 2, 1 and still gives 3, so
+two different configurations carry the same stamp from the second change onward and
+the tuner segmenting on it would pool exactly what it exists to keep apart. The
+failure is the silent kind this system is full of: every row still carries a number
+and every query still groups. D-72 replaced it with the count, which rises by one per
+change because insertion is append-only.
+
+Nothing had been stamped with the maximum: `config_version` exists only on
+`attribution` and `screen_score_daily`, both phase 4's, and phase 1 persists it
+nowhere. The wrong definition lived for one working session and no row inherited it.
+
+Absence fails the run rather than defaulting.
+`ConfigVersionNotInForceException` is separate from `ConfigNotInForceException`
+because the two say different things, one naming an unseeded key and the other saying
+the whole store post-dates the run. **Null rather than a number when nothing is in
+force**, and under the amended mechanism that is not derivable from the arithmetic:
+one plus zero revisions is 1, which is a real version, so the rows in force are
+counted separately and only an empty set returns null. A resolver that returned the
+sum alone would answer 1 for a date before the seed and the caller would stamp a run
+that had no configuration at all [`CLAUDE.md` §6].
+
+Proved in the binary rather than only in tests: `run FlowEngine 2026-08-07` against a
+seeded database prints ~~**`config v22`**, which is the seeded key count~~
+[amended] **`config v1`**, because every seeded row is version 1 and none of them is a
+change, and `run FlowEngine 2019-01-01` throws and exits non-zero. Seven tests cover
+the store-wide rule. Two carry the decision.
+`ChangingAKeyOtherThanTheHighestVersionedOneStillMovesTheStoreWideVersion` moves a key
+that is not the highest-versioned one and asserts both that the version moves, 3 to 4,
+and alongside it that a maximum would have returned the same number twice.
+`SeedingAnAdditionalKeyLeavesEveryPriorDatesVersionUnchanged` adds a key backdated
+exactly as the seeder backdates and asserts four prior dates are unmoved, and alongside
+it that a row count would have moved. Asserting what each rejected rule does, rather
+than describing it, is what stops the next session reinstating either.
+
+**One of these tests failed first and the failure was mine, not the code's.** The
+as-of assertion was hand-computed at three rows where four were in force, which is
+the same practice failure as the guessed commit figures above: a number written from
+reasoning rather than read from output. The test caught it before anything was
+recorded.
+
+#### Seeding a new key raises the count for every past date. **Closed by D-72's amendment**
+
+**Found by auditing D-72 rather than by running it, reported rather than fixed because
+D-72 is authored, and closed the same day by the operator amending its mechanism in
+place: the version now counts changes rather than rows.** The finding is kept in full
+below rather than deleted, because it is the reasoning the amendment rests on and a
+closure that removes it reads as though the mechanism had been obvious.
+
+`ConfigSeeder.SeedInstant` is the fixed literal `2020-01-01T12:00Z` and every seeded
+key carries it, at `ConfigStore.cs:116` and `:220`. That is deliberate and A9's
+reasoning for it stands: a wall-clock stamp would put every backfill date before every
+row. But the key list grows phase by phase. It was nine, then eleven, twelve, fourteen,
+fifteen, seventeen, nineteen and now **22**, and `CONFIG_REFERENCE.md` documents **74**
+live key rows, two of which are `screens.<id>.*` templates that expand once per screen.
+So roughly fifty more rows are still to be seeded, each stamped 2020-01-01.
+
+Under a count, seeding a key **raises the store-wide version for every date from
+2020-01-01 onward**, retroactively. Phase 2 seeds `percentile.cell_min_members` and a
+2021 date that resolved to 22 yesterday resolves to 23 today. Under a maximum this was
+inert, because a new key enters at version 1 and cannot raise a maximum already at 1 or
+above. ~~**The count is the definition that distinguishes configurations; the maximum
+was the one that was stable. Neither is both, and the trade was made deliberately in
+the direction the tuner needs.**~~ [answered by the closure below: counting revisions
+is both, and the trade did not have to be made]
+
+What it does not break: the tuner reads the stamp stored on the row rather than
+re-resolving the date, and attribution rows are never re-written [`CLAUDE.md` §12,
+INVARIANT 4], so segmentation still works and no stored row changes. Rows either side
+of a seeding carry different stamps, which is correct rather than spurious, because the
+store genuinely differed.
+
+~~What it does touch, and what the decision is owed on: D-72 says the count "rises by
+exactly one per change". Seeding a phase's keys raises it by however many that phase
+adds, at once, and for dates in the past. Phase 3's backfill is where it bites: rows
+stamped during a backfill record the count as it stood at backfill time, and a later
+phase's seeding makes a fresh resolution of the same date disagree with them. The
+disagreement is invisible, because both numbers are plausible integers.~~ [closed
+below; seeding now moves nothing, so phase 3's backfill is not touched]
+
+~~Two shapes would close it and neither is taken here. Seed with `set_at` at the date
+the key is genuinely introduced rather than at the window start, which trades the
+retroactivity for A9's original failure and needs A9 re-read first. Or stamp from a
+counter that only ever moves forward. **This is an authored question and phase 2 is the
+first phase that would trip it**, since it is the next one to seed a key.~~
+
+**Closed by a third shape neither of those saw.** D-72's amendment keeps `SeedInstant`
+exactly as A9 set it and changes what is counted instead: one plus the rows whose
+version is greater than one. A seed enters at version 1 and is therefore not counted,
+so seeding a key moves nothing, at any date. **A seed extends the configuration's
+schema; only a revision changes the configuration in force**, and that distinction is
+what the row count did not make. The property D-72 was written for is untouched, since
+a revision is exactly what the tuner does and exactly what has to be distinguishable.
+
+`SeedingAnAdditionalKeyLeavesEveryPriorDatesVersionUnchanged` asserts it directly over
+four dates, and asserts alongside that a row count would have moved. The store-wide
+version now begins at 1 rather than at 22, and `run FlowEngine 2026-08-07` prints
+`config v1`.
+
+**One consequence worth recording rather than leaving to be noticed.**
+`WORKED_EXAMPLE.md` stamps an attribution row `config_version` v7, which the row count
+made unreachable against 22 seeded keys and which one-plus-revisions permits: it is a
+store that has been revised six times. So the document needs no edit, and nobody has
+made one.
+
+That sentence first read as though it were closing a note raised at the sign-off. **No
+such note exists in this file.** The observation was made in conversation and never
+written here, and a claim in a chat is not a record [`CLAUDE.md` §7]. Corrected rather
+than quietly reworded, because inventing a citation to a finding that was never filed
+is exactly the failure the rule names.
+
+#### What the amended rule rests on, which is the seeder rather than the schema
+
+The amended mechanism was attacked rather than accepted, by executing candidate append
+sequences against the compiled `ResolveVersion` instead of reasoning about them. It
+holds in the direction D-72 was written for and three residues are worth carrying. None
+is a defect in the code as it stands, and **all three become live the moment a second
+writer of `config_rows` exists**, which is phase 4's tuner. `0001_snapshot.sql:449`
+already names it: "Writer: configuration and ScreenTuner".
+
+**1. Distinctness is guaranteed by `ConfigSeeder` being the only writer, not by the
+rule.** `config_rows` carries `PRIMARY KEY (key, version)` and nothing else: no check
+that a key's first version is 1, that versions are contiguous, or that version order
+follows `set_at` order. `ResolveVersion` treats `version > 1` as a proxy for "revision"
+and the schema does not enforce that reading. A new key inserted at version 1 with a
+current `set_at`, which is the natural thing for a tuner adding a sixth screen to do,
+changes what is configured from that date and moves the stamp not at all, so two dates
+with different configurations share a version. The row count did move on that case. It
+was executed: two dates, versions equal, configurations different.
+
+**2. A revision backdated before `SeedInstant` also collapses the null guard.** Rows in
+force are counted for the null test and seeds count toward that, so a pre-seed date
+with one backdated revision returns a version instead of null and
+`RequireVersionAsync` stops throwing for the date it exists to refuse. Also executed.
+
+**3. "Rises by exactly one per change" is true of rows appended, not of changes made.**
+A tuner run rewriting slots across two screens writes two rows and moves the version by
+two. Harmless to segmentation, since the dates still differ, and it contradicts D-72's
+wording rather than its property. Two further sequences move the version while the
+configuration in force does not change at all: a revert, where a value returns to what
+it was, and a revision backdated behind an existing one, where the row is never the
+resolved row on any date and still counts. **Both over-segment rather than pool**,
+which is the safe direction and is not the failure D-72 exists to prevent.
+
+**What is owed, and to whom.** Phase 4 writes the tuner and phase 4 is where all three
+land. ~~The obligation is on that writer: a revision is appended at a version above one
+with a `set_at` at or after every row already present.~~ [replaced with a resolver form]
+**The obligation is on the resolver instead: the store-wide version as of a date is the
+count of distinct `set_at` instants at or before that date.**
+
+**That is the better shape and the reason is section 5's.** A rule the writer has to
+obey is a rule someone has to remember, and nothing in `config_rows` would catch a
+tuner that forgot; a rule the resolver applies cannot be forgotten by anyone. Preferring
+to make a mistake impossible over documenting that it is wrong is what the stage
+pattern already rests on.
+
+Walked against the three residues rather than asserted. **Residue 1 closes**: a new key
+inserted at version 1 with a current `set_at` is a new distinct instant, so the stamp
+moves where `version > 1` counting left it still, and that was the serious one.
+**Residue 3 closes**: one tuner run rewriting slots across two screens writes two rows
+at one instant, which is one distinct instant and a rise of exactly one, so "rises by
+exactly one per change" becomes true of changes rather than of rows appended. **The
+revert is unchanged** and still over-segments, which is the safe direction. **Seeding
+still moves nothing**, and this is the part worth stating precisely, because a phase 4
+note that is approximately right is how phase 4 gets it wrong.
+
+**The constraint is not that every seed shares one instant.** A seed at a current
+instant is fine and correct, since it moves only dates from then on, which is when that
+key genuinely came into force. What breaks it is a seed **backdated to a new early
+instant**, which would sit before every backfill date and move all of them by one. So
+the rule is that no seed introduces a new backdated instant, and `SeedInstant` being a
+single fixed literal is one way of satisfying that rather than the requirement itself.
+
+Three things a session adopting it has to do, none of them mechanical.
+**`ConfigRow` carries a `DateOnly` and not an instant.** `SetOn` is `set_at` already
+reduced to a US Eastern date in SQL, so two tuner runs on one day are one value and the
+resolver cannot see the two instants it is being asked to count. The instant has to
+reach the record alongside the date, with the date filter left exactly as it is.
+**The null case stops being a separate branch.** Zero rows in force is zero distinct
+instants, and zero is not a version, so null falls out of the arithmetic where D-72 as
+amended needs a second counter for it. **And D-72 says something else.** Its mechanism
+is one plus the rows whose version is greater than one, which this replaces rather than
+refines, so adopting it is an amendment to D-72 and not an implementation detail. The
+code follows the decision here, not this note.
+
+Recorded rather than built, and recorded here rather than only in conversation.
+
+**Two errors of mine that the same check caught**, both corrected above rather than
+argued with. The summary on the discrimination test stated the row count's answers, 5
+and 6, three lines above assertions of 3 and 4, which is the rejected mechanism left
+standing as the stated reason for a passing test. And the `WORKED_EXAMPLE.md` paragraph
+cited a sign-off note that does not exist in this file: the observation was made in
+conversation and never written down, which `CLAUDE.md` §7 names exactly.
+
+**Finding G is not fixed** and is the one left open of the code findings.
+`EnsureColumnsDeclared` still runs on the bulk route only, and C21 is an Update on
+the route that does not check. **Findings C and D are corrected in place above**,
+struck with the correction stated, per `CLAUDE.md` §13.
 
 ## Open items carried forward
 

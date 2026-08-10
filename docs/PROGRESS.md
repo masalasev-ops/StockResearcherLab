@@ -134,9 +134,10 @@ against a database dropped first:
   migrate again                 nothing to apply, gate passed
   dotnet test --no-build        Passed 25, Failed 0
 
-**The line CI does not cover, and why.** All of them, because **no CI run has
-ever executed a step of this workflow.** The sequence, since the diagnosis
-changed twice:
+**The line CI does not cover, and why.** All of them, because ~~**no CI run has
+ever executed a step of this workflow.**~~ [struck 2026-08-10, see the observation
+below] no CI run had executed a step of this workflow when this was written. The
+sequence, since the diagnosis changed twice:
 
   Nothing registered while `ci.yml` sat only on `phase-0-rails`, because GitHub
   discovers workflows from the default branch. Merging `phase-0-rails` at
@@ -147,8 +148,8 @@ changed twice:
   type hosted even after multiple attempts*. `runner_name` empty, zero steps,
   nothing checked out. It says nothing about the code either way.
 
-  Merging pull request 2 queued nothing at all. The repository's total run count
-  is 1.
+  Merging pull request 2 queued nothing at all. ~~The repository's total run count
+  is 1.~~ [struck 2026-08-10] It was 1 when this was written.
 
 So hosted runners are not being allocated to this account. Actions is enabled
 with `allowed_actions: all`, the YAML parses with valid triggers, and the
@@ -156,6 +157,51 @@ workflow is registered and active, so it is none of those. The billing endpoint
 needs a token scope this session does not have and the condition was not read
 directly. Both pull requests were merged with the gap stated rather than with
 `CLAUDE.md` §10 quietly satisfied.
+
+**Observed 2026-08-10: runners are being allocated, and no cause is claimed.** The
+two present-tense claims above are struck and the reasoning around them is left as
+written, because accepting local evidence was correct on what was known then and
+the gap it recorded was real when recorded. `gh run list` returns five runs:
+
+| Created, UTC | Branch | Event | Head | Result | Run |
+|---|---|---|---|---|---|
+| 2026-08-06 20:32 | `main` | push | `8fb6a6e` | cancelled unassigned | `31127684749` |
+| 2026-08-10 04:08 | `phase-1-ingest` | pull_request | `ce42b3d` | success | `31354548657` |
+| 2026-08-10 04:08 | `main` | push | `742606c` | success | `31354562844` |
+| 2026-08-10 17:53 | `architecture-reconciliation` | pull_request | `bda6b35` | success | `31416323507` |
+| 2026-08-10 18:06 | `architecture-reconciliation` | pull_request | `221a487` | success | `31417394884` |
+
+The first is the one described above and is unchanged. The other four ran to
+completion and passed, and two of them predate this session: allocation resumed at
+the phase 1 merge rather than at anything done here. **No cause is known and none
+is claimed.** Nothing was done to the account, the workflow file or the repository
+between the sixth and the tenth that this record can point at, so what changed is
+the observation and not an explanation.
+
+`CLAUDE.md` §10's "CI green before merge" can be satisfied literally from here on.
+The phase 0 and phase 1 sign-offs stand as written, because a record states what
+was true when it was taken.
+
+**What the Linux runs do and do not retire.** They execute `guards.ps1` under
+pwsh, restore, build with warnings as errors, `migrate` twice against a
+`postgres:18` service container, and the whole test suite, on `ubuntu-latest`.
+They do **not** execute `SystemClock.ResolveEastern`, so the timezone question
+1.13 left open is not retired by them and is stated here rather than assumed
+closed. `Migrator` reads `_clock.UtcNow` and never `Today`
+[`Migrator.cs:87`], and every test uses `FixedClock` or a local double, so nothing
+on either path reads `SystemClock.Today`. `PipelineComposition` does construct
+`new SystemClock()` when no clock is passed [`PipelineComposition.cs:41`], which
+the conformance tests do, but `Eastern` is a `beforefieldinit` static field that
+nothing on that path reads, so the resolution is not guaranteed to have run and
+its result is never used.
+
+That matters because `InvariantGlobalization` is `true` for every project
+[`Directory.Build.props:22`], which is the condition that stopped
+`America/New_York` resolving on Windows at 1.13. Whether it also stops it on
+Linux, where the id comes from tzdata rather than from ICU, is untested here. One
+test reading `new SystemClock().Today` would settle it on the next CI run, and it
+is not written, because a session does not add a measurement to its own scope
+[`CLAUDE.md` §3].
 
 **Step 2, a review in a session that did not build the phase.** Ran at
 `d4baeaf`, in a session with no involvement in the build and no commit in this
@@ -1028,9 +1074,12 @@ signed off with step 1 met by running every `ci.yml` step by hand. The same gap
 applies to this phase and the decision is taken here so it is not taken under
 pressure later.
 
-Hosted runners are still not being allocated to this account. The repository's
+~~Hosted runners are still not being allocated to this account. The repository's
 total run count is 1: one run queued on the merge of `phase-0-rails`, sat
-fifteen minutes unassigned, and was cancelled by GitHub. It is not the YAML, the
+fifteen minutes unassigned, and was cancelled by GitHub.~~ [struck 2026-08-10, and
+the observation with its run list is in the phase 0 block above. It was true when
+written and the reasoning below it stands unchanged, since a self-hosted runner
+was not the answer either way] It is not the YAML, the
 triggers, the registration or the repository permissions, all of which were
 checked at phase 0, and it is not minute exhaustion, the repository being public.
 

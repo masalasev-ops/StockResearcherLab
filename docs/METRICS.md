@@ -402,24 +402,28 @@ monetary path.
 ### `fcf_yield`
 
 ```
-FCF      = TTM cash_from_operating + TTM cash_from_investing
+FCF       = TTM cash_from_operating - TTM capital_expenditures
 fcf_yield = FCF / market_cap(D)
 ```
 
-**FINDING, and it is a real imprecision rather than a note.** There is no
-`capital_expenditures` column. `cash_from_investing` is total investing cash flow, which
-includes acquisitions and purchases of securities, so for an acquisitive company this
-reads an acquisition as capital expenditure and understates free cash flow. For a company
-holding a securities portfolio it moves with the portfolio rather than with the business.
+**Capital expenditure on its own line, not total investing cash flow** [D-79]. Cash from
+operating plus cash from investing reads an acquisition as capital expenditure and an
+asset sale as free cash flow, and both errors land hardest on exactly the names S1 exists
+to find: an acquisitive small cap looks like it spends everything it earns, and one
+selling a division looks like it generates cash it does not. `capital_expenditures`
+arrives in `0004` with C03's parse widened to populate it from `Cash_Flow`'s
+`capitalExpenditures`.
 
-The fix is one field from an endpoint the fundamentals ingest already calls, and
-`0002_statement_fields_and_grains.sql:22-24` states its own column list is "driven by what
-valuation_daily needs in phase 2", which is exactly this. It touches C03's write set, so
-it is raised rather than taken: **recommendation is that 0004 adds
-`capital_expenditures` and C09 uses `TTM cash_from_operating - TTM capital_expenditures`.**
-Until then the formula above stands and S1's first ranking input carries the imprecision.
+**OPEN, and 2.7 closes it: the sign convention is not known from anything in this
+repository.** Providers differ on whether capital expenditure is reported as a negative
+cash outflow or as a positive magnitude, and the phase P transcripts at
+`docs/evidence/phase-P/` never printed the field, so there is no evidence here either
+way. The subtraction above assumes a positive magnitude. **Before the formula is fixed,
+2.7 reads real rows out of `fundamental_snapshot` and confirms the sign against
+`cash_from_investing` on a name with material capex.** Getting it backwards doubles free
+cash flow rather than halving it and nothing downstream errors.
 
-Null when the TTM sum is incomplete or `market_cap` is null.
+Null when either TTM sum is incomplete or `market_cap` is null.
 
 ### `ev_ebit`
 

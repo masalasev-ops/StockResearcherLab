@@ -232,6 +232,18 @@ both are above their thresholds, `risk-off` when both are below, `mixed` otherwi
 the two thresholds as config keys. The virtue is that it reuses numbers C10 computes
 anyway and adds no input.
 
+### 3.5a `fcf_yield` had no capital expenditure figure
+
+**CLOSED at 2.2 by D-79.** Raised here as a finding, authored as a decision, and taken in
+`0004` with C03's parse widened. `fcf_yield` is TTM cash from operating less TTM capital
+expenditure rather than plus total investing cash flow.
+
+One thing it leaves open, which 2.7 closes: the sign convention. Nothing in this
+repository shows the field, the phase P transcripts never printed it, and providers
+differ on whether capital expenditure is a negative outflow or a positive magnitude.
+Getting it backwards doubles free cash flow rather than halving it and nothing errors, so
+2.7 confirms it against real rows before the formula is fixed.
+
 ### 3.5 `last_two_earnings_surprises` has no input
 
 The column is `real[]` in `valuation_daily`, is bolded in §07's fixed core, and is one

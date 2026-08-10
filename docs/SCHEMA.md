@@ -106,6 +106,34 @@ Grain: ticker by day, whole universe. **Writer: SentimentIngestor.** ~380 MB.
 
 `ticker`, `date`, `article_count`, `sentiment_score`.
 
+**A day with no row is a day with no articles, not a day nobody looked** [D-78]. C04
+covers the whole universe every night with no pre-selection, and the probe found days
+carrying a non-zero count identical to days carrying a row on all seven names, so no
+empty rows are written. That is what lets `article_count` be read as zero across an
+absent day and it is the reason the derived table below can exist at all.
+
+### sentiment_derived_daily
+Grain: ticker by day [D-78]. **Writer: SentimentEngine, a compute stage, not the
+ingest.** Small.
+
+`ticker`, `date`, `article_count_z_own_90d`, `sentiment_delta_7v30`,
+`sentiment_7d_level`.
+
+Derived rather than ingested, exactly as `flow_daily` is derived from the two flow
+source tables and `indicator_daily` from `price_daily`. Ingest grain follows the
+source; consumption grain follows the screen [D-61].
+
+S3 ranks on these three and on nothing else, S5's stabilisation gate reads the first
+two, and the dossier's fixed core carries two. The three windows are named in the
+columns, so they are constants in the stage rather than config keys.
+
+**`article_count` zero-fills across an absent day and `sentiment_score` does not**, and
+the two rules are the same rule applied to absences that mean different things. There is
+no tone where there are no articles. Zero-filling the score would say the coverage was
+exactly neutral, which is a different claim from the coverage not existing, and it would
+pull every thinly covered name toward zero in proportion to how thinly covered it is.
+That is a size proxy arriving where D-12 exists to keep one out.
+
 ### headline
 Grain: candidate by day. **Writer: HeadlineIngestor.** Small.
 
@@ -195,7 +223,12 @@ Grain: ticker by day. **Writer: IndicatorEngine.** ~1.2 GB, the second largest t
 Roughly forty technical columns plus their percentiles. `atr_pct`, `adx14`,
 `dist_200dma`, `dist_52w_high`, `rs_change_21d`, `rs_change_63d`,
 `rs_change_vs_sector`, `volume_vs_50d_avg`, `ma50_200_slope`,
-`base_breakout_flag` [O.2].
+`base_breakout_flag` [O.2], and four added at 2.2 for readers that had none:
+`dist_20dma`, `rs_20d_slope`, `rs_21d_63d_change`, `dist_52w_high_20d_change`.
+
+`dist_20dma` is the signed fraction rather than the 20-day average itself, so S5's
+stabilisation gate reads `dist_20dma > 0` rather than joining back to the close. It
+matches `dist_200dma`'s shape and it keeps a price out of a `real` column.
 
 Store as 32-bit floats. No technical indicator needs fifteen significant figures and
 it halves the table.
@@ -451,12 +484,22 @@ was the previous mechanism and it had reached two entries with phase 2's forty
 technical columns still to come, at which point the guard would have been suppressed
 rather than satisfied.
 
-**The count is stated so the check cannot pass over an empty match set.** Seventeen
-columns match the monetary pattern and are `numeric`, and a check finding fewer has
-stopped reading part of the schema rather than found a cleaner one. That is not
+**The count is stated so the check cannot pass over an empty match set.** Eighteen
+columns match the monetary pattern and are `numeric` [D-79], and a check finding fewer
+has stopped reading part of the schema rather than found a cleaner one. That is not
 hypothetical: the parser written for this missed `"order"` and `"position"`, whose
-identifiers are quoted because both are reserved words, and six monetary columns
-were silently outside the set it reported on.
+identifiers are quoted because both are reserved words, and six monetary columns were
+silently outside the set it reported on.
+
+The eighteenth is `fundamental_snapshot.capital_expenditures`, which matches through
+`cap` and is money [D-79]. The number moving is the mechanism working rather than an
+inconvenience: it is exact rather than a floor precisely so that a monetary column
+cannot arrive without someone thinking about its type.
+
+The eighteenth is `fundamental_snapshot.capital_expenditures`, which matches through
+`cap` and is money [D-79]. The number moving is the mechanism working rather than an
+inconvenience: it is exact rather than a floor precisely so that a monetary column
+cannot arrive without someone thinking about its type.
 
 Everything below is a measurement, a ratio, an index or a key. None of it is a sum
 of money, and storing a technical measure as a 32-bit float halves the two largest
@@ -473,6 +516,10 @@ tables in the system [O.2].
 | `indicator_daily.rs_change_vs_sector` | `real` | a relative change |
 | `indicator_daily.volume_vs_50d_avg` | `real` | a ratio of two volumes |
 | `indicator_daily.ma50_200_slope` | `real` | a slope |
+| `indicator_daily.dist_20dma` | `real` | a distance as a fraction |
+| `indicator_daily.rs_20d_slope` | `real` | a slope of a relative strength ratio |
+| `indicator_daily.rs_21d_63d_change` | `real` | a difference of two relative changes |
+| `indicator_daily.dist_52w_high_20d_change` | `real` | a change in a distance |
 | `valuation_daily.fcf_yield` | `real` | a yield |
 | `valuation_daily.ev_ebit` | `real` | a multiple |
 | `valuation_daily.ev_ebit_vs_own_5y` | `real` | a multiple against its own history |
@@ -489,9 +536,57 @@ tables in the system [O.2].
 | `flow_daily.inst_ownership_change` | `real` | a proportional change in a share count |
 | `market_context_daily.breadth` | `real` | a fraction of the market |
 | `market_context_daily.vix` | `real` | an index level |
+| `sentiment_derived_daily.article_count_z_own_90d` | `real` | a z-score against the ticker's own baseline |
+| `sentiment_derived_daily.sentiment_delta_7v30` | `real` | a difference of two sentiment means |
+| `sentiment_derived_daily.sentiment_7d_level` | `real` | a mean of a normalised score |
 | `screen_score_daily.score` | `real` | a screen score |
 | `screen_history.floor_score` | `real` | a screen score |
 | `screen_history.p98_trailing` | `real` | a screen score percentile |
+
+### The percentile columns are not money either
+
+Thirty of them, one per ranked metric, added at 2.2. Every one is a rank between 0 and
+100 within a size and sector cell, so none is a sum of money whatever its source column
+is. They are listed rather than pattern-matched away, because the two mechanisms this
+document rejects are a list of files to skip and a rule that guesses from a name.
+
+| Column | Type | What it is |
+|---|---|---|
+| `indicator_daily.atr_pct_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.adx14_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.dist_20dma_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.dist_200dma_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.dist_52w_high_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.dist_52w_high_20d_change_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.rs_change_21d_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.rs_change_63d_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.rs_21d_63d_change_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.rs_20d_slope_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.rs_change_vs_sector_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.volume_vs_50d_avg_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.ma50_200_slope_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.median_dollar_volume_20d_pctile` | `real` | a rank between 0 and 100. Its source column is money and this is not |
+| `valuation_daily.fcf_yield_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.ev_ebit_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.ev_ebit_vs_own_5y_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.roic_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.roic_4q_change_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.gross_margin_4q_change_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.net_debt_ebitda_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.accruals_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.share_count_change_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.revenue_growth_4q_trend_pctile` | `real` | a rank between 0 and 100 |
+| `flow_daily.insider_net_90d_usd_pctile` | `real` | a rank between 0 and 100. Its source column is money and this is not |
+| `flow_daily.distinct_buyer_count_pctile` | `real` | a rank between 0 and 100 |
+| `flow_daily.inst_ownership_change_pctile` | `real` | a rank between 0 and 100 |
+| `sentiment_derived_daily.article_count_z_own_90d_pctile` | `real` | a rank between 0 and 100 |
+| `sentiment_derived_daily.sentiment_delta_7v30_pctile` | `real` | a rank between 0 and 100 |
+| `sentiment_derived_daily.sentiment_7d_level_pctile` | `real` | a rank between 0 and 100 |
+
+**Two of those names match the monetary pattern**, `insider_net_90d_usd_pctile` through
+`_usd` and `median_dollar_volume_20d_pctile` through `dollar`. Both are declared here
+for the reason above and not by an exception carved into the pattern, so the pattern
+stays a statement about names and this list stays the single place a type is argued.
 
 **Two columns whose names collide with the monetary pattern** and are not money.
 They are declared here for the same reason and by the same mechanism, so there is

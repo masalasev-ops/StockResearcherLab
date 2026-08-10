@@ -112,7 +112,10 @@ public sealed class SchemaParityTests
             "Columns whose name says money and whose type does not: " + string.Join(", ", wrong) +
             " [INVARIANT 16].");
 
-        Assert.Equal(17, monetary.Count(c => c.Type.StartsWith("numeric", StringComparison.Ordinal)));
+        // Moved 17 to 18 at 2.2: fundamental_snapshot.capital_expenditures, which
+        // matches through "cap" and is money [D-79]. guards.ps1 carries the same
+        // number against the migrations; this one is against the live database.
+        Assert.Equal(18, monetary.Count(c => c.Type.StartsWith("numeric", StringComparison.Ordinal)));
     }
 
     /// <summary>`real` and `double precision`, as `table.column`.</summary>

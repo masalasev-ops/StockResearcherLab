@@ -859,6 +859,39 @@ the reason is mechanical: the 1.10 conformance test asserts §3's registry again
 consistent by a test. The store matrix's columns were checked by nothing, which is
 why they drifted.
 
+**D-78 The derived sentiment metrics are computed by a compute-layer stage from
+`sentiment_daily`.** `ACTIVE`
+`sentiment_daily` is what the provider sends. The three forms the screens rank on are
+derived from it, exactly as `flow_daily` is derived from the two flow source tables and
+`indicator_daily` from `price_daily` [D-61]. C35 SentimentEngine reads `sentiment_daily`
+and `security` and writes `sentiment_derived_daily` at ticker by day. Windows named in a
+column stay constants rather than keys, as FlowEngine's 90 does.
+
+S3 ranks on `article_count_z_own_90d`, `sentiment_delta_7v30` and `sentiment_7d_level`
+and on nothing else, S5's stabilisation gate reads the first two, and §7's fixed core
+carries two. `sentiment_daily` holds `ticker`, `date`, `article_count` and
+`sentiment_score`, and no §3 catalogue row gave any component a path from one to the
+other. The rule was already decided by D-12; what was missing was a component and a
+store.
+
+**D-79 `fcf_yield` needs a capital expenditure figure of its own, and
+`capital_expenditures` is ingested for it.** `ACTIVE`
+Free cash flow computed as cash from operating plus cash from investing reads an
+acquisition as capital expenditure and an asset sale as free cash flow. That is S1's
+first ranking input, and both errors land hardest on exactly the names the screen is
+meant to find: an acquisitive small cap looks like it spends everything it earns, and one
+selling a division looks like it generates cash it does not.
+
+The column is one field from the fundamentals endpoint C03 already calls, and
+`0002_statement_fields_and_grains.sql` states its own column list is "driven by what
+`valuation_daily` needs in phase 2, not by what the provider happens to send", which
+covers this. It arrives in `0004` with C03's parse widened to populate it, and
+`fcf_yield` becomes TTM cash from operating less TTM capital expenditure.
+
+It is money and its name matches the monetary pattern, so it is `numeric` and it moves
+`guards.ps1`'s `ExpectedMonetary` from 17 to 18, which is that number doing the job it
+was made exact for [INVARIANT 16].
+
 ---
 
 ---

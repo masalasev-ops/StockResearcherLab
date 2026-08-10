@@ -398,3 +398,22 @@ unchanged.
 **The failure table, an entire row removed rather than left empty** [D-65]. Every
 cell of it was struck and the three rows D-65 split it into sit directly below.
 > | End-of-day file stale or short | FreshnessGuard | Abort. No orders | Check the provider. Rerun when fresh. A skipped night costs nothing |
+
+---
+
+## 2026-08-10, phase 2 checkpoint 2.2
+
+Migration `0004` and its declarations. One clean edit to a spec document, recorded
+here because D-73 makes this the only place the prior wording survives.
+
+#### `SCHEMA.md`
+
+**The monetary count, in "Columns that are not money"** [D-79]. One word, replaced
+by `Eighteen`, with the paragraph naming the eighteenth added below it. The count is
+exact rather than a floor precisely so that a monetary column cannot arrive without
+moving it, so this is the mechanism working rather than a correction.
+> Seventeen
+
+Nothing else was removed. The rest of 2.2's changes to `SCHEMA.md` are additions:
+the `sentiment_derived_daily` section, four column names on `indicator_daily`, and
+thirty-seven rows declaring new `real` columns as not money.

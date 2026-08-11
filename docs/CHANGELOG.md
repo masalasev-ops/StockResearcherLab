@@ -891,3 +891,37 @@ after four deviations had gone unnoticed. Write ownership is asserted against
 `SCHEMA.md` rather than against the catalogue, so §03's Writes cells are checked by
 nobody, and this one drifted at the first opportunity it had. Recorded as a finding in
 `PROGRESS.md` rather than fixed here.
+
+---
+
+## 2026-08-11, D-92 to D-95
+
+Phase 3's four decisions authored from the plan at
+`prompts/BuildPlans/phase-3-backfill.md` §3, and `BUILD_PLAN.md` phase 3 gaining its
+eighteen checkpoints, an amended fourth done-when line and eleven carried-obligation
+landings. Human-directed transcription; the decisions were authored before the plan was
+built against [`CLAUDE.md` §13].
+
+**`BUILD_PLAN.md`'s fourth done-when line for phase 3, clean edit, prior wording verbatim
+below.** The line was conditionally unsatisfiable and did not say so. Byte identity holds
+for compute over a store whose ingest has not moved, and does not survive a re-ingest of
+fundamentals, because `filing_date_effective` is computed at ingest from the ticker's
+widest clean gap known at that moment and a widest gap only grows [D-62's stated
+limitation]. The replacement states both halves. Removed:
+
+> a replay of one historical date produces byte-identical output to the first run
+
+**Nothing else was removed.** The checkpoint table is new, and the eleven obligation rows
+gained a landing appended to text that is otherwise unchanged, so neither has a prior
+wording to quote.
+
+**`BUILD_PLAN.md` is not one of D-73's four clean-edit documents** and its existing
+supersessions are struck in place, so this file now carries both conventions. The clean
+edit was directed rather than derived, and the inconsistency is recorded here rather than
+resolved, because which convention `BUILD_PLAN.md` follows is authored and this entry is
+not the place to decide it.
+
+**No code and no schema.** D-92's `security_daily`, D-95's `flow_fetch_attempt` and
+D-93's `IBackfillStage` are all declared here and built at the checkpoints that name
+them, so `SCHEMA.md` gains nothing yet: a declaration ahead of its column fails a parity
+check for a column that is correctly absent.

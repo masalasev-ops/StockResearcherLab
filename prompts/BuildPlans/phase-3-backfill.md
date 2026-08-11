@@ -5,9 +5,18 @@
 **Read against** `ARCHITECTURE.html` §02, §03, §04, §14, §16 and §19, `SCHEMA.md`,
 `METRICS.md` §1 and §6, `VALIDITY.md` §5 and §6, and `SCREEN_LIFECYCLE.md` §3 and §9,
 at HEAD `443f3cf`.
-**Status** `DRAFT`. The numbered checkpoints below are phase scope and are authored into
-`BUILD_PLAN.md` by a human, not from here [`CLAUDE.md` §13]. Four items in §3 are
-authored content and block the checkpoints that name them.
+**Status** `DRAFT`, which is the only value this corpus uses for a plan:
+`phase-2-compute.md` is still `DRAFT` and phase 2 is signed off and merged. The
+numbered checkpoints below are phase scope and were authored into `BUILD_PLAN.md` by a
+human rather than from here [`CLAUDE.md` §13].
+
+**§3's four items are closed.** D-92, D-93, D-94 and D-95 were authored into
+`DECISIONS.md` on 2026-08-11 under a new Backfill section, verbatim from §3 and each
+`ACTIVE`. `BUILD_PLAN.md` phase 3 gained the eighteen checkpoints, the amended fourth
+done-when line and eleven carried-obligation landings in the same pass, with the prior
+wording of the done-when line in `CHANGELOG.md`. The clauses stay below as the text that
+was authored from, following `phase-2-compute.md` §3.2's precedent of marking an item
+closed rather than deleting it.
 
 ---
 

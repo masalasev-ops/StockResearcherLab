@@ -1342,6 +1342,121 @@ and is untouched, the two stages sharing no selection code. It is carried in
 
 ---
 
+## Backfill
+
+Authored 2026-08-11 at phase 2's sign-off, from the plan drafted in
+`prompts/BuildPlans/phase-3-backfill.md` §3. Authored before any phase 3 code, because
+each blocks a checkpoint that cannot be built without it [`CLAUDE.md` §13].
+
+No entry below rests on a measurement and none exists to rest on: the backfill has not
+run, and D-92 and D-94 are what decide what it will produce [`CLAUDE.md` §11]. The four
+numbers run in the order the decisions were drafted rather than in the order the plan
+presents them, and nothing is missing between them.
+
+**D-92 Universe membership, size bucket, market cap and sector are stored per date in
+`security_daily`. `security` keeps identity alone.** `ACTIVE`
+C11 ranks inside size-bucket-by-sector cells [D-10] and `security` carries one row per
+ticker, so a backfilled 2021 date would rank every name in its 2026 cell. The cell is
+the population D-10 defines, and a percentile computed over a slightly wrong cell is not
+inspectable afterwards: nothing downstream can see it or correct it.
+
+Deriving it at read time was weighed and does not work. The bucket itself derives, being
+a comparison of one name's market cap against two absolute config floors
+[`UniverseBuilder.Bucket`], but C11's cell is `(size_bucket, sector)` and the
+fifteen-member test counts the non-null population in that cell on that date, so ranking
+one row needs every other row's bucket and sector on the same date. Market cap as-of
+needs `shares_outstanding` readable on `filing_date_effective <= date`, and sector is a
+provider call with no history from this source at all. The derivation is therefore the
+whole store recomputed per date, which is a store.
+
+A month-end grain was weighed and rejected for the reason the derivation was rejected
+against: it puts an approximation underneath cell membership rather than beside it.
+
+`security_daily` is ticker by date, written by UniverseBuilder, carrying `sector`,
+`size_bucket`, `market_cap` and `is_active`. `security` keeps `ticker`, `name`,
+`first_seen`, `last_seen` and `delisted_date`, which is identity and lifespan. Every
+reader meaning "the universe on a date" reads `security_daily`; a reader meaning "this
+ticker" reads `security`.
+
+This subsumes the `is_active` obligation rather than sitting beside it. C01 having no
+path that deactivates a name was a phase 1 finding [`PROGRESS.md`, 2026-08-09] and it
+stops mattering for any read, because membership is reconstructable per date by
+construction rather than by a flag someone has to remember to clear.
+
+Sector is the one column that is not point-in-time, and that is stated rather than
+hidden. This provider carries no sector history, so a ticker's sector is fetched once and
+carried across the window. A reclassification inside the window is invisible, which is a
+bounded distortion of cell membership and is recorded in `PROGRESS.md` rather than
+proxied.
+
+**C01's cadence does not change and that is deliberate.** `ARCHITECTURE.html` §3 runs it
+weekly on Sunday. The backfill evaluates membership on the same weekly cadence and C11
+reads the most recent `security_daily` row at or before the date, so backfilled cells sit
+on the identical population rule as live ones. That is D-58's principle applied to
+membership: a floor drawn from a population the live system does not share is not a
+floor.
+
+**D-93 A backfill is the registered components executed over a range. No component exists
+that a night does not run.** `ACTIVE`
+`SCHEMA.md` names PriceIngestor as `price_daily`'s writer and IndicatorEngine as
+`indicator_daily`'s, and the conformance test asserts no two components claim the same
+component-table-operation triple [INVARIANT 10]. A `HistoricalPriceIngestor` would be a
+second claim on the same triple, and `ARCHITECTURE.html` §3 would not name it, which
+`RegistryNameTests` catches. Neither is an accident of the machinery: a loader with its
+own arithmetic is a second implementation of every formula, and the reference fixtures at
+2.5 to 2.8 would then cover half of what runs.
+
+So the range mode is a second entry point on the same class.
+`IBackfillStage.ExecuteRangeAsync(from, to)` beside `IStage.ExecuteAsync(date)`.
+`WriteSet`, `ReadSet`, the registry and §3 are all unchanged.
+
+Config resolves per date being computed, not once for the range [D-43, INVARIANT 13]. A
+window key resolved at the range end would give a backfilled date a different answer from
+a nightly re-run of the same date, which is exactly the equality phase 3's fourth
+done-when line asserts.
+
+Idempotence rather than a transaction is what makes an interrupted backfill resumable,
+which D-68 already states in as many words: one transaction spanning twelve million rows
+is its own failure mode.
+
+**D-94 The backfill window start is a stored date, and the compute window is the only
+bound on how deep the price load goes.** `ACTIVE`
+`eod/{t}` costs one unit for five years or twenty, so the load depth is a disk decision
+rather than a unit one and the loader takes whatever the call returns. What is bounded is
+the range compute runs over, and it is bounded by a date rather than by a count of years.
+
+A count of years resolved against the run date moves the window on every re-run, so two
+backfills over one store would compute different date sets and phase 3's fourth done-when
+line could not be tested at all. A stored date resolves as-of by the same rule as every
+other key and gives the same window whenever it is read [D-43, INVARIANT 13]. It is also
+the D-83 case: a bound stated as a number of years is a claim about what a later phase
+will need, where the compute window is a bound someone can check.
+
+There is a floor underneath it that the key does not show. `ConfigSeeder.SeedInstant` is
+2020-01-01 and `RequireVersionAsync` fails for any earlier date [D-72], so no stage
+resolves config before it whatever `price_daily` holds. `price_daily` reaching further
+back than the pipeline can compute for is the intended state rather than a defect: the
+extra history costs bytes now and cannot be re-fetched cheaply once it is the deep past.
+
+**D-95 FlowIngestor orders on its own attempt record, and the two rotations share their
+ordering rule rather than a table.** `ACTIVE`
+`FlowIngestor.SelectionFor` carries C03's defect unchanged: never-fetched first, then
+ticker ordinal, so it freezes on the alphabetical head once the pool is covered, and the
+14 of 250 that answer `404 Symbol not found` stay never-fetched and are re-asked on every
+run [D-91, which names this as not closed by it].
+
+`flow_fetch_attempt`, one row per ticker, four columns, written for every selected ticker
+whether or not the fetch yielded rows, read strictly before the run date. That is D-91's
+shape applied to the component it explicitly left open, and its three reasons carry over
+unchanged: the record is of the attempt, attempts are read strictly before the run date,
+and universe membership is a tiebreak rather than a tier.
+
+A shared table was rejected: two components writing one table is two claims on one triple
+[INVARIANT 10]. What is shared is the ordering function, so the two rotations cannot
+drift apart the way the code and the catalogue did.
+
+---
+
 ---
 
 ## Open

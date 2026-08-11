@@ -746,6 +746,45 @@ AAON.US, the only ticker walked page by page before the run, was interior. It tu
 out to be representative rather than a coincidence, but that was not knowable from
 one ticker and the note above was right not to claim it.
 
+#### form4 pages newest-first, measured 2026-08-11, and D-71's classification holds
+
+**The ordering was assumed by two things and had never been measured.** D-71
+classifies a short final page as putting the missing rows at the oldest end, and
+`EodhdClient.cs:62-66` states it in the same terms. Both hold only if the endpoint
+pages newest-first. Nothing in this file established that it does.
+
+Bracketed between two `/api/user` reads, which cost nothing, against CCS.US, whose
+`meta.total` reads 325 in 7 pages of 50, unchanged from the 325 measured on
+2026-08-09.
+
+| | `filed_at` | `accession_number` |
+|---|---|---|
+| Page 1, first row | **2026-08-04** | `0001576940-26-000059` |
+| Page 1, last row | 2024-03-19 | `0001576940-24-000029` |
+| Page 7, offset 300, first row | **2015-08-19** | `0001562762-15-000245` |
+| Page 7, last row | 2014-07-02 | `0001209191-14-045522` |
+
+**The endpoint pages newest-first.** Page one opens eleven years after the last page
+opens, and within each page `filed_at` descends. Two data pages, 20 units, measured
+by the bracket at 90,498 before and 90,518 after.
+
+**So D-71's classification is confirmed rather than corrected, and nothing above is
+struck.** A short final page does put the missing rows at the oldest end, outside
+every trailing window. The 42 interior against 2 final stands as recorded, the
+unfavourable direction is the real one, and the qualification on
+`insider_net_90d_usd`, `distinct_buyer_count` and phase P's S4 purchase base rate is
+right as written. Had the ordering gone the other way all three would have been
+wrong in the opposite direction, which is the reason the check was worth its 20
+units.
+
+**One incidental figure, measured and worth having.** CCS.US's first page of 50
+filings spans 2026-08-04 back to 2024-03-19, so a trailing ninety-day window sits
+well inside page one for this name. It is one ticker and not a distribution, and it
+bears on what a nightly read could cost. No change is designed here.
+
+**The allowance stood at 90,498 of 100,000 before this probe**, on a day whose
+ingest had already run.
+
 ### The night of 2026-08-09, and four findings it produced
 
 The allowance reset mid-session and the whole of phase 1's remaining live work ran

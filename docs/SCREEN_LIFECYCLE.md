@@ -424,12 +424,34 @@ neither unreachable nor immediate.
 
 For a paired comparison, meaning a successor or an extraction against its named
 incumbent, the floor is **250 paired observations**, where a paired observation is one
-ticker on one date carrying both screens' ids after truncation. **DRAFT FIGURE.** It
-rests on pairing removing the market, regime and cell variance the unpaired comparison
-carries, which is what the brief's own argument for pairing says, and on 250 being the
-count at which the paired comparison is still asked over roughly a season of overlap
-rather than a week. Nothing measured supports the specific number and a human should
-set it.
+ticker on one date carrying both screens' ids after truncation.
+
+**DRAFT FIGURE, and what it rests on is an assumption rather than a preference.** The
+variance of a paired difference is `2σ²(1 - ρ)`, so a paired test matches an unpaired
+one's power at `n_paired = n_unpaired × (1 - ρ)`. Against the unpaired floor of 1,000
+above, 250 is exactly `ρ = 0.75`. That is not an observation about the number; it is the
+assumption the number already makes, and stating it is what makes the number
+falsifiable. A reader who thinks a shadow and its incumbent overlap less than that now
+knows precisely which quantity to disagree about, and by how much the floor moves if
+they are right: at `ρ = 0.5` the floor is 500, and at `ρ = 0.9` it is 100.
+
+**The assumption is observable, and revising the floor on the observation is not
+result-shopping.** The realised correlation between a shadow's per-observation
+peer-relative return and its incumbent's is computable the moment both have run over
+the same names on the same dates, which is what pairing already requires. Measuring it
+measures **the precision of the instrument, not the answer the instrument gives**: `ρ`
+says how many observations a paired test needs and says nothing whatever about whether
+the shadow beat the incumbent. So re-setting the floor on a measured `ρ` is the one kind
+of after-the-fact adjustment `CLAUDE.md` §11 does not forbid, and this paragraph exists
+so that the first person to measure `ρ` knows that before they measure it rather than
+after.
+
+**What would still be result-shopping**, stated so the permission is not read wider than
+it is. Re-setting the floor after seeing the paired difference. Or setting it from a `ρ`
+measured over the same window the promotion is then decided on, which lets the floor be
+chosen by the data it will be applied to. The measurement that revises this floor is a
+property of the pair, taken before the comparison it sizes is read, and recorded as a
+`config_rows` version like every other value that moves [`CLAUDE.md` §8].
 
 ### 6.3 The sustained-fail requirement
 
@@ -565,12 +587,15 @@ several inputs to a live screen, where it can be outvoted. An extraction is pair
 against the screen it was extracted from, on the same terms as a successor.
 
 **Additions** are orthogonal to every live screen and are judged against the family
-with §8.2's correction, because the best of four looks better than four independent
-things.
+mean, because the best of four looks better than four independent things.
 
-**Extractions and successors are both paired against a named incumbent, so there are
-two statistical treatments across three kinds, and only additions carry the
-multiplicity correction.**
+**Extractions and successors are both paired against a named incumbent, so there are two
+statistical treatments across three kinds.** The treatments differ in what the bar is
+stated against and in which standard error sizes it, and not in whether §8.2's
+multiplicity correction applies. It applies to both, counted within each family
+separately, because promoting whichever of k paired shadows wins selects the maximum of
+k exactly as promoting whichever of k additions wins does. Pairing shrinks the standard
+error; it does not remove the selection across tests.
 
 ### 7.1 Two of the four proposed additions are not orthogonal, and are reclassified
 
@@ -762,41 +787,60 @@ the ones the formula is about.
 **What is proposed instead acknowledges that k candidates were run and has no free
 parameter.**
 
-An addition's promotion bar is stated against the live family's mean 21-day
-peer-relative alpha over the same window at the same depth, and the margin it must clear
-is the expected maximum of k draws:
+The promotion bar is stated against a reference, and the margin it must clear is the
+expected maximum of k draws:
 
 ```
-required margin = sqrt(2 * ln(k)) standard errors of the addition's own estimate
+required margin = sqrt(2 * ln(k)) standard errors
 ```
 
-where k is the number of **additions** under evaluation at that boundary.
+**It is one rule, and the two families differ only in what k counts and which standard
+error is used.**
 
-| k additions | Margin, standard errors |
+| | Reference the bar is stated against | k counts | Standard error |
+|---|---|---|---|
+| **Addition** | The live family's mean 21-day peer-relative alpha over the same window at the same depth | Additions under evaluation at that boundary | Of the addition's own estimate |
+| **Successor or extraction** | Zero, the paired difference against its named incumbent | Paired shadows under evaluation at that boundary | Of the paired difference |
+
+| k | Margin, standard errors |
 |---|---|
 | 1 | 0.00 |
 | 2 | 1.18 |
 | 3 | 1.48 |
 | 4 | 1.67 |
 
-It is the expected maximum of k independent standard normal draws, which is the exact
-statement of "the best of four looks better than four independent things". It falls to
-zero at k = 1, which is correct, because one addition run alone needs no multiplicity
-correction. It rises with k rather than being a fixed penalty, so registering more
-candidates raises the bar for all of them, which is the incentive the correction is for.
-It needs only the standard error of an estimate the tuner must compute in order to shrink
-anything at all.
+**Pairing removes the selection within a test, not the selection across tests.** That is
+why the paired family carries the correction too, and it was the first reading here that
+it did not. Running k paired tests and promoting whichever wins selects the maximum of
+k, exactly as running k additions does. What pairing buys is a smaller standard error,
+which is §6.2's floor, and a smaller standard error makes the same margin easier to
+clear rather than unnecessary.
 
-**Successors and extractions carry no multiplicity correction**, because they are paired
-against a named incumbent and the comparison is one test rather than a selection from
-k. Their bar is a paired mean difference in 21-day peer-relative return that is positive
-over §6.2's 250 paired observations, sustained across §6.3's three evaluations.
+`sqrt(2 ln k)` is the expected maximum of k independent standard normal draws, which is
+the exact statement of "the best of four looks better than four independent things". It
+rises with k rather than being a fixed penalty, so registering more candidates raises the
+bar for all of them, which is the incentive the correction is for. And it needs only a
+standard error, which the tuner must compute in order to shrink anything at all.
 
-**DRAFT FIGURE:** whether the paired bar carries a magnitude as well as a sign. A sign
-alone promotes a screen that is trivially better; a magnitude has to be chosen and there
-is nothing to choose it from. `VALIDITY.md` §4 uses 1.5 percentage points at 21 days for
-the unpaired BUY-against-PASS separation, and a paired bar should be smaller than that
-because pairing removes the market, regime and cell variance. A human sets it.
+**It is inert at k = 1 in both families, and that is correct in both.** One addition run
+alone is not a selection from a set and needs no correction; one paired shadow run alone
+is the same statement about the same quantity. At the family as registered, two
+extractions and two additions, the margin is 1.18 standard errors on each side, because
+k is counted within a family rather than across the registry: an addition and an
+extraction are not competing for the same seat, and pooling them would penalise each for
+the other's existence.
+
+**So D-90 moves the additions bar and nothing else**, which is worth seeing while that
+fork is still open. X-FM and X-PEAD are the two additions, so declining to register
+X-PEAD leaves one addition, k = 1, and the correction is inert on the addition side
+while staying at 1.18 on the paired side. That is the rule behaving correctly rather
+than a hole in it, and it is a reason to decide D-90 deliberately rather than by
+default: registering a second addition raises the bar on the first.
+
+**Not a sign alone**, for the reason §6.7 already gives. A promotion costs a rubric, a
+changed prefix hash and a bundled break in the primary claim's comparability, so it must
+not fire on an edge that noise would produce. A bar of "the paired difference is
+positive" fires at one standard error of nothing about half the time it is asked.
 
 ### 8.3 Where the quota system stops working
 
@@ -923,7 +967,7 @@ an absent one.
 |---|---|---|---|
 | `screens.<id>.state` | `live` for S1 to S5 | ScreenEngine, CandidateAllocator | The registration itself. Three values, and the whole of C13's behavioural change |
 | `lifecycle.min_prospective_observations` | 1000 | ScreenTuner | §6.2's floor, taken from `VALIDITY.md` §4 |
-| `lifecycle.min_paired_observations` | 250 | ScreenTuner | §6.2's paired floor. **DRAFT FIGURE** |
+| `lifecycle.min_paired_observations` | 250 | ScreenTuner | §6.2's paired floor, which encodes `ρ = 0.75`. **DRAFT FIGURE**, and the one key here a measurement is expected to revise, which is the reason it is a versioned key rather than a constant |
 | `lifecycle.consecutive_evaluations` | 3 | ScreenTuner | §6.3's sustained-fail requirement |
 | `lifecycle.evaluation_horizon_days` | 21 | ScreenTuner | §6.1's horizon. A key rather than a literal so a test can assert it matches `VALIDITY.md` §4's pre-registered horizon, which is the same reason `tuner.benchmark_column` is a key |
 | `lifecycle.counts_backfilled_observations` | `false` | ScreenTuner | §5.2. A key so that the prohibition is visible in configuration and a test can assert it is false, rather than being a condition somebody has to remember not to relax |
@@ -935,7 +979,7 @@ at eight slots, and whether they stay as keys, become the proportion's inputs, o
 retired is a phase 4 question this document does not close.
 
 **No key is introduced for the multiplicity correction**, because `sqrt(2 ln k)` has no
-parameter and k is counted from the registry.
+parameter and k is counted from the registry, within a family rather than across it.
 
 ---
 
@@ -997,9 +1041,19 @@ the register's own form: the rule as a bolded sentence, then the reason.
 > 40-day time stop means an edge appearing only at 63 days is one this portfolio cannot
 > hold to. A screen may be nominated only with at least 1,000 prospective observations,
 > which is `VALIDITY.md` §4's per-side count used unchanged, or 250 paired observations
-> where it is paired against a named incumbent. A nomination requires three consecutive
-> monthly evaluations, so a quarter is the shortest path to one. A fail nominates and
-> does not execute. C22 ScreenTuner computes the measure for every registered screen and
+> where it is paired against a named incumbent. The 250 encodes `ρ = 0.75` and nothing
+> else, since a paired test matches an unpaired one's power at `n × (1 - ρ)`; the
+> correlation is observable once both screens have run and re-setting the floor on a
+> measured one sizes the instrument rather than choosing the answer, which is the single
+> after-the-fact adjustment `CLAUDE.md` §11 permits, provided the measurement precedes
+> the comparison it sizes. A promotion clears a margin of `sqrt(2 ln k)` standard errors,
+> k counted within a family, against the live family's mean for an addition and against
+> zero for a paired shadow. One rule for both, because promoting whichever of k paired
+> shadows wins selects the maximum of k exactly as it does for additions: pairing shrinks
+> the standard error and does not remove the selection across tests. A nomination
+> requires three consecutive monthly evaluations, so a quarter is the shortest path to
+> one. A fail nominates and does not execute. C22 ScreenTuner computes the measure for
+> every registered screen and
 > allocates slots among the live ones only, because that measure is already what it
 > computes and a second component computing it is one fact stated twice, which is the
 > defect D-76, D-77 and D-83 each removed. Its write set gains `screen_evaluation`,
@@ -1273,9 +1327,14 @@ tuning" note and before "Three rules the filler needs from day one":
 > parameter: trend measured on price against trend measured on earnings revisions is a
 > mechanism, while the same trend over a different lookback is a parameter, and parameter
 > variants are what the tuner already does with slots. An addition is orthogonal to every
-> live screen, is judged against the family, and carries a correction for the fact that
-> several were run at once, because the best of four looks better than four independent
-> things.
+> live screen and is judged against the family mean instead.
+>
+> **Both kinds carry the same correction for the fact that several were run at once**,
+> because the best of four looks better than four independent things and that is as true
+> of four paired tests as of four unpaired ones. Pairing buys a smaller standard error,
+> and a smaller standard error makes the margin easier to clear rather than unnecessary.
+> The margin is inert where only one candidate of a kind is under evaluation, which is
+> correct: one candidate is not a selection from a set.
 >
 > **The measure is peer-relative return at 21 days and never absolute alpha**, for
 > INVARIANT 5's reason: against a large-cap index every small-cap candidate posts
@@ -1442,5 +1501,8 @@ open.
 **D-69.** §7.6 states what an S4 retirement would mean given the family has no cover for
 the flow axis. It does not answer D-69, which is a phase 4 decision on its own terms.
 
-**Whether the paired promotion bar carries a magnitude.** §8.2 marks it a draft figure
-and says what it would have to rest on.
+**What `ρ` actually is.** §6.2's paired floor of 250 encodes `ρ = 0.75` and says so. The
+realised correlation between a shadow's per-observation peer-relative return and its
+incumbent's is a measurement, and this document takes none. It states which measurement
+would revise the floor, why taking it is sizing the instrument rather than choosing the
+answer, and what would make the same measurement result-shopping instead.

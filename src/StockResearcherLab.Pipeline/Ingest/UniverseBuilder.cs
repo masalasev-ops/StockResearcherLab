@@ -145,7 +145,18 @@ public sealed class UniverseBuilder : IStage
         return new StageResult(written, "ok", detail);
     }
 
-    private static string Bucket(decimal marketCap, decimal largeFloor, decimal midFloor)
+    /// <summary>
+    /// The size bucket, which is total: every market capitalisation takes one of three
+    /// values and none takes null.
+    ///
+    /// Public so the test that C11's fallback rests on reads this rule rather than a
+    /// copy of it [2.10]. `METRICS.md` §6.4 says a null <c>size_bucket</c> cannot
+    /// arise, and that claim is this function being total plus a member having cleared
+    /// D-4's market capitalisation floor to be here at all. Without it a reader cannot
+    /// tell whether the bucket hole was reasoned about or missed, and the percentile
+    /// fallback would need a third step for a case that does not exist.
+    /// </summary>
+    public static string Bucket(decimal marketCap, decimal largeFloor, decimal midFloor)
         => marketCap >= largeFloor ? "large" : marketCap >= midFloor ? "mid" : "small";
 
     private readonly record struct Member(

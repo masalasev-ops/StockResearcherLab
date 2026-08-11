@@ -5,6 +5,7 @@ using StockResearcherLab.Core.Config;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data;
 using StockResearcherLab.Pipeline.Compute;
+using StockResearcherLab.Pipeline.Ingest;
 using StockResearcherLab.Tests.Corpus;
 using Xunit;
 
@@ -221,29 +222,59 @@ public sealed class PercentileEngineTests
     /// A member cleared D-4's market capitalisation floor, so it has a market
     /// capitalisation, so C01 assigned it a bucket. The sector hole is real and the
     /// bucket hole is not, and a reader cannot otherwise tell which of the two was
-    /// reasoned about. This is what makes the claim fail if C01 ever changes
-    /// [`METRICS.md` §6.4].
+    /// reasoned about [`METRICS.md` §6.4].
+    ///
+    /// **This is the rule rather than the data, and that is the half that survives a
+    /// fresh database.** <c>ci.ps1</c> drops and recreates its own, so a query over
+    /// `security` there asserts over nothing at all. The rule is total: every market
+    /// capitalisation takes one of three values and none takes null, so the claim fails
+    /// here if C01 ever gains a fourth branch that returns one.
     /// </summary>
     [Fact]
-    public async Task EveryActiveUniverseMemberHasASizeBucket()
+    public void TheSizeBucketRuleIsTotalAndNeverReturnsNull()
+    {
+        const decimal largeFloor = 10_000_000_000m;
+        const decimal midFloor = 2_000_000_000m;
+
+        decimal[] capitalisations =
+        [
+            300_000_000m, midFloor - 1m, midFloor, midFloor + 1m,
+            largeFloor - 1m, largeFloor, largeFloor + 1m, 4_000_000_000_000m,
+        ];
+
+        foreach (var cap in capitalisations)
+        {
+            var bucket = UniverseBuilder.Bucket(cap, largeFloor, midFloor);
+
+            Assert.Contains(bucket, new[] { "large", "mid", "small" });
+        }
+
+        // The boundaries themselves are inside the larger bucket, which is what makes
+        // the three exhaustive rather than leaving a gap between them.
+        Assert.Equal("large", UniverseBuilder.Bucket(largeFloor, largeFloor, midFloor));
+        Assert.Equal("mid", UniverseBuilder.Bucket(midFloor, largeFloor, midFloor));
+        Assert.Equal("small", UniverseBuilder.Bucket(midFloor - 1m, largeFloor, midFloor));
+    }
+
+    /// <summary>
+    /// The same claim against whatever universe is in the store, which is the half that
+    /// would catch C01 writing a null through some route the rule above does not cover.
+    ///
+    /// **It asserts nothing against an empty database and that is deliberate.** The
+    /// rule test above is what holds in CI; this one is what holds against a store C01
+    /// has actually built, and requiring a populated universe here would fail every
+    /// run from a fresh schema for a reason that is not a defect.
+    /// </summary>
+    [Fact]
+    public async Task NoActiveUniverseMemberCarriesANullSizeBucket()
     {
         var ct = TestContext.Current.CancellationToken;
 
         await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
         await using var cmd = new NpgsqlCommand(
-            """
-            SELECT count(*) FILTER (WHERE size_bucket IS NULL), count(*)
-            FROM security WHERE is_active;
-            """, conn);
+            "SELECT count(*) FROM security WHERE is_active AND size_bucket IS NULL;", conn);
 
-        await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(true);
-        await r.ReadAsync(ct).ConfigureAwait(true);
-
-        var withoutABucket = r.GetInt64(0);
-        var active = r.GetInt64(1);
-
-        Assert.True(active > 0,
-            "There is no universe to assert over, so this test would pass over nothing.");
+        var withoutABucket = (long?) await cmd.ExecuteScalarAsync(ct).ConfigureAwait(true);
 
         Assert.True(withoutABucket == 0,
             $"{withoutABucket} active security row(s) carry no size_bucket. The fallback stops at " +

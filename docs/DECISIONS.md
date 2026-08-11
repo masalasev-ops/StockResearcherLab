@@ -906,6 +906,69 @@ the staged path builds its staging table from the written columns alone, so the 
 nothing about columns a stage does not write, and this is the first place in the codebase
 where two stages share a table's rows rather than a table.
 
+**D-82 EBIT is not substituted from operating income, and the threshold that decided
+it was fixed before the measurement.** `ACTIVE`
+Settles whether `ev_ebit` and `roic` may read `operating_income` where `ebit` is absent.
+
+`ebit` is null on the latest readable quarter for 946 of 3,897 names and 847 of those
+carry `operating_income`. That is what holds `ev_ebit` to 2,203 names, and the gap is
+not neutral: it excludes names by which ones this provider happens to populate a field
+for, which is a selection effect on a screen input rather than a property of the
+companies.
+
+**The rule was written down before the number existed** [`CLAUDE.md` §11]. Substitute
+if the median of `abs(ebit - operating_income) / abs(ebit)` over rows carrying both is
+under 2% **and** the 90th percentile is under 10%. The two thresholds are not
+arbitrary: `ev_ebit` is ranked inside a cell, so a couple of percent moves a name a rank
+or two and is tolerable, while a tail past 10% moves names across deciles and is not.
+
+Measured over 380,281 quarterly rows carrying both: median **1.01%**, 75th **13.9%**,
+90th **63.9%**, 99th **942%**. Over the 2,942 latest readable quarters alone: median
+**4.90%**, 75th **23.1%**, 90th **84.3%**. The median passes and the tail fails by six
+to eight times, which is the exact failure the 90th percentile threshold was set to
+catch, so the substitution is refused.
+
+**The selection effect stays open rather than being closed by a worse answer.** What
+the measurement establishes is that operating income is not available as a stand-in at
+an error a ranked column can carry, not that the gap is acceptable. Whoever revisits it
+needs a different input, not a different threshold, and lowering the bound because a
+measurement missed it is what `CLAUDE.md` §11 prohibits.
+
+**D-81 `cash_on_hand` reads the reported cash line where the parts line is absent, and
+the coalesce to zero is narrowed to short-term investments.** `ACTIVE`
+Supersedes the `cash_on_hand` rule in `METRICS.md` §3 as authored at 2.1.
+
+The rule was `coalesce(cash_and_equivalents, 0) + coalesce(short_term_investments, 0)`,
+falling back to `cash` only when both parts were absent. It is now
+`coalesce(cash_and_equivalents, cash) + coalesce(short_term_investments, 0)`, null when
+both `cash_and_equivalents` and `cash` are absent.
+
+**The old rule zeroed an absent part in both directions and only one of them is a
+zero.** A company reporting cash and equivalents with no short-term investments line has
+no short-term investments, which is the case the original reasoning gives and which
+occurs 5 times across the store's latest readable quarters. The mirror case, short-term
+investments present with no cash and equivalents line, occurs **1,644 times**, and on
+699 of those the reported `cash` line is at least twice the investments figure.
+`NFLX.US` carried 28,678,000 under a column that says cash on hand, against a reported
+`cash` of 9,099,232,000.
+
+**Which line stands in was measured before the rule was chosen.** Reading another
+reported line from the same statement is not inventing data, so the question was only
+whether `cash` is the parts line under another name or the total. Over the 8,411
+quarterly rows carrying all three where short-term investments are non-zero, `cash`
+equals `cash_and_equivalents` **6,710** times exactly and equals their sum **13** times;
+at a one percent tolerance, 7,083 against 757. It is the parts line, by two orders of
+magnitude, so it substitutes for the part and the investments are still added.
+
+**5 names lose a value and that is the intended direction.** Where neither cash line is
+present the column was the investments figure alone and is now null, because an absence
+a reader can see is worth more than a number wrong by whatever the cash line would have
+been [`CLAUDE.md` §6].
+
+The column is not ranked [`METRICS.md` §6.5], so no percentile moves. It is sent to the
+dossier for magnitude and is the denominator of runway against `quarterly_burn_rate`,
+which is where the old figure was doing damage.
+
 **D-80 The regime label takes three values, and the benchmark test needs no
 threshold.** `ACTIVE`
 Settles the enumerated values `market_context_daily.regime_label` holds.

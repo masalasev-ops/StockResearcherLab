@@ -2895,6 +2895,109 @@ ordered by `date` for `market_context_daily`.
 
 ---
 
+## The fundamentals rotation, 2026-08-11
+
+### It stopped rotating once coverage completed, and the row count never said so
+
+`CandidatesAsync` defined `fetched` as any ticker with any row in
+`fundamental_snapshot`, ordered never-fetched first, then in-universe, then ticker
+ordinal, and took `fundamentals.max_tickers_per_run`. Once the pool was covered the
+never-fetched group was empty and ticker ordinal decided everything, so the same
+alphabetically-first 500 names were selected on every subsequent run, for ever.
+
+**Measured before the change, 2026-08-11:**
+
+| | |
+|---|---|
+| Tickers with `capital_expenditures` | **482**, running contiguously `A.US` to `CCBG.US` |
+| `valuation_daily` rows with `fcf_yield` | **464** |
+| `valuation_daily` rows in total | **5,713** |
+| Distinct tickers in `fundamental_snapshot` | 5,653 |
+| Active universe | 2,841 |
+
+**The clearest single figure is that the numerator has not moved while the
+denominator has.** `fcf_yield` covered 464 of 3,897 rows when phase 2 recorded it and
+464 of 5,713 now: the same 464, so coverage fell from 11.9 percent to 8.1 percent
+without a single thing going wrong that a row count could show. Two consecutive runs
+wrote an identical 44,365 rows over an identical 500 tickers, and `fcf_yield` is S1's
+first ranking input while three of five screens read fundamentals.
+
+### The record has to be of the attempt, and both obvious columns fail on one case
+
+A `fetched_at` column on `fundamental_snapshot` moves only when rows are written, and
+a ticker whose fetch returns nothing writes nothing, so its freshness never moves and
+it holds the head of the rotation for ever. That is the same defect as the fourteen
+tickers that answer `404 Symbol not found` in the flow ingest, one component over:
+**never fetched** conflates *not yet attempted* with *attempted and empty*.
+
+A column on `security` fails differently. C03's pool is the candidate set, which 1.8
+made deliberately broader than the universe, so a pool member with no `security` row
+would have nowhere to record an attempt.
+
+So `fundamental_fetch_attempt`, one row per ticker, written for every selected ticker
+whether or not the fetch yielded rows [0006]. `last_yield_date` null means attempted
+and never yielded, which is a different fact from an absent row, which means never
+attempted. No counter column, because a tally would not be idempotent under D-68.
+
+**The ordering is now: never attempted, then oldest attempt, then universe member,
+then ordinal.** The universe tier moved from a tier to a tiebreak deliberately:
+ranking it above freshness would starve every pool member outside `security`
+permanently, which is this same defect in another dress, since the universe is
+refreshed every run and is therefore never exhausted.
+
+### The rotation advances between dates and never between runs
+
+Attempts are read **strictly before the run date**, so a re-run of one date sees the
+state the first run saw and selects the same names. Without that the stage would stop
+being a pure function of its date and config version, which is the property that makes
+a night replayable [`CLAUDE.md` §6].
+
+It is the same point-in-time discipline every fundamental read already applies to
+`filing_date_effective`, and it is the reason the obvious implementation, ordering by
+an attempt timestamp, would have been wrong even though it looks equivalent.
+
+### What is measured and what is not
+
+**Measured:** the before-state above, and seven tests over a six-member pool and a
+rotation of two.
+
+**Not measured, and it cannot be today.** The after-state of `fcf_yield` coverage
+needs enough runs to cycle a pool of roughly 4,800 at 500 a run, which is about ten
+runs at ~5,000 units each. The allowance stood at 90,518 of 100,000 after the form4
+ordering probe, so there is room for one run today and not for ten. The figure is
+owed, and it is the observable this change exists to move.
+
+The coverage line now separates new from refreshed and names the oldest attempt date
+in the selection, so a frozen rotation is visible in the run log rather than in a
+query someone thought to write. A run that is entirely refreshed on a pool with
+never-attempted names left in it is the defect; entirely refreshed on a fully
+attempted pool is the rotation working.
+
+### C05 has the same defect and is not fixed here
+
+`FlowIngestor.SelectionFor` orders never-fetched first then ticker ordinal, so it
+freezes on the alphabetical head the moment the universe is covered, exactly as C03
+did. Its own summary already names the residue: the 14 of 250 that answer `404 Symbol
+not found` stay never-fetched and are re-asked every run, recorded as "the residue a
+high-water mark would close. Not built here."
+
+`fundamental_fetch_attempt` is the shape that closes it, and applying it to C05 is a
+carried obligation rather than part of this change. The two stages have no shared
+selection code, so nothing here alters C05's behaviour.
+
+### `ARCHITECTURE.html` §3's C03 Writes cell is now incomplete, and is not edited
+
+The cell reads `fundamental_snapshot` and the component now writes
+`fundamental_fetch_attempt` as well. Nothing asserts that cell: the read conformance
+test parses the Reads column only, and `SchemaDocument` is what write ownership is
+held against, so `ci.ps1` is green with the cell as it stands.
+
+Reported rather than closed, because the Writes column is authored prose stating what
+a component does and `CLAUDE.md` §13 makes that a human's to write. It is carried in
+`BUILD_PLAN.md`.
+
+---
+
 ## Open items carried forward
 
 Found and not closed. Each names what triggers it. The pass narratives behind

@@ -103,6 +103,39 @@ a rise in `equal` is its date handling changing, and `negative` is a date that
 cannot exist and should never appear at all. The substitution rate stays measurable
 rather than invisible.
 
+### fundamental_fetch_attempt
+Grain: one row per ticker. **Writer: FundamentalsIngestor.** Tiny.
+
+`ticker`, `last_attempted_date`, `last_yield_date`, `rows_last_attempt`.
+
+**The record is of the attempt, not of the result, and that is the whole point of
+it** [0006]. C03 ordered never-fetched first, where fetched meant any row in
+`fundamental_snapshot`. Once the pool is covered that group is empty, so the same
+alphabetically-first names are selected on every run afterwards and coverage never
+advances: `capital_expenditures` reached 482 tickers running contiguously from
+`A.US` to `CCBG.US` and stopped there, while two consecutive runs wrote an identical
+44,365 rows over an identical 500 tickers.
+
+A `fetched_at` column on `fundamental_snapshot` would not fix it. That column moves
+only when rows are written, so a ticker whose fetch returns nothing never moves and
+sits at the front of the rotation for ever. A column on `security` fails differently:
+C03's pool is the candidate set, deliberately broader than the universe, so a pool
+member with no `security` row would have nowhere to record an attempt.
+
+**`last_yield_date` null means attempted and never yielded, which is a different fact
+from an absent row, which means never attempted.** Those are the two states the old
+ordering conflated [`CLAUDE.md` §6].
+
+**No counter column, because a tally would not be idempotent.** Each column is a
+function of the last attempt alone, so a second run over one date writes what the
+first wrote [D-68].
+
+**The rotation reads attempts strictly before the run date.** A re-run of one date
+therefore sees the state the first run saw and selects the same names, so the stage
+stays a pure function of its date and config version; the rotation advances between
+dates rather than between runs. That is the discipline every fundamental read already
+applies to `filing_date_effective` [INVARIANT 12, INVARIANT 13, `CLAUDE.md` §6].
+
 ### sentiment_daily
 Grain: ticker by day, whole universe. **Writer: SentimentIngestor.** ~380 MB.
 

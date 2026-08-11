@@ -945,10 +945,21 @@ prose is a claim with no owner. A rule plus a pointer is a claim someone can che
 and if nothing can check it, that is worth knowing at the moment the sentence is
 written rather than at the sign-off two phases later.
 
+**The rule is not scoped to the four spec documents.** [added after the fact] It applies
+wherever a count is stated as fact and nothing checks it. A number a script prints on
+every run is read more often than one in a document, and a comment restating a value the
+assertion below it already checks is a second statement of one fact, which is the shape
+every instance of this defect has had. Both cases were found at the phase 2 sign-off
+after the first pass had been scoped to `docs/`: `guards.ps1` named the technical column
+count in its header and in the rationale it prints on every run, and
+`SchemaParityTests` carried a comment saying seventeen above an assertion of eighteen.
+
 This does not reach a count that a test does read. `SCHEMA.md`'s "Eighteen columns
 match the monetary pattern and are `numeric`" stays, because `guards.ps1` asserts it
 against the migrations and `SchemaParityTests` asserts it against the live database,
-and the paragraph says why it is exact rather than a floor.
+and the paragraph says why it is exact rather than a floor. The distinction is whether
+the number is the assertion or a restatement of it: the assertion stays and the
+restatement goes.
 
 `PROGRESS.md`'s fifteen stays as it is. It is a record of what was built and of an
 estimate that moved to a measurement, not a spec, and records keep their strikes

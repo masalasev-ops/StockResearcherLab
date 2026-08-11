@@ -456,3 +456,34 @@ entry because the change is identical in shape at each: `Writer: X.` becomes
 > **Writer: FlowEngine, a compute stage, not the ingest.**
 
 > **Writer: SentimentEngine, a compute stage, not the ingest.**
+
+---
+
+## 2026-08-10, phase 2 checkpoint 2.14
+
+`ARCHITECTURE.html` amended: C35 SentimentEngine gains a catalogue row.
+
+Numbered 2.14 rather than inserted, because a checkpoint number is a plan reference
+and not an execution order, which 1.9 established. The plan's Stage A runs 2.1 to
+2.4 and this arrived after 2.3. An
+architecture amendment rather than a removal, so nothing verbatim is recorded below
+and this entry exists because the document changed.
+
+D-78 authored the component at 2.2 and `SCHEMA.md` named it as a writer at 2.3, but
+§3 did not have it. `SchemaDocument.WritersByTable` keeps only bolded words §3
+catalogues, so `sentiment_derived_daily` parsed to one writer rather than two, and
+2.8 registering the component would have tripped `RegistryNameTests`, which is the
+check that exists for exactly this.
+
+- §3 gains a C35 row after C34, matching that row's markup: `NEW` badge, a `muted`
+  description citing D-78, Runs `Daily 18:05`, Writes `sentiment_derived_daily`.
+- Its Reads cell names `sentiment_daily` and `security` in `<code>`, and says what
+  the `security` read is for, because D-74 made that standing. A row written after
+  that decision honours it at birth rather than becoming a fifth deviation someone
+  finds later.
+- §1's layer 2 list gains C35 beside C08, C09, C10, C11 and C34.
+
+`CataloguedComponents` moves 34 to 35. The amendment as issued said 35 to 36; the
+constant read 34 and §3 carried exactly 34 rows, both checked before the edit. The
+figure is an observation rather than a decision, so it is corrected here rather than
+carried [`CLAUDE.md` §13].

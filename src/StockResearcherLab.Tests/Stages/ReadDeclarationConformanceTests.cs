@@ -40,7 +40,7 @@ public sealed class ReadDeclarationConformanceTests
     /// because a parser that stopped matching returns an empty map, and an empty map
     /// makes the catalogue-to-code direction below pass over nothing.
     /// </summary>
-    private const int CataloguedComponents = 34;
+    private const int CataloguedComponents = 35;
 
     /// <summary>
     /// The one place the catalogue and the code disagree, recorded rather than

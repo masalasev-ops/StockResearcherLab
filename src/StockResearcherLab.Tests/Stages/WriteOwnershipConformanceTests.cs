@@ -66,7 +66,9 @@ public sealed class WriteOwnershipConformanceTests
     /// for the same reason: five checks finding nothing over two components produce a
     /// line indistinguishable from five checks finding nothing over nine.
     ///
-    /// It moves deliberately when a phase adds a component. Phase 2 adds four.
+    /// It moves deliberately when a phase adds a component. Phase 2 adds five:
+    /// C08, C09, C10, C11 and C35, the last authored at D-78 after this comment
+    /// was written and after C34 had already been built early with D-61's ingest.
     /// </summary>
     private const int ExpectedOwners = 9;
 

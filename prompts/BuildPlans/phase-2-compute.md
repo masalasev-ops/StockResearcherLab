@@ -177,6 +177,12 @@ _pctile value unchanged.
 
 ### 3.2 C35 SentimentEngine, or a widened C08
 
+**CLOSED.** D-78 authored at 2.2, `SCHEMA.md` naming it as a writer at 2.3, and the §3
+catalogue row plus the §1 layer-2 entry at 2.14. `CataloguedComponents` moved 34 to 35.
+The amendment as issued said 35 to 36; the constant read 34 and §3 carried exactly 34
+rows, both checked before the edit, and the figure is an observation rather than a
+decision.
+
 `article_count_z_own_90d`, `sentiment_delta_7v30` and `sentiment_7d_level` are named in
 §05 as S3's entire ranking basis, in §05's gate table for S5, and in §07's fixed core.
 `sentiment_daily` holds `ticker`, `date`, `article_count`, `sentiment_score` and nothing

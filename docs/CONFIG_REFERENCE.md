@@ -156,7 +156,7 @@ of them [INVARIANT 14]. Formulas and null rules are in `METRICS.md`.
 | `valuation.own_history_min_points` | 24 | 2.1 | ValuationEngine | verified 2026-08-11 |
 | `market.breadth_ma_days` | 200 | 2.1 | MarketContextEngine | unverified |
 | `market.sector_composite_min_members` | 5 | 2.1 | IndicatorEngine, MarketContextEngine | unverified |
-| `sentiment.min_baseline_days` | 20 | 2.1 | SentimentEngine | unverified |
+| `sentiment.min_baseline_days` | 20 | 2.1 | SentimentEngine | verified 2026-08-11 |
 | `market.regime_breadth_high` | 0.60 | D-80 | MarketContextEngine | verified 2026-08-10 |
 | `market.regime_breadth_low` | 0.40 | D-80 | MarketContextEngine | verified 2026-08-10 |
 

@@ -58,6 +58,7 @@ public sealed class NightlyRun
         "FlowEngine",           // C34 18:05
         "IndicatorEngine",      // C08 18:05
         "ValuationEngine",      // C09 18:05
+        "SentimentEngine",      // C35 18:05
         "MarketContextEngine",  // C10 18:05, after C08 because breadth reads indicator_daily
     ];
 

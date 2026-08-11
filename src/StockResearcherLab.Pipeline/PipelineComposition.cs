@@ -36,6 +36,7 @@ public static class PipelineComposition
             new FlowEngine(),
             new IndicatorEngine(),
             new ValuationEngine(),
+            new SentimentEngine(),
             new MarketContextEngine(),
         };
 

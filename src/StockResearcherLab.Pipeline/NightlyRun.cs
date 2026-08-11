@@ -60,6 +60,7 @@ public sealed class NightlyRun
         "ValuationEngine",      // C09 18:05
         "SentimentEngine",      // C35 18:05
         "MarketContextEngine",  // C10 18:05, after C08 because breadth reads indicator_daily
+        "PercentileEngine",     // C11 18:15, last, because it ranks what the four above wrote
     ];
 
     private readonly StageRegistry _registry;

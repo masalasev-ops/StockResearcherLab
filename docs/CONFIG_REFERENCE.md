@@ -130,7 +130,7 @@ and both are given so the next reader can find it either way.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `percentile.cell_min_members` | 15 | D-10 | PercentileEngine | unverified |
+| `percentile.cell_min_members` | 15 | D-10 | PercentileEngine | verified 2026-08-11 |
 
 **It counts the non-null population for the metric being ranked, not the cell** [2.1].
 A cell of twenty members where five carry a value for one metric otherwise produces a

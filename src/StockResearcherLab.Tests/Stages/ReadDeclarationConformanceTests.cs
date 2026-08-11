@@ -33,7 +33,7 @@ public sealed class ReadDeclarationConformanceTests
     ///
     /// It moves deliberately when a phase adds a stage.
     /// </summary>
-    private const int ExpectedStages = 12;
+    private const int ExpectedStages = 13;
 
     /// <summary>
     /// Section 3 catalogues thirty-four components. Asserted rather than assumed,
@@ -110,7 +110,7 @@ public sealed class ReadDeclarationConformanceTests
                      "PriceIngestor", "FreshnessGuard", "FundamentalsIngestor", "UniverseBuilder",
                      "SentimentIngestor", "FlowIngestor", "EventsIngestor", "FlowEngine",
                      "IndicatorEngine", "ValuationEngine", "SentimentEngine",
-                     "MarketContextEngine",
+                     "MarketContextEngine", "PercentileEngine",
                  })
         {
             Assert.True(stages.ContainsKey(expected), $"{expected} is registered and is not under test.");

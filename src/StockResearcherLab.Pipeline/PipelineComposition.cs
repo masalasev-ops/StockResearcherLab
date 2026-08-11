@@ -38,6 +38,7 @@ public static class PipelineComposition
             new ValuationEngine(),
             new SentimentEngine(),
             new MarketContextEngine(),
+            new PercentileEngine(),
         };
 
         if (!string.IsNullOrWhiteSpace(apiToken))

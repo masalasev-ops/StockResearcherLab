@@ -560,16 +560,25 @@ Null below eight qualifying periods.
 ### `cash_on_hand`
 
 ```
-coalesce(cash_and_equivalents, 0) + coalesce(short_term_investments, 0)
+coalesce(cash_and_equivalents, cash) + coalesce(short_term_investments, 0)
 ```
 
-falling back to `cash` when both are absent, and null when all three are absent.
+null when both `cash_and_equivalents` and `cash` are absent [D-81].
 
-**The coalesce to zero here is deliberate and is the one place in this document that
-does it.** A company reporting cash and equivalents but no short-term investments line has
-no short-term investments, which is zero rather than unknown, and treating it as unknown
-would null the field for most of the universe. The fallback to `cash` covers the shape
-where the provider sends the aggregate and not the parts. `numeric`.
+**The coalesce to zero applies to short-term investments and to nothing else, and that
+asymmetry is the rule rather than an oversight.** A company reporting cash and
+equivalents but no short-term investments line has no short-term investments, which is
+zero rather than unknown. The mirror case is not the same fact: an absent cash and
+equivalents line is a line the provider did not send, not a company holding no cash, and
+reading it as zero wrote the investments figure alone under a column that says cash on
+hand. Measured at the phase 2 sign-off, that happened 1,644 times against the justified
+case's 5.
+
+**`cash` substitutes for the part rather than for the total, and which one it is was
+measured before the rule was written.** Over the quarterly rows carrying all three with
+non-zero short-term investments, `cash` equals `cash_and_equivalents` far more often
+than it equals their sum, so it is the parts line under another name and the investments
+are still added to it [D-81, counts in `PROGRESS.md`]. `numeric`.
 
 Sent in the dossier for small and mid buckets only [§07].
 
@@ -726,12 +735,18 @@ is read by the cached prefix [§07], stored on every attribution row [`SCHEMA.md
 shown on screen U1, and named as what makes S1's and S5's size tilt "regime dependent"
 [§05].
 
+**The authored rule is D-80 and it is not the proposal below.** D-80 makes the
+benchmark a sign test rather than a second threshold, and `0005_regime_label.sql`
+enforces the three values as a `CHECK`. Read D-80 for what the column holds; the
+proposal is kept as the record of what was offered. This section stays BLOCKED because
+promoting it belongs with the other eight PROPOSAL entries, as one act.
+
 Proposal offered for authoring: three labels from two facts C10 already computes.
 
 ```
-risk-on  when breadth >= market.regime_breadth_high
+risk_on  when breadth >= market.regime_breadth_high
              and the universe composite is above its own 200-day average
-risk-off when breadth <= market.regime_breadth_low
+risk_off when breadth <= market.regime_breadth_low
              and the universe composite is below its own 200-day average
 mixed    otherwise
 ```
@@ -761,7 +776,11 @@ cell = (security.size_bucket, security.sector)
 ```
 
 Percentiles are computed within size bucket by sector cells, falling back to size bucket
-alone when a cell has fewer than `percentile.cell_min_members` members [D-10, default 15].
+alone when a cell carries fewer than `percentile.cell_min_members` **non-null values for
+the metric being ranked** [D-10, default 15]. The floor counts the population, not the
+cell, and §6.2 is where that is stated in full: a cell of sixty members carrying twelve
+values for a sparse metric falls back, and at the phase 2 sign-off 18 of the 21 cells
+that fell back for `fcf_yield` were thin in exactly that way rather than in members.
 A $1B name is scored against its peers, not against megacaps.
 
 ### 6.2 The population, and why the fallback counts per metric

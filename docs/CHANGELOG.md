@@ -515,3 +515,65 @@ phrase.
 now name PercentileEngine in their own `SCHEMA.md` headings [D-77], so the cell names
 the four tables. No test reads that cell, so this is tidiness rather than a fix, and
 it is recorded as such.
+
+---
+
+## 2026-08-11, phase 2 sign-off
+
+`ARCHITECTURE.html` §3 and `METRICS.md` §3, §5 and §6.1 amended, all four from findings
+in the sign-off review. Removals, so the prior wording is recorded verbatim below.
+
+**§3's C11 row stated a different rule from the one the code implements, and the two
+disagree on real cells.** It said the fallback fires when a cell has fewer than 15
+members. The implemented rule is fewer than 15 non-null values for the metric being
+ranked, which is what `CONFIG_REFERENCE.md` has stated since 2.1 and what `METRICS.md`
+§6.4 states in its fallback list. On the blessed date 21 cells fell back for
+`fcf_yield`, and only 3 of them have fewer than 15 members, so 18 cells and all 110
+fallen-back names are treated differently under the two wordings. The code is right and
+the sentence was the loose one. Removed:
+
+> Ranks inside size bucket by sector cells, falling back to size bucket alone when a
+> cell has fewer than 15 members
+
+**`METRICS.md` §6.1 carried the same loose wording two pages from its own §6.2 and
+§6.4, which carry the strict one.** The document disagreed with itself. Removed:
+
+> Percentiles are computed within size bucket by sector cells, falling back to size
+> bucket alone when a cell has fewer than `percentile.cell_min_members` members [D-10,
+> default 15].
+
+**`METRICS.md` §3's `cash_on_hand` rule is superseded by D-81.** The coalesce to zero
+ran in both directions and only one of them is a zero. Removed:
+
+> ```
+> coalesce(cash_and_equivalents, 0) + coalesce(short_term_investments, 0)
+> ```
+>
+> falling back to `cash` when both are absent, and null when all three are absent.
+>
+> **The coalesce to zero here is deliberate and is the one place in this document that
+> does it.** A company reporting cash and equivalents but no short-term investments line
+> has no short-term investments, which is zero rather than unknown, and treating it as
+> unknown would null the field for most of the universe. The fallback to `cash` covers
+> the shape where the provider sends the aggregate and not the parts. `numeric`.
+
+**`METRICS.md` §5 named regime label values the database rejects.** The proposal block
+spelled them `risk-on` and `risk-off` where D-80, `SCHEMA.md` and
+`0005_regime_label.sql`'s `CHECK` all use underscores, so a reader reproducing the
+document's literals would have written rows Postgres refuses with 23514. Corrected to
+underscores, with a pointer added naming D-80 as the authored rule. The section stays
+BLOCKED, because promoting it belongs with the other eight PROPOSAL entries and is one
+act rather than nine. Removed:
+
+> ```
+> risk-on  when breadth >= market.regime_breadth_high
+>              and the universe composite is above its own 200-day average
+> risk-off when breadth <= market.regime_breadth_low
+>              and the universe composite is below its own 200-day average
+> mixed    otherwise
+> ```
+
+`METRICS.md` is not one of the four documents D-73 names as kept clean. It carried no
+strikes before this, so the removals are clean edits with the prior wording recorded
+here rather than struck in place. If the intent is that it keeps its strikes, this entry
+is what makes that reversible.

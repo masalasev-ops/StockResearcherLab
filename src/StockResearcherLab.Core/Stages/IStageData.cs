@@ -72,4 +72,20 @@ public interface IBulkWriter
 
     /// <summary>Writes one column. Null means unknown and is written as NULL, never as zero [CLAUDE.md section 6].</summary>
     Task WriteAsync<T>(T? value, CancellationToken ct = default);
+
+    /// <summary>
+    /// Writes one <c>jsonb</c> column from a JSON document held as a string.
+    ///
+    /// **It needs its own method because binary COPY carries no type name and the
+    /// driver infers one from the CLR type.** A string infers `text`, whose binary
+    /// form is the bytes themselves, where `jsonb` expects a one-byte format version
+    /// first. Postgres then reads the document's own opening brace as that version
+    /// and refuses the row with "unsupported jsonb version number 123", which is
+    /// `{` [2.9, found at 2.12 by running C10].
+    ///
+    /// Declared here as an intent rather than as a provider type, so `Core` keeps no
+    /// reference to the driver. The mapping from intent to wire format belongs to
+    /// whatever implements this.
+    /// </summary>
+    Task WriteJsonAsync(string? json, CancellationToken ct = default);
 }

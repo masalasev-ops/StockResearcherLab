@@ -74,7 +74,12 @@ public sealed class MarketContextEngine : IStage
                 await w.WriteAsync<float?>(null, c).ConfigureAwait(false);
 
                 await w.WriteAsync(label, c).ConfigureAwait(false);
-                await w.WriteAsync(sectors, c).ConfigureAwait(false);
+
+                // jsonb rather than text, named rather than inferred. Binary COPY
+                // carries no type name, and the two formats differ by one leading
+                // version byte that the driver cannot know to write from a string
+                // [2.9, found at 2.12].
+                await w.WriteJsonAsync(sectors, c).ConfigureAwait(false);
             }, ct).ConfigureAwait(false);
 
         var detail = string.Format(

@@ -1,4 +1,6 @@
 using Npgsql;
+using StockResearcherLab.Core.Stages;
+using StockResearcherLab.Data;
 using StockResearcherLab.Pipeline.Compute;
 using StockResearcherLab.Tests.Corpus;
 using Xunit;
@@ -133,6 +135,78 @@ public sealed class MarketContextEngineTests
             () => cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken)).ConfigureAwait(true);
 
         Assert.Equal("23502", ex.SqlState);
+    }
+
+    /// <summary>
+    /// The stage's own write path, which nothing exercised until 2.12 ran it.
+    ///
+    /// **`sector_relative_strength` is `jsonb` and binary COPY carries no type name.**
+    /// The driver infers one from the CLR type, a string infers `text`, and the two
+    /// formats differ by a leading one-byte format version. Postgres read the
+    /// document's opening brace as that version and refused the row with "unsupported
+    /// jsonb version number 123", which is `{`. The stage could not write at all, and
+    /// every test above went to the rule or to the constraint rather than through the
+    /// write, so all of them passed.
+    ///
+    /// This goes through <see cref="IBulkWriter"/> as the stage does, with the same
+    /// column set, rather than through a plain `INSERT` where the type is named in the
+    /// SQL and the failure cannot occur.
+    /// </summary>
+    [Fact]
+    public async Task TheJsonbColumnIsWrittenThroughTheBulkPathAndReadsBackAsAnObject()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var date = new DateOnly(2001, 3, 17);
+
+        await using (var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true))
+        {
+            await ClearAsync(conn, date).ConfigureAwait(true);
+        }
+
+        var data = new StageData(
+            TestDatabase.ConnectionString,
+            new DeclaredAccess("TestMarketContext", [],
+                [new TableWrite("market_context_daily", WriteOperation.Insert, MarketContextEngine.Columns)]));
+
+        const string sectors = """{"Energy":-0.012340,"Technology":0.045600}""";
+
+        await data.BulkUpsertAsync(
+            "market_context_daily", MarketContextEngine.Columns, ["date"],
+            async (w, c) =>
+            {
+                await w.StartRowAsync(c).ConfigureAwait(false);
+                await w.WriteAsync(date, c).ConfigureAwait(false);
+                await w.WriteAsync((float?) 0.55f, c).ConfigureAwait(false);
+                await w.WriteAsync<float?>(null, c).ConfigureAwait(false);
+                await w.WriteAsync(MarketContextEngine.Mixed, c).ConfigureAwait(false);
+                await w.WriteJsonAsync(sectors, c).ConfigureAwait(false);
+            }, ct).ConfigureAwait(true);
+
+        await using (var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true))
+        {
+            await using (var cmd = new NpgsqlCommand(
+                """
+                SELECT jsonb_typeof(sector_relative_strength),
+                       (sector_relative_strength ->> 'Technology')::float8,
+                       (SELECT count(*) FROM jsonb_object_keys(sector_relative_strength))
+                FROM market_context_daily WHERE date = @d;
+                """, conn))
+            {
+                cmd.Parameters.AddWithValue("d", date);
+                await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(true);
+
+                Assert.True(await r.ReadAsync(ct).ConfigureAwait(true));
+
+                // Read back as a document rather than as a string, which is what
+                // separates a jsonb column that holds JSON from one that holds bytes
+                // Postgres could not parse.
+                Assert.Equal("object", r.GetString(0));
+                Assert.Equal(0.0456, r.GetDouble(1), 6);
+                Assert.Equal(2L, r.GetInt64(2));
+            }
+
+            await ClearAsync(conn, date).ConfigureAwait(true);
+        }
     }
 
     private static async Task ClearAsync(NpgsqlConnection conn, DateOnly date)

@@ -1,4 +1,5 @@
 using Npgsql;
+using NpgsqlTypes;
 using StockResearcherLab.Core.Stages;
 
 namespace StockResearcherLab.Data;
@@ -198,6 +199,25 @@ public sealed class StageData : IStageData
             }
 
             await importer.WriteAsync(value, ct).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// The one place a wire type is named rather than inferred.
+        ///
+        /// Inferred from a string it is `text`, and `text` and `jsonb` differ in
+        /// binary COPY by one leading version byte. Postgres then reads the
+        /// document's opening brace as that byte, so the failure names a version
+        /// number of 123 and neither the column nor the row [2.9, found at 2.12].
+        /// </summary>
+        public async Task WriteJsonAsync(string? json, CancellationToken ct = default)
+        {
+            if (json is null)
+            {
+                await importer.WriteNullAsync(ct).ConfigureAwait(false);
+                return;
+            }
+
+            await importer.WriteAsync(json, NpgsqlDbType.Jsonb, ct).ConfigureAwait(false);
         }
     }
 }

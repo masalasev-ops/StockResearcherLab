@@ -417,3 +417,42 @@ moving it, so this is the mechanism working rather than a correction.
 Nothing else was removed. The rest of 2.2's changes to `SCHEMA.md` are additions:
 the `sentiment_derived_daily` section, four column names on `indicator_daily`, and
 thirty-seven rows declaring new `real` columns as not money.
+
+---
+
+## 2026-08-10, phase 2 checkpoint 2.3
+
+D-77 applied. The count of permitted splits removed from `SCHEMA.md`'s opening, the
+four compute tables naming both their writers, and the percentile-columns section no
+longer naming one.
+
+#### `SCHEMA.md`
+
+**The exception enumeration, the whole paragraph** [D-77]. Removed rather than
+amended: the percentile engine takes the count from three splits over five tables to
+seven over nine, and no number survives the next correct design either. The paragraph
+replacing it carries the reasoning without a count and cites D-77. Its own last
+sentence is why it went, and that sentence is kept in the replacement.
+> The exception list was the wrong shape rather than too short. `attribution`,
+> `proposal`, and `order` with `fill` and `position` each had more than one writer
+> from the first draft, which is already past the two the old rule allowed. Three
+> splits over five tables, and no fourth: the one candidate for it, a stored clean
+> gap count on `security`, turned out to want computing rather than storing [M.1].
+> Every attempt to enumerate exceptions ran out before the list was complete, because
+> a rule that counts exceptions gets longer every time the design is correct.
+
+**The `### percentile columns` opening line** [D-77]. The four table headings now
+carry the fact and a third statement of it is the duplication D-73 and D-76 remove.
+What replaces it states the naming convention and the type rule instead.
+> Written alongside their source tables by **PercentileEngine**.
+
+**Four writer lines, each replaced by a two-writer form** [D-77]. Recorded as one
+entry because the change is identical in shape at each: `Writer: X.` becomes
+`Writers: X inserts, PercentileEngine updates the percentile columns`.
+> **Writer: IndicatorEngine.**
+
+> **Writer: ValuationEngine.**
+
+> **Writer: FlowEngine, a compute stage, not the ingest.**
+
+> **Writer: SentimentEngine, a compute stage, not the ingest.**

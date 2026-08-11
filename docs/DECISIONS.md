@@ -874,6 +874,38 @@ carries two. `sentiment_daily` holds `ticker`, `date`, `article_count` and
 other. The rule was already decided by D-12; what was missing was a component and a
 store.
 
+**D-77 A table's writers are whoever its heading names.** `ACTIVE`
+Replaces the enumeration in `SCHEMA.md`'s opening.
+
+`SCHEMA.md` said three splits over five tables and no fourth. The percentile engine
+updates `_pctile` columns on `indicator_daily`, `valuation_daily`, `flow_daily` and
+`sentiment_derived_daily`, which is four more splits over four more tables. Seven over
+nine.
+
+That sentence predicted this in its own last line: a rule that counts exceptions gets
+longer every time the design is correct. It was a count of what existed when it was
+written rather than a rule, and no amendment to the number fixes that, because the next
+correct design would need an eighth.
+
+The count is removed and nothing replaces it as a count. A table's writers are whoever
+its heading names, each declaring the operation and the column set it owns, and nothing
+else may write there. INVARIANT 10 as amended is per operation, so a metric engine
+inserting and the percentile engine updating a disjoint column set are two claims rather
+than a conflict.
+
+The brake the count provided is not lost. Adding a second writer now requires editing an
+authored document, which a build session cannot do, where a count is prose a build
+session can read past. That is checked on every push rather than by whoever remembers the
+sentence.
+
+**The property this arrangement can break, which no test covers.** The failure mode here
+is not a conflict the registry catches. It is a metric engine re-running and blanking the
+percentiles the percentile engine wrote. That is safe today only by construction, because
+the staged path builds its staging table from the written columns alone, so the upsert's
+`SET` leaves `_pctile` untouched. D-68's idempotence is guaranteed per stage and says
+nothing about columns a stage does not write, and this is the first place in the codebase
+where two stages share a table's rows rather than a table.
+
 **D-79 `fcf_yield` needs a capital expenditure figure of its own, and
 `capital_expenditures` is ingested for it.** `ACTIVE`
 Free cash flow computed as cash from operating plus cash from investing reads an

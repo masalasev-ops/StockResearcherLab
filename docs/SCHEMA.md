@@ -11,13 +11,15 @@ components claim the same triple. Where a heading below reads **Writer: X**, X o
 every operation on that table. Where it names several, each declares the operation
 and the columns it owns, and nothing else may write there at all.
 
-The exception list was the wrong shape rather than too short. `attribution`,
-`proposal`, and `order` with `fill` and `position` each had more than one writer from
-the first draft, which is already past the two the old rule allowed. Three splits over
-five tables, and no fourth: the one candidate for it, a stored clean gap count on
-`security`, turned out to want computing rather than storing [M.1]. Every attempt to
-enumerate exceptions ran out before the list was complete, because a rule that counts
-exceptions gets longer every time the design is correct.
+**There is no count of how many tables may have several writers, and nothing replaces
+it as a count** [D-77]. A rule that counts exceptions gets longer every time the design
+is correct, which is what happened: the count stood at three splits over five tables
+until the percentile engine made it seven over nine.
+
+The brake a count provided is not lost. Adding a second writer means editing this
+document, which a build session cannot do, where a count is prose a build session can
+read past. The conformance test derives the permitted splits from the headings below
+rather than from a list of its own, so what a heading says is checked on every push.
 
 Column lists below are the load-bearing ones, not exhaustive. Types, indexes and
 constraints are phase 0 work and are not fabricated here.
@@ -113,8 +115,8 @@ empty rows are written. That is what lets `article_count` be read as zero across
 absent day and it is the reason the derived table below can exist at all.
 
 ### sentiment_derived_daily
-Grain: ticker by day [D-78]. **Writer: SentimentEngine, a compute stage, not the
-ingest.** Small.
+Grain: ticker by day [D-78]. **Writers: SentimentEngine, a compute stage and not the
+ingest, inserts; PercentileEngine updates the percentile columns** [D-77]. Small.
 
 `ticker`, `date`, `article_count_z_own_90d`, `sentiment_delta_7v30`,
 `sentiment_7d_level`.
@@ -186,8 +188,8 @@ accumulates forward only. The table still ingests, because a current top-20 hold
 list is a usable static feature; it is the change metric that has no series.
 
 ### flow_daily
-Grain: ticker by day [D-61]. **Writer: FlowEngine, a compute stage, not the ingest.**
-~52 MB.
+Grain: ticker by day [D-61]. **Writers: FlowEngine, a compute stage and not the ingest,
+inserts; PercentileEngine updates the percentile columns** [D-77]. ~52 MB.
 
 `ticker`, `date`, `insider_net_90d_usd` [A1.a], `distinct_buyer_count`,
 `inst_ownership_change` [D-58, D-61].
@@ -218,7 +220,8 @@ Grain: ticker by event. **Writer: EventsIngestor.** Small.
 ## Computed
 
 ### indicator_daily
-Grain: ticker by day. **Writer: IndicatorEngine.** ~1.2 GB, the second largest table.
+Grain: ticker by day. **Writers: IndicatorEngine inserts, PercentileEngine updates the
+percentile columns** [D-77]. ~1.2 GB, the second largest table.
 
 Roughly forty technical columns plus their percentiles. `atr_pct`, `adx14`,
 `dist_200dma`, `dist_52w_high`, `rs_change_21d`, `rs_change_63d`,
@@ -239,7 +242,8 @@ is money and INVARIANT 16 does not bend for storage size [O.2].
 All computed locally from `price_daily`. Never bought from the provider.
 
 ### valuation_daily
-Grain: ticker by day. **Writer: ValuationEngine.** ~540 MB.
+Grain: ticker by day. **Writers: ValuationEngine inserts, PercentileEngine updates the
+percentile columns** [D-77]. ~540 MB.
 
 `fcf_yield`, `ev_ebit`, `ev_ebit_vs_own_5y`, `roic`, `roic_4q_change`,
 `gross_margin_4q_change`, `net_debt_ebitda`, `accruals`, `share_count_change`,
@@ -255,12 +259,22 @@ Grain: one row per day. **Writer: MarketContextEngine.** Small.
 `date`, `breadth`, `vix`, `regime_label`, plus sector relative strength.
 
 ### percentile columns
-Written alongside their source tables by **PercentileEngine**.
+Named `<metric>_pctile` and stored alongside the metric they rank, on the metric's own
+table rather than in a table of their own. `real`, scaled 0 to 100, and none of them is
+money whatever its source column is.
+
+Who writes them is stated in the four headings above and nowhere here [D-77]. Stating
+it in a third place is the duplication D-73 and D-76 exist to remove, and the headings
+are the copy a conformance test reads.
 
 Computed within size bucket by sector cells, falling back to size bucket alone when a
 cell has fewer than fifteen members [D-10]. Expressed as window functions partitioned
 by bucket and sector, so this is set-based and date-partitioned rather than
 application-threaded.
+
+This section has no `Grain:` line and is deliberately not parsed as a table, which
+`SchemaParityTests` asserts. The columns belong to the tables above and are declared
+individually under "Columns that are not money".
 
 ---
 

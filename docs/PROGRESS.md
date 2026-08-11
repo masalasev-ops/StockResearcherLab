@@ -2097,7 +2097,7 @@ test or the measurement that produces it is named.
 | 3 | `ci.ps1` green at HEAD | **met** | Green at every checkpoint sha, and at `834b7fd` for 220 with 2.12's test still uncommitted |
 | 4 | migrations run clean from empty and again as a no-op | **met** | `ci.ps1` steps 9 and 10, five files applied then "nothing to apply" |
 | 5 | `run-night` completes with all twelve stages and every phase 2 table populated for the blessed date | **met** | `run-night 2026-08-10` completed on 2026-08-07 over twelve steps in 14m31s. Rows below |
-| 6 | a second run over the same date is byte-identical | **met, of the compute layer, and the qualification is the point** | Five digests unchanged across a re-run, below. A second full night is not this experiment: C03 and C05 advance their rotations by design, so it would measure the ingest rather than the determinism |
+| 6 | a second run over the same date is byte-identical | **met, of the compute layer, and the qualification is the point** | Five digests unchanged across a re-run, below. A second full night is not this experiment: ~~C03 and C05 advance their rotations by design~~ [corrected, sign-off C] C02, C04 and C05 all read the provider afresh, so it would measure the ingest rather than the determinism. **C03 does not advance and naming it there was wrong**, as the same section's own coverage measurement shows |
 | 7 | a fundamental is unreadable before its effective filing date in a valuation row | **met** | `ValuationEngineTests.AQuarterFiledAfterTheDateIsNotReadable`, whose fixture carries an EBIT twenty times the others so a leak is 0.49 against 12.5, and `.AQuarterWithNoEffectiveFilingDateIsNotReadable` |
 | 8 | a thin cell falls back to size bucket alone and a thin bucket carries null | **met** | `.AThinCellFallsBackToTheSizeBucketAlone` at 80 where its own cell would say 0, and `.AThinBucketCarriesNullRatherThanACrossBucketRank`. Live, 998 rows ranked in the bucket alone and 25 null |
 | 9 | a null metric carries a null percentile | **met** | Four null-metric members inside a twenty-member cell, asserted null while the sixteen with values rank 0 to 100 over sixteen rather than over twenty |
@@ -2141,6 +2141,15 @@ had not happened. It is the first time the guard has aborted a real run.
 The five compute stages re-run over the blessed date. `md5` over every column of every
 row, ordered, so the percentile columns are inside the digest.
 
+**The expression, written down because it was not and the review spent part of a session
+recovering it by trial.** A digest whose expression is not stated cannot be rechecked by
+the next reader, which makes it an assertion rather than evidence.
+
+```sql
+SELECT md5(string_agg(x, E'\n' ORDER BY x))
+FROM (SELECT (t.*)::text AS x FROM <table> t WHERE t.date = DATE '2026-08-07') s
+```
+
 | Table | Digest | Rows |
 |---|---|---|
 | `indicator_daily` | `26097aef9ce89c71962764dbb8217c24` | 2,841 |
@@ -2181,8 +2190,13 @@ format.
 
 **How many cells fell back to size bucket alone, and for which metrics.** 30 metrics over
 4 tables at a floor of 15 non-null members: 56,031 rows ranked in a sector cell, 998 in
-the size bucket alone, 25 null on a thin bucket. Three cells are thin for the fourteen
-broadly covered indicator columns. The thin-cell count rises with a metric's own
+the size bucket alone, 25 null on a thin bucket. Three cells are thin for ~~the fourteen~~
+[corrected, sign-off] **thirteen** of the fourteen ranked indicator columns, the
+fourteenth being `dist_52w_high_20d_change`, whose 35 this same paragraph then gives.
+The sentence took its count from the fifteen written columns less that one and its
+subject from the fourteen ranked ones less that one, which are different sets.
+`base_breakout_flag` is broadly covered, is not ranked, and has no thin-cell count at
+all. The thin-cell count rises with a metric's own
 sparseness: `valuation_daily.fcf_yield` 21, `flow_daily.inst_ownership_change` 32, the
 three sentiment metrics 27 each, and `dist_52w_high_20d_change` and `ev_ebit_vs_own_5y` 35
 each, which is every cell, because neither computes for any name yet.
@@ -2279,6 +2293,35 @@ sibling database. Re-run against a quiet server it was green at the same sha.
 Evidence at `docs/evidence/phase-1/ci-failure-20260811-045102.txt`. Left where the next
 occurrence will be read rather than acted on: it is not phase 2's to fix and a build
 session does not add a measurement to its own scope.
+
+### The prompt was archived at the end again, and half of it is missing
+
+Sign-off finding A, and it is the sharper form of what the build reported. The build
+reported the symptom, that `prompts/README.md` describes two kinds of file and
+`BuildPlans/` is a third. It did not report that `CLAUDE.md` §3, `BUILD_PLAN.md`'s
+sign-off clause and `prompts/README.md`'s naming rule all name `prompts/spent/` and
+that phase 2's record was not in it.
+
+`prompts/spent/phase-2-compute.md` now holds the prompt issued to the second build
+session, verbatim, with its lateness in its own header. It covers 2.7, 2.8, 2.10 through
+2.13 and the two corrections. It was written when someone asked where the phase 2 spent
+prompt was, which is later than `CLAUDE.md` §3 requires and later than the sign-off
+review that found it missing. Phase 1 recorded failing this in the same way; phase 2
+failed it again with phase 1's finding already on the page above.
+
+**The first session's prompt is not archived and is not recoverable here.** Checkpoints
+2.1 through 2.6, 2.9, 2.14 and 2.15 were built against a prompt no file in this
+repository holds and no transcript here preserves. Reconstructing it from the second
+session would be a paraphrase, which is the one thing a spent prompt must not be [D-63],
+so it is left absent and named rather than approximated. What survives of that session
+is its commit bodies and `prompts/BuildPlans/phase-2-compute.md`, and neither is the
+prompt: that file's own commit body says it was filed under `BuildPlans` rather than
+`spent` precisely because a spent prompt records what was issued and a plan is derived
+from one. It also carries status `DRAFT`, which is not one of the three
+`prompts/README.md` enumerates.
+
+So phase 2's archive is half a record, which is worse than phase 1's outcome, where both
+halves were eventually filed even though one was late.
 
 ### Two authored documents this phase leaves outstanding
 

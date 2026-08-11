@@ -375,6 +375,13 @@ six weeks; the primary claim needs a year [VALIDITY.md §3].
 Items that a phase inherits rather than discovers. Add here rather than losing them
 in a phase prompt.
 
+The From column names the phase that raised the item. `SL` is the screen lifecycle
+design pass, which is not a phase: it was run between phases 2 and 3 because the
+history a candidate screen could be selected on comes into existence when the backfill
+runs, and its decisions are D-84 to D-90. Its rows cite `docs/SCREEN_LIFECYCLE.md` by
+section rather than restating it, because that document is the specification and a
+second copy of a rule is a rule that can disagree with itself.
+
 | From | Owed to | Item |
 |---|---|---|
 | P | 1 | Whatever the probe finds about news depth, sentiment and flow coverage constrains what phase 1 can promise |
@@ -411,3 +418,18 @@ in a phase prompt.
 | 2 | the next authored amendment to `prompts/README.md` | The README opens "Two different kinds of thing live here and they follow opposite rules" and `prompts/BuildPlans/` is a third. Reported rather than edited, the README being authored prose stating a rule. Carried from the phase 2 plan, which raised it before any code |
 | 4 | 8 | Config version must be stamped on attribution rows from the first write, or the tuner cannot segment history |
 | 6 | 10 | Cost ledger recording per model before the first full night |
+| SL | 4 | `screens.<id>.state` seeded, `live` for S1 to S5 and `shadow` for whatever the family registers as. C13 iterates on it and changes nothing else [D-84, `SCREEN_LIFECYCLE.md` §1.1, §2] |
+| SL | 4 | `attribution.surfaced_as`, `NOT NULL` with a `CHECK` on `candidate` and `shadow`, and `score_per_screen` carrying each screen's rank beside its score. Both are migration work and both are free now and not later: the column has no rows and the `jsonb` shape has no writer [D-85, §4.3, §4.4] |
+| SL | 4 | C14 writes `attribution` for every registered screen and `candidate_set` for the live ones only, a shadow recorded to `tuner.slot_cap` under §8.1's proportion with D-8 unchanged [D-85, §2.1] |
+| SL | 4 | The `candidate_attribution` view, and a test asserting that each reader meaning "candidate" declares the view rather than the table. §4.5 names eight such readers, three that mean everything surfaced, and three that do not read it at all; the enumeration is the specification and is not repeated here [D-85, §4.5, §4.7] |
+| SL | 4 | §8.1's proportion replaces the fixed 2/3/3 in the allocator, since D-43's floor and cap have always permitted four to twelve slots and 2/3/3 is defined at eight alone. Whether `screens.quota_large`, `quota_mid` and `quota_small` stay as keys, become the proportion's inputs or are retired is decided here [D-89, §8.1, §10] |
+| SL | 4 | `screen_score_daily`'s key is ticker first and the nightly read is one date, so an index on `(date, screen_id, rank_within_screen)` or range partitioning by date is decided **before** the phase 4 screen backfill and not after. Both are cheap on an empty table and the second is not cheap on a 1.4 GB one. Shadows amplify this rather than cause it [§9.3] |
+| SL | 4 | `SCHEMA.md` gains `attribution.surfaced_as` in the same checkpoint as its migration and not before. `guards.ps1` and `SchemaParityTests` hold that document against the migrations and the live database in both directions, so a declaration ahead of its column fails a check for a column that is correctly absent [D-85, INVARIANT 16] |
+| SL | 4 | D-90 is answered before the family is registered, and if post-earnings drift is registered its ranking metric needs a column `valuation_daily` does not have. The other three members rank on columns C09 already writes and C11 already percentiles, so this is the only member with ingest or compute behind it [D-90, §7.2, §7.5] |
+| SL | 4 | D-69 is answered knowing that the family covers no axis but S1's, so an S4 retirement leaves the flow axis uncovered and is a design decision rather than a swap [D-69, §7.6] |
+| SL | 8 | `screen_evaluation`, screen by evaluation date, insert only, with C22 as its declared writer in the stage registry and in `SCHEMA.md` in the same checkpoint as its migration [D-87, §6.6, INVARIANT 10] |
+| SL | 8 | C22 computes the measure for every registered screen and allocates slots among the live ones only. One computation with the filter on the allocation half, which is what stops the measure existing in two components [D-87, §6.5] |
+| SL | 8 | The retirement and promotion rules: §6.1's measure, §6.2's floors, §6.3's sustained fail, §8.2's margin with `k` counted off `screen_evaluation` over the eligible rather than the registered, and §8.3's four-to-ten bound blocking a retirement or a promotion that the slot pool cannot absorb [D-87, D-89] |
+| SL | 8 | D-88's gate, so no nomination executes before the primary claim reaches `VALIDITY.md` §4's sample and every nomination due is bundled into one boundary. It is a gate on an operator action rather than a stage, so the phase owes the check and the record rather than an automated promotion [D-88, §6.7] |
+| SL | 8 | The six `lifecycle.*` keys in §10 seeded and their Consumer column filled in `CONFIG_REFERENCE.md` from the composition code. `lifecycle.counts_backfilled_observations` is a key so a test can assert it false rather than leaving D-86 a condition to remember [D-86, D-87, §10] |
+| SL | 9 | U4 renders every registered screen with its state, a shadow's prospective and backfilled counts separated, and any standing nomination, reading `screen_evaluation`. U2, U7 and the abstention analysis read `candidate_attribution` and not `attribution` [D-84, D-85, D-87, §4.5, §12.4] |

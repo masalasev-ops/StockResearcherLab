@@ -4,27 +4,41 @@ How a screen enters this system, how it is judged while it is in, and how it lea
 Registration, shadow running, promotion and retirement, in a form someone who was not
 part of the conversation could apply.
 
-**This document is the draft produced against `prompts/BuildPlans/design-screen-lifecycle.md`
-and is not yet authored.** Its content states rules, which `CLAUDE.md` §13 makes
-authored content. The decisions it proposes are drafted in §11 for a human to author
-into `DECISIONS.md`, and the `ARCHITECTURE.html` edits it needs are drafted in §12 for
-a human to apply. Nothing in either section has been applied here.
+**This document is the design behind D-84 to D-90, and those decisions are authored.**
+It was produced against `prompts/spent/design-screen-lifecycle.md`. §11 is the index
+into the register, which is where the decisions live; §12 is the `ARCHITECTURE.html`
+edits, and they are applied. `CHANGELOG.md` carries the prior wording of every one,
+and `BUILD_PLAN.md`'s carried obligations carry every part of this document that is
+code, against the phase that owes it.
 
-**No decision is authored, no code is written, and no threshold below was chosen
-against a measurement.** No measurement exists to choose against: phase 3 has not run,
-screens are phase 4, and the tuner is phase 8. That is the reason the work is happening
-now rather than inside phase 4 [`CLAUDE.md` §11]. Every figure below is derived from an
-existing config key, from arithmetic over the slot pool, or from a pre-registered
-threshold already in `VALIDITY.md` §4. Where a figure is none of those it is marked
-**DRAFT FIGURE** and says what it rests on.
+**No code is written and no threshold below was chosen against a measurement.** No
+measurement exists to choose against: phase 3 has not run, screens are phase 4, and the
+tuner is phase 8. That is the reason the work happened now rather than inside phase 4
+[`CLAUDE.md` §11]. Every figure below is derived from an existing config key, from
+arithmetic over the slot pool, or from a pre-registered threshold already in
+`VALIDITY.md` §4. Where a figure is none of those it is marked **DRAFT FIGURE** and says
+what it rests on. One is.
+
+**This document states the design and shows the working. `DECISIONS.md` states the
+rules.** Where the two differ the register is right, and nothing here is a second copy
+of a ruling [D-76, D-77, D-83].
+
+**FINDING, carried rather than closed.** D-73 sorts the corpus into specs, which take
+clean edits, and records, which keep their strikes, and it names four documents in the
+first class and two in the second. This document is in neither list, as `METRICS.md` was
+not when it was written. It reads as a spec, since it is read to know the current state
+of the lifecycle, so edits to it are clean and their prior wording goes to
+`CHANGELOG.md`. That is a reading and not a decision, and closing it is an authored
+amendment to `CLAUDE.md` §13 [`CLAUDE.md` §13].
 
 **Read against** `ARCHITECTURE.html` §01 to §20, `SCHEMA.md`, `DECISIONS.md` D-1 to
 D-83, `VALIDITY.md`, `BUILD_PLAN.md`, `CONFIG_REFERENCE.md`, `METRICS.md`,
 `GLOSSARY.md`, `RUNBOOK.md` and migrations `0001` to `0005`, all at HEAD `2cad4cc`.
+The `ARCHITECTURE.html` line numbers §12 cites are that revision's, before its own
+edits moved them.
 
 **Read by** phase 4, which builds the registration flag and the allocator behaviour;
-phase 8, which builds the evaluation; phase 9, which renders U4; and whoever authors
-the decisions in §11.
+phase 8, which builds the evaluation; and phase 9, which renders U4.
 
 ---
 
@@ -593,7 +607,8 @@ mean, because the best of four looks better than four independent things.
 statistical treatments across three kinds.** The treatments differ in what the bar is
 stated against and in which standard error sizes it, and not in whether §8.2's
 multiplicity correction applies. It applies to both, counted within each family
-separately, because promoting whichever of k paired shadows wins selects the maximum of
+separately and over the members eligible at that evaluation rather than the members
+registered, because promoting whichever of k paired shadows wins selects the maximum of
 k exactly as promoting whichever of k additions wins does. Pairing shrinks the standard
 error; it does not remove the selection across tests.
 
@@ -799,8 +814,22 @@ error is used.**
 
 | | Reference the bar is stated against | k counts | Standard error |
 |---|---|---|---|
-| **Addition** | The live family's mean 21-day peer-relative alpha over the same window at the same depth | Additions under evaluation at that boundary | Of the addition's own estimate |
-| **Successor or extraction** | Zero, the paired difference against its named incumbent | Paired shadows under evaluation at that boundary | Of the paired difference |
+| **Addition** | The live family's mean 21-day peer-relative alpha over the same window at the same depth | Eligible additions at that evaluation | Of the addition's own estimate |
+| **Successor or extraction** | Zero, the paired difference against its named incumbent | Eligible paired shadows at that evaluation | Of the paired difference |
+
+**Eligible, not registered, and the distinction is the whole of what k means.** A
+multiplicity correction is for the tests that were run and would have been acted on. An
+addition below §6.2's sample floor could not have been promoted whatever it did, so it
+was never one of them, and counting it would penalise the screens that were actually in
+contention for the existence of one that was not. **k is the count of screens of that
+kind meeting §6.2's floor at that evaluation**, read off `screen_evaluation`'s
+`observations_prospective` rather than off the registry.
+
+It is not gameable in either direction. The floor is fixed in `config_rows` and cannot
+be lowered to admit a rival or raised to exclude one without a version that says so, and
+eligibility is a recorded fact per evaluation rather than an assertion made at the
+boundary. Registering a screen and leaving it below the floor buys nothing, since it
+raises no bar and can win nothing.
 
 | k | Margin, standard errors |
 |---|---|
@@ -830,12 +859,16 @@ k is counted within a family rather than across the registry: an addition and an
 extraction are not competing for the same seat, and pooling them would penalise each for
 the other's existence.
 
-**So D-90 moves the additions bar and nothing else**, which is worth seeing while that
-fork is still open. X-FM and X-PEAD are the two additions, so declining to register
-X-PEAD leaves one addition, k = 1, and the correction is inert on the addition side
-while staying at 1.18 on the paired side. That is the rule behaving correctly rather
-than a hole in it, and it is a reason to decide D-90 deliberately rather than by
-default: registering a second addition raises the bar on the first.
+**So D-90 moves the additions bar, and under eligibility it moves it about a year later
+than registration.** X-FM and X-PEAD are the two additions. Under fork A, X-PEAD cannot
+rank until it has a trailing distribution to draw D-9's floor from, so it surfaces
+nothing and accumulates no prospective observations for its first 250 sessions, and
+reaches §6.2's floor roughly a year behind X-FM. Registering it therefore costs X-FM
+nothing over that year, because k counts eligible additions and X-PEAD is not one; the
+bar rises to 1.18 at the evaluation where both are eligible, which is the first
+evaluation at which there is genuinely a selection of two. Fork C leaves k at one
+indefinitely and the addition bar inert, which is the rule behaving correctly rather
+than a hole in it.
 
 **Not a sign alone**, for the reason §6.7 already gives. A promotion costs a rubric, a
 changed prefix hash and a bundled break in the primary claim's comparability, so it must
@@ -979,154 +1012,59 @@ at eight slots, and whether they stay as keys, become the proportion's inputs, o
 retired is a phase 4 question this document does not close.
 
 **No key is introduced for the multiplicity correction**, because `sqrt(2 ln k)` has no
-parameter and k is counted from the registry, within a family rather than across it.
+parameter and k is counted off `screen_evaluation`, within a family rather than across
+it, from rows that met `lifecycle.min_prospective_observations` or
+`lifecycle.min_paired_observations`. The correction has no threshold of its own for the
+same reason D-9's floor has none: it is defined against a quantity the system already
+records.
 
 ---
 
-## 11. Decision text, drafted and not authored
+## 11. The decisions, authored
 
-Ready to author into `DECISIONS.md`. Numbers proposed as **D-84 to D-89**, D-83 being
-the highest in the register at HEAD `2cad4cc` and D-84 onward unused. Each is written in
-the register's own form: the rule as a bolded sentence, then the reason.
+**D-84 to D-89 are in `DECISIONS.md` under Screen lifecycle, and D-90 is in its Open
+section.** Authored 2026-08-11 from the text this section drafted, human-directed and
+before `ARCHITECTURE.html` was touched, because the cells cite them [`CLAUDE.md` §13].
 
-> **D-84 A screen has three states and a shadow screen is one of them.** `ACTIVE`
-> `live` scores and holds slots, `shadow` scores and holds none, `retired` does not
-> score and keeps its config row. The state is `screens.<id>.state`, so registering a
-> candidate screen is a config row rather than a deployment, exactly as adding a screen
-> already was [D-6]. A shadow inherits D-9's floor unchanged and has no threshold of its
-> own, because D-9's floor is self-referential and is therefore defined for any screen
-> that has a distribution. C13's only change is which screens it iterates. The state
-> exists so that a candidate screen can accumulate a record before it can affect a
-> candidate set, which is the only way to know anything about it that is not an argument.
+**The drafted bodies are not repeated here.** The register is the copy, and a decision
+stated twice is a decision that can disagree with itself, which is the defect D-76, D-77
+and D-83 each removed from this corpus. What follows is the index, so that a reader of
+this document knows which decision carries which part of it and where the reasoning
+went.
 
-> **D-85 Shadow screens write `attribution` and never `candidate_set`.** `ACTIVE`
-> `attribution` gains `surfaced_as`, `NOT NULL` and constrained to `candidate` or
-> `shadow`, and `score_per_screen` gains each screen's rank alongside its score. The
-> grain does not change: one row per ticker per day surfaced, with `screens_surfacing`
-> carrying live and shadow ids together. A separate shadow store was weighed and
-> rejected, because C21 ForwardReturnFiller would become two code paths that have to
-> agree on the acquisition and delisting rules, the point-in-time size bucket, sector and
-> regime would be frozen twice by two writers, and the tuner's single-table aggregate
-> would become a union [`ARCHITECTURE.html` §19]. `surfaced_as` is stored rather than
-> derived for D-80's reason: a derivation resolves against the live set, which moves on
-> promotion, so a promoted screen would silently relabel its own history, and a
-> constraint protects the column where a writer-side check protects one writer. A view
-> `candidate_attribution` selects `surfaced_as = 'candidate'`, and every reader meaning
-> "candidate" reads the view, so the filter cannot be forgotten [`CLAUDE.md` §5]. Eight
-> readers mean candidate and three mean everything surfaced; `SCREEN_LIFECYCLE.md` §4.5
-> enumerates all of them. `candidate_set` is unchanged and is therefore the unambiguous
-> definition of the candidate set.
+| Decision | Status | The rule | Worked out in |
+|---|---|---|---|
+| **D-84** | `ACTIVE` | A screen has three states and a shadow screen is one of them | §1, §2 |
+| **D-85** | `ACTIVE` | Shadow screens write `attribution` and never `candidate_set` | §4 |
+| **D-86** | `ACTIVE` | Backfilled observations count toward a shadow's distribution and never toward a promotion or a retirement | §5 |
+| **D-87** | `ACTIVE` | A screen is retired on sustained peer-relative underperformance, and the tuner is what measures it | §6, §8.2 |
+| **D-88** | `ACTIVE` | A promotion or a retirement splits the primary claim, so none executes before the claim has its sample and all due are bundled into one boundary | §6.7 |
+| **D-89** | `ACTIVE` | The slot pool stays at 40, D-7's 2/3/3 is restated as a proportion, and the feasible live-screen range is four to ten | §8.1, §8.3, §8.4 |
+| **D-90** | `OPEN` | Whether post-earnings drift is registered, and on what history | §7.5 |
 
-> **D-86 Backfilled observations count toward a shadow's distribution and never toward a
-> promotion or a retirement.** `ACTIVE`
-> A shadow needs backfilled scores or it has no D-9 floor for its first 250 sessions and
-> no record at all for its first year, and the condition on counting them is D-58's: the
-> screen's inputs must be backfillable to the definition the live screen will use. A
-> promotion or a retirement reads prospective observations only. Four years of history
-> arrive at once when the screen backfill runs, so a sample floor counting them is met on
-> registration day and the rule means nothing; `CLAUDE.md` §11 prohibits tuning screens
-> on forward returns before the researcher has judged anything, and a promotion is a
-> stronger action than a slot move; and `VALIDITY.md` §5 and §6 make the window one macro
-> environment with regime confounding stated rather than mitigated. `VALIDITY.md` §6's
-> "backfill... only the screens" is about researcher contamination and is not authority
-> to promote on backfill, and `BUILD_PLAN.md` phase 8's "the tuner moves slots on
-> backfilled data" is a build verification criterion, phase 8 having no prospective
-> night to run against.
-
-> **D-87 A screen is retired on sustained peer-relative underperformance, and the tuner
-> is what measures it.** `ACTIVE`
-> The measure is 21-day peer-relative return and the hit rate on the same column, never
-> absolute alpha and never the SPY column [D-42, INVARIANT 5]. 21 days because it is the
-> horizon `VALIDITY.md` §4 already pre-registers the primary claim at, and because D-34's
-> 40-day time stop means an edge appearing only at 63 days is one this portfolio cannot
-> hold to. A screen may be nominated only with at least 1,000 prospective observations,
-> which is `VALIDITY.md` §4's per-side count used unchanged, or 250 paired observations
-> where it is paired against a named incumbent. The 250 encodes `ρ = 0.75` and nothing
-> else, since a paired test matches an unpaired one's power at `n × (1 - ρ)`; the
-> correlation is observable once both screens have run and re-setting the floor on a
-> measured one sizes the instrument rather than choosing the answer, which is the single
-> after-the-fact adjustment `CLAUDE.md` §11 permits, provided the measurement precedes
-> the comparison it sizes. A promotion clears a margin of `sqrt(2 ln k)` standard errors,
-> k counted within a family, against the live family's mean for an addition and against
-> zero for a paired shadow. One rule for both, because promoting whichever of k paired
-> shadows wins selects the maximum of k exactly as it does for additions: pairing shrinks
-> the standard error and does not remove the selection across tests. A nomination
-> requires three consecutive monthly evaluations, so a quarter is the shortest path to
-> one. A fail nominates and does not execute. C22 ScreenTuner computes the measure for
-> every registered screen and
-> allocates slots among the live ones only, because that measure is already what it
-> computes and a second component computing it is one fact stated twice, which is the
-> defect D-76, D-77 and D-83 each removed. Its write set gains `screen_evaluation`,
-> screen by evaluation date, insert only: `config_rows` is versioned configuration and
-> would resolve a measurement as config [INVARIANT 13], `screen_history` is the wrong
-> grain and C13's table, and the sustained-fail rule needs the consecutive count to be a
-> record rather than a recomputation, since recomputing applies today's definitions to a
-> past evaluation [D-40]. D-43's "touches nothing else" is about what the tuner tunes,
-> and recording a measurement is not tuning.
-
-> **D-88 A promotion or a retirement splits the primary claim, so none executes before
-> the claim has its sample and all due are bundled into one boundary.** `ACTIVE`
-> The set of screens is the set of rubrics [`ARCHITECTURE.html` §07], so promoting or
-> retiring one changes the rubrics and the dossier, which `CLAUDE.md` §12 lists among the
-> changes that invalidate comparisons across the boundary. It therefore splits the
-> primary claim's history and not only the screen's own. So nothing executes until
-> `VALIDITY.md` §4's pre-registered sample is reached, meaning at least 1,000
-> observations on each side of BUY against PASS at 21 days and the minimum evaluation
-> period of 12 months, and every nomination due at that point goes into one boundary.
-> Four screens promoted one at a time is four boundaries and five incomparable segments,
-> which is the outcome `CLAUDE.md` §12's instruction to bundle exists to avoid.
-
-> **D-89 The slot pool stays at 40, D-7's 2/3/3 is restated as a proportion, and the
-> feasible live-screen range is four to ten.** `ACTIVE`
-> Large takes `floor(slots / 4)`, the remainder splits between mid and small with the
-> extra to small. That is exactly 2 / 3 / 3 at eight slots and integral at every count
-> from four to twelve, which is the range D-43's floor and cap have always permitted; the
-> gap is pre-existing and retirement makes it reachable more often rather than creating
-> it. Two properties are why this proportion: the large share never exceeds 25 percent at
-> any count, so D-7's bound of ten megacap slots of forty holds at every live-screen
-> count rather than only at five screens of eight; and the guaranteed small-cap places
-> are minimised at exactly today's five screens of eight, so D-7's floor of fifteen is a
-> floor across the whole reachable space. With a floor of four and a cap of twelve, forty
-> is reachable only with four to ten live screens, so a retirement leaving three does not
-> execute and becomes a design decision, and a promotion taking the count to eleven does
-> not execute either. A retiring screen's slots return to the pool and the tuner
-> redistributes at the next monthly run with the floor and the cap untouched. A promoted
-> screen enters at the floor of four.
-
-**One decision is left open deliberately**, because it is a fork rather than a finding
-and the choice is a human's:
-
-> **D-90 Whether post-earnings drift is registered, and on what history.** `OPEN`
-> Its input has no backfillable history and nothing else in the family shares the
-> problem. `events.earnings_backward_days` is 7, so the events store reaches seven days
-> into the past, and `announced_date` is null for earnings because `calendar/earnings`
-> sends none, so a backfilled row and a live-accumulated one are indistinguishable
-> [`BUILD_PLAN.md` carried obligations, 1 to 5]. D-86's condition therefore fails for
-> this screen alone: its backfilled distribution would come from a different population
-> than its live one, which is what D-58 removed short interest for and what D-69 is open
-> on for `inst_ownership_change`. Three options, none chosen. Register it as a shadow
-> accumulating live only, in which case it has no floor for 250 sessions and is never
-> comparable to the other three on a backfilled window. Widen the backward window and
-> backfill earnings history first, which is an ingest change, does not fix
-> `announced_date`, and runs into phase 5's open question about whether a backfilled
-> `events` row is point-in-time correct at all. Or do not register it, and revisit when
-> `events` can support it.
+**Where this document and the register differ, the register is right.** This one states
+the design and shows the arithmetic; that one states the rule and the reason. The
+sections above are the working, not a second copy of the ruling.
 
 ---
 
-## 12. The `ARCHITECTURE.html` edits, drafted and not applied
+## 12. The `ARCHITECTURE.html` edits, applied
 
-`ARCHITECTURE.html` is human-edited only [`CLAUDE.md` §13] and has not been touched.
-`git status` shows it unmodified in the working tree.
+`ARCHITECTURE.html` is human-edited only [`CLAUDE.md` §13]. These were applied
+human-directed, on 2026-08-11, after D-84 to D-90 were authored and not before, because
+an edit citing an unauthored decision is a document constraining the code on the
+strength of something that does not exist.
 
-Under D-73 these are clean edits: the superseded text is deleted, the decision citation
-is kept at the point of change, and the prior wording is recorded in `CHANGELOG.md`.
-§13 below carries the changelog entries. Under D-83, a count is replaced by the rule
-that governs it rather than by a new count.
+Under D-73 they are clean edits: the superseded text is deleted, the decision citation
+is kept at the point of change, and the prior wording is recorded in `CHANGELOG.md`,
+which carries one entry per decision. Under D-83, a count is replaced by the rule that
+governs it rather than by a new count.
 
-**Every replacement below assumes D-84 to D-89 have been authored first.** An edit
-citing an unauthored decision is a document constraining the code on the strength of
-something that does not exist.
+**This section is kept as the specification of what changed and why**, with each edit's
+prior text beside its replacement. `CHANGELOG.md` records the removals as the corpus
+log; this records the reasoning that chose each one, which is what a later reader asking
+why a cell reads as it does will want. The line numbers are those of HEAD `2cad4cc`,
+before these edits moved them.
 
 ### 12.1 §03, C13 ScreenEngine
 
@@ -1219,11 +1157,18 @@ fact D-76 removed from these columns once already.
 |---|---|---|
 | `screen_evaluation` <span class="tag new">NEW</span> | screen × evaluation date | tiny |
 
-placed with the Learn stores beside `calibration`, and the `screen_score_daily` size
-cell at line 824 changes from `1.4 GB` to a figure the family's registration implies,
-which §9.1 gives as roughly 2.2 GB at eight registered screens and 2.5 GB at nine. The
-tfoot total moves with it. **These are estimates and `SCHEMA.md` says so**, so the
-figure a human writes depends on D-90.
+placed with the Learn stores beside `calibration`.
+
+**The `screen_score_daily` size cell states the rate rather than a total, and that is
+D-83 rather than a dodge.** It read `1.4 GB` against a grain of `ticker × screen × day`,
+which is a figure that assumes five screens without saying so, and the number the family
+implies is not knowable while D-90 is open: 2.2 GB at eight registered screens, 2.5 GB
+at nine. Writing either would be a count that goes stale on the decision that is
+explicitly still to be taken. The cell now reads `~280 MB per registered screen`, which
+reproduces 1.4 GB at five, moves correctly at any count, and is the rule §9.1 states.
+The grain cell reads `ticker × registered screen × day` for the same reason. The tfoot
+total keeps its 5 GB, now stated as being at five registered screens, and gains what a
+further one costs.
 
 ### 12.6 §06, the attribution grain card
 
@@ -1250,6 +1195,13 @@ Every one is audited below. **Live** means the count of screens holding slots an
 on promotion or retirement. **Design's five** means a statement about the design as
 built, which stays true of that moment whatever the registry later holds. **Incidental**
 means the number carries no weight in the sentence and D-83 says to state the rule.
+
+**All eleven are resolved and nine changed.** The two that did not are lines 357 and
+358, whose sentences were rewritten to state a general property and which name five
+screens of eight as the configuration that property is tightest at. That is the phrase
+surviving inside a stronger claim rather than the audit missing it, and it is recorded
+so a later whitespace-tolerant sweep returning two is read as this and not as a
+regression.
 
 | Line | Text, abbreviated | Sense | Action |
 |---|---|---|---|
@@ -1380,98 +1332,28 @@ And in §06, appended to the "The attribution write happens here, not later" not
 
 ---
 
-## 13. The `CHANGELOG.md` entries the edits need
+## 13. The `CHANGELOG.md` entries, written
 
-Under D-73, `ARCHITECTURE.html` is a spec and takes clean edits with the prior wording
-recorded here. Drafted in the register's existing form, which opens with what changed
-and why, then quotes the prior wording verbatim under a blockquote.
+**Seven entries, one per decision, at `2026-08-11`.** They are in `CHANGELOG.md` and are
+not repeated here, for the reason §11 gives: the log is the record, and a second copy of
+a removal is a removal that can disagree with itself.
 
-> ## <date>, D-84 to D-89, the screen lifecycle
->
-> `ARCHITECTURE.html` §03, §04, §05, §06, §13, §15, §16 and §18 amended under D-84 to
-> D-89. Human-directed; the decisions were authored before the document was touched
-> [`CLAUDE.md` §13]. Clean edits under D-73, prior wording verbatim below. The design
-> they implement is `docs/SCREEN_LIFECYCLE.md` and the brief it answers is
-> `prompts/spent/design-screen-lifecycle.md`.
->
-> **The document described a system with exactly five screens and no way to add or remove
-> one.** Registration, shadow running, promotion and retirement are new concepts and none
-> of them existed in it. The rule now sits in §13 beside the tuner, which computes it, and
-> §05 and §06 point at it from the components that carry out their halves.
->
-> Replaced in §03's C13 row:
->
-> > Runs the five screens from config. Maintains each screen's trailing 250-day
-> > distribution for its floor
->
-> Replaced in §03's C14 row:
->
-> > Size quota per screen, no backfill, dedup across screens, writes attribution
->
-> Replaced in §03's C22 row, and its Writes cell gained `screen_evaluation`:
->
-> > Reallocates the 40 slots between screens on peer-relative hit rate and alpha, shrunk,
-> > floor 4 and cap 12
->
-> Replaced in §15's U4 row, and its Reads cell gained `screen_evaluation`:
->
-> > The five screens with current slot allocation, fill rate, hit rate, mean peer-relative
-> > alpha and current floor. History of how the tuner has moved slots. Recent candidates
-> > per screen and how they went.
->
-> Replaced in §06's attribution grain card, under D-83, two counts nothing checked and
-> both of which move the moment a screen is registered:
->
-> > Around 7,000 rows a year, each tagged with its screen. Roughly 1,400 per screen, which
-> > is enough to say something about each within a year.
->
-> **Eleven occurrences of "five screens" were audited individually and eight changed.**
-> The brief that commissioned the work said nine, which a case-sensitive grep confirms
-> and a whitespace-tolerant case-insensitive one refutes: lines 252 and 281 open sentences
-> with "Five screens". That the count was itself an unchecked count is D-83's defect
-> appearing in the instruction to fix it, and it is recorded here rather than quietly
-> corrected. `SCREEN_LIFECYCLE.md` §12.7 carries the audit with a sense for each.
-> Prior wording of the eight that changed:
->
-> > Three of the five screens need company fundamentals that a fund does not have.
->
-> > Five screens, each with its own ranking and its own floor
->
-> > Five screens, each with its own metric set, each blind to the others.
->
-> > Figure 3 — five screens running in parallel off one percentile store
->
-> > Union across the five screens
->
-> > Two large slots across five screens is 10 of a possible 40, or 25 percent.
->
-> > Three small slots across five screens is up to 15 guaranteed places for names between
-> > $300M and $2B, subject only to clearing each screen's own floor.
->
-> > Every ticker is scored by all five screens every day, because the floor is the 98th
-> > percentile of that screen's own trailing distribution and you cannot know the
-> > distribution without scoring everyone. That is five rows per ticker per day rather
-> > than one.
->
-> > All five screens return zero
->
-> **The three slot counts were audited and all three stay.** The pool of forty, the floor
-> of four and the cap of twelve are the three inputs to the arithmetic that makes four to
-> ten live screens the feasible range, so they are numbers the design rests on rather
-> than counts of a set, and D-83 does not reach them.
->
-> **What the two megacap and small-cap cards gained is a stronger claim, not a corrected
-> number.** Ten of forty and fifteen of forty were stated as properties of five screens of
-> eight. Under D-89's proportion they are properties of every allocation the tuner can
-> reach, and the small-cap floor of fifteen is lowest at exactly today's configuration.
->
-> `SCHEMA.md` gains `attribution.surfaced_as` and the `screen_evaluation` table, and
-> `PROGRESS.md`'s estimated-to-measured table gains `screen_score_daily`'s size, which
-> moves with the number of registered screens.
+The set opens with a shared entry, `2026-08-11, D-84 to D-90, the screen lifecycle`,
+carrying what the pass was, where the narrative went and why, the eleven-against-nine
+audit, the three slot counts, and what was deliberately not touched. Then one entry per
+decision, each quoting verbatim the prior wording of the edits that decision drove.
 
-A second entry is needed for `SCHEMA.md`, which is also a spec under D-73. It has no
-prior wording to quote for `screen_evaluation`, which is an addition, and one line to
-quote for `attribution`'s column list.
+Three of the seven remove nothing and are written anyway. D-86 and D-88 are rules that
+arrive as new prose, and D-90 is `OPEN` and changes no spec at all. An entry a reader
+cannot find is the same as no entry, and a decision authored on a date is a corpus change
+whether or not it deleted a sentence.
+
+**`SCHEMA.md` gets no entry yet and that is deliberate.** D-85's `surfaced_as` and D-87's
+`screen_evaluation` are declarations `guards.ps1` and `SchemaParityTests` hold against the
+migrations and the live database in both directions. Declaring either before its migration
+exists fails a check for a column that is correctly absent, so both are carried obligations
+against the phase that migrates them, and the `SCHEMA.md` entry is written in that
+checkpoint.
 
 ---
 

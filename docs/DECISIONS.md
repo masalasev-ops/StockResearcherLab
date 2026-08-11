@@ -1099,6 +1099,179 @@ was made exact for [INVARIANT 16].
 
 ---
 
+## Screen lifecycle
+
+Authored 2026-08-11 from the design drafted in `docs/SCREEN_LIFECYCLE.md`, which
+answers the brief archived at `prompts/spent/design-screen-lifecycle.md`. Authored
+before `ARCHITECTURE.html` was touched, because the cells cite them [`CLAUDE.md`
+§13]. No entry below rests on a measurement, and none exists to rest on: phase 3 has
+not run, screens are phase 4 and the tuner is phase 8. That is the reason the
+decisions were taken now rather than inside phase 4 [`CLAUDE.md` §11].
+
+**D-84 A screen has three states and a shadow screen is one of them.** `ACTIVE`
+`live` scores and holds slots, `shadow` scores and holds none, `retired` does not
+score and keeps its config row. The state is `screens.<id>.state`, so registering a
+candidate screen is a config row rather than a deployment, exactly as adding a screen
+already was [D-6]. A shadow inherits D-9's floor unchanged and has no threshold of
+its own, because D-9's floor is self-referential and is therefore defined for any
+screen that has a distribution. C13's only change is which screens it iterates.
+
+The state exists so that a candidate screen can accumulate a record before it can
+affect a candidate set, which is the only way to know anything about it that is not
+an argument. A screen registered live is a screen chosen by argument; a screen
+promoted from shadow is one chosen on a record it built while unable to affect
+anything.
+
+**D-85 Shadow screens write `attribution` and never `candidate_set`.** `ACTIVE`
+`attribution` gains `surfaced_as`, `NOT NULL` and constrained to `candidate` or
+`shadow`, and `score_per_screen` gains each screen's rank alongside its score. The
+grain does not change: one row per ticker per day surfaced, with `screens_surfacing`
+carrying live and shadow ids together, because the forward return of a name on a date
+is one number however many screens surfaced it.
+
+A separate shadow store was weighed and rejected. C21 ForwardReturnFiller would
+become two code paths that have to agree on the acquisition and delisting rules, the
+point-in-time size bucket, sector and regime would be frozen twice by two writers,
+and the tuner's single-table aggregate would become a union [`ARCHITECTURE.html`
+§19]. A second store holding the same grain, the same context columns and the same
+nine return columns is the shape D-76, D-77 and D-83 each removed.
+
+`surfaced_as` is stored rather than derived for D-80's reason. A derivation resolves
+against the live set, which moves on promotion, so a promoted screen would silently
+relabel its own history, which is today's definitions applied to a past date
+[INVARIANT 4]. And a constraint protects the column where a writer-side check
+protects one writer.
+
+A view `candidate_attribution` selects `surfaced_as = 'candidate'`, and every reader
+meaning "candidate" reads the view, so the filter cannot be forgotten [`CLAUDE.md`
+§5]. Eight readers mean candidate and three mean everything surfaced;
+`SCREEN_LIFECYCLE.md` §4.5 enumerates all of them, with three more that a reader
+would expect to appear and do not read the table at all. The population filter and
+the per-screen grouping filter are different, and C24 needs both, because a candidate
+row can carry a shadow id in `screens_surfacing`.
+
+`candidate_set` is unchanged and is therefore the unambiguous definition of the
+candidate set.
+
+**D-86 Backfilled observations count toward a shadow's distribution and never toward
+a promotion or a retirement.** `ACTIVE`
+A shadow needs backfilled scores or it has no D-9 floor for its first 250 sessions
+and no record at all for its first year. The condition on counting them is D-58's:
+the screen's inputs must be backfillable to the definition the live screen will use,
+because a floor drawn from a population the live screen does not share is the defect
+D-58 removed short interest for.
+
+A promotion or a retirement reads prospective observations only. Four years of
+history arrive at once when the screen backfill runs, so a sample floor counting them
+is met on registration day and the rule means nothing. `CLAUDE.md` §11 prohibits
+tuning screens on forward returns before the researcher has judged anything, and a
+promotion is a stronger action than a slot move. And `VALIDITY.md` §5 and §6 make the
+window one macro environment with regime confounding stated rather than mitigated.
+
+**Two documents were read against their surface and neither licenses a promotion on
+backfill.** `VALIDITY.md` §6's "backfill is never used to evaluate the researcher,
+only the screens" has model training contamination as its threat and the researcher
+as its subject; it says backfill is unusable for the researcher and not that it is
+sufficient for a screen. `BUILD_PLAN.md` phase 8's "the tuner moves slots on
+backfilled data" is a build verification criterion and has to be, phase 8 having no
+prospective night to run against. This is the clause to revisit if either reading is
+wrong, and nothing else in the lifecycle moves with it.
+
+**D-87 A screen is retired on sustained peer-relative underperformance, and the tuner
+is what measures it.** `ACTIVE`
+The measure is 21-day peer-relative return and the hit rate on the same column, never
+absolute alpha and never the SPY column [D-42, INVARIANT 5]. A rule that can retire a
+screen is more destructive than one that can cut its slots to four, so INVARIANT 5
+binds on it at least as hard. Twenty-one days because it is the horizon
+`VALIDITY.md` §4 already pre-registers the primary claim at, and because D-34's
+40-day time stop means an edge appearing only at 63 days is one this portfolio cannot
+hold to.
+
+**The sample floor.** At least 1,000 prospective observations, which is
+`VALIDITY.md` §4's per-side count used unchanged, or 250 paired observations where
+the screen is paired against a named incumbent. The 250 encodes `rho = 0.75` and
+nothing else, since the variance of a paired difference is `2 * sigma^2 * (1 - rho)`
+and a paired test matches an unpaired one's power at `n * (1 - rho)`. The correlation
+is observable once both screens have run over the same names on the same dates, and
+re-setting the floor on a measured one sizes the instrument rather than choosing the
+answer, which is the single after-the-fact adjustment `CLAUDE.md` §11 permits.
+Provided the measurement precedes the comparison it sizes: sizing from a correlation
+measured over the same window the promotion is then decided on lets the floor be
+chosen by the data it is applied to, and that is result-shopping.
+
+**The promotion bar.** A margin of `sqrt(2 * ln(k))` standard errors, against the
+live family's mean for an addition and against zero for a paired shadow. One rule for
+both, because promoting whichever of k paired shadows wins selects the maximum of k
+exactly as it does for additions: pairing shrinks the standard error and does not
+remove the selection across tests. `k` counts the screens of that kind that met the
+sample floor at that evaluation, read off `screen_evaluation` and not off the
+registry, and counted within a family rather than across it. A correction is for the
+tests that could have been acted on, and a screen below the floor could not have been
+promoted whatever it did. It is inert at `k` of one in both families, which is
+correct in both, and it is not gameable: the floor is a versioned config row and
+eligibility is a recorded fact per evaluation.
+
+**Nomination, not execution.** A nomination requires three consecutive monthly
+evaluations, so a quarter is the shortest path to one and a single bad quarter cannot
+retire anything. A fail nominates; a human retires, at D-88's boundary.
+
+**Why the tuner.** C22 ScreenTuner computes the measure for every registered screen
+and allocates slots among the live ones only. That measure is already what it
+computes, and a second component computing it is one fact stated twice, which is the
+defect D-76, D-77 and D-83 each removed. INVARIANT 2 is not in the way, since the
+tuner is not a screen and has read every screen's results since it was designed.
+D-43's "touches nothing else" is about what the tuner tunes, and recording a
+measurement is not tuning.
+
+Its write set gains `screen_evaluation`, screen by evaluation date, insert only.
+`config_rows` is versioned configuration and would resolve a measurement as config
+[INVARIANT 13], `screen_history` is the wrong grain and C13's table [INVARIANT 10],
+and the sustained-fail rule needs the consecutive count to be a record rather than a
+recomputation, since recomputing applies today's definitions to a past evaluation
+[D-40].
+
+**D-88 A promotion or a retirement splits the primary claim, so none executes before
+the claim has its sample and all due are bundled into one boundary.** `ACTIVE`
+The set of screens is the set of rubrics [`ARCHITECTURE.html` §07], so promoting or
+retiring one changes the rubrics and the dossier, which `CLAUDE.md` §12 lists among
+the changes that invalidate comparisons across the boundary. It therefore splits the
+primary claim's history and not only the screen's own record.
+
+So nothing executes until `VALIDITY.md` §4's pre-registered sample is reached,
+meaning at least 1,000 observations on each side of BUY against PASS at 21 days, and
+its minimum evaluation period of 12 months regardless. Every nomination due at that
+point goes into one boundary. Four screens promoted one at a time is four boundaries
+and five incomparable segments where one bundled change is two, which is the outcome
+`CLAUDE.md` §12's instruction to bundle exists to avoid.
+
+**D-89 The slot pool stays at 40, D-7's 2/3/3 is restated as a proportion, and the
+feasible live-screen range is four to ten.** `ACTIVE`
+Large takes `floor(slots / 4)`, the remainder splits between mid and small with the
+extra to small. That is exactly 2 / 3 / 3 at eight slots and integral at every count
+from four to twelve, which is the range D-43's floor and cap have always permitted.
+The gap is pre-existing: the tuner has been able to reach any count in that range
+since it was designed and 2/3/3 is defined at eight alone, so retirement makes the
+gap reachable more often rather than creating it.
+
+Two properties are why this proportion rather than another. The large share never
+exceeds 25 percent at any count, so the sum over any allocation totalling 40 is at
+most 10 and **D-7's megacap bound of ten of forty holds at every live-screen count**
+rather than only at five screens of eight. And the guaranteed small-cap places are
+minimised at exactly today's five screens of eight, every other feasible allocation
+giving 16 to 20, so **D-7's small-cap floor of fifteen is a floor across the whole
+reachable space** rather than a figure that happens to hold today.
+
+With a floor of four and a cap of twelve, forty is reachable only with four to ten
+live screens. A retirement leaving three does not execute and becomes a design
+decision requiring a promotion in the same boundary or an authored change to the
+pool, the cap or the floor; a promotion taking the count to eleven does not execute
+either. A retiring screen's slots return to the pool and the tuner redistributes at
+the next monthly run with the floor and the cap untouched, which is a normal monthly
+move rather than an exception because the arithmetic above guarantees one exists. A
+promoted screen enters at the floor of four.
+
+---
+
 ---
 
 ## Open
@@ -1171,3 +1344,38 @@ decision on its own.
 `institutional_holding` still ingests and 1.7's institutional half still builds.
 A top-20 current-holders snapshot is a usable static feature. It is only the
 change metric that has no series behind it.
+
+**D-90 Whether post-earnings drift is registered, and on what history.** `OPEN`
+Owed to phase 4, and open rather than decided because it is a fork the design
+cannot settle from what it knows. Its input has no backfillable history and
+nothing else in the family shares the problem.
+
+`events.earnings_backward_days` is 7 [`CONFIG_REFERENCE.md`, verified consumer
+EventsIngestor], so the events store reaches seven days into the past and there
+is no multi-year earnings history to backfill against. And `announced_date` is
+null for earnings, because `calendar/earnings` sends none, so a backfilled row
+and a live-accumulated one are indistinguishable and a rescheduled report
+overwrites its old date without trace [`BUILD_PLAN.md` carried obligations, 1
+to 5].
+
+D-86's condition therefore fails for this screen alone: its backfilled
+distribution would come from a different population than its live one. That is
+what D-58 removed short interest for and what D-69 is open on for
+`inst_ownership_change`, making this the third instance of one pattern and the
+first found before anything was built on it.
+
+Three options, none chosen. Register it as a shadow accumulating prospectively
+only, in which case it has no floor for 250 sessions, reaches D-87's sample
+floor roughly a year behind the other addition, and is never comparable to the
+other three on a backfilled window. Widen the backward window and backfill
+earnings history first, which is an ingest change, does not fix
+`announced_date`, and runs into phase 5's open question about whether a
+backfilled `events` row is point-in-time correct at all. Or do not register it,
+and revisit when `events` can support it.
+
+**What the choice costs the rest of the family, which is less than it looks.**
+D-87's `k` counts screens eligible at the evaluation rather than registered, so
+under the first option X-PEAD raises no bar until it reaches the sample floor
+about a year in. Registering it costs the other addition nothing over that year,
+and the bar rises to 1.18 standard errors at the first evaluation where there is
+genuinely a selection of two.

@@ -132,6 +132,51 @@ and both are given so the next reader can find it either way.
 |---|---|---|---|---|
 | `percentile.cell_min_members` | 15 | D-10 | PercentileEngine | unverified |
 
+**It counts the non-null population for the metric being ranked, not the cell** [2.1].
+A cell of twenty members where five carry a value for one metric otherwise produces a
+percentile computed over five that is indistinguishable from one computed over twenty,
+and nothing downstream could tell. So one row can be ranked inside its sector cell for a
+metric with broad coverage and inside its size bucket for a metric with thin coverage,
+on the same night.
+
+It had been in this document since the corpus was written with nothing seeding it, which
+`seed.ps1` closed at 2.4.
+
+## Compute
+
+Every key here is a window, a warm-up or a floor beneath which a metric is null rather
+than computed over less. None of them is a screen threshold and the tuner touches none
+of them [INVARIANT 14]. Formulas and null rules are in `METRICS.md`.
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `indicator.wilder_warmup_bars` | 250 | 2.1 | IndicatorEngine | unverified |
+| `indicator.base_lookback_days` | 60 | 2.1 | IndicatorEngine | unverified |
+| `indicator.base_max_range_pct` | 0.25 | 2.1 | IndicatorEngine | unverified |
+| `valuation.own_history_min_points` | 24 | 2.1 | ValuationEngine | unverified |
+| `market.breadth_ma_days` | 200 | 2.1 | MarketContextEngine | unverified |
+| `market.sector_composite_min_members` | 5 | 2.1 | IndicatorEngine, MarketContextEngine | unverified |
+| `sentiment.min_baseline_days` | 20 | 2.1 | SentimentEngine | unverified |
+
+**A window named inside a column is a constant, not a key.** `article_count_z_own_90d`
+carries its 90, `sentiment_delta_7v30` its 7 and 30, `dist_200dma` its 200 and
+`median_dollar_volume_20d` its 20. A tunable value beside a column that names it is a
+second place for the number to live and the column name is wrong the first time they
+disagree, which is why `FlowEngine.WindowDays` is a `const` beside
+`insider_net_90d_usd`. `market.breadth_ma_days` is a key for the opposite reason: it is
+the same 200 and no column names it.
+
+**Two keys are missing from this table and the omission is deliberate.**
+`market.regime_breadth_high` and `market.regime_breadth_low` are the thresholds a regime
+label would be assigned from, and no document enumerates the labels or the rule. Seeding
+a value for a rule that does not exist would put a number in the store that nothing can
+be read against. They arrive with the decision, and seeding a key later is version 1 and
+does not move the store-wide config version [D-72], so waiting costs nothing.
+
+**Every entry above is `unverified` and that is the accurate state**, not an oversight:
+the four components that consume them do not exist yet. Each checkpoint that wires one
+up moves its own row, having read the line that consumes it [CLAUDE.md §8].
+
 ## Screens
 
 | Key | Default | Set by | Consumer | Verified |

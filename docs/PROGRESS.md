@@ -2739,6 +2739,116 @@ log records for `ev_ebit` are exactly 3,897 less 2,203.
   commit moves it. `4ccf342` touches four documents and no source, so the test count
   and the guard count carry.
 
+### The correction pass on the review's findings
+
+Run on 2026-08-11 against `8df9264`, which already held the review and the three
+record corrections the build session took from it. What follows is what the review
+found and did not itself change, decided by the operator and applied here. **The
+sign-off section above is untouched.**
+
+Two of the findings were rules rather than defects, and both were settled by
+measurement with the rule written down before the number existed [`CLAUDE.md` §11].
+
+#### D-81, and the measurement that chose between two candidate lines
+
+The question was not whether `cash_on_hand`'s zero-coalesce was wrong in the mirror
+direction. It was which reported line should stand in, and reading another line from
+the same statement is not inventing data, so it was measured.
+
+**Population: quarterly rows carrying `cash`, `cash_and_equivalents` and
+`short_term_investments` together, with `cash` non-zero.** 8,664 rows, of which 253
+carry zero short-term investments and cannot discriminate between the two candidates,
+leaving **8,411**.
+
+| Tolerance, relative to `cash` | `cash` = `cash_and_equivalents` | `cash` = their sum | neither |
+|---|---|---|---|
+| exact | **6,710** | 13 | 1,688 |
+| 1 basis point | **6,850** | 46 | 1,547 |
+| 1 percent | **7,083** | 757 | 1,297 |
+
+`cash` is the parts line under another name by roughly five hundred to one exactly and
+nine to one at a percent, and it is never plausibly the total. So it substitutes for
+the part and short-term investments are still added: `coalesce(cash_and_equivalents,
+cash) + coalesce(short_term_investments, 0)`, null when both cash lines are absent.
+
+**Applied and measured on the blessed date.** Re-running C09 over 2026-08-07 leaves
+2,253 rows unchanged, **corrects 1,639**, and nulls **5** where neither cash line
+exists. Coverage moves 3,849 to 3,844. `NFLX.US` goes from 28,678,000 to 9,127,910,000.
+`KLAC.US` from 3,252,566,000 to 4,902,408,000. `BKNG.US` and `OHI.US` are unmoved,
+because both report the parts line.
+
+`cash_on_hand` is not ranked [`METRICS.md` §6.5], so no percentile moves.
+
+#### D-82, and a threshold that was set before the measurement and then failed
+
+Whether `ev_ebit` and `roic` may read `operating_income` where `ebit` is absent. The
+rule was fixed first: substitute if the median of `abs(ebit - operating_income) /
+abs(ebit)` is under 2 percent **and** the 90th percentile is under 10 percent, the
+second because a ranked column tolerates a name moving a rank or two and does not
+tolerate names moving across deciles.
+
+| Population | Rows | Median | 75th | 90th | 99th |
+|---|---|---|---|---|---|
+| every quarterly row carrying both | 380,281 | **1.01%** | 13.9% | **63.9%** | 942% |
+| latest readable quarter only | 2,942 | **4.90%** | 23.1% | **84.3%** | |
+
+The median passes on the wider population and the tail fails by six times there and by
+eight on the population the ratios actually read. **No substitution.** `ev_ebit` stays
+at 2,203 of 3,897.
+
+The selection effect the review named stays open and is not closed by this: what the
+measurement establishes is that operating income is not available as a stand-in at an
+error a ranked column can carry, not that the gap is acceptable. Whoever revisits it
+needs a different input rather than a lower bound [`CLAUDE.md` §11].
+
+#### The three write paths that no test executed
+
+`StageWritePathTests` runs C09, C35 and C10 through their own `ExecuteAsync` against
+the database and reads the row back. C09's row carries a `real` ratio, a `numeric`
+level and a `real[]` written null, which is three wire formats in one write.
+
+**The C10 case was verified against the defect it exists for rather than assumed to
+cover it.** Reverting `MarketContextEngine.cs:82` to `WriteAsync` a second time now
+gives 226 passed and **1 failed**, where before this test the same edit gave 221 passed
+and 0 failed. The fix was reverted, the tree is clean.
+
+Every compute component now has a test that runs the stage: C34 and C08 and C11 had
+one, and these are the other three.
+
+#### The two authored documents, and what was deliberately not done
+
+`ARCHITECTURE.html` §3's C11 row and `METRICS.md` §6.1 both stated the fallback as
+fewer than 15 members where the code counts non-null values, and `METRICS.md` §5 named
+regime labels the `CHECK` rejects. All three corrected, with the prior wording verbatim
+in `CHANGELOG.md` under 2026-08-11. `METRICS.md` §3's `cash_on_hand` rule replaced
+under D-81, same treatment.
+
+**`METRICS.md` is still the 2.1 draft and its nine PROPOSAL entries are still
+PROPOSAL.** Promoting them was declined deliberately: D-81 and D-82 change one of its
+rules and settle another the same week, so promotion is one act after those land rather
+than nine entries authored alongside two amendments. §5 keeps its BLOCKED marker and
+gains a pointer to D-80 instead, so a reader cannot take the superseded literals for the
+authored ones.
+
+#### What moved, and what did not
+
+221 tests to **227**. `valuation_daily`'s digest for 2026-08-07 moves with D-81 and the
+other four do not, which is C09's write ownership observed rather than declared.
+
+| Table | Digest at 2.12 and at the review | After D-81 |
+|---|---|---|
+| `indicator_daily` | `26097aef9ce89c71962764dbb8217c24` | unchanged |
+| `valuation_daily` | `52105e24c2f92b271e9812e5513eb91b` | **`e08ce4c0db02d594da278dc413191409`** |
+| `flow_daily` | `0bf8e067a4d1b2860c5428417ae2d794` | unchanged |
+| `sentiment_derived_daily` | `8e3978a1e5f0205f3a5a42f16ba653ef` | unchanged |
+| `market_context_daily` | `03ecf62da6ed7a555bfa4908031dc821` | unchanged |
+
+A second run of C09 under the new rule reproduces `e08ce4c0db02d594da278dc413191409`,
+so determinism holds across the change rather than being assumed to.
+
+The digest is `md5(string_agg(t::text, E'\n' ORDER BY ticker))` over the date's rows,
+ordered by `date` for `market_context_daily`.
+
 ---
 
 ## Open items carried forward

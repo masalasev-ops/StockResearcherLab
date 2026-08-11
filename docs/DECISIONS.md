@@ -782,19 +782,58 @@ one to read. A reader parsing live text from dead text on every visit is paying 
 cost the register was built to remove, and a session skimming can take struck text
 for live.
 
-In documents read to know the current state, a removal is a clean edit:
+~~In documents read to know the current state, a removal is a clean edit:
 `ARCHITECTURE.html`, `SCHEMA.md`, `CONFIG_REFERENCE.md`, `RUNBOOK.md`. Delete the
 superseded text, keep the decision citation at the point of change, and record the
-prior value in `CHANGELOG.md`.
+prior value in `CHANGELOG.md`.~~
 
-In documents that are the record, strikes stay. `DECISIONS.md`, because a
+~~In documents that are the record, strikes stay. `DECISIONS.md`, because a
 superseded entry must keep the reasoning its successor replaced. `PROGRESS.md`,
-because a log's corrections are its content. Runtime prompt files remain clean
-deletions, unchanged from before.
+because a log's corrections are its content.~~ [amended, the four and the two were
+written as the definition where they had to be examples of a test]
 
-Existing strikes in the four spec documents are cleaned under this decision, one
-condition: no strike is removed until its decision names what it removed. Where a
-decision does not, `CHANGELOG.md` records the text before the deletion.
+**The rule is a test on what a document is read for, and it is stated in the two
+sentences below. Neither names a document, deliberately, so a document written later
+classifies itself instead of waiting to be added to a list.**
+
+A document read to know the current state takes clean edits.
+
+A document that is the record keeps its strikes, because a superseded decision must
+keep the reasoning its successor replaced, and because a log's corrections are its
+content.
+
+**The mechanism for a clean edit**, which is not part of the test: delete the
+superseded text, keep the decision citation at the point of change, and record the
+prior wording in `CHANGELOG.md`.
+
+**Examples of the test rather than the definition of it.** Reading it as a definition
+is what left three documents unclassified and one carrying both conventions.
+`ARCHITECTURE.html`, `SCHEMA.md`, `CONFIG_REFERENCE.md` and `RUNBOOK.md` are read to
+know the current state and take clean edits. `DECISIONS.md` and `PROGRESS.md` are the
+record and keep their strikes. Runtime prompt files remain clean deletions, unchanged
+from before and for a different reason: the model reads them at execution time and
+cannot tell struck text from live.
+
+**`BUILD_PLAN.md` is a spec under the test.** Its checkpoint tables, done-when lines
+and carried obligations are all read to know what is currently owed, so it takes clean
+edits from here.
+
+**Its existing strikes stay for now, and that is a sweep rather than part of this
+amendment.** Removing one requires confirming that its decision names what it removed,
+which is the condition below, and the file carries several from phases P, 0 and 1. So
+the file is mid-convention: earlier supersessions are struck in place and phase 3's
+fourth done-when line is a clean edit. Recorded in `PROGRESS.md` as an outstanding
+finding rather than left for the next editor to rediscover.
+
+`METRICS.md` and `SCREEN_LIFECYCLE.md` were the other two the list did not reach.
+Each classifies itself under the test at its next edit rather than here, since
+neither has a strike to resolve today.
+
+Existing strikes in ~~the four spec documents~~ [amended with the test] **any document
+the test makes a spec** are cleaned under this decision, one condition: no strike is
+removed until its decision names what it removed. Where a decision does not,
+`CHANGELOG.md` records the text before the deletion. That condition is why
+`BUILD_PLAN.md`'s existing strikes are a sweep rather than an edit taken here.
 
 `CHANGELOG.md` is reopened for that purpose. D-67 closed it because corpus
 versioning had stopped catching anything, and that reason still holds: no version

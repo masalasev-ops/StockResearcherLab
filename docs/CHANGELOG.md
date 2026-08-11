@@ -925,3 +925,41 @@ not the place to decide it.
 D-93's `IBackfillStage` are all declared here and built at the checkpoints that name
 them, so `SCHEMA.md` gains nothing yet: a declaration ahead of its column fails a parity
 check for a column that is correctly absent.
+
+---
+
+## 2026-08-11, D-73 amended
+
+D-73 classified by name where it had to classify by role. Human-directed. Nothing was
+removed from a spec document, so there is no prior wording to quote here; the amendment
+is in `DECISIONS.md`, which is the record and keeps its strikes.
+
+**What was wrong.** `ARCHITECTURE.html`, `SCHEMA.md`, `CONFIG_REFERENCE.md` and
+`RUNBOOK.md` were named individually as the documents that take clean edits, and
+`DECISIONS.md` and `PROGRESS.md` as the two that keep strikes. `BUILD_PLAN.md`,
+`METRICS.md` and `SCREEN_LIFECYCLE.md` were in neither list, so every document written
+after the decision had to be classified by whoever next edited it, and one of them was
+classified twice: `BUILD_PLAN.md`'s earlier supersessions are struck in place and phase
+3's fourth done-when line is a clean edit.
+
+**What replaces it.** The rule is now a test on what a document is read for, stated in
+two sentences that name no document, so a document written later classifies itself. A
+document read to know the current state takes clean edits; a document that is the record
+keeps its strikes. The six names stay as examples of the test rather than as the
+definition of it, and runtime prompt files remain clean deletions for their own reason.
+
+**`BUILD_PLAN.md` is a spec under the test** and takes clean edits from here. Its eight
+existing strikes stay, because D-73's condition requires confirming that each strike's
+decision names what it removed before it can go, and three of the eight cite a
+correction pass rather than a decision. Recorded as open item 11 in `PROGRESS.md`.
+
+**This entry corrects the one above it.** The `D-92 to D-95` entry says "`BUILD_PLAN.md`
+is not one of D-73's four clean-edit documents" and closes by leaving the convention
+question open. Under the amended decision that sentence is false and the question is
+answered. The earlier entry is not edited, this file being appended to and never
+rewritten, and the correction lives here where a reader reaching the end finds it.
+
+**`CLAUDE.md` §13 carries the same list and now disagrees with the register.** It is
+human-edited only [`CLAUDE.md` §13], so it is reported rather than changed. Its
+"Supersede visibly, never silently" paragraph names the same four and the same two as
+the definition, and it needs the same amendment for the corpus to state one rule.

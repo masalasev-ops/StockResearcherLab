@@ -2295,6 +2295,407 @@ is authored is.
 opposite rules" and `prompts/BuildPlans/` is a third.** Carried from the phase plan, which
 raised it before any code was written.
 
+### The sign-off review, step 2
+
+Ran on 2026-08-11 in a session with no commit in this repository and no part in the
+build. Read at `4ccf342`, which is `68aafa4` plus one documentation commit: the diff
+between them touches `BUILD_PLAN.md`, `CONFIG_REFERENCE.md`, `FIXTURES.md` and this
+file and no source file, so step 1's results carry and the recorded HEAD of `68aafa4`
+is the right sha to have recorded.
+
+**Step 1 was reproduced rather than taken on trust.** `ci.ps1` was run independently
+at `4ccf342` and returned `guards.ps1` 5 checks over 83 files, 0 warnings and 0
+errors, 5 migrations applied from an empty server, nothing to apply on the second,
+and **Passed 221, Failed 0**. Counting attributes over the tracked test sources gives
+212 `[Fact]` and 3 `[Theory]`, each theory carrying a three-row `MemberData`, which is
+221. The reported count is the count. Every test name cited in the definition-of-done
+walk exists in tracked source and was located by name, and `ExpectedOwners` 14,
+`ExpectedStages` 13 and `CataloguedComponents` 35 were read off
+`WriteOwnershipConformanceTests.cs:73` and `ReadDeclarationConformanceTests.cs:36,43`.
+
+The five questions this review was given, then the three standing ones. **Nothing here
+is corrected and no document is amended.** Everything below was run against the live
+store on 2026-08-11 and the queries and scripts are reproducible from what is stated.
+
+#### 1. Recompute rather than re-read
+
+**Method.** The raw bars were exported from `price_daily` and every one of the fifteen
+`indicator_daily` columns was reimplemented from its definition in a separate program,
+then compared against what the night wrote for 2026-08-07. The same for the twelve
+computed `valuation_daily` columns against `fundamental_snapshot`. No fixture was read
+and no engine code was called: the comparison is between two independent computations
+over the same real rows.
+
+**The names, chosen so that the adjustment has something to do.**
+
+| Ticker | Why | Bars in window |
+|---|---|---|
+| `NFLX.US` | 10-for-1 forward split on 2025-11-17, no dividend, so the factor is exactly 0.1 then 1.0 | 264 |
+| `BKNG.US` | 25-for-1 split on 2026-04-06 **and** four quarterly dividends | 264 |
+| `KLAC.US` | 10-for-1 split on 2026-06-12 and four dividends, and the split sits inside the 50-bar volume window | 264 |
+| `OHI.US` | five dividends, the last on 2026-08-03, which is **inside** the 20-bar dollar-volume window | 264 |
+| `NOKBF.US` | eight interior sessions absent across a 264-session span | 256 |
+| `TBNK.US` | one interior session absent | 263 |
+| `MH.US` | one bar carrying zero in every OHLCV field, the only such bar in the whole universe window | 263 |
+
+**Result.** 105 indicator cells over 15 columns and 7 names: every one agrees. The
+worst relative difference is 1.10e-7 against float32's own resolution of about 1.2e-7,
+so the disagreement is the storage type and nothing else. `median_dollar_volume_20d`,
+which is `numeric`, agrees to the last digit on all seven. On valuation, 93 valued
+cells agree at worst 5.93e-8, 27 agree that the value is null, and there is no cell
+where one side has a value and the other does not.
+
+**Agreement proves nothing unless the wrong reading gives a different answer, so each
+column was also computed the wrong way.** This is the part the closed-form fixtures
+cannot reach.
+
+| Ticker | Column | Stored | Adjusted | A wrong reading |
+|---|---|---|---|---|
+| `KLAC.US` | `dist_200dma` | 0.20510465 | 0.20510465 | raw close: **-0.84157984** |
+| `KLAC.US` | `adx14` | 18.023170 | 18.023171 | raw high/low/close: **45.710018** |
+| `KLAC.US` | `volume_vs_50d_avg` | 0.23400956 | 0.23400956 | raw volume: **0.65623176** |
+| `KLAC.US` | `rs_change_63d` | 0.061611727 | 0.061611726 | raw on both legs: **-0.89370110** |
+| `NFLX.US` | `dist_52w_high` | -0.41488440 | -0.41488438 | raw: **-0.94148844**; adjusted **close** used as the high: **-0.41310113** |
+| `OHI.US` | `median_dollar_volume_20d` | 94,318,606.88 | 94,318,606.88 | adjusted close times raw volume: **93,392,434.535** |
+
+The third of those is the one worth naming. Using the adjusted close where the adjusted
+high belongs is a plausible mistake that moves `dist_52w_high` by about 0.4 percent
+rather than by half, and it is separated here.
+
+**One column cannot be discriminated this way and it should be said rather than
+implied.** The adjustment factor cancels in `close * volume`, so raw times raw and
+adjusted times adjusted are the same number by construction. What the `OHI.US` case
+excludes is the mixed form, adjusted price against unadjusted volume, which is the
+error that could actually be made. That the column is unadjusted is a statement about
+`DollarVolume.MedianExpression` read directly, not something this comparison shows.
+
+**`MH.US` and `TBNK.US` are the control and they behave as a control should.** Neither
+has a corporate action inside the window, so every counterfactual coincides with the
+stored value for both. A name without an action proves nothing about adjustment, which
+is why the other five were chosen.
+
+The one holed bar, `MH.US` on 2025-07-23, sits at index 0 of a 263-bar history. The
+Wilder window starts at index 13 and the 200-day and 52-week windows start at 63 and
+11, so it falls outside all of them and changes nothing. It would matter on a shorter
+history and there is no such name today.
+
+#### 2. Which write paths have a test, and which ran once
+
+The question is not whether tests exist. It is whether any test constructs the
+component and calls `ExecuteAsync` against a database, which is the only shape that
+would have caught either defect.
+
+| Component | A test runs the stage | Real values through its own write path | Where |
+|---|---|---|---|
+| C34 FlowEngine | **yes** | yes, from a seeded insider row | `FlowEngineTests.cs:204-211`, `PercentileSplitTests.cs:342-350` |
+| C08 IndicatorEngine | **yes** | yes, all seventeen columns from twenty seeded bars | `DollarVolumeTests.cs:98-106` |
+| C11 PercentileEngine | **yes** | yes | `PercentileEngineTests.cs:318-326` |
+| C09 ValuationEngine | **no** | column set only, every non-key column null | `PercentileSplitTests.cs:52-97` |
+| C35 SentimentEngine | **no** | column set only, every non-key column null | `PercentileSplitTests.cs:52-97` |
+| C10 MarketContextEngine | **no** | `WriteJsonAsync` exercised by a hand-written lambda, not by the stage | `MarketContextEngineTests.cs:166-183` |
+
+`ValuationEngineTests` and `SentimentEngineTests` never name their engine outside
+`Compute` and the nested record types. No test file constructs a `ValuationEngine`, a
+`SentimentEngine` or a `MarketContextEngine` at all.
+
+**The two corrections are not equivalent, and the difference is the point.** 2.5's
+`DollarVolumeTests` runs `IndicatorEngine.ExecuteAsync` and reads
+`median_dollar_volume_20d` back out of `indicator_daily`, so the cast defect cannot
+return. 2.9's `MarketContextEngineTests` covers the mechanism and not the call site.
+
+**Demonstrated rather than argued.** Changing `MarketContextEngine.cs:82` from
+`WriteJsonAsync` back to `WriteAsync`, which is the 2.9 defect exactly, leaves **all
+221 tests passing**, and the binary built from that same tree fails on the first row
+against the store with `XX000: unsupported jsonb version number 123`. The edit was
+reverted, `git status` is clean, and the five digests were re-read afterwards and are
+back at their recorded values.
+
+So three of the six compute components still have no test that runs the stage, and one
+of the three is the component whose write path this phase found broken. C09 and C35
+are in a weaker position than C10 rather than a stronger one: their write paths have
+executed exactly once each, on the night of 2.12, and nothing since has run them from
+a test.
+
+`PercentileSplitTests` is not a substitute and does not claim to be. It writes each
+engine's declared column set through the real staged path, which is what makes it a
+statement about column ownership, but every non-key column is written null. A null
+carries no type over binary COPY, so neither the `decimal?` cast nor the `jsonb`
+format could have surfaced there.
+
+#### 3. Did the fifteen-member fallback actually fire
+
+**The run log's three totals were recomputed from an independent query** over the four
+source tables joined to `security`, using the two predicates written out rather than
+`PercentileEngine`'s own SQL. It returns 56,031 ranked in a sector cell, 998 in the
+size bucket alone and 25 null on a thin bucket, which is the recorded line to the row.
+Every per-metric count matches as well.
+
+**The cell census.** 35 cells over three buckets and thirteen distinct `sector`
+values. Three of them are tiny: `mid`/`NA` with 1 member, `mid`/`Other` with 1, and
+`small`/`Utilities` with 8. Ten names in total, which is the "10 in bucket" the
+fourteen indicator metrics show, and eight for `rs_change_vs_sector` because the two
+one-member sectors cannot form a composite at `market.sector_composite_min_members` 5.
+
+**The distribution of cell sizes actually used, for a broadly covered metric.**
+
+| Cell size | Cells | Names in them |
+|---|---|---|
+| under 15, falls back | 3 | 10 |
+| 15 to 29 | **0** | 0 |
+| 30 to 49 | 12 | 502 |
+| 50 to 99 | 7 | 481 |
+| 100 or more | 13 | 1,848 |
+
+**The floor is not a marginal call for these metrics.** The smallest cell it admits is
+32, more than twice the floor, and there is no cell anywhere between 9 and 31. For the
+fourteen indicator metrics the rule separates three structurally tiny cells from
+thirty-two comfortable ones, and it has not yet had to judge a cell that was merely
+thin on the night. That is a safeguard confirmed to fire, not a safeguard confirmed to
+discriminate.
+
+**Where it does bite is the sparse metrics, and there it bites at its own edge.**
+
+| Metric | Cells present | Thin | Smallest used | Median used | Largest used | In bucket | Null |
+|---|---|---|---|---|---|---|---|
+| `atr_pct` and 12 others on `indicator_daily` | 35 | 3 | 32 | 65 | 173 | 10 | 0 |
+| `rs_change_vs_sector` | 35 | 3 | 32 | 65 | 173 | 8 | 0 |
+| `dist_52w_high_20d_change` | 35 | 35 | n/a | n/a | n/a | 0 | 0 |
+| `ev_ebit` | 35 | 3 | 18 | 50 | 121 | 7 | 0 |
+| `roic` | 35 | 10 | 16 | 36 | 97 | 72 | 0 |
+| `roic_4q_change` | 35 | 13 | **15** | 34 | 87 | 97 | 0 |
+| `fcf_yield` | 35 | 21 | **15** | 27 | 39 | 110 | 0 |
+| `insider_net_90d_usd`, `distinct_buyer_count` | 32 | 17 | 19 | 29 | 43 | 128, 130 | 0 |
+| `inst_ownership_change` | 32 | 32 | n/a | n/a | n/a | 0 | 1 |
+| the three sentiment metrics | 35 | 27 | 19 | 45 | 87 | 94 each | 8 each |
+
+For `fcf_yield`, 3 cells are empty, 18 fall back holding 110 names, and **4 cells sit
+in the 15 to 19 band holding 65 names**. So 65 of the 464 `fcf_yield` percentiles are
+computed over between 15 and 19 values and report on the same 0 to 100 scale as one
+computed over 173. That is the floor doing exactly what it was set to do and it is
+worth knowing that the design is currently operating at its own boundary on the metric
+S1 ranks first.
+
+#### 4. Which recorded figures come from the alphabetical head
+
+**The premise needs narrowing and the narrowing is measured.** The head reaches one
+recorded figure and not the table.
+
+| Column on `valuation_daily` | Rows with a value | First | Last | Distinct initials |
+|---|---|---|---|---|
+| `fcf_yield` | 464 | `A.US` | `CCBG.US` | **3** |
+| `ev_ebit` | 2,203 | `A.US` | `ZWS.US` | 26 |
+| `roic` | 1,384 | `A.US` | `ZWS.US` | 26 |
+| `accruals` | 3,500 | `A.US` | `ZYME.US` | 26 |
+| `cash_on_hand` | 3,849 | `A.US` | `ZYME.US` | 26 |
+| every row | 3,897 | `A.US` | `ZYME.US` | 26 |
+
+`goodwill`, which is what bounds `roic` to 1,384, is present for 2,483 names across 26
+initials. So `roic`'s coverage gap is a reporting fact about companies that never
+acquired anything, exactly as recorded, and not the head. **Only
+`capital_expenditures` is head-bound, and through it only `fcf_yield`, its 21 thin
+cells and its 110 bucket fallbacks.** "Every distribution computed over
+`valuation_daily` is therefore drawn from that set" holds for the capital-expenditure
+column and for nothing else on that table.
+
+**"482 names running contiguously from `A.US` to `CCBG.US`" is right, and it is right
+over a population the sentence does not name.** Within `fundamental_snapshot`'s own
+`A.US` to `CCBG.US` span there are 1,338 quarterly filers, of which 856 carry no
+capital expenditure, so the 482 are not a contiguous run of that table. They are
+contiguous over the **active universe ordered by ticker**: 483 universe members sort
+at or before `CCBG.US`, 482 of them carry the field, the one that does not is
+`BXBLY.US`, and no name carrying it sits outside the universe. All 464 `fcf_yield`
+rows belong to universe members, so every one of them is rankable.
+
+Stated at the grain that matters downstream: **S1's first ranking input exists for 464
+of the 2,841 universe names, and those are the alphabetically first 483 less one.**
+
+**Why it will not improve, which is sharper than "will not improve with more nights".**
+C03 orders its pool never-fetched first, then universe members, then everything else,
+each group ordinal by ticker, and takes `fundamentals.max_tickers_per_run` of 500. Once
+the never-fetched group stops shrinking the selection is frozen. The run log shows
+three consecutive C03 runs, `run_log_id` 684, 796 and 824, each writing 44,365 rows
+over 500 tickers with the same "Candidate pool 3,187, of which 18 have never been
+fetched; 18 of this run's selection were new". Those 18 are selected every run and are
+still never-fetched afterwards, so the provider returns nothing for them, and the other
+482 are the universe's head. **The coverage figure is `max_tickers_per_run` minus a
+group of 18 that returns nothing, and it cannot move until one of those two changes.**
+
+**Everything else this phase recorded traces.** Read off the store at 2026-08-07,
+against the population named.
+
+| Figure | Population | Confirmed |
+|---|---|---|
+| `indicator_daily` 2,841 rows | `security WHERE is_active`, 2,841 | yes, exactly |
+| `dist_52w_high` 1 null, `rs_change_vs_sector` 2, others 0 | the same 2,841 | yes |
+| `dist_52w_high_20d_change` null for all 2,841 | the same 2,841 | yes. No name has the 272 bars it needs; the longest history in the window is 266 and `SPY.US` has 264 |
+| "fourteen of fifteen effectively fully populated" | C08's 15 written columns | yes |
+| `valuation_daily` 3,897 rows | tickers with a readable quarterly filing | yes, and **all 2,841 universe members are among them**, so the extra 1,056 are names C11 never ranks |
+| `fcf_yield` 464, `roic` 1,384, `goodwill` 2,483, `intangible_assets` 2,686 | the 3,897 | yes, all four |
+| sentiment 453 of 2,841 | the universe | yes |
+| breadth 0.718409, `risk_on`, `vix` null, 11 sectors | the universe; 13 sector values of which 2 have one member | yes |
+| D-79's capital expenditure signs, 41,651 populated, 38,613 positive, 3,038 zero, 0 negative | every populated row of `fundamental_snapshot` | yes, all four |
+| the night's twelve step rows and durations | `run_log` 822 to 833 | yes |
+| 14.4 seconds of compute | the six compute steps of that run | yes, 340 + 7,379 + 4,461 + 163 + 1,514 + 521 = 14,378 ms |
+
+#### 5. Reproduce the determinism claim
+
+**The digest expression is recorded nowhere and was recovered by trial.** It is
+`md5(string_agg(t::text, E'\n' ORDER BY ticker))` over the date's rows, ordered by
+`date` for `market_context_daily`. Six other plausible forms were tried and none
+reproduces the recorded values. Worth writing down somewhere, because a digest whose
+expression is not stated cannot be rechecked by the next reader, and this review spent
+part of a session finding it.
+
+**Before anything was re-run, all five recorded digests reproduce from the store as it
+stands**, so nothing has moved since 2.12.
+
+**The compute layer was then re-run from a binary built in this session**, all six
+stages over 2026-08-07 in the nightly order. Row counts came back 661, 2,841, 3,897,
+2,841, 1 and 10,240, and **all five digests are unchanged**. The claim holds
+independently of the session that made it.
+
+**Then the sharper one, extended past what 2.12 did.** 2.12 re-ran C08 alone. This
+review re-ran **all four metric engines with nothing after them**, so C11 had no chance
+to repair anything, and every digest including the thirty percentile columns was
+unchanged. D-77's property is now observed live on all four split tables rather than on
+`indicator_daily` alone.
+
+**On not re-running the whole night, the reasoning is half right and the half that
+fails is the half that was leaned on.** The stated basis is that "C03 and C05 advance
+their rotations by design". C05 does: its never-fetched count falls 2,615 to 2,424
+across `run_log` 797 and 825. **C03 does not**, and the measurement that shows it is
+recorded twelve paragraphs above in this same section. Three consecutive C03 runs over
+an identical 500 tickers writing an identical 44,365 rows is a rotation that has
+stopped advancing, which is the finding of §4 above arriving from the other direction.
+The conclusion still stands, because C05, C02 and C04 all read the provider afresh and
+a second night would measure them rather than the determinism. The reason given for it
+is wrong about one of the two stages it names.
+
+#### Does the code match the architecture sections phase 2 implements
+
+Yes on every read set, write set and partition key, checked by reading the §3
+catalogue rows and §19's table against the source rather than against the conformance
+tests that already assert part of it.
+
+- C08 reads `price_daily` and `security` and writes `indicator_daily`; C09 reads
+  `price_daily` and `fundamental_snapshot` and writes `valuation_daily`; C10 reads
+  `price_daily`, `security` and `indicator_daily` and writes `market_context_daily`;
+  C35 reads `sentiment_daily` and `security` and writes `sentiment_derived_daily`;
+  C11 reads the four stores and `security` and updates the four. All five match the
+  catalogue exactly.
+- §19 gives indicators and valuation a ticker key and percentiles a date key, and says
+  of the last that it is expressed as a single window function with `PARTITION BY
+  size_bucket, sector`. The code is that shape in all three cases.
+
+**One divergence, and it is not theoretical.** §3's C11 row says the fallback fires
+"when a cell has fewer than 15 members". The implemented rule is fewer than 15
+**non-null values for the metric being ranked**, which is what `CONFIG_REFERENCE.md:135`
+states outright and what `METRICS.md` §6.4 states in its fallback list. The two
+readings are not the same rule and they disagree on real cells: of the 21 cells thin
+for `fcf_yield` on this date, only 3 have fewer than 15 members, so **18 cells and all
+110 fallen-back names are treated differently under the two wordings**. The code is
+right and §3's sentence is the loose one. `ARCHITECTURE.html` is human-edited only, so
+this is a report rather than a fix, and it was not among the two documents the build
+left outstanding.
+
+`METRICS.md` §6's own lead sentence at line 764 carries the same loose wording as §3
+while its §6.4 at lines 805 to 810 carries the strict one, so that document disagrees
+with itself two pages apart.
+
+#### Does every number trace to something that produced it
+
+Yes. Every figure in the tables above was reproduced from the store, and the three
+narrative counts in the fallback section reproduce from a query built independently of
+the engine. Two figures are stated over a population the sentence does not name and
+both are recorded above: the 482, which is over the universe rather than over
+`fundamental_snapshot`; and the thin-cell count.
+
+**On the thin-cell count, the number is off by one column.** "Three cells are thin for
+the fourteen broadly covered indicator columns" is true of **thirteen**. C11 ranks
+fourteen `indicator_daily` metrics, of which `dist_52w_high_20d_change` has 35 thin
+cells and the sentence itself says so three lines later. The fifteen written columns
+less `dist_52w_high_20d_change` is fourteen, and the fourteen ranked metrics less
+`dist_52w_high_20d_change` is thirteen; the sentence takes its count from the first
+set and its subject from the second. `base_breakout_flag` is broadly covered and is
+not ranked, so it has no thin-cell count at all.
+
+#### Did the build resolve any contradiction silently
+
+Nothing was resolved silently. Three things were resolved more narrowly than they
+stand, and one measurement contradicts a statement in its own section.
+
+**A. There is no phase 2 prompt in `prompts/spent/`.** `CLAUDE.md` §3 says the prompt
+goes to `prompts/spent/` as issued, `BUILD_PLAN.md`'s sign-off clause says it is
+archived there as `phase-<n>-<slug>.md`, and `prompts/README.md` §Naming says the same.
+The phase 2 document is at `prompts/BuildPlans/phase-2-compute.md`, it carries status
+`DRAFT` where the README enumerates `ISSUED`, `SPENT` and `SUPERSEDED BY`, and
+`prompts/spent/` holds nothing for phase 2. The build reports the symptom, that
+`prompts/README.md` describes two kinds of file and `BuildPlans/` is a third. It does
+not report that three authored documents name a location the phase's own record is not
+in. The spirit was met, since the commit is `286773c` "Phase 2 / chore - the build
+plan, archived before any code" and the header dates it to phase 1's sign-off. The
+letter is not, and which of the two the corpus wants is authored content.
+
+**B. §3's fallback wording, above.** Not reported, and it changes the treatment of 18
+cells on the blessed date.
+
+**C. The reason given for not re-running the whole night is contradicted by a
+measurement in the same section.** C03 does not advance its rotation. Recorded under
+§5 above.
+
+**D. `METRICS.md` §5 names the regime labels `risk-on` and `risk-off` with hyphens**,
+at lines 732 and 734, while D-80, `SCHEMA.md`, `0005_regime_label.sql`'s CHECK and the
+code all use underscores. The literal values that document gives would be refused by
+the database. The build does report that METRICS.md is still the 2.1 draft and that
+the regime label is among the nine PROPOSAL entries now implemented, so the item is
+open; the specific mismatch is not called out and is the sort a reader reproduces from
+the document rather than from the decision.
+
+**On D-80.** The phase plan raised the missing enumeration as blocking 2.9 and offered
+a proposal "for authoring rather than taken". D-80 landed in the build commit `d66595c`
+and departs from that proposal in two ways, dropping the benchmark threshold in favour
+of a sign test and using underscores. `CLAUDE.md` §13 puts decisions outside a build
+session's authority. Whether a human authored it between sessions is not visible in the
+repository, and this review raises it rather than concluding it.
+
+#### Two findings about the data that no document names
+
+Neither blocks sign-off and neither is this review's to close.
+
+**E. `cash_on_hand`'s coalesce to zero fires overwhelmingly in the direction its own
+justification does not cover.** The rule reads the parts where either is present and
+falls back to `cash` only when both are absent. `ValuationEngine.cs:537-550` justifies
+it with the case of a company reporting cash and equivalents but no short-term
+investments line, which is a real zero. Over the latest readable quarter of all 3,897
+names that case occurs **5 times**. The mirror case, short-term investments present and
+cash and equivalents absent, occurs **1,644 times**, and on **699** of those the
+reported `cash` line is at least twice the short-term investments figure. `NFLX.US` is
+the extreme: `cash_and_equivalents` is null, `short_term_investments` is 28,678,000 and
+`cash` is 9,099,232,000, so `cash_on_hand` is written as $28.7M against a reported
+$9.1B. The column is not ranked, so no percentile is affected, but §07 sends it to the
+dossier for magnitude and it feeds runway against `quarterly_burn_rate`.
+
+**F. `ebit` is absent on the latest readable quarter for 946 of 3,897 names, and 847 of
+those carry `operating_income`.** That is what holds `ev_ebit` to 2,203 and it is the
+largest single coverage gap on `valuation_daily` after the head. The code reads the
+right column and the provider left it empty; whether `operating_income` is an
+acceptable fallback is a rule and therefore authored content. The 1,694 nulls the run
+log records for `ev_ebit` are exactly 3,897 less 2,203.
+
+#### Smaller things, noted and not pursued
+
+- `PercentileEngine`'s `FallbackReportSql` counts a thin cell wherever the metric's
+  non-null population is below the floor, including cells where it is zero. Three of
+  `fcf_yield`'s 21 are empty cells rather than thin ones. The distinction does not
+  change any percentile and the count is what §6.6 asks for.
+- `StageResult.Detail` lands in `run_log.error` whatever the status, which is what the
+  component doc comments mean by "the run log line". `StageContracts.cs:52-55`
+  describes the field as the line worth reading when the status is not `ok`. Every
+  compute stage returns one on `ok` and this review read all six from that column.
+- The recorded HEAD `68aafa4` is one commit behind the branch tip because the record
+  commit moves it. `4ccf342` touches four documents and no source, so the test count
+  and the guard count carry.
+
 ---
 
 ## Open items carried forward

@@ -906,6 +906,54 @@ the staged path builds its staging table from the written columns alone, so the 
 nothing about columns a stage does not write, and this is the first place in the codebase
 where two stages share a table's rows rather than a table.
 
+**D-83 A spec states the rule that governs a set, not a count of it.** `ACTIVE`
+Settles what `ARCHITECTURE.html` §04 and `SCHEMA.md` say about the technical columns,
+and states the general rule the three instances of this defect share.
+
+`ARCHITECTURE.html` §04 said `~40 technical columns per name` and `SCHEMA.md`'s
+`indicator_daily` section said "Roughly forty technical columns plus their
+percentiles". Phase 2 built fifteen and `PROGRESS.md` records fifteen, so two documents
+now disagree with a third about the same fact rather than one carrying a stale
+estimate that nothing contradicts.
+
+**The count was made at design time and nothing has ever checked it.** It is the third
+instance of one defect. The split count in `SCHEMA.md`'s opening was the first,
+removed by D-77. The Written-by and Read-by columns of §16's store matrix were the
+second, removed by D-76. Each was a number or a list stated in prose that no test
+could read, and each drifted at the moment the design turned out to be right in a way
+it had not anticipated.
+
+**The count is removed rather than corrected.** Correcting forty to fifteen buys
+nothing: it goes stale the first time a later phase adds an indicator column, and the
+next reader has no way to tell a checked number from an unchecked one. Both documents
+state what governs the set instead. The technical columns are those with a named
+consumer, which is the rule phase 2 traced the fifteen from, and `SCHEMA.md`'s own
+`indicator_daily` section carries the list.
+
+**The list is checked where the count was not.** `SchemaParityTests` holds
+`SCHEMA.md`'s type declarations against the live database in both directions: every
+`real` or `double precision` column in the database must be declared in the document,
+and every column the document declares must be in the database. Thirteen of the
+fifteen technical columns are `real` and are covered by that pair;
+`median_dollar_volume_20d` is held to `numeric` by the monetary direction of the same
+test [INVARIANT 16]. `base_breakout_flag` is `boolean` and is covered by neither, which
+is stated rather than glossed.
+
+**Standing from here: where a spec would state how many of something there are, it
+states what decides membership and points at the place a test can read.** A count in
+prose is a claim with no owner. A rule plus a pointer is a claim someone can check,
+and if nothing can check it, that is worth knowing at the moment the sentence is
+written rather than at the sign-off two phases later.
+
+This does not reach a count that a test does read. `SCHEMA.md`'s "Eighteen columns
+match the monetary pattern and are `numeric`" stays, because `guards.ps1` asserts it
+against the migrations and `SchemaParityTests` asserts it against the live database,
+and the paragraph says why it is exact rather than a floor.
+
+`PROGRESS.md`'s fifteen stays as it is. It is a record of what was built and of an
+estimate that moved to a measurement, not a spec, and records keep their strikes
+[D-73].
+
 **D-82 EBIT is not substituted from operating income, and the threshold that decided
 it was fixed before the measurement.** `ACTIVE`
 Settles whether `ev_ebit` and `roic` may read `operating_income` where `ebit` is absent.
@@ -959,6 +1007,23 @@ quarterly rows carrying all three where short-term investments are non-zero, `ca
 equals `cash_and_equivalents` **6,710** times exactly and equals their sum **13** times;
 at a one percent tolerance, 7,083 against 757. It is the parts line, by two orders of
 magnitude, so it substitutes for the part and the investments are still added.
+
+**The measurement and the rule cover different populations, and the gap is recorded
+rather than closed.** [added after the fact] The comparison needs `cash`,
+`cash_and_equivalents` and `short_term_investments` all present to be made at all, so
+it ran over rows carrying all three. The rule fires where `cash_and_equivalents` is
+absent, which is exactly the population the comparison cannot observe. The inference is
+from one population to another and that is stated rather than left implicit.
+
+The ratio makes the direction decisive anyway. What it leaves is the nine percent: at a
+one percent tolerance 757 of 8,411 rows had `cash` matching the sum rather than the
+part, so on the order of a hundred and fifty of the 1,644 mirror cases may now carry
+their short-term investments twice. Against 1,644 that were previously wrong by orders
+of magnitude, and against `NFLX.US` reading 28,678,000 for 9,127,910,000, that is a
+residual rather than a reason to hesitate. It is written down so a later reader knows it
+was seen rather than missed, and knows what a follow-up would have to reach: a source
+that distinguishes the two shapes on rows where `cash_and_equivalents` is absent, which
+this store does not carry.
 
 **5 names lose a value and that is the intended direction.** Where neither cash line is
 present the column was the investments figure alone and is now null, because an absence

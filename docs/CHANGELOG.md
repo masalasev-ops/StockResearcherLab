@@ -487,3 +487,31 @@ check that exists for exactly this.
 constant read 34 and §3 carried exactly 34 rows, both checked before the edit. The
 figure is an observation rather than a decision, so it is corrected here rather than
 carried [`CLAUDE.md` §13].
+
+---
+
+## 2026-08-10, phase 2 checkpoint 2.15
+
+`ARCHITECTURE.html` §3 amended: the C10 and C11 Reads cells name tables, and C11's
+Writes cell names tables rather than a column pattern. An architecture amendment, so
+nothing verbatim is recorded below and this entry exists because the document changed.
+
+**C10's cell named a store that does not exist and will not.** It read "Index and
+sector prices". The benchmark is the SPY row already in `price_daily`, which C02
+writes because the bulk feed carries every US ticker, and the sector series is a
+composite of the universe's own members [2.6]. So the phrase was wrong as well as
+unparseable, and this is not the markup fix it looks like. It now names
+`price_daily`, `security` and `indicator_daily`, each in `<code>`, saying what the
+read is for where that is not obvious [D-74].
+
+**C11's cell said "All metric stores".** Enumerated: `indicator_daily`,
+`valuation_daily`, `flow_daily`, `sentiment_derived_daily` and `security`. The
+generalisation was doing no work, because nothing enforced it and no test could read
+it. Enumerating gains a check and brings D-77's brake to bear, since a fifth metric
+store now means editing an authored document rather than being silently covered by a
+phrase.
+
+**C11's Writes cell said `*_pctile columns`**, which names no table. The four tables
+now name PercentileEngine in their own `SCHEMA.md` headings [D-77], so the cell names
+the four tables. No test reads that cell, so this is tidiness rather than a fix, and
+it is recorded as such.

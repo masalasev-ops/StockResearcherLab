@@ -1272,6 +1272,76 @@ promoted screen enters at the floor of four.
 
 ---
 
+## Ingest rotation
+
+**D-91 The fundamentals rotation orders on a record of the attempt, read strictly
+before the run date.** `ACTIVE`
+Settles three choices the fix made that a later session could reasonably make
+differently: where the record lives, what it records, and when it is readable.
+
+**The failure it corrects produced no error and survived two phases.** C03 ordered
+never-fetched first, where fetched meant any row in `fundamental_snapshot`. Once the
+pool was covered that group was empty, ticker ordinal decided everything, and the
+same alphabetically-first 500 names were selected on every run afterwards, for ever.
+`capital_expenditures` reached 482 tickers running contiguously from `A.US` to
+`CCBG.US` and stopped. Two consecutive runs wrote an identical 44,365 rows over an
+identical 500 tickers.
+
+**The figures that make it a decision rather than a tidy-up.** `fcf_yield` covered
+464 of 3,897 `valuation_daily` rows when phase 2 recorded it and 464 of 5,713 on
+2026-08-11: the same 464 rows, so coverage fell from 11.9 percent to 8.1 percent
+while both row counts stayed healthy and nothing anywhere reported a fault. It is
+S1's first ranking input and three of five screens read fundamentals.
+
+**One, the record is of the attempt and lives in its own table.**
+`fundamental_fetch_attempt`, one row per ticker, written for every selected ticker
+whether or not the fetch yielded rows [0006]. An absent row means never attempted; a
+null `last_yield_date` means attempted and never yielded. Those are different facts
+and the old ordering could not tell them apart.
+
+Both obvious alternatives fail on the same case. A `fetched_at` column on
+`fundamental_snapshot` moves only when rows are written, so a ticker whose fetch
+returns nothing never moves and holds the head of the rotation for ever, which is the
+fourteen-404s residue of the flow ingest one component over. A column on `security`
+fails differently: C03's pool is the candidate set, deliberately broader than the
+universe [1.8], so a pool member with no `security` row has nowhere to record an
+attempt.
+
+**No counter column.** An attempts tally would increment on a re-run of one date, and
+D-68 requires every stage write to be idempotent on the table's own grain. Every
+column is a function of the last attempt alone.
+
+**Two, attempts are read strictly before the run date.** A re-run of one date
+therefore sees the state the first run saw and selects the same names, so the stage
+stays a pure function of its date and config version [`CLAUDE.md` §6]. The rotation
+advances between dates and never between runs.
+
+Ordering on an attempt timestamp looks equivalent and is not: it advances on every
+run, so replaying a night would fetch a different set and the night would stop being
+reproducible. This is the discipline every fundamental read already applies to
+`filing_date_effective` [INVARIANT 12, INVARIANT 13].
+
+**Three, universe membership is a tiebreak and not a tier.** Ranked above freshness
+it starves every pool member outside `security` permanently, because the universe is
+refreshed on every run and is therefore never exhausted. That is the same defect this
+decision corrects, wearing different clothes. Among names of equal staleness a
+universe member goes first, which is the preference the old tier reached for without
+the starvation. Coverage still precedes freshness while coverage is incomplete: a
+name absent from the store cannot be screened at all, where a name whose figures are
+a few days old still can.
+
+**The run log separates new from refreshed and names the oldest attempt in the
+selection**, so a frozen rotation is visible where a reader already looks rather than
+in a query someone thought to write. A run that is entirely refreshed while the pool
+still holds never-attempted names is the defect; entirely refreshed on a fully
+attempted pool is the rotation working.
+
+**Not closed by this.** C05 `FlowIngestor.SelectionFor` carries the identical defect
+and is untouched, the two stages sharing no selection code. It is carried in
+`BUILD_PLAN.md` against phase 3.
+
+---
+
 ---
 
 ## Open

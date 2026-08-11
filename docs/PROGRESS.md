@@ -2985,16 +2985,45 @@ high-water mark would close. Not built here."
 carried obligation rather than part of this change. The two stages have no shared
 selection code, so nothing here alters C05's behaviour.
 
-### `ARCHITECTURE.html` §3's C03 Writes cell is now incomplete, and is not edited
+~~### `ARCHITECTURE.html` §3's C03 Writes cell is now incomplete, and is not edited~~
+[closed, D-91]. It said the cell was reported rather than edited because the Writes
+column is authored prose, and that reading was right about the rule and wrong about
+what to do next: a cell nothing checks, left wrong, is the drift the section below is
+about. The decision was authored and the cell corrected. The prior wording of the cell
+is in `CHANGELOG.md`.
 
-The cell reads `fundamental_snapshot` and the component now writes
-`fundamental_fetch_attempt` as well. Nothing asserts that cell: the read conformance
-test parses the Reads column only, and `SchemaDocument` is what write ownership is
-held against, so `ci.ps1` is green with the cell as it stands.
+### The Writes column has no conformance test, and it drifted at the first opportunity
 
-Reported rather than closed, because the Writes column is authored prose stating what
-a component does and `CLAUDE.md` §13 makes that a human's to write. It is carried in
-`BUILD_PLAN.md`.
+**Closed as an edit and left open as a finding.** §3's C03 Writes cell read
+`fundamental_snapshot` while the component wrote two tables. It is corrected under
+D-91, the prior wording is in `CHANGELOG.md`, and `git diff docs/ARCHITECTURE.html`
+touches that one line.
+
+**The finding is why nothing caught it.** The Reads column gained
+`ReadDeclarationConformanceTests` at the post phase 1 reconciliation, after four Reads
+cells had named an endpoint and no ticker source while `DeclaredAccess` enforced a read
+set the document never mentioned, and that silence is what let the fundamentals pool be
+drawn from `security` and close the universe over itself. The Writes column got no such
+test, because write ownership is asserted against `SCHEMA.md` and not against the
+catalogue: `WriteOwnershipConformanceTests` reads `SchemaDocument`, and nothing anywhere
+reads §3's Writes cells.
+
+So those cells are prose no test has ever checked, in the one column of the one table
+that says what each component may do. **The first component to gain a second write
+drifted, and it drifted immediately.** C03 is the first: every other component in the
+catalogue writes what it wrote when the catalogue was authored.
+
+**Named now rather than fixed, so the next one is checked rather than discovered.** The
+shape is available and costs little: `ArchitectureDocument` already parses catalogue
+rows into cells and takes the fourth for Reads, and the fifth is the Writes cell.
+Intersecting it with `SchemaDocument.Tables()` in both directions against the registry's
+`AllWrites()` is the same assertion the Reads path already makes. It is not built here
+because a conformance test is a phase's work rather than a finding's, and because this
+document's job at this point is to say what is true.
+
+**One reason to expect more of it soon.** D-85 and D-87 give C14 a second write and C22
+a table it has never had, both in phase 4 and phase 8. Those are exactly the case that
+just failed.
 
 ---
 

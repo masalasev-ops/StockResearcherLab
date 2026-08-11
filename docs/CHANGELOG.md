@@ -864,3 +864,30 @@ It exists because `events.earnings_backward_days` is 7 and `announced_date` is n
 earnings, so D-86's condition fails for that screen and only that screen. It is the third
 instance of the pattern D-58 removed short interest for and D-69 is open on, and the first
 found before anything was built on it.
+
+---
+
+## 2026-08-11, D-91
+
+`ARCHITECTURE.html` §03's C03 row amended under D-91. Human-directed; the decision was
+authored before the document was touched [`CLAUDE.md` §13]. Clean edit under D-73, prior
+wording verbatim below. One cell, and `git diff docs/ARCHITECTURE.html` shows one line.
+
+**The component gained a second write and the cell named one.** C03 writes
+`fundamental_fetch_attempt` as well as `fundamental_snapshot`: the rotation had stopped
+rotating once coverage completed, and the store that keeps it going is a record of the
+attempt rather than of the result. Removed from the Writes cell:
+
+> fundamental_snapshot
+
+**`SCHEMA.md` gained the table in the same commit as its migration** and needs no entry
+here, having no prior wording to quote. It is a new `### fundamental_fetch_attempt`
+heading declaring FundamentalsIngestor as its writer, which is what
+`WriteOwnershipConformanceTests` reads and what D-77 requires of any second writer.
+
+**What this entry is evidence of, beyond the edit.** The Writes column has no
+conformance test, where the Reads column gained one at the post phase 1 reconciliation
+after four deviations had gone unnoticed. Write ownership is asserted against
+`SCHEMA.md` rather than against the catalogue, so §03's Writes cells are checked by
+nobody, and this one drifted at the first opportunity it had. Recorded as a finding in
+`PROGRESS.md` rather than fixed here.

@@ -55,7 +55,8 @@ public sealed class NightlyRun
         "FlowIngestor",         // C05 17:45
         "EventsIngestor",       // C06 17:45
         "SentimentIngestor",    // C04 18:00
-        "FlowEngine",           // C34 18:05, the one layer 2 component this phase builds
+        "FlowEngine",           // C34 18:05
+        "IndicatorEngine",      // C08 18:05
     ];
 
     private readonly StageRegistry _registry;

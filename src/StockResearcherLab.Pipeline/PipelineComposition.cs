@@ -30,9 +30,11 @@ public static class PipelineComposition
             // Not a stage. Sits outside the layers and owns run_log.
             new RunLog(connectionString),
 
-            // Layer 2. Derives from two tables the ingest wrote and calls nothing,
-            // so it is registered whether or not a token is present.
+            // Layer 2. Every compute stage derives from tables the ingest wrote and
+            // calls no provider, so all of them are registered whether or not a token
+            // is present.
             new FlowEngine(),
+            new IndicatorEngine(),
         };
 
         if (!string.IsNullOrWhiteSpace(apiToken))

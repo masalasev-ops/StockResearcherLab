@@ -181,8 +181,10 @@ public sealed class UniverseBuilder : IStage
             latest AS (SELECT ticker, close FROM bars WHERE rn = 1),
             mdv AS (
                 SELECT ticker,
-                       percentile_cont(0.5) WITHIN GROUP (ORDER BY close * volume) AS median_dollar_volume
-                FROM bars WHERE rn <= 20 AND close IS NOT NULL AND volume IS NOT NULL
+                       {DollarVolume.MedianExpression} AS median_dollar_volume
+                FROM bars
+                WHERE rn <= {DollarVolume.WindowBars.ToString(CultureInfo.InvariantCulture)}
+                  AND {DollarVolume.RowFilter}
                 GROUP BY ticker
             ),
             span AS (

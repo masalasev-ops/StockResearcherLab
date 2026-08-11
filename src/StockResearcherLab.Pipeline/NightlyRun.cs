@@ -57,6 +57,7 @@ public sealed class NightlyRun
         "SentimentIngestor",    // C04 18:00
         "FlowEngine",           // C34 18:05
         "IndicatorEngine",      // C08 18:05
+        "MarketContextEngine",  // C10 18:05, after C08 because breadth reads indicator_daily
     ];
 
     private readonly StageRegistry _registry;

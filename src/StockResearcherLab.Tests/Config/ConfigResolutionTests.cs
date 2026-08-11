@@ -306,7 +306,7 @@ public sealed class ConfigResolutionTests
         // that same kind: it had been in CONFIG_REFERENCE.md since the corpus was
         // written and nothing seeded it, so the phase that first ranks anything
         // would have resolved nothing for it.
-        Assert.Equal(30, ConfigSeeder.Keys.Count);
+        Assert.Equal(32, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)
@@ -343,6 +343,10 @@ public sealed class ConfigResolutionTests
                      "market.breadth_ma_days",
                      "market.sector_composite_min_members",
                      "sentiment.min_baseline_days",
+
+                     // D-80's two, held back at 2.4 until the rule existed [2.9].
+                     "market.regime_breadth_high",
+                     "market.regime_breadth_low",
                  })
         {
             Assert.Contains(ConfigSeeder.Keys, k => string.Equals(k.Key, required, StringComparison.Ordinal));

@@ -157,6 +157,8 @@ of them [INVARIANT 14]. Formulas and null rules are in `METRICS.md`.
 | `market.breadth_ma_days` | 200 | 2.1 | MarketContextEngine | unverified |
 | `market.sector_composite_min_members` | 5 | 2.1 | IndicatorEngine, MarketContextEngine | unverified |
 | `sentiment.min_baseline_days` | 20 | 2.1 | SentimentEngine | unverified |
+| `market.regime_breadth_high` | 0.60 | D-80 | MarketContextEngine | verified 2026-08-10 |
+| `market.regime_breadth_low` | 0.40 | D-80 | MarketContextEngine | verified 2026-08-10 |
 
 **A window named inside a column is a constant, not a key.** `article_count_z_own_90d`
 carries its 90, `sentiment_delta_7v30` its 7 and 30, `dist_200dma` its 200 and
@@ -166,16 +168,21 @@ disagree, which is why `FlowEngine.WindowDays` is a `const` beside
 `insider_net_90d_usd`. `market.breadth_ma_days` is a key for the opposite reason: it is
 the same 200 and no column names it.
 
-**Two keys are missing from this table and the omission is deliberate.**
-`market.regime_breadth_high` and `market.regime_breadth_low` are the thresholds a regime
-label would be assigned from, and no document enumerates the labels or the rule. Seeding
-a value for a rule that does not exist would put a number in the store that nothing can
-be read against. They arrive with the decision, and seeding a key later is version 1 and
-does not move the store-wide config version [D-72], so waiting costs nothing.
+**The two regime thresholds were held back at 2.4 and arrived at 2.9 with D-80**, which
+is the decision that says what they threshold. Seeding a value for a rule that does not
+exist puts a number in the store nothing can be read against, and seeding a key later is
+version 1 and does not move the store-wide config version [D-72], so waiting cost
+nothing.
 
-**Every entry above is `unverified` and that is the accurate state**, not an oversight:
-the four components that consume them do not exist yet. Each checkpoint that wires one
-up moves its own row, having read the line that consumes it [CLAUDE.md §8].
+**The regime rule's other half has no key and that is deliberate** [D-80]. The benchmark
+contributes a sign test rather than a threshold, because a series is above or below its
+own 200-day average and zero is already meaningful there. A fraction has no natural cut
+and so takes two; a sign has one already.
+
+**An entry above reading `unverified` is the accurate state rather than an oversight**
+where the component that consumes it does not exist yet. Each checkpoint that wires one
+up moves its own row, having read the line that consumes it [CLAUDE.md §8]. The two
+regime keys are verified at `MarketContextEngine.cs:56-57`.
 
 ## Screens
 

@@ -256,7 +256,30 @@ Recomputed daily because price moves. Every fundamental input resolved as of
 ### market_context_daily
 Grain: one row per day. **Writer: MarketContextEngine.** Small.
 
-`date`, `breadth`, `vix`, `regime_label`, plus sector relative strength.
+`date`, `breadth`, `vix`, `regime_label`, `sector_relative_strength`.
+
+**`regime_label` is `NOT NULL` with a `CHECK` on exactly `risk_on`, `risk_off` and
+`mixed`** [D-80, 0005]. Enforced by the database rather than by the writer, and for the
+same reason `filing_date_unknown_reason` is: this column segments analysis, being
+carried in the cached prefix, stored on every attribution row and shown on screen U1, so
+a drifted or mistyped value lands in its own bucket in every segmentation without ever
+erroring. A writer-side check protects one writer; a constraint protects the column.
+
+`risk_on` when breadth is at or above `market.regime_breadth_high` and the benchmark is
+above its own 200-day average, `risk_off` when breadth is at or below
+`market.regime_breadth_low` and the benchmark is below it, `mixed` otherwise. The
+benchmark contributes a sign test and carries no threshold, because a series is above or
+below its own average and zero is already meaningful there.
+
+**`vix` is null and contributes nothing to the label.** The bulk end-of-day feed carries
+equities and the index is not among them. The absence is recorded rather than allowed to
+null the label, since three components read the label and a null would degrade all three
+over a column none of them reads [D-80].
+
+`sector_relative_strength` is a jsonb object of sector to trailing relative return
+against the universe composite, with keys in ordinal sort order. Dictionary enumeration
+order is unspecified and this column reaches the cached prefix, where a byte difference
+breaks the cache and roughly triples the input bill silently [INVARIANT 6].
 
 ### percentile columns
 Named `<metric>_pctile` and stored alongside the metric they rank, on the metric's own

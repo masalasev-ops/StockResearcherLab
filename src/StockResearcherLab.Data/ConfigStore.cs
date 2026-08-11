@@ -117,7 +117,7 @@ public sealed class ConfigSeeder
         new(2020, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>
-    /// Thirty keys. The count is asserted rather than left to be miscounted: it
+    /// Thirty-two keys. The count is asserted rather than left to be miscounted: it
     /// was recorded as nine, corrected to eleven at A5, twelve at A10, fourteen at A14, fifteen at 1.4,
     /// seventeen at 1.6, nineteen at 1.7 and twenty-two at 1.8, and every correction was a key that existed with nothing seeding it.
     /// Thirty at 2.4, which is phase 2's seven plus percentile.cell_min_members:
@@ -237,6 +237,14 @@ public sealed class ConfigSeeder
         // articles, but only once the ingest has reached the ticker at all, and
         // this is what separates those two cases.
         ("sentiment.min_baseline_days", "20"),
+
+        // D-80's two breadth thresholds. Held back at 2.4 because the rule they
+        // threshold was unauthored and a value with no rule behind it is a number
+        // nothing can be read against. The benchmark half of the same rule has no key,
+        // because a series is above or below its own average and zero is already
+        // meaningful there.
+        ("market.regime_breadth_high", "0.60"),
+        ("market.regime_breadth_low", "0.40"),
     ];
 
     private readonly string _connectionString;

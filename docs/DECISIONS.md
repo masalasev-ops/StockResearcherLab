@@ -906,6 +906,40 @@ the staged path builds its staging table from the written columns alone, so the 
 nothing about columns a stage does not write, and this is the first place in the codebase
 where two stages share a table's rows rather than a table.
 
+**D-80 The regime label takes three values, and the benchmark test needs no
+threshold.** `ACTIVE`
+Settles the enumerated values `market_context_daily.regime_label` holds.
+
+Three values: `risk_on`, `risk_off`, `mixed`.
+
+`risk_on` when breadth is at or above `market.regime_breadth_high` and the benchmark is
+above its own 200-day average. `risk_off` when breadth is at or below
+`market.regime_breadth_low` and the benchmark is below it. `mixed` otherwise.
+
+The benchmark contributes a sign test rather than a threshold, deliberately. Zero is
+already meaningful there, since a series is above or below its own two-hundred day
+average, and every threshold is a number someone has to justify and later defend.
+Breadth has two because a fraction has no natural cut; the benchmark has none because
+it does.
+
+**No minimum run length, and the reason is recorded rather than assumed.** The
+three-state design already buffers: a single crossing on either input moves the label to
+`mixed` rather than flipping it to the opposite, so the label cannot alternate between
+`risk_on` and `risk_off`. What remains is one input sitting at its threshold and moving
+between `risk_on` and `mixed`, which splits a boundary period into two rather than
+mislabelling either, and that is the honest reading of a boundary period. If it proves
+noisier than that in practice, a run length is added with the observation behind it.
+
+VIX is null and contributes nothing. The label is derived from breadth and the
+benchmark, and the absence of VIX is recorded rather than allowed to null the label,
+since three components read it and a null degrades all three.
+
+**The values are enforced by the database, not by the writer.** `regime_label` becomes
+`NOT NULL` with a `CHECK` on exactly those three. Same treatment as
+`filing_date_unknown_reason` and for the same reason: this column segments analysis, and
+a drifted or mistyped value lands in its own bucket in every segmentation without ever
+erroring.
+
 **D-79 `fcf_yield` needs a capital expenditure figure of its own, and
 `capital_expenditures` is ingested for it.** `ACTIVE`
 Free cash flow computed as cash from operating plus cash from investing reads an

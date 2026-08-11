@@ -85,6 +85,11 @@ public static class Statements
             ("totalCashFromOperatingActivities", "cash_from_operating"),
             ("totalCashflowsFromInvestingActivities", "cash_from_investing"),
             ("totalCashFromFinancingActivities", "cash_from_financing"),
+            // Capital expenditure on its own line, so free cash flow is cash from
+            // operating less capex rather than less all investing. Total investing
+            // reads an acquisition as capex and an asset sale as free cash flow,
+            // on S1's first ranking input [D-79].
+            ("capitalExpenditures", "capital_expenditures"),
             ("depreciation", "depreciation"),
             ("dividendsPaid", "dividends_paid"),
             ("salePurchaseOfStock", "sale_purchase_of_stock"),

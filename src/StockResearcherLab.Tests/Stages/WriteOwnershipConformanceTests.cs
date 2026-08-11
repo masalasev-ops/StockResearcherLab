@@ -66,9 +66,11 @@ public sealed class WriteOwnershipConformanceTests
     /// for the same reason: five checks finding nothing over two components produce a
     /// line indistinguishable from five checks finding nothing over nine.
     ///
-    /// It moves deliberately when a phase adds a component. Phase 2 adds four.
+    /// It moves deliberately when a phase adds a component. Phase 2 adds five:
+    /// C08, C09, C10, C11 and C35, the last authored at D-78 after this comment
+    /// was written and after C34 had already been built early with D-61's ingest.
     /// </summary>
-    private const int ExpectedOwners = 9;
+    private const int ExpectedOwners = 14;
 
     /// <summary>
     /// The assertion that keeps the rest of this file meaningful. A conformance test
@@ -86,13 +88,20 @@ public sealed class WriteOwnershipConformanceTests
         // registry built without a provider token: it holds RunLog and FlowEngine,
         // both of which are real, so a count alone would read as a smaller system
         // rather than as a narrower scan.
-        foreach (var provider in new[]
+        //
+        // The compute components are named too since 2.11. They are registered
+        // unconditionally and so cannot go missing that way, and naming them is what
+        // makes a registry that lost one fail by that one's name rather than by a
+        // count being off by one.
+        foreach (var component in new[]
                  {
                      "PriceIngestor", "FreshnessGuard", "FundamentalsIngestor",
                      "UniverseBuilder", "SentimentIngestor", "FlowIngestor", "EventsIngestor",
+                     "FlowEngine", "IndicatorEngine", "ValuationEngine", "SentimentEngine",
+                     "MarketContextEngine", "PercentileEngine",
                  })
         {
-            Assert.Contains(owners, o => string.Equals(o.Name, provider, StringComparison.Ordinal));
+            Assert.Contains(owners, o => string.Equals(o.Name, component, StringComparison.Ordinal));
         }
     }
 

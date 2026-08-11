@@ -37,7 +37,8 @@ public sealed class FundamentalsIngestor : IStage
         "ebit", "ebitda", "net_income", "income_before_tax", "income_tax_expense",
         "interest_expense", "research_development",
         "cash_from_operating", "cash_from_investing", "cash_from_financing",
-        "depreciation", "dividends_paid", "sale_purchase_of_stock",
+        "capital_expenditures", "depreciation", "dividends_paid",
+        "sale_purchase_of_stock",
         "shares_outstanding",
     ];
 

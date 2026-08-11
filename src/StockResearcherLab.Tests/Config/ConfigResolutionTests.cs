@@ -296,12 +296,17 @@ public sealed class ConfigResolutionTests
     }
 
     [Fact]
-    public void TheSeederCoversEveryKeyPhaseOneConsumes()
+    public void TheSeederCoversEveryKeyPhasesOneAndTwoConsume()
     {
         // The count has been wrong three times, recorded as nine and corrected to
         // eleven, twelve and fourteen, and every correction was a key that existed
         // with nothing seeding it. Asserted rather than counted by hand.
-        Assert.Equal(22, ConfigSeeder.Keys.Count);
+        //
+        // Thirty at 2.4. percentile.cell_min_members is the fourth correction of
+        // that same kind: it had been in CONFIG_REFERENCE.md since the corpus was
+        // written and nothing seeded it, so the phase that first ranks anything
+        // would have resolved nothing for it.
+        Assert.Equal(32, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)
@@ -325,6 +330,23 @@ public sealed class ConfigResolutionTests
                      "flow.institutional_report_lag_days",
                      "events.earnings_forward_days",
                      "events.earnings_backward_days",
+
+                     // Phase 2 [2.4]. The two market.regime_breadth_* keys are
+                     // deliberately absent: the rule they threshold is unauthored,
+                     // and seeding a value for a rule that does not exist puts a
+                     // number in the store nothing can be read against.
+                     "percentile.cell_min_members",
+                     "indicator.wilder_warmup_bars",
+                     "indicator.base_lookback_days",
+                     "indicator.base_max_range_pct",
+                     "valuation.own_history_min_points",
+                     "market.breadth_ma_days",
+                     "market.sector_composite_min_members",
+                     "sentiment.min_baseline_days",
+
+                     // D-80's two, held back at 2.4 until the rule existed [2.9].
+                     "market.regime_breadth_high",
+                     "market.regime_breadth_low",
                  })
         {
             Assert.Contains(ConfigSeeder.Keys, k => string.Equals(k.Key, required, StringComparison.Ordinal));

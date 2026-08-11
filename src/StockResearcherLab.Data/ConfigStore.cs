@@ -117,9 +117,12 @@ public sealed class ConfigSeeder
         new(2020, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>
-    /// Twenty-two keys. The count is asserted rather than left to be miscounted: it
+    /// Thirty-two keys. The count is asserted rather than left to be miscounted: it
     /// was recorded as nine, corrected to eleven at A5, twelve at A10, fourteen at A14, fifteen at 1.4,
     /// seventeen at 1.6, nineteen at 1.7 and twenty-two at 1.8, and every correction was a key that existed with nothing seeding it.
+    /// Thirty at 2.4, which is phase 2's seven plus percentile.cell_min_members:
+    /// that one had been in CONFIG_REFERENCE.md since the corpus was written with
+    /// nothing seeding it, which is the same defect as every correction above.
     /// </summary>
     public static IReadOnlyList<(string Key, string Value)> Keys { get; } =
     [
@@ -186,6 +189,62 @@ public sealed class ConfigSeeder
         // is topped up by re-loading it, and D-68's idempotent upsert is what makes
         // that safe. Without it a part-settled day stays part-settled for ever.
         ("price.reload_window_days", "20"),
+
+        // The cell floor, D-10. Below this many members carrying a value for the
+        // metric being ranked, the cell falls back to size bucket alone. It counts
+        // the non-null population per metric rather than the cell, because a cell of
+        // twenty where five carry a value otherwise yields a percentile computed
+        // over five that is indistinguishable from one computed over twenty.
+        ("percentile.cell_min_members", "15"),
+
+        // C08's Wilder seed [2.1]. ATR and ADX are recursive rather than window
+        // aggregates, so the recursion needs a start. Without a fixed warm-up the
+        // answer depends on how much history the database happens to hold, two
+        // databases with the same 250 bars and different amounts before them
+        // disagree, neither is wrong, and the reference test cannot be written.
+        // 250 rather than 14 because the 13/14 decay puts the seed's influence
+        // under one part in ten thousand after 125 steps, which makes the choice
+        // immaterial to the answer while keeping it exactly specified.
+        ("indicator.wilder_warmup_bars", "250"),
+
+        // base_breakout_flag's two conditions [2.1]. The lookback is the window a
+        // breakout is measured against; the range cap is what makes that window a
+        // base rather than a trend. Without the second, a name in a steady advance
+        // sets a new window high most days and the flag is on permanently, which
+        // carries no information and puts every strong trend into S2 twice.
+        ("indicator.base_lookback_days", "60"),
+        ("indicator.base_max_range_pct", "0.25"),
+
+        // How many sampled points ev_ebit_vs_own_5y needs before it is computed
+        // rather than null [2.1]. Month-ends over five years is sixty; twenty-four
+        // is two years. Below it the column is null rather than a comparison
+        // against a history too short to be one, which on a cold database is every
+        // name until phase 3 has backfilled.
+        ("valuation.own_history_min_points", "24"),
+
+        // Breadth's window [2.1]. It matches dist_200dma's 200 and is a key rather
+        // than a constant because, unlike the indicator windows, it is not named in
+        // any column.
+        ("market.breadth_ma_days", "200"),
+
+        // Below this many members a sector composite is one name's noise rather
+        // than a sector [2.1]. Read by C08 for rs_change_vs_sector and by C10 for
+        // sector_relative_strength, which are the same construction at two grains.
+        ("market.sector_composite_min_members", "5"),
+
+        // How many days inside the window must carry a sentiment_daily row before
+        // any derived sentiment metric is computed [2.1]. An absent day is zero
+        // articles, but only once the ingest has reached the ticker at all, and
+        // this is what separates those two cases.
+        ("sentiment.min_baseline_days", "20"),
+
+        // D-80's two breadth thresholds. Held back at 2.4 because the rule they
+        // threshold was unauthored and a value with no rule behind it is a number
+        // nothing can be read against. The benchmark half of the same rule has no key,
+        // because a series is above or below its own average and zero is already
+        // meaningful there.
+        ("market.regime_breadth_high", "0.60"),
+        ("market.regime_breadth_low", "0.40"),
     ];
 
     private readonly string _connectionString;

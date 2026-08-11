@@ -859,6 +859,244 @@ the reason is mechanical: the 1.10 conformance test asserts §3's registry again
 consistent by a test. The store matrix's columns were checked by nothing, which is
 why they drifted.
 
+**D-78 The derived sentiment metrics are computed by a compute-layer stage from
+`sentiment_daily`.** `ACTIVE`
+`sentiment_daily` is what the provider sends. The three forms the screens rank on are
+derived from it, exactly as `flow_daily` is derived from the two flow source tables and
+`indicator_daily` from `price_daily` [D-61]. C35 SentimentEngine reads `sentiment_daily`
+and `security` and writes `sentiment_derived_daily` at ticker by day. Windows named in a
+column stay constants rather than keys, as FlowEngine's 90 does.
+
+S3 ranks on `article_count_z_own_90d`, `sentiment_delta_7v30` and `sentiment_7d_level`
+and on nothing else, S5's stabilisation gate reads the first two, and §7's fixed core
+carries two. `sentiment_daily` holds `ticker`, `date`, `article_count` and
+`sentiment_score`, and no §3 catalogue row gave any component a path from one to the
+other. The rule was already decided by D-12; what was missing was a component and a
+store.
+
+**D-77 A table's writers are whoever its heading names.** `ACTIVE`
+Replaces the enumeration in `SCHEMA.md`'s opening.
+
+`SCHEMA.md` said three splits over five tables and no fourth. The percentile engine
+updates `_pctile` columns on `indicator_daily`, `valuation_daily`, `flow_daily` and
+`sentiment_derived_daily`, which is four more splits over four more tables. Seven over
+nine.
+
+That sentence predicted this in its own last line: a rule that counts exceptions gets
+longer every time the design is correct. It was a count of what existed when it was
+written rather than a rule, and no amendment to the number fixes that, because the next
+correct design would need an eighth.
+
+The count is removed and nothing replaces it as a count. A table's writers are whoever
+its heading names, each declaring the operation and the column set it owns, and nothing
+else may write there. INVARIANT 10 as amended is per operation, so a metric engine
+inserting and the percentile engine updating a disjoint column set are two claims rather
+than a conflict.
+
+The brake the count provided is not lost. Adding a second writer now requires editing an
+authored document, which a build session cannot do, where a count is prose a build
+session can read past. That is checked on every push rather than by whoever remembers the
+sentence.
+
+**The property this arrangement can break, which no test covers.** The failure mode here
+is not a conflict the registry catches. It is a metric engine re-running and blanking the
+percentiles the percentile engine wrote. That is safe today only by construction, because
+the staged path builds its staging table from the written columns alone, so the upsert's
+`SET` leaves `_pctile` untouched. D-68's idempotence is guaranteed per stage and says
+nothing about columns a stage does not write, and this is the first place in the codebase
+where two stages share a table's rows rather than a table.
+
+**D-83 A spec states the rule that governs a set, not a count of it.** `ACTIVE`
+Settles what `ARCHITECTURE.html` §04 and `SCHEMA.md` say about the technical columns,
+and states the general rule the three instances of this defect share.
+
+`ARCHITECTURE.html` §04 said `~40 technical columns per name` and `SCHEMA.md`'s
+`indicator_daily` section said "Roughly forty technical columns plus their
+percentiles". Phase 2 built fifteen and `PROGRESS.md` records fifteen, so two documents
+now disagree with a third about the same fact rather than one carrying a stale
+estimate that nothing contradicts.
+
+**The count was made at design time and nothing has ever checked it.** It is the third
+instance of one defect. The split count in `SCHEMA.md`'s opening was the first,
+removed by D-77. The Written-by and Read-by columns of §16's store matrix were the
+second, removed by D-76. Each was a number or a list stated in prose that no test
+could read, and each drifted at the moment the design turned out to be right in a way
+it had not anticipated.
+
+**The count is removed rather than corrected.** Correcting forty to fifteen buys
+nothing: it goes stale the first time a later phase adds an indicator column, and the
+next reader has no way to tell a checked number from an unchecked one. Both documents
+state what governs the set instead. The technical columns are those with a named
+consumer, which is the rule phase 2 traced the fifteen from, and `SCHEMA.md`'s own
+`indicator_daily` section carries the list.
+
+**The list is checked where the count was not.** `SchemaParityTests` holds
+`SCHEMA.md`'s type declarations against the live database in both directions: every
+`real` or `double precision` column in the database must be declared in the document,
+and every column the document declares must be in the database. Thirteen of the
+fifteen technical columns are `real` and are covered by that pair;
+`median_dollar_volume_20d` is held to `numeric` by the monetary direction of the same
+test [INVARIANT 16]. `base_breakout_flag` is `boolean` and is covered by neither, which
+is stated rather than glossed.
+
+**Standing from here: where a spec would state how many of something there are, it
+states what decides membership and points at the place a test can read.** A count in
+prose is a claim with no owner. A rule plus a pointer is a claim someone can check,
+and if nothing can check it, that is worth knowing at the moment the sentence is
+written rather than at the sign-off two phases later.
+
+**The rule is not scoped to the four spec documents.** [added after the fact] It applies
+wherever a count is stated as fact and nothing checks it. A number a script prints on
+every run is read more often than one in a document, and a comment restating a value the
+assertion below it already checks is a second statement of one fact, which is the shape
+every instance of this defect has had. Both cases were found at the phase 2 sign-off
+after the first pass had been scoped to `docs/`: `guards.ps1` named the technical column
+count in its header and in the rationale it prints on every run, and
+`SchemaParityTests` carried a comment saying seventeen above an assertion of eighteen.
+
+This does not reach a count that a test does read. `SCHEMA.md`'s "Eighteen columns
+match the monetary pattern and are `numeric`" stays, because `guards.ps1` asserts it
+against the migrations and `SchemaParityTests` asserts it against the live database,
+and the paragraph says why it is exact rather than a floor. The distinction is whether
+the number is the assertion or a restatement of it: the assertion stays and the
+restatement goes.
+
+`PROGRESS.md`'s fifteen stays as it is. It is a record of what was built and of an
+estimate that moved to a measurement, not a spec, and records keep their strikes
+[D-73].
+
+**D-82 EBIT is not substituted from operating income, and the threshold that decided
+it was fixed before the measurement.** `ACTIVE`
+Settles whether `ev_ebit` and `roic` may read `operating_income` where `ebit` is absent.
+
+`ebit` is null on the latest readable quarter for 946 of 3,897 names and 847 of those
+carry `operating_income`. That is what holds `ev_ebit` to 2,203 names, and the gap is
+not neutral: it excludes names by which ones this provider happens to populate a field
+for, which is a selection effect on a screen input rather than a property of the
+companies.
+
+**The rule was written down before the number existed** [`CLAUDE.md` §11]. Substitute
+if the median of `abs(ebit - operating_income) / abs(ebit)` over rows carrying both is
+under 2% **and** the 90th percentile is under 10%. The two thresholds are not
+arbitrary: `ev_ebit` is ranked inside a cell, so a couple of percent moves a name a rank
+or two and is tolerable, while a tail past 10% moves names across deciles and is not.
+
+Measured over 380,281 quarterly rows carrying both: median **1.01%**, 75th **13.9%**,
+90th **63.9%**, 99th **942%**. Over the 2,942 latest readable quarters alone: median
+**4.90%**, 75th **23.1%**, 90th **84.3%**. The median passes and the tail fails by six
+to eight times, which is the exact failure the 90th percentile threshold was set to
+catch, so the substitution is refused.
+
+**The selection effect stays open rather than being closed by a worse answer.** What
+the measurement establishes is that operating income is not available as a stand-in at
+an error a ranked column can carry, not that the gap is acceptable. Whoever revisits it
+needs a different input, not a different threshold, and lowering the bound because a
+measurement missed it is what `CLAUDE.md` §11 prohibits.
+
+**D-81 `cash_on_hand` reads the reported cash line where the parts line is absent, and
+the coalesce to zero is narrowed to short-term investments.** `ACTIVE`
+Supersedes the `cash_on_hand` rule in `METRICS.md` §3 as authored at 2.1.
+
+The rule was `coalesce(cash_and_equivalents, 0) + coalesce(short_term_investments, 0)`,
+falling back to `cash` only when both parts were absent. It is now
+`coalesce(cash_and_equivalents, cash) + coalesce(short_term_investments, 0)`, null when
+both `cash_and_equivalents` and `cash` are absent.
+
+**The old rule zeroed an absent part in both directions and only one of them is a
+zero.** A company reporting cash and equivalents with no short-term investments line has
+no short-term investments, which is the case the original reasoning gives and which
+occurs 5 times across the store's latest readable quarters. The mirror case, short-term
+investments present with no cash and equivalents line, occurs **1,644 times**, and on
+699 of those the reported `cash` line is at least twice the investments figure.
+`NFLX.US` carried 28,678,000 under a column that says cash on hand, against a reported
+`cash` of 9,099,232,000.
+
+**Which line stands in was measured before the rule was chosen.** Reading another
+reported line from the same statement is not inventing data, so the question was only
+whether `cash` is the parts line under another name or the total. Over the 8,411
+quarterly rows carrying all three where short-term investments are non-zero, `cash`
+equals `cash_and_equivalents` **6,710** times exactly and equals their sum **13** times;
+at a one percent tolerance, 7,083 against 757. It is the parts line, by two orders of
+magnitude, so it substitutes for the part and the investments are still added.
+
+**The measurement and the rule cover different populations, and the gap is recorded
+rather than closed.** [added after the fact] The comparison needs `cash`,
+`cash_and_equivalents` and `short_term_investments` all present to be made at all, so
+it ran over rows carrying all three. The rule fires where `cash_and_equivalents` is
+absent, which is exactly the population the comparison cannot observe. The inference is
+from one population to another and that is stated rather than left implicit.
+
+The ratio makes the direction decisive anyway. What it leaves is the nine percent: at a
+one percent tolerance 757 of 8,411 rows had `cash` matching the sum rather than the
+part, so on the order of a hundred and fifty of the 1,644 mirror cases may now carry
+their short-term investments twice. Against 1,644 that were previously wrong by orders
+of magnitude, and against `NFLX.US` reading 28,678,000 for 9,127,910,000, that is a
+residual rather than a reason to hesitate. It is written down so a later reader knows it
+was seen rather than missed, and knows what a follow-up would have to reach: a source
+that distinguishes the two shapes on rows where `cash_and_equivalents` is absent, which
+this store does not carry.
+
+**5 names lose a value and that is the intended direction.** Where neither cash line is
+present the column was the investments figure alone and is now null, because an absence
+a reader can see is worth more than a number wrong by whatever the cash line would have
+been [`CLAUDE.md` §6].
+
+The column is not ranked [`METRICS.md` §6.5], so no percentile moves. It is sent to the
+dossier for magnitude and is the denominator of runway against `quarterly_burn_rate`,
+which is where the old figure was doing damage.
+
+**D-80 The regime label takes three values, and the benchmark test needs no
+threshold.** `ACTIVE`
+Settles the enumerated values `market_context_daily.regime_label` holds.
+
+Three values: `risk_on`, `risk_off`, `mixed`.
+
+`risk_on` when breadth is at or above `market.regime_breadth_high` and the benchmark is
+above its own 200-day average. `risk_off` when breadth is at or below
+`market.regime_breadth_low` and the benchmark is below it. `mixed` otherwise.
+
+The benchmark contributes a sign test rather than a threshold, deliberately. Zero is
+already meaningful there, since a series is above or below its own two-hundred day
+average, and every threshold is a number someone has to justify and later defend.
+Breadth has two because a fraction has no natural cut; the benchmark has none because
+it does.
+
+**No minimum run length, and the reason is recorded rather than assumed.** The
+three-state design already buffers: a single crossing on either input moves the label to
+`mixed` rather than flipping it to the opposite, so the label cannot alternate between
+`risk_on` and `risk_off`. What remains is one input sitting at its threshold and moving
+between `risk_on` and `mixed`, which splits a boundary period into two rather than
+mislabelling either, and that is the honest reading of a boundary period. If it proves
+noisier than that in practice, a run length is added with the observation behind it.
+
+VIX is null and contributes nothing. The label is derived from breadth and the
+benchmark, and the absence of VIX is recorded rather than allowed to null the label,
+since three components read it and a null degrades all three.
+
+**The values are enforced by the database, not by the writer.** `regime_label` becomes
+`NOT NULL` with a `CHECK` on exactly those three. Same treatment as
+`filing_date_unknown_reason` and for the same reason: this column segments analysis, and
+a drifted or mistyped value lands in its own bucket in every segmentation without ever
+erroring.
+
+**D-79 `fcf_yield` needs a capital expenditure figure of its own, and
+`capital_expenditures` is ingested for it.** `ACTIVE`
+Free cash flow computed as cash from operating plus cash from investing reads an
+acquisition as capital expenditure and an asset sale as free cash flow. That is S1's
+first ranking input, and both errors land hardest on exactly the names the screen is
+meant to find: an acquisitive small cap looks like it spends everything it earns, and one
+selling a division looks like it generates cash it does not.
+
+The column is one field from the fundamentals endpoint C03 already calls, and
+`0002_statement_fields_and_grains.sql` states its own column list is "driven by what
+`valuation_daily` needs in phase 2, not by what the provider happens to send", which
+covers this. It arrives in `0004` with C03's parse widened to populate it, and
+`fcf_yield` becomes TTM cash from operating less TTM capital expenditure.
+
+It is money and its name matches the monetary pattern, so it is `numeric` and it moves
+`guards.ps1`'s `ExpectedMonetary` from 17 to 18, which is that number doing the job it
+was made exact for [INVARIANT 16].
+
 ---
 
 ---

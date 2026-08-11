@@ -398,3 +398,246 @@ unchanged.
 **The failure table, an entire row removed rather than left empty** [D-65]. Every
 cell of it was struck and the three rows D-65 split it into sit directly below.
 > | End-of-day file stale or short | FreshnessGuard | Abort. No orders | Check the provider. Rerun when fresh. A skipped night costs nothing |
+
+---
+
+## 2026-08-10, phase 2 checkpoint 2.2
+
+Migration `0004` and its declarations. One clean edit to a spec document, recorded
+here because D-73 makes this the only place the prior wording survives.
+
+#### `SCHEMA.md`
+
+**The monetary count, in "Columns that are not money"** [D-79]. One word, replaced
+by `Eighteen`, with the paragraph naming the eighteenth added below it. The count is
+exact rather than a floor precisely so that a monetary column cannot arrive without
+moving it, so this is the mechanism working rather than a correction.
+> Seventeen
+
+Nothing else was removed. The rest of 2.2's changes to `SCHEMA.md` are additions:
+the `sentiment_derived_daily` section, four column names on `indicator_daily`, and
+thirty-seven rows declaring new `real` columns as not money.
+
+---
+
+## 2026-08-10, phase 2 checkpoint 2.3
+
+D-77 applied. The count of permitted splits removed from `SCHEMA.md`'s opening, the
+four compute tables naming both their writers, and the percentile-columns section no
+longer naming one.
+
+#### `SCHEMA.md`
+
+**The exception enumeration, the whole paragraph** [D-77]. Removed rather than
+amended: the percentile engine takes the count from three splits over five tables to
+seven over nine, and no number survives the next correct design either. The paragraph
+replacing it carries the reasoning without a count and cites D-77. Its own last
+sentence is why it went, and that sentence is kept in the replacement.
+> The exception list was the wrong shape rather than too short. `attribution`,
+> `proposal`, and `order` with `fill` and `position` each had more than one writer
+> from the first draft, which is already past the two the old rule allowed. Three
+> splits over five tables, and no fourth: the one candidate for it, a stored clean
+> gap count on `security`, turned out to want computing rather than storing [M.1].
+> Every attempt to enumerate exceptions ran out before the list was complete, because
+> a rule that counts exceptions gets longer every time the design is correct.
+
+**The `### percentile columns` opening line** [D-77]. The four table headings now
+carry the fact and a third statement of it is the duplication D-73 and D-76 remove.
+What replaces it states the naming convention and the type rule instead.
+> Written alongside their source tables by **PercentileEngine**.
+
+**Four writer lines, each replaced by a two-writer form** [D-77]. Recorded as one
+entry because the change is identical in shape at each: `Writer: X.` becomes
+`Writers: X inserts, PercentileEngine updates the percentile columns`.
+> **Writer: IndicatorEngine.**
+
+> **Writer: ValuationEngine.**
+
+> **Writer: FlowEngine, a compute stage, not the ingest.**
+
+> **Writer: SentimentEngine, a compute stage, not the ingest.**
+
+---
+
+## 2026-08-10, phase 2 checkpoint 2.14
+
+`ARCHITECTURE.html` amended: C35 SentimentEngine gains a catalogue row.
+
+Numbered 2.14 rather than inserted, because a checkpoint number is a plan reference
+and not an execution order, which 1.9 established. The plan's Stage A runs 2.1 to
+2.4 and this arrived after 2.3. An
+architecture amendment rather than a removal, so nothing verbatim is recorded below
+and this entry exists because the document changed.
+
+D-78 authored the component at 2.2 and `SCHEMA.md` named it as a writer at 2.3, but
+§3 did not have it. `SchemaDocument.WritersByTable` keeps only bolded words §3
+catalogues, so `sentiment_derived_daily` parsed to one writer rather than two, and
+2.8 registering the component would have tripped `RegistryNameTests`, which is the
+check that exists for exactly this.
+
+- §3 gains a C35 row after C34, matching that row's markup: `NEW` badge, a `muted`
+  description citing D-78, Runs `Daily 18:05`, Writes `sentiment_derived_daily`.
+- Its Reads cell names `sentiment_daily` and `security` in `<code>`, and says what
+  the `security` read is for, because D-74 made that standing. A row written after
+  that decision honours it at birth rather than becoming a fifth deviation someone
+  finds later.
+- §1's layer 2 list gains C35 beside C08, C09, C10, C11 and C34.
+
+`CataloguedComponents` moves 34 to 35. The amendment as issued said 35 to 36; the
+constant read 34 and §3 carried exactly 34 rows, both checked before the edit. The
+figure is an observation rather than a decision, so it is corrected here rather than
+carried [`CLAUDE.md` §13].
+
+---
+
+## 2026-08-10, phase 2 checkpoint 2.15
+
+`ARCHITECTURE.html` §3 amended: the C10 and C11 Reads cells name tables, and C11's
+Writes cell names tables rather than a column pattern. An architecture amendment, so
+nothing verbatim is recorded below and this entry exists because the document changed.
+
+**C10's cell named a store that does not exist and will not.** It read "Index and
+sector prices". The benchmark is the SPY row already in `price_daily`, which C02
+writes because the bulk feed carries every US ticker, and the sector series is a
+composite of the universe's own members [2.6]. So the phrase was wrong as well as
+unparseable, and this is not the markup fix it looks like. It now names
+`price_daily`, `security` and `indicator_daily`, each in `<code>`, saying what the
+read is for where that is not obvious [D-74].
+
+**C11's cell said "All metric stores".** Enumerated: `indicator_daily`,
+`valuation_daily`, `flow_daily`, `sentiment_derived_daily` and `security`. The
+generalisation was doing no work, because nothing enforced it and no test could read
+it. Enumerating gains a check and brings D-77's brake to bear, since a fifth metric
+store now means editing an authored document rather than being silently covered by a
+phrase.
+
+**C11's Writes cell said `*_pctile columns`**, which names no table. The four tables
+now name PercentileEngine in their own `SCHEMA.md` headings [D-77], so the cell names
+the four tables. No test reads that cell, so this is tidiness rather than a fix, and
+it is recorded as such.
+
+---
+
+## 2026-08-11, phase 2 sign-off
+
+`ARCHITECTURE.html` §3 and `METRICS.md` §3, §5 and §6.1 amended, all four from findings
+in the sign-off review. Removals, so the prior wording is recorded verbatim below.
+
+**§3's C11 row stated a different rule from the one the code implements, and the two
+disagree on real cells.** It said the fallback fires when a cell has fewer than 15
+members. The implemented rule is fewer than 15 non-null values for the metric being
+ranked, which is what `CONFIG_REFERENCE.md` has stated since 2.1 and what `METRICS.md`
+§6.4 states in its fallback list. On the blessed date 21 cells fell back for
+`fcf_yield`, and only 3 of them have fewer than 15 members, so 18 cells and all 110
+fallen-back names are treated differently under the two wordings. The code is right and
+the sentence was the loose one. Removed:
+
+> Ranks inside size bucket by sector cells, falling back to size bucket alone when a
+> cell has fewer than 15 members
+
+**`METRICS.md` §6.1 carried the same loose wording two pages from its own §6.2 and
+§6.4, which carry the strict one.** The document disagreed with itself. Removed:
+
+> Percentiles are computed within size bucket by sector cells, falling back to size
+> bucket alone when a cell has fewer than `percentile.cell_min_members` members [D-10,
+> default 15].
+
+**`METRICS.md` §3's `cash_on_hand` rule is superseded by D-81.** The coalesce to zero
+ran in both directions and only one of them is a zero. Removed:
+
+> ```
+> coalesce(cash_and_equivalents, 0) + coalesce(short_term_investments, 0)
+> ```
+>
+> falling back to `cash` when both are absent, and null when all three are absent.
+>
+> **The coalesce to zero here is deliberate and is the one place in this document that
+> does it.** A company reporting cash and equivalents but no short-term investments line
+> has no short-term investments, which is zero rather than unknown, and treating it as
+> unknown would null the field for most of the universe. The fallback to `cash` covers
+> the shape where the provider sends the aggregate and not the parts. `numeric`.
+
+**`METRICS.md` §5 named regime label values the database rejects.** The proposal block
+spelled them `risk-on` and `risk-off` where D-80, `SCHEMA.md` and
+`0005_regime_label.sql`'s `CHECK` all use underscores, so a reader reproducing the
+document's literals would have written rows Postgres refuses with 23514. Corrected to
+underscores, with a pointer added naming D-80 as the authored rule. The section stays
+BLOCKED, because promoting it belongs with the other eight PROPOSAL entries and is one
+act rather than nine. Removed:
+
+> ```
+> risk-on  when breadth >= market.regime_breadth_high
+>              and the universe composite is above its own 200-day average
+> risk-off when breadth <= market.regime_breadth_low
+>              and the universe composite is below its own 200-day average
+> mixed    otherwise
+> ```
+
+`METRICS.md` is not one of the four documents D-73 names as kept clean. It carried no
+strikes before this, so the removals are clean edits with the prior wording recorded
+here rather than struck in place. If the intent is that it keeps its strikes, this entry
+is what makes that reversible.
+
+---
+
+## 2026-08-11, D-83
+
+`ARCHITECTURE.html` §04 and `SCHEMA.md` amended under D-83, which removes a count from
+a spec rather than correcting it. Human-directed; D-83 was authored before either
+document was touched [`CLAUDE.md` §13]. Clean edits under D-73, prior wording verbatim
+below.
+
+**Both documents stated how many technical columns there are and nothing had ever
+checked either.** Phase 2 built fifteen against a design-time estimate of forty, so two
+documents disagreed with `PROGRESS.md` about the same fact. Correcting forty to fifteen
+would go stale the first time a later phase adds a column and would leave the next
+reader unable to tell a checked number from an unchecked one, so both now state what
+governs the set and point at the list. Removed from `ARCHITECTURE.html` §04's C08
+diagram node:
+
+> ~40 technical columns per name
+
+Removed from `SCHEMA.md`'s `indicator_daily` section, which is followed by the list it
+was counting:
+
+> Roughly forty technical columns plus their percentiles.
+
+**A third occurrence, in `SCHEMA.md` §Types, was a stale estimate carried inside an
+argument rather than a statement about the schema.** It explains why a file exclusion
+list was replaced by a declaration, and cited the forty as the scale of what was coming.
+The argument is unchanged and the number is gone, because a spec citing an unchecked
+count in passing is the same defect wearing a different sentence. The sentence read:
+
+> was the previous mechanism and it had reached two entries with phase 2's forty
+> technical columns still to come, at which point the guard would have been suppressed
+> rather than satisfied.
+
+Of which the removed span is "phase 2's forty technical columns", now "the whole of
+phase 2's compute layer". The clause from "at which point" onward is unchanged and is
+quoted here only so the sentence reads as it did.
+
+**`PROGRESS.md`'s fifteen is untouched**, and so is its estimated-to-measured row
+carrying the `~40`. That document is a record of what was built and of an estimate that
+became a measurement, not a spec, and a record that loses the estimate loses the point
+of having recorded the correction.
+
+**What D-83 does not reach.** `SCHEMA.md`'s "Eighteen columns match the monetary pattern
+and are `numeric`" stays exactly as it was. `guards.ps1` asserts it against the
+migrations and `SchemaParityTests` asserts it against the live database, so it is a
+count a test reads, which is the case the decision explicitly excludes.
+
+---
+
+## 2026-08-11, `SCHEMA.md` duplicate paragraph
+
+**A removal of a duplicate, not a change of fact.** The paragraph beginning "The
+eighteenth is `fundamental_snapshot.capital_expenditures`" appeared twice in §Types,
+identically, and now appears once. Nothing it states has changed: capital expenditures
+is still the eighteenth monetary column, the count is still eighteen, and `guards.ps1`
+check 4 and `SchemaParityTests.EveryMonetaryNamedColumnInTheDatabaseIsNumeric` both
+still assert that number.
+
+This entry says duplicate rather than removed deliberately. An entry reading "removed"
+against a paragraph a later reader can still find would tell them the opposite of what
+happened, and the changelog was reopened at the post phase 1 reconciliation precisely so
+that a removal could be trusted to mean one.

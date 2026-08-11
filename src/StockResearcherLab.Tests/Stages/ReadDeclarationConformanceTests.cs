@@ -33,14 +33,14 @@ public sealed class ReadDeclarationConformanceTests
     ///
     /// It moves deliberately when a phase adds a stage.
     /// </summary>
-    private const int ExpectedStages = 8;
+    private const int ExpectedStages = 13;
 
     /// <summary>
     /// Section 3 catalogues thirty-four components. Asserted rather than assumed,
     /// because a parser that stopped matching returns an empty map, and an empty map
     /// makes the catalogue-to-code direction below pass over nothing.
     /// </summary>
-    private const int CataloguedComponents = 34;
+    private const int CataloguedComponents = 35;
 
     /// <summary>
     /// The one place the catalogue and the code disagree, recorded rather than
@@ -109,6 +109,8 @@ public sealed class ReadDeclarationConformanceTests
                  {
                      "PriceIngestor", "FreshnessGuard", "FundamentalsIngestor", "UniverseBuilder",
                      "SentimentIngestor", "FlowIngestor", "EventsIngestor", "FlowEngine",
+                     "IndicatorEngine", "ValuationEngine", "SentimentEngine",
+                     "MarketContextEngine", "PercentileEngine",
                  })
         {
             Assert.True(stages.ContainsKey(expected), $"{expected} is registered and is not under test.");

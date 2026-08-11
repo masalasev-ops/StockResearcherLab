@@ -1,0 +1,36 @@
+﻿ci.ps1 failure evidence
+step      : Migrate, from an empty server
+utc       : 2026-08-11 04:51:12Z
+head      : 834b7fd
+database  : stockresearcherlab_ci
+
+No cause is claimed by this file. It exists so the next occurrence is read
+rather than investigated from nothing. The two candidates worth checking
+first are a drop refused because a session is still attached to the target,
+and a create refused because a session is attached to template1.
+
+=== error, verbatim ===
+The migrate output contains no "created database" line, so the database existed when it ran. The drop step reported success immediately before.
+
+=== step output, verbatim ===
+migrate  database stockresearcherlab_ci
+  0001_snapshot.sql            already applied
+  0002_statement_fields_and_grains.sql already applied
+  0003_insider_transaction_grain.sql already applied
+  0004_compute_columns.sql     already applied
+  0005_regime_label.sql        already applied
+  nothing to apply, schema already current
+
+=== pg_stat_activity, every session ===
+pid      datname                    application_name           client       state                query
+6624     postgres                                              ::1          idle                 SELECT J.jobid   FROM pgagent.pga_job J  WHERE jobenabled    AND jobagentid IS N
+15996    postgres                                              ::1          active               SELECT pid, coalesce(datname,'-'), coalesce(application_name,'-'), coalesce(host
+33136    stockresearcherlab                                    ::1          active               INSERT INTO "price_daily" ("ticker", "date", "open", "high", "low", "close", "ad
+3492     -                                                     local        -                    
+6592     -                                                     local        -                    
+6604     -                                                     local        -                    
+11140    -                                                     local        -                    
+11148    -                                                     local        -                    
+11168    -                                                     local        -                    
+11188    -                                                     local        -                    
+11208    -                                                     local        -                    

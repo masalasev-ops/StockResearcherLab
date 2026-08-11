@@ -130,7 +130,68 @@ and both are given so the next reader can find it either way.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `percentile.cell_min_members` | 15 | D-10 | PercentileEngine | unverified |
+| `percentile.cell_min_members` | 15 | D-10 | PercentileEngine | verified 2026-08-11 |
+
+**It counts the non-null population for the metric being ranked, not the cell** [2.1].
+A cell of twenty members where five carry a value for one metric otherwise produces a
+percentile computed over five that is indistinguishable from one computed over twenty,
+and nothing downstream could tell. So one row can be ranked inside its sector cell for a
+metric with broad coverage and inside its size bucket for a metric with thin coverage,
+on the same night.
+
+It had been in this document since the corpus was written with nothing seeding it, which
+`seed.ps1` closed at 2.4.
+
+## Compute
+
+Every key here is a window, a warm-up or a floor beneath which a metric is null rather
+than computed over less. None of them is a screen threshold and the tuner touches none
+of them [INVARIANT 14]. Formulas and null rules are in `METRICS.md`.
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `indicator.wilder_warmup_bars` | 250 | 2.1 | IndicatorEngine | verified 2026-08-11 |
+| `indicator.base_lookback_days` | 60 | 2.1 | IndicatorEngine | verified 2026-08-11 |
+| `indicator.base_max_range_pct` | 0.25 | 2.1 | IndicatorEngine | verified 2026-08-11 |
+| `valuation.own_history_min_points` | 24 | 2.1 | ValuationEngine | verified 2026-08-11 |
+| `market.breadth_ma_days` | 200 | 2.1 | MarketContextEngine | verified 2026-08-11 |
+| `market.sector_composite_min_members` | 5 | 2.1 | IndicatorEngine, MarketContextEngine | verified 2026-08-11 |
+| `sentiment.min_baseline_days` | 20 | 2.1 | SentimentEngine | verified 2026-08-11 |
+| `market.regime_breadth_high` | 0.60 | D-80 | MarketContextEngine | verified 2026-08-10 |
+| `market.regime_breadth_low` | 0.40 | D-80 | MarketContextEngine | verified 2026-08-10 |
+
+**A window named inside a column is a constant, not a key.** `article_count_z_own_90d`
+carries its 90, `sentiment_delta_7v30` its 7 and 30, `dist_200dma` its 200 and
+`median_dollar_volume_20d` its 20. A tunable value beside a column that names it is a
+second place for the number to live and the column name is wrong the first time they
+disagree, which is why `FlowEngine.WindowDays` is a `const` beside
+`insider_net_90d_usd`. `market.breadth_ma_days` is a key for the opposite reason: it is
+the same 200 and no column names it.
+
+**The two regime thresholds were held back at 2.4 and arrived at 2.9 with D-80**, which
+is the decision that says what they threshold. Seeding a value for a rule that does not
+exist puts a number in the store nothing can be read against, and seeding a key later is
+version 1 and does not move the store-wide config version [D-72], so waiting cost
+nothing.
+
+**The regime rule's other half has no key and that is deliberate** [D-80]. The benchmark
+contributes a sign test rather than a threshold, because a series is above or below its
+own 200-day average and zero is already meaningful there. A fraction has no natural cut
+and so takes two; a sign has one already.
+
+**Every key in this table and the one above was confirmed by reading the line that
+consumes it**, in the same form the ingest keys are recorded in further up: the three
+indicator keys and the sector minimum at `IndicatorEngine.cs:94-101`, the own-history
+floor at `ValuationEngine.cs:97`, the baseline floor at `SentimentEngine.cs:73`, the
+breadth window, the sector minimum again and the two regime thresholds at
+`MarketContextEngine.cs:53-56`, and the cell floor at `PercentileEngine.cs:116`. Line
+numbers go stale; the file and the stage do not, and both are given so the next reader
+can find it either way.
+
+**An entry above reading `unverified` is the accurate state rather than an oversight**
+where the component that consumes it does not exist yet. Each checkpoint that wires one
+up moves its own row, having read the line that consumes it [CLAUDE.md §8]. The two
+regime keys are verified at `MarketContextEngine.cs:56-57`.
 
 ## Screens
 

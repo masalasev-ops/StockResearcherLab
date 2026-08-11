@@ -11,13 +11,15 @@ components claim the same triple. Where a heading below reads **Writer: X**, X o
 every operation on that table. Where it names several, each declares the operation
 and the columns it owns, and nothing else may write there at all.
 
-The exception list was the wrong shape rather than too short. `attribution`,
-`proposal`, and `order` with `fill` and `position` each had more than one writer from
-the first draft, which is already past the two the old rule allowed. Three splits over
-five tables, and no fourth: the one candidate for it, a stored clean gap count on
-`security`, turned out to want computing rather than storing [M.1]. Every attempt to
-enumerate exceptions ran out before the list was complete, because a rule that counts
-exceptions gets longer every time the design is correct.
+**There is no count of how many tables may have several writers, and nothing replaces
+it as a count** [D-77]. A rule that counts exceptions gets longer every time the design
+is correct, which is what happened: the count stood at three splits over five tables
+until the percentile engine made it seven over nine.
+
+The brake a count provided is not lost. Adding a second writer means editing this
+document, which a build session cannot do, where a count is prose a build session can
+read past. The conformance test derives the permitted splits from the headings below
+rather than from a list of its own, so what a heading says is checked on every push.
 
 Column lists below are the load-bearing ones, not exhaustive. Types, indexes and
 constraints are phase 0 work and are not fabricated here.
@@ -106,6 +108,34 @@ Grain: ticker by day, whole universe. **Writer: SentimentIngestor.** ~380 MB.
 
 `ticker`, `date`, `article_count`, `sentiment_score`.
 
+**A day with no row is a day with no articles, not a day nobody looked** [D-78]. C04
+covers the whole universe every night with no pre-selection, and the probe found days
+carrying a non-zero count identical to days carrying a row on all seven names, so no
+empty rows are written. That is what lets `article_count` be read as zero across an
+absent day and it is the reason the derived table below can exist at all.
+
+### sentiment_derived_daily
+Grain: ticker by day [D-78]. **Writers: SentimentEngine, a compute stage and not the
+ingest, inserts; PercentileEngine updates the percentile columns** [D-77]. Small.
+
+`ticker`, `date`, `article_count_z_own_90d`, `sentiment_delta_7v30`,
+`sentiment_7d_level`.
+
+Derived rather than ingested, exactly as `flow_daily` is derived from the two flow
+source tables and `indicator_daily` from `price_daily`. Ingest grain follows the
+source; consumption grain follows the screen [D-61].
+
+S3 ranks on these three and on nothing else, S5's stabilisation gate reads the first
+two, and the dossier's fixed core carries two. The three windows are named in the
+columns, so they are constants in the stage rather than config keys.
+
+**`article_count` zero-fills across an absent day and `sentiment_score` does not**, and
+the two rules are the same rule applied to absences that mean different things. There is
+no tone where there are no articles. Zero-filling the score would say the coverage was
+exactly neutral, which is a different claim from the coverage not existing, and it would
+pull every thinly covered name toward zero in proportion to how thinly covered it is.
+That is a size proxy arriving where D-12 exists to keep one out.
+
 ### headline
 Grain: candidate by day. **Writer: HeadlineIngestor.** Small.
 
@@ -158,8 +188,8 @@ accumulates forward only. The table still ingests, because a current top-20 hold
 list is a usable static feature; it is the change metric that has no series.
 
 ### flow_daily
-Grain: ticker by day [D-61]. **Writer: FlowEngine, a compute stage, not the ingest.**
-~52 MB.
+Grain: ticker by day [D-61]. **Writers: FlowEngine, a compute stage and not the ingest,
+inserts; PercentileEngine updates the percentile columns** [D-77]. ~52 MB.
 
 `ticker`, `date`, `insider_net_90d_usd` [A1.a], `distinct_buyer_count`,
 `inst_ownership_change` [D-58, D-61].
@@ -190,12 +220,22 @@ Grain: ticker by event. **Writer: EventsIngestor.** Small.
 ## Computed
 
 ### indicator_daily
-Grain: ticker by day. **Writer: IndicatorEngine.** ~1.2 GB, the second largest table.
+Grain: ticker by day. **Writers: IndicatorEngine inserts, PercentileEngine updates the
+percentile columns** [D-77]. ~1.2 GB, the second largest table.
 
-Roughly forty technical columns plus their percentiles. `atr_pct`, `adx14`,
-`dist_200dma`, `dist_52w_high`, `rs_change_21d`, `rs_change_63d`,
-`rs_change_vs_sector`, `volume_vs_50d_avg`, `ma50_200_slope`,
-`base_breakout_flag` [O.2].
+**The technical columns are those with a named consumer, and the list is here rather
+than a count of it** [D-83]. `SchemaParityTests` holds the type declarations in §Types
+against the live database in both directions, so the columns below are checked where a
+count could not be. Each arrives with its percentile.
+
+`atr_pct`, `adx14`, `dist_200dma`, `dist_52w_high`, `rs_change_21d`, `rs_change_63d`,
+`rs_change_vs_sector`, `volume_vs_50d_avg`, `ma50_200_slope`, `base_breakout_flag`
+[O.2], and four added at 2.2 for readers that had none: `dist_20dma`, `rs_20d_slope`,
+`rs_21d_63d_change`, `dist_52w_high_20d_change`.
+
+`dist_20dma` is the signed fraction rather than the 20-day average itself, so S5's
+stabilisation gate reads `dist_20dma > 0` rather than joining back to the close. It
+matches `dist_200dma`'s shape and it keeps a price out of a `real` column.
 
 Store as 32-bit floats. No technical indicator needs fifteen significant figures and
 it halves the table.
@@ -206,7 +246,8 @@ is money and INVARIANT 16 does not bend for storage size [O.2].
 All computed locally from `price_daily`. Never bought from the provider.
 
 ### valuation_daily
-Grain: ticker by day. **Writer: ValuationEngine.** ~540 MB.
+Grain: ticker by day. **Writers: ValuationEngine inserts, PercentileEngine updates the
+percentile columns** [D-77]. ~540 MB.
 
 `fcf_yield`, `ev_ebit`, `ev_ebit_vs_own_5y`, `roic`, `roic_4q_change`,
 `gross_margin_4q_change`, `net_debt_ebitda`, `accruals`, `share_count_change`,
@@ -219,15 +260,48 @@ Recomputed daily because price moves. Every fundamental input resolved as of
 ### market_context_daily
 Grain: one row per day. **Writer: MarketContextEngine.** Small.
 
-`date`, `breadth`, `vix`, `regime_label`, plus sector relative strength.
+`date`, `breadth`, `vix`, `regime_label`, `sector_relative_strength`.
+
+**`regime_label` is `NOT NULL` with a `CHECK` on exactly `risk_on`, `risk_off` and
+`mixed`** [D-80, 0005]. Enforced by the database rather than by the writer, and for the
+same reason `filing_date_unknown_reason` is: this column segments analysis, being
+carried in the cached prefix, stored on every attribution row and shown on screen U1, so
+a drifted or mistyped value lands in its own bucket in every segmentation without ever
+erroring. A writer-side check protects one writer; a constraint protects the column.
+
+`risk_on` when breadth is at or above `market.regime_breadth_high` and the benchmark is
+above its own 200-day average, `risk_off` when breadth is at or below
+`market.regime_breadth_low` and the benchmark is below it, `mixed` otherwise. The
+benchmark contributes a sign test and carries no threshold, because a series is above or
+below its own average and zero is already meaningful there.
+
+**`vix` is null and contributes nothing to the label.** The bulk end-of-day feed carries
+equities and the index is not among them. The absence is recorded rather than allowed to
+null the label, since three components read the label and a null would degrade all three
+over a column none of them reads [D-80].
+
+`sector_relative_strength` is a jsonb object of sector to trailing relative return
+against the universe composite, with keys in ordinal sort order. Dictionary enumeration
+order is unspecified and this column reaches the cached prefix, where a byte difference
+breaks the cache and roughly triples the input bill silently [INVARIANT 6].
 
 ### percentile columns
-Written alongside their source tables by **PercentileEngine**.
+Named `<metric>_pctile` and stored alongside the metric they rank, on the metric's own
+table rather than in a table of their own. `real`, scaled 0 to 100, and none of them is
+money whatever its source column is.
+
+Who writes them is stated in the four headings above and nowhere here [D-77]. Stating
+it in a third place is the duplication D-73 and D-76 exist to remove, and the headings
+are the copy a conformance test reads.
 
 Computed within size bucket by sector cells, falling back to size bucket alone when a
 cell has fewer than fifteen members [D-10]. Expressed as window functions partitioned
 by bucket and sector, so this is set-based and date-partitioned rather than
 application-threaded.
+
+This section has no `Grain:` line and is deliberately not parsed as a table, which
+`SchemaParityTests` asserts. The columns belong to the tables above and are declared
+individually under "Columns that are not money".
 
 ---
 
@@ -447,16 +521,21 @@ a reader would look, rather than in a script, which is where nobody does.
 The monetary pattern covers `_usd`, `price`, `value`, `cap`, `cost`, `equity`,
 `pnl`, `dollar` and `amount`, matched against the column name and not the table's.
 Extend the pattern as the schema grows. Do not extend a list of files to skip: that
-was the previous mechanism and it had reached two entries with phase 2's forty
-technical columns still to come, at which point the guard would have been suppressed
+was the previous mechanism and it had reached two entries with the whole of phase 2's
+compute layer still to come [D-83], at which point the guard would have been suppressed
 rather than satisfied.
 
-**The count is stated so the check cannot pass over an empty match set.** Seventeen
-columns match the monetary pattern and are `numeric`, and a check finding fewer has
-stopped reading part of the schema rather than found a cleaner one. That is not
+**The count is stated so the check cannot pass over an empty match set.** Eighteen
+columns match the monetary pattern and are `numeric` [D-79], and a check finding fewer
+has stopped reading part of the schema rather than found a cleaner one. That is not
 hypothetical: the parser written for this missed `"order"` and `"position"`, whose
-identifiers are quoted because both are reserved words, and six monetary columns
-were silently outside the set it reported on.
+identifiers are quoted because both are reserved words, and six monetary columns were
+silently outside the set it reported on.
+
+The eighteenth is `fundamental_snapshot.capital_expenditures`, which matches through
+`cap` and is money [D-79]. The number moving is the mechanism working rather than an
+inconvenience: it is exact rather than a floor precisely so that a monetary column
+cannot arrive without someone thinking about its type.
 
 Everything below is a measurement, a ratio, an index or a key. None of it is a sum
 of money, and storing a technical measure as a 32-bit float halves the two largest
@@ -473,6 +552,10 @@ tables in the system [O.2].
 | `indicator_daily.rs_change_vs_sector` | `real` | a relative change |
 | `indicator_daily.volume_vs_50d_avg` | `real` | a ratio of two volumes |
 | `indicator_daily.ma50_200_slope` | `real` | a slope |
+| `indicator_daily.dist_20dma` | `real` | a distance as a fraction |
+| `indicator_daily.rs_20d_slope` | `real` | a slope of a relative strength ratio |
+| `indicator_daily.rs_21d_63d_change` | `real` | a difference of two relative changes |
+| `indicator_daily.dist_52w_high_20d_change` | `real` | a change in a distance |
 | `valuation_daily.fcf_yield` | `real` | a yield |
 | `valuation_daily.ev_ebit` | `real` | a multiple |
 | `valuation_daily.ev_ebit_vs_own_5y` | `real` | a multiple against its own history |
@@ -489,9 +572,57 @@ tables in the system [O.2].
 | `flow_daily.inst_ownership_change` | `real` | a proportional change in a share count |
 | `market_context_daily.breadth` | `real` | a fraction of the market |
 | `market_context_daily.vix` | `real` | an index level |
+| `sentiment_derived_daily.article_count_z_own_90d` | `real` | a z-score against the ticker's own baseline |
+| `sentiment_derived_daily.sentiment_delta_7v30` | `real` | a difference of two sentiment means |
+| `sentiment_derived_daily.sentiment_7d_level` | `real` | a mean of a normalised score |
 | `screen_score_daily.score` | `real` | a screen score |
 | `screen_history.floor_score` | `real` | a screen score |
 | `screen_history.p98_trailing` | `real` | a screen score percentile |
+
+### The percentile columns are not money either
+
+Thirty of them, one per ranked metric, added at 2.2. Every one is a rank between 0 and
+100 within a size and sector cell, so none is a sum of money whatever its source column
+is. They are listed rather than pattern-matched away, because the two mechanisms this
+document rejects are a list of files to skip and a rule that guesses from a name.
+
+| Column | Type | What it is |
+|---|---|---|
+| `indicator_daily.atr_pct_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.adx14_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.dist_20dma_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.dist_200dma_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.dist_52w_high_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.dist_52w_high_20d_change_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.rs_change_21d_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.rs_change_63d_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.rs_21d_63d_change_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.rs_20d_slope_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.rs_change_vs_sector_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.volume_vs_50d_avg_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.ma50_200_slope_pctile` | `real` | a rank between 0 and 100 |
+| `indicator_daily.median_dollar_volume_20d_pctile` | `real` | a rank between 0 and 100. Its source column is money and this is not |
+| `valuation_daily.fcf_yield_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.ev_ebit_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.ev_ebit_vs_own_5y_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.roic_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.roic_4q_change_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.gross_margin_4q_change_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.net_debt_ebitda_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.accruals_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.share_count_change_pctile` | `real` | a rank between 0 and 100 |
+| `valuation_daily.revenue_growth_4q_trend_pctile` | `real` | a rank between 0 and 100 |
+| `flow_daily.insider_net_90d_usd_pctile` | `real` | a rank between 0 and 100. Its source column is money and this is not |
+| `flow_daily.distinct_buyer_count_pctile` | `real` | a rank between 0 and 100 |
+| `flow_daily.inst_ownership_change_pctile` | `real` | a rank between 0 and 100 |
+| `sentiment_derived_daily.article_count_z_own_90d_pctile` | `real` | a rank between 0 and 100 |
+| `sentiment_derived_daily.sentiment_delta_7v30_pctile` | `real` | a rank between 0 and 100 |
+| `sentiment_derived_daily.sentiment_7d_level_pctile` | `real` | a rank between 0 and 100 |
+
+**Two of those names match the monetary pattern**, `insider_net_90d_usd_pctile` through
+`_usd` and `median_dollar_volume_20d_pctile` through `dollar`. Both are declared here
+for the reason above and not by an exception carved into the pattern, so the pattern
+stays a statement about names and this list stays the single place a type is argued.
 
 **Two columns whose names collide with the monetary pattern** and are not money.
 They are declared here for the same reason and by the same mechanism, so there is

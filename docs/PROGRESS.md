@@ -2832,8 +2832,13 @@ authored ones.
 
 #### What moved, and what did not
 
-221 tests to **227**. `valuation_daily`'s digest for 2026-08-07 moves with D-81 and the
-other four do not, which is C09's write ownership observed rather than declared.
+**`ci.ps1` green at `1271de2`**: `guards.ps1` 5 checks over 84 files, 0 warnings and 0
+errors, 5 migrations applied from an empty server, nothing to apply on the second, and
+**Passed 227, Failed 0**. 221 tests to 227 and 83 swept files to 84, both from the one
+new test file.
+
+`valuation_daily`'s digest for 2026-08-07 moves with D-81 and the other four do not,
+which is C09's write ownership observed rather than declared.
 
 | Table | Digest at 2.12 and at the review | After D-81 |
 |---|---|---|

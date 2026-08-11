@@ -150,12 +150,12 @@ of them [INVARIANT 14]. Formulas and null rules are in `METRICS.md`.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `indicator.wilder_warmup_bars` | 250 | 2.1 | IndicatorEngine | unverified |
-| `indicator.base_lookback_days` | 60 | 2.1 | IndicatorEngine | unverified |
-| `indicator.base_max_range_pct` | 0.25 | 2.1 | IndicatorEngine | unverified |
+| `indicator.wilder_warmup_bars` | 250 | 2.1 | IndicatorEngine | verified 2026-08-11 |
+| `indicator.base_lookback_days` | 60 | 2.1 | IndicatorEngine | verified 2026-08-11 |
+| `indicator.base_max_range_pct` | 0.25 | 2.1 | IndicatorEngine | verified 2026-08-11 |
 | `valuation.own_history_min_points` | 24 | 2.1 | ValuationEngine | verified 2026-08-11 |
-| `market.breadth_ma_days` | 200 | 2.1 | MarketContextEngine | unverified |
-| `market.sector_composite_min_members` | 5 | 2.1 | IndicatorEngine, MarketContextEngine | unverified |
+| `market.breadth_ma_days` | 200 | 2.1 | MarketContextEngine | verified 2026-08-11 |
+| `market.sector_composite_min_members` | 5 | 2.1 | IndicatorEngine, MarketContextEngine | verified 2026-08-11 |
 | `sentiment.min_baseline_days` | 20 | 2.1 | SentimentEngine | verified 2026-08-11 |
 | `market.regime_breadth_high` | 0.60 | D-80 | MarketContextEngine | verified 2026-08-10 |
 | `market.regime_breadth_low` | 0.40 | D-80 | MarketContextEngine | verified 2026-08-10 |
@@ -178,6 +178,15 @@ nothing.
 contributes a sign test rather than a threshold, because a series is above or below its
 own 200-day average and zero is already meaningful there. A fraction has no natural cut
 and so takes two; a sign has one already.
+
+**Every key in this table and the one above was confirmed by reading the line that
+consumes it**, in the same form the ingest keys are recorded in further up: the three
+indicator keys and the sector minimum at `IndicatorEngine.cs:94-101`, the own-history
+floor at `ValuationEngine.cs:97`, the baseline floor at `SentimentEngine.cs:73`, the
+breadth window, the sector minimum again and the two regime thresholds at
+`MarketContextEngine.cs:53-56`, and the cell floor at `PercentileEngine.cs:116`. Line
+numbers go stale; the file and the stage do not, and both are given so the next reader
+can find it either way.
 
 **An entry above reading `unverified` is the accurate state rather than an oversight**
 where the component that consumes it does not exist yet. Each checkpoint that wires one

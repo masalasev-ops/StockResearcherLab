@@ -223,11 +223,15 @@ Grain: ticker by event. **Writer: EventsIngestor.** Small.
 Grain: ticker by day. **Writers: IndicatorEngine inserts, PercentileEngine updates the
 percentile columns** [D-77]. ~1.2 GB, the second largest table.
 
-Roughly forty technical columns plus their percentiles. `atr_pct`, `adx14`,
-`dist_200dma`, `dist_52w_high`, `rs_change_21d`, `rs_change_63d`,
-`rs_change_vs_sector`, `volume_vs_50d_avg`, `ma50_200_slope`,
-`base_breakout_flag` [O.2], and four added at 2.2 for readers that had none:
-`dist_20dma`, `rs_20d_slope`, `rs_21d_63d_change`, `dist_52w_high_20d_change`.
+**The technical columns are those with a named consumer, and the list is here rather
+than a count of it** [D-83]. `SchemaParityTests` holds the type declarations in §Types
+against the live database in both directions, so the columns below are checked where a
+count could not be. Each arrives with its percentile.
+
+`atr_pct`, `adx14`, `dist_200dma`, `dist_52w_high`, `rs_change_21d`, `rs_change_63d`,
+`rs_change_vs_sector`, `volume_vs_50d_avg`, `ma50_200_slope`, `base_breakout_flag`
+[O.2], and four added at 2.2 for readers that had none: `dist_20dma`, `rs_20d_slope`,
+`rs_21d_63d_change`, `dist_52w_high_20d_change`.
 
 `dist_20dma` is the signed fraction rather than the 20-day average itself, so S5's
 stabilisation gate reads `dist_20dma > 0` rather than joining back to the close. It
@@ -517,8 +521,8 @@ a reader would look, rather than in a script, which is where nobody does.
 The monetary pattern covers `_usd`, `price`, `value`, `cap`, `cost`, `equity`,
 `pnl`, `dollar` and `amount`, matched against the column name and not the table's.
 Extend the pattern as the schema grows. Do not extend a list of files to skip: that
-was the previous mechanism and it had reached two entries with phase 2's forty
-technical columns still to come, at which point the guard would have been suppressed
+was the previous mechanism and it had reached two entries with the whole of phase 2's
+compute layer still to come [D-83], at which point the guard would have been suppressed
 rather than satisfied.
 
 **The count is stated so the check cannot pass over an empty match set.** Eighteen
@@ -527,11 +531,6 @@ has stopped reading part of the schema rather than found a cleaner one. That is 
 hypothetical: the parser written for this missed `"order"` and `"position"`, whose
 identifiers are quoted because both are reserved words, and six monetary columns were
 silently outside the set it reported on.
-
-The eighteenth is `fundamental_snapshot.capital_expenditures`, which matches through
-`cap` and is money [D-79]. The number moving is the mechanism working rather than an
-inconvenience: it is exact rather than a floor precisely so that a monetary column
-cannot arrive without someone thinking about its type.
 
 The eighteenth is `fundamental_snapshot.capital_expenditures`, which matches through
 `cap` and is money [D-79]. The number moving is the mechanism working rather than an

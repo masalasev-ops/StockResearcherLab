@@ -577,3 +577,67 @@ act rather than nine. Removed:
 strikes before this, so the removals are clean edits with the prior wording recorded
 here rather than struck in place. If the intent is that it keeps its strikes, this entry
 is what makes that reversible.
+
+---
+
+## 2026-08-11, D-83
+
+`ARCHITECTURE.html` §04 and `SCHEMA.md` amended under D-83, which removes a count from
+a spec rather than correcting it. Human-directed; D-83 was authored before either
+document was touched [`CLAUDE.md` §13]. Clean edits under D-73, prior wording verbatim
+below.
+
+**Both documents stated how many technical columns there are and nothing had ever
+checked either.** Phase 2 built fifteen against a design-time estimate of forty, so two
+documents disagreed with `PROGRESS.md` about the same fact. Correcting forty to fifteen
+would go stale the first time a later phase adds a column and would leave the next
+reader unable to tell a checked number from an unchecked one, so both now state what
+governs the set and point at the list. Removed from `ARCHITECTURE.html` §04's C08
+diagram node:
+
+> ~40 technical columns per name
+
+Removed from `SCHEMA.md`'s `indicator_daily` section, which is followed by the list it
+was counting:
+
+> Roughly forty technical columns plus their percentiles.
+
+**A third occurrence, in `SCHEMA.md` §Types, was a stale estimate carried inside an
+argument rather than a statement about the schema.** It explains why a file exclusion
+list was replaced by a declaration, and cited the forty as the scale of what was coming.
+The argument is unchanged and the number is gone, because a spec citing an unchecked
+count in passing is the same defect wearing a different sentence. The sentence read:
+
+> was the previous mechanism and it had reached two entries with phase 2's forty
+> technical columns still to come, at which point the guard would have been suppressed
+> rather than satisfied.
+
+Of which the removed span is "phase 2's forty technical columns", now "the whole of
+phase 2's compute layer". The clause from "at which point" onward is unchanged and is
+quoted here only so the sentence reads as it did.
+
+**`PROGRESS.md`'s fifteen is untouched**, and so is its estimated-to-measured row
+carrying the `~40`. That document is a record of what was built and of an estimate that
+became a measurement, not a spec, and a record that loses the estimate loses the point
+of having recorded the correction.
+
+**What D-83 does not reach.** `SCHEMA.md`'s "Eighteen columns match the monetary pattern
+and are `numeric`" stays exactly as it was. `guards.ps1` asserts it against the
+migrations and `SchemaParityTests` asserts it against the live database, so it is a
+count a test reads, which is the case the decision explicitly excludes.
+
+---
+
+## 2026-08-11, `SCHEMA.md` duplicate paragraph
+
+**A removal of a duplicate, not a change of fact.** The paragraph beginning "The
+eighteenth is `fundamental_snapshot.capital_expenditures`" appeared twice in §Types,
+identically, and now appears once. Nothing it states has changed: capital expenditures
+is still the eighteenth monetary column, the count is still eighteen, and `guards.ps1`
+check 4 and `SchemaParityTests.EveryMonetaryNamedColumnInTheDatabaseIsNumeric` both
+still assert that number.
+
+This entry says duplicate rather than removed deliberately. An entry reading "removed"
+against a paragraph a later reader can still find would tell them the opposite of what
+happened, and the changelog was reopened at the post phase 1 reconciliation precisely so
+that a removal could be trusted to mean one.

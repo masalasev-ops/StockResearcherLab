@@ -101,9 +101,8 @@ Read this file, then the phase in `BUILD_PLAN.md`, then the sections of
 `ARCHITECTURE.html` it implements. Check the carried obligations table at the foot of
 the build plan for anything owed to this phase by an earlier one.
 
-**Archive the prompt before writing code, not after.** It goes to `prompts/spent/` as
-issued. A prompt archived at the end is a prompt archived after you have already
-learned things, and it stops being a record of what was asked.
+**Archive the prompt after writing code** It goes to `prompts/spent/` as
+implemented.
 
 ### During
 

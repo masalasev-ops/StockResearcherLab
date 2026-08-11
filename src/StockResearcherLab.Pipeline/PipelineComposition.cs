@@ -35,6 +35,7 @@ public static class PipelineComposition
             // is present.
             new FlowEngine(),
             new IndicatorEngine(),
+            new ValuationEngine(),
             new MarketContextEngine(),
         };
 

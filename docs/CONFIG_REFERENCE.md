@@ -153,7 +153,7 @@ of them [INVARIANT 14]. Formulas and null rules are in `METRICS.md`.
 | `indicator.wilder_warmup_bars` | 250 | 2.1 | IndicatorEngine | unverified |
 | `indicator.base_lookback_days` | 60 | 2.1 | IndicatorEngine | unverified |
 | `indicator.base_max_range_pct` | 0.25 | 2.1 | IndicatorEngine | unverified |
-| `valuation.own_history_min_points` | 24 | 2.1 | ValuationEngine | unverified |
+| `valuation.own_history_min_points` | 24 | 2.1 | ValuationEngine | verified 2026-08-11 |
 | `market.breadth_ma_days` | 200 | 2.1 | MarketContextEngine | unverified |
 | `market.sector_composite_min_members` | 5 | 2.1 | IndicatorEngine, MarketContextEngine | unverified |
 | `sentiment.min_baseline_days` | 20 | 2.1 | SentimentEngine | unverified |

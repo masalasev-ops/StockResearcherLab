@@ -13,10 +13,10 @@
 
     INVARIANT 16 ASSERTS RATHER THAN EXCLUDES [1.8]. It used to grep for
     `float` and `double` with a list of files to skip, and the list had reached
-    two before phase 2 had started, which adds about forty technical `real`
-    columns. A list like that gets extended until the guard is suppressed rather
-    than satisfied. Two positive checks replace it, both reading the migrations
-    and `SCHEMA.md`:
+    two before phase 2 had started, with a whole compute layer of `real` columns
+    still to come [D-83]. A list like that gets extended until the guard is
+    suppressed rather than satisfied. Two positive checks replace it, both
+    reading the migrations and `SCHEMA.md`:
 
       1. Every column whose name matches the monetary pattern is `numeric`,
          unless `SCHEMA.md` declares it as not money. The expected count is
@@ -119,7 +119,7 @@ $checks = @(
         # matches through "cap" and is money [D-79].
         ExpectedMonetary = 18
 
-        Why        = 'The previous mechanism was a grep for float and double with a list of files to skip. The list had reached two before phase 2, which adds about forty technical real columns, and a list like that gets extended until the guard is suppressed rather than satisfied. This asserts instead: every monetary-named column is numeric unless SCHEMA.md declares it as not money, and every real column is declared there. Adding a real column therefore means declaring it in the document a reader would look at'
+        Why        = 'The previous mechanism was a grep for float and double with a list of files to skip. The list had reached two before phase 2, with a whole compute layer of real columns still to come, and a list like that gets extended until the guard is suppressed rather than satisfied. This asserts instead: every monetary-named column is numeric unless SCHEMA.md declares it as not money, and every real column is declared there. The set is what SCHEMA.md declares rather than a number stated here, and this check reads that declaration in both directions [D-83]. Adding a real column therefore means declaring it in the document a reader would look at'
     },
     @{
         Invariant  = 'CLAUDE.md section 6'

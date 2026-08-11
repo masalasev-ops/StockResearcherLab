@@ -91,10 +91,13 @@ public sealed class SchemaParityTests
     /// the document says it is not money, and the count is asserted so the check
     /// cannot pass over a match set that quietly emptied.
     ///
-    /// Seventeen is what the migrations carry. The number is stated in
-    /// `guards.ps1` too and both are read from the schema rather than from each
-    /// other, so a parser that stops seeing part of it fails in one place and not
-    /// the other rather than in neither.
+    /// **The number lives in the assertion below and nowhere else here** [D-83]. It
+    /// is what the live database carries, and `guards.ps1` states its own against the
+    /// migrations. Both are read from the schema rather than from each other, so a
+    /// parser that stops seeing part of it fails in one place and not the other
+    /// rather than in neither. A comment restating the value would be a third copy
+    /// that nothing checks, which is how this one came to say seventeen while the
+    /// assertion said eighteen.
     /// </summary>
     [Fact]
     public async Task EveryMonetaryNamedColumnInTheDatabaseIsNumeric()
@@ -112,9 +115,10 @@ public sealed class SchemaParityTests
             "Columns whose name says money and whose type does not: " + string.Join(", ", wrong) +
             " [INVARIANT 16].");
 
-        // Moved 17 to 18 at 2.2: fundamental_snapshot.capital_expenditures, which
-        // matches through "cap" and is money [D-79]. guards.ps1 carries the same
-        // number against the migrations; this one is against the live database.
+        // It moved at 2.2, when fundamental_snapshot.capital_expenditures arrived
+        // and matched through "cap" [D-79], and it moves whenever a monetary column
+        // does. guards.ps1 states its own against the migrations; this one is
+        // against the live database. The value itself is stated once, below [D-83].
         Assert.Equal(18, monetary.Count(c => c.Type.StartsWith("numeric", StringComparison.Ordinal)));
     }
 

@@ -641,3 +641,253 @@ This entry says duplicate rather than removed deliberately. An entry reading "re
 against a paragraph a later reader can still find would tell them the opposite of what
 happened, and the changelog was reopened at the post phase 1 reconciliation precisely so
 that a removal could be trusted to mean one.
+
+---
+
+## 2026-08-11, D-84 to D-90, the screen lifecycle
+
+Seven decisions authored into `DECISIONS.md` and `ARCHITECTURE.html` amended under six of
+them. Human-directed, and the decisions were authored before the document was touched,
+because the cells cite them [`CLAUDE.md` §13]. Clean edits under D-73, prior wording
+verbatim in the entries below, one per decision.
+
+**The document described a system with exactly five screens and no way to add or remove
+one.** Registration, shadow running, promotion and retirement are new concepts and none of
+them existed in it. The design they implement is `docs/SCREEN_LIFECYCLE.md`, which answers
+the brief archived at `prompts/spent/design-screen-lifecycle.md`. Nothing in any of them
+rests on a measurement, and none exists to rest on: phase 3 has not run, screens are phase
+4 and the tuner is phase 8. That timing is the point rather than an accident of scheduling
+[`CLAUDE.md` §11].
+
+**The narrative went into §13 beside the tuner, which computes the rule, and §05 and §06
+gained one sentence each pointing at it.** A new section describing all three components
+would restate what three sections already open up, which is the shape D-76, D-77 and D-83
+each removed; splitting the rule across three would leave a reader assembling it. One
+statement of the rule, two statements of behaviour.
+
+**Eleven occurrences of "five screens" were audited individually and all eleven are
+resolved.** The brief that commissioned the work said nine, which a case-sensitive grep
+confirms and a whitespace-tolerant case-insensitive sweep refutes: lines 252 and 281 opened
+sentences with "Five screens". That the count was itself an unchecked count is D-83's defect
+appearing inside the instruction to fix it, and it is recorded here rather than quietly
+corrected. Nine changed. Two survive deliberately, inside the megacap and small-cap cards,
+where the new sentence states a general property and names the configuration it generalises
+from. `SCREEN_LIFECYCLE.md` §12.7 carries the audit with a sense for each.
+
+**All three slot counts stay.** The pool of forty, the floor of four and the cap of twelve
+are the three inputs to the arithmetic that makes four to ten live screens the feasible
+range, so they are numbers the design rests on rather than counts of a set, and D-83 does
+not reach them. Two of the three gained "among the live screens".
+
+**What was deliberately not touched.** `SCHEMA.md` gains nothing yet. D-85's `surfaced_as`
+and D-87's `screen_evaluation` are declarations `guards.ps1` and `SchemaParityTests` hold
+against the migrations and the live database in both directions, so declaring either before
+its migration exists turns a green check red for a table that is correctly absent. Both are
+carried obligations in `BUILD_PLAN.md` against the phase that migrates them.
+
+---
+
+## 2026-08-11, D-84
+
+A screen has three states. Removed from `ARCHITECTURE.html` §03's C13 row, which named a
+fixed five and now names the states:
+
+> Runs the five screens from config. Maintains each screen's trailing 250-day distribution
+> for its floor
+
+Removed from §04's figure 2 C13 node:
+
+> Five screens, each with its own ranking and its own floor
+
+Removed from §05's opening paragraph, which gained the state sentence and the pointer to
+§13:
+
+> Five screens, each with its own metric set, each blind to the others. Definitions live in
+> `config_rows` under the `screens.*` keys, as data rather than code, so a sixth screen is a
+> config row and not a deployment.
+
+Removed from figure 3's caption:
+
+> Figure 3 — five screens running in parallel off one percentile store
+
+Removed from §16's note on the screen score table, which is the sizing argument and stated
+the count twice in one sentence:
+
+> Every ticker is scored by all five screens every day, because the floor is the 98th
+> percentile of that screen's own trailing distribution and you cannot know the distribution
+> without scoring everyone. That is five rows per ticker per day rather than one.
+
+Removed from §16's store matrix, where the grain and the size both assumed five. The size
+is now stated per registered screen, which is the rule the figure was an instance of
+[D-83], and it reproduces 1.4 GB at five:
+
+> `screen_score_daily` | ticker × screen × day | **1.4 GB**
+
+Removed from the same table's total row, which gained what a further registered screen
+costs:
+
+> Roughly 5 GB after a five-year backfill, growing about 700 MB a year
+
+Removed from §18's failure table, where the halt is a data-fault signal and a shadow
+returning zero is not one:
+
+> All five screens return zero
+
+**One further removal under D-83's standing rule rather than under D-84.** §02's instrument
+type row counted how many screens need fundamentals, which is illustration in a sentence
+about excluding funds and moves whenever the registry does:
+
+> Funds, trusts and SPACs excluded. Three of the five screens need company fundamentals that
+> a fund does not have.
+
+---
+
+## 2026-08-11, D-85
+
+Shadow screens write `attribution` and never `candidate_set`. Removed from
+`ARCHITECTURE.html` §03's C14 row, which now says what it writes a row for and what the
+candidate set is drawn from, those being two different populations for the first time:
+
+> Size quota per screen, no backfill, dedup across screens, writes attribution
+
+Removed from §06's deduplication node, which now names the live screens, a shadow not being
+deduplicated into `candidate_set` at all:
+
+> Union across the five screens
+
+Removed from §06's attribution grain card under D-83. Two counts stated in prose that
+nothing checked, and both move the moment a screen is registered:
+
+> Around 7,000 rows a year, each tagged with its screen. Roughly 1,400 per screen, which is
+> enough to say something about each within a year.
+
+§06's "The attribution write happens here, not later" note gained two sentences and lost
+nothing. §15's U4 row is quoted under D-87, which is the decision that changed its Reads
+cell.
+
+---
+
+## 2026-08-11, D-86
+
+Backfilled observations count toward a shadow's distribution and never toward a promotion
+or a retirement.
+
+**Nothing was removed from any document.** The rule is new prose in §13 and the decision is
+new in the register. It is recorded here because a decision with no prior wording still
+changes what the corpus says, and an entry a reader cannot find is the same as no entry.
+
+The decision reads two authored documents against their surface and says so in its own
+body: `VALIDITY.md` §6's "backfill is never used to evaluate the researcher, only the
+screens" has the researcher as its subject, and `BUILD_PLAN.md` phase 8's "the tuner moves
+slots on backfilled data" is a build verification criterion. Neither document is edited,
+because neither is wrong. If either reading is wrong it is D-86 that changes.
+
+---
+
+## 2026-08-11, D-87
+
+A screen is retired on sustained peer-relative underperformance, and the tuner is what
+measures it. Removed from `ARCHITECTURE.html` §03's C22 row, whose Writes cell gained
+`screen_evaluation`:
+
+> Reallocates the 40 slots between screens on peer-relative hit rate and alpha, shrunk,
+> floor 4 and cap 12
+
+Removed from §13's figure 10 C22 node, which gained the allocation filter and kept the 40:
+
+> Reallocates the 40 slots on peer-relative hit rate and alpha, shrunk 0.8 old and 0.2
+> implied, floor 4 and cap 12
+
+Removed from §15's U4 row, which cites D-84, D-86 and D-87 and whose Reads cell gained
+`screen_evaluation`. The counts a shadow needs are separated rather than summed, because
+§15's own first density rule is that no number appears without its comparison and its
+sample size, and D-86 makes a backfilled count and a prospective count mean different
+things:
+
+> The five screens with current slot allocation, fill rate, hit rate, mean peer-relative
+> alpha and current floor. History of how the tuner has moved slots. Recent candidates per
+> screen and how they went.
+
+§13 gained the lifecycle section, which is new prose and replaced nothing.
+
+---
+
+## 2026-08-11, D-88
+
+A promotion or a retirement splits the primary claim, so none executes before the claim has
+its sample and all due are bundled into one boundary.
+
+**Nothing was removed.** The rule is new prose in §13 and one clause in §03's C22 row,
+which now says the tuner nominates and executes neither. It is recorded here for the reason
+D-86's entry gives.
+
+---
+
+## 2026-08-11, D-89
+
+The slot pool stays at 40, D-7's 2/3/3 is restated as a proportion, and the feasible
+live-screen range is four to ten.
+
+Removed from `ARCHITECTURE.html` §06's megacap bound card:
+
+> Two large slots across five screens is 10 of a possible 40, or 25 percent. Close to the
+> megacap share of total US market capitalisation, so the bound is defensible rather than
+> arbitrary.
+
+Removed from §06's small cap floor card:
+
+> Three small slots across five screens is up to 15 guaranteed places for names between
+> $300M and $2B, subject only to clearing each screen's own floor.
+
+**Both cards gained a stronger claim rather than a corrected number, and that is the whole
+reason the proportion was worth restating.** Ten of forty and fifteen of forty were stated
+as properties of five screens of eight. Under D-89's proportion the large share never
+exceeds a quarter of any screen's slots at any count, so ten of forty holds at every
+live-screen count; and the guaranteed small-cap places are minimised at exactly five
+screens of eight, every other feasible allocation giving sixteen to twenty, so fifteen is a
+floor across the whole reachable space. Each card therefore still names five screens of
+eight, as the configuration the general property is tightest at.
+
+§13's lifecycle section carries the four-to-ten bound.
+
+---
+
+## 2026-08-11, D-90
+
+Whether post-earnings drift is registered, and on what history. `OPEN`.
+
+**Nothing was removed and nothing in `ARCHITECTURE.html` cites it.** It is in the register's
+Open section, alongside D-53, D-54 and D-69, and it is recorded here because an open
+decision authored on a date is a corpus change like any other.
+
+It exists because `events.earnings_backward_days` is 7 and `announced_date` is null for
+earnings, so D-86's condition fails for that screen and only that screen. It is the third
+instance of the pattern D-58 removed short interest for and D-69 is open on, and the first
+found before anything was built on it.
+
+---
+
+## 2026-08-11, D-91
+
+`ARCHITECTURE.html` §03's C03 row amended under D-91. Human-directed; the decision was
+authored before the document was touched [`CLAUDE.md` §13]. Clean edit under D-73, prior
+wording verbatim below. One cell, and `git diff docs/ARCHITECTURE.html` shows one line.
+
+**The component gained a second write and the cell named one.** C03 writes
+`fundamental_fetch_attempt` as well as `fundamental_snapshot`: the rotation had stopped
+rotating once coverage completed, and the store that keeps it going is a record of the
+attempt rather than of the result. Removed from the Writes cell:
+
+> fundamental_snapshot
+
+**`SCHEMA.md` gained the table in the same commit as its migration** and needs no entry
+here, having no prior wording to quote. It is a new `### fundamental_fetch_attempt`
+heading declaring FundamentalsIngestor as its writer, which is what
+`WriteOwnershipConformanceTests` reads and what D-77 requires of any second writer.
+
+**What this entry is evidence of, beyond the edit.** The Writes column has no
+conformance test, where the Reads column gained one at the post phase 1 reconciliation
+after four deviations had gone unnoticed. Write ownership is asserted against
+`SCHEMA.md` rather than against the catalogue, so §03's Writes cells are checked by
+nobody, and this one drifted at the first opportunity it had. Recorded as a finding in
+`PROGRESS.md` rather than fixed here.

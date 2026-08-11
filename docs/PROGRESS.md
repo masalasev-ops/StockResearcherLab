@@ -746,6 +746,45 @@ AAON.US, the only ticker walked page by page before the run, was interior. It tu
 out to be representative rather than a coincidence, but that was not knowable from
 one ticker and the note above was right not to claim it.
 
+#### form4 pages newest-first, measured 2026-08-11, and D-71's classification holds
+
+**The ordering was assumed by two things and had never been measured.** D-71
+classifies a short final page as putting the missing rows at the oldest end, and
+`EodhdClient.cs:62-66` states it in the same terms. Both hold only if the endpoint
+pages newest-first. Nothing in this file established that it does.
+
+Bracketed between two `/api/user` reads, which cost nothing, against CCS.US, whose
+`meta.total` reads 325 in 7 pages of 50, unchanged from the 325 measured on
+2026-08-09.
+
+| | `filed_at` | `accession_number` |
+|---|---|---|
+| Page 1, first row | **2026-08-04** | `0001576940-26-000059` |
+| Page 1, last row | 2024-03-19 | `0001576940-24-000029` |
+| Page 7, offset 300, first row | **2015-08-19** | `0001562762-15-000245` |
+| Page 7, last row | 2014-07-02 | `0001209191-14-045522` |
+
+**The endpoint pages newest-first.** Page one opens eleven years after the last page
+opens, and within each page `filed_at` descends. Two data pages, 20 units, measured
+by the bracket at 90,498 before and 90,518 after.
+
+**So D-71's classification is confirmed rather than corrected, and nothing above is
+struck.** A short final page does put the missing rows at the oldest end, outside
+every trailing window. The 42 interior against 2 final stands as recorded, the
+unfavourable direction is the real one, and the qualification on
+`insider_net_90d_usd`, `distinct_buyer_count` and phase P's S4 purchase base rate is
+right as written. Had the ordering gone the other way all three would have been
+wrong in the opposite direction, which is the reason the check was worth its 20
+units.
+
+**One incidental figure, measured and worth having.** CCS.US's first page of 50
+filings spans 2026-08-04 back to 2024-03-19, so a trailing ninety-day window sits
+well inside page one for this name. It is one ticker and not a distribution, and it
+bears on what a nightly read could cost. No change is designed here.
+
+**The allowance stood at 90,498 of 100,000 before this probe**, on a day whose
+ingest had already run.
+
 ### The night of 2026-08-09, and four findings it produced
 
 The allowance reset mid-session and the whole of phase 1's remaining live work ran
@@ -2853,6 +2892,138 @@ so determinism holds across the change rather than being assumed to.
 
 The digest is `md5(string_agg(t::text, E'\n' ORDER BY ticker))` over the date's rows,
 ordered by `date` for `market_context_daily`.
+
+---
+
+## The fundamentals rotation, 2026-08-11
+
+### It stopped rotating once coverage completed, and the row count never said so
+
+`CandidatesAsync` defined `fetched` as any ticker with any row in
+`fundamental_snapshot`, ordered never-fetched first, then in-universe, then ticker
+ordinal, and took `fundamentals.max_tickers_per_run`. Once the pool was covered the
+never-fetched group was empty and ticker ordinal decided everything, so the same
+alphabetically-first 500 names were selected on every subsequent run, for ever.
+
+**Measured before the change, 2026-08-11:**
+
+| | |
+|---|---|
+| Tickers with `capital_expenditures` | **482**, running contiguously `A.US` to `CCBG.US` |
+| `valuation_daily` rows with `fcf_yield` | **464** |
+| `valuation_daily` rows in total | **5,713** |
+| Distinct tickers in `fundamental_snapshot` | 5,653 |
+| Active universe | 2,841 |
+
+**The clearest single figure is that the numerator has not moved while the
+denominator has.** `fcf_yield` covered 464 of 3,897 rows when phase 2 recorded it and
+464 of 5,713 now: the same 464, so coverage fell from 11.9 percent to 8.1 percent
+without a single thing going wrong that a row count could show. Two consecutive runs
+wrote an identical 44,365 rows over an identical 500 tickers, and `fcf_yield` is S1's
+first ranking input while three of five screens read fundamentals.
+
+### The record has to be of the attempt, and both obvious columns fail on one case
+
+A `fetched_at` column on `fundamental_snapshot` moves only when rows are written, and
+a ticker whose fetch returns nothing writes nothing, so its freshness never moves and
+it holds the head of the rotation for ever. That is the same defect as the fourteen
+tickers that answer `404 Symbol not found` in the flow ingest, one component over:
+**never fetched** conflates *not yet attempted* with *attempted and empty*.
+
+A column on `security` fails differently. C03's pool is the candidate set, which 1.8
+made deliberately broader than the universe, so a pool member with no `security` row
+would have nowhere to record an attempt.
+
+So `fundamental_fetch_attempt`, one row per ticker, written for every selected ticker
+whether or not the fetch yielded rows [0006]. `last_yield_date` null means attempted
+and never yielded, which is a different fact from an absent row, which means never
+attempted. No counter column, because a tally would not be idempotent under D-68.
+
+**The ordering is now: never attempted, then oldest attempt, then universe member,
+then ordinal.** The universe tier moved from a tier to a tiebreak deliberately:
+ranking it above freshness would starve every pool member outside `security`
+permanently, which is this same defect in another dress, since the universe is
+refreshed every run and is therefore never exhausted.
+
+### The rotation advances between dates and never between runs
+
+Attempts are read **strictly before the run date**, so a re-run of one date sees the
+state the first run saw and selects the same names. Without that the stage would stop
+being a pure function of its date and config version, which is the property that makes
+a night replayable [`CLAUDE.md` §6].
+
+It is the same point-in-time discipline every fundamental read already applies to
+`filing_date_effective`, and it is the reason the obvious implementation, ordering by
+an attempt timestamp, would have been wrong even though it looks equivalent.
+
+### What is measured and what is not
+
+**Measured:** the before-state above, and seven tests over a six-member pool and a
+rotation of two.
+
+**Not measured, and it cannot be today.** The after-state of `fcf_yield` coverage
+needs enough runs to cycle a pool of roughly 4,800 at 500 a run, which is about ten
+runs at ~5,000 units each. The allowance stood at 90,518 of 100,000 after the form4
+ordering probe, so there is room for one run today and not for ten. The figure is
+owed, and it is the observable this change exists to move.
+
+The coverage line now separates new from refreshed and names the oldest attempt date
+in the selection, so a frozen rotation is visible in the run log rather than in a
+query someone thought to write. A run that is entirely refreshed on a pool with
+never-attempted names left in it is the defect; entirely refreshed on a fully
+attempted pool is the rotation working.
+
+### C05 has the same defect and is not fixed here
+
+`FlowIngestor.SelectionFor` orders never-fetched first then ticker ordinal, so it
+freezes on the alphabetical head the moment the universe is covered, exactly as C03
+did. Its own summary already names the residue: the 14 of 250 that answer `404 Symbol
+not found` stay never-fetched and are re-asked every run, recorded as "the residue a
+high-water mark would close. Not built here."
+
+`fundamental_fetch_attempt` is the shape that closes it, and applying it to C05 is a
+carried obligation rather than part of this change. The two stages have no shared
+selection code, so nothing here alters C05's behaviour.
+
+~~### `ARCHITECTURE.html` §3's C03 Writes cell is now incomplete, and is not edited~~
+[closed, D-91]. It said the cell was reported rather than edited because the Writes
+column is authored prose, and that reading was right about the rule and wrong about
+what to do next: a cell nothing checks, left wrong, is the drift the section below is
+about. The decision was authored and the cell corrected. The prior wording of the cell
+is in `CHANGELOG.md`.
+
+### The Writes column has no conformance test, and it drifted at the first opportunity
+
+**Closed as an edit and left open as a finding.** §3's C03 Writes cell read
+`fundamental_snapshot` while the component wrote two tables. It is corrected under
+D-91, the prior wording is in `CHANGELOG.md`, and `git diff docs/ARCHITECTURE.html`
+touches that one line.
+
+**The finding is why nothing caught it.** The Reads column gained
+`ReadDeclarationConformanceTests` at the post phase 1 reconciliation, after four Reads
+cells had named an endpoint and no ticker source while `DeclaredAccess` enforced a read
+set the document never mentioned, and that silence is what let the fundamentals pool be
+drawn from `security` and close the universe over itself. The Writes column got no such
+test, because write ownership is asserted against `SCHEMA.md` and not against the
+catalogue: `WriteOwnershipConformanceTests` reads `SchemaDocument`, and nothing anywhere
+reads §3's Writes cells.
+
+So those cells are prose no test has ever checked, in the one column of the one table
+that says what each component may do. **The first component to gain a second write
+drifted, and it drifted immediately.** C03 is the first: every other component in the
+catalogue writes what it wrote when the catalogue was authored.
+
+**Named now rather than fixed, so the next one is checked rather than discovered.** The
+shape is available and costs little: `ArchitectureDocument` already parses catalogue
+rows into cells and takes the fourth for Reads, and the fifth is the Writes cell.
+Intersecting it with `SchemaDocument.Tables()` in both directions against the registry's
+`AllWrites()` is the same assertion the Reads path already makes. It is not built here
+because a conformance test is a phase's work rather than a finding's, and because this
+document's job at this point is to say what is true.
+
+**One reason to expect more of it soon.** D-85 and D-87 give C14 a second write and C22
+a table it has never had, both in phase 4 and phase 8. Those are exactly the case that
+just failed.
 
 ---
 

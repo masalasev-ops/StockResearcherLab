@@ -211,6 +211,47 @@ public sealed class NightlyRunTests
     }
 
     /// <summary>
+    /// Checkpoint 2.12. The compute layer's two ordering constraints, which are the
+    /// only ones in the evening order that are about data rather than about the clock.
+    ///
+    /// **C10 reads `indicator_daily`, so it runs after C08** even though both sit in
+    /// the 18:05 slot. Breadth is counted off `dist_200dma` rather than recomputed from
+    /// prices, so there is one definition of "above its own 200-day average" and it
+    /// belongs to the column that already carries it.
+    ///
+    /// **C11 is last** because it ranks what the four metric engines wrote. Run before
+    /// any of them it would rank a table that is still yesterday's, and every
+    /// percentile would be a real number computed over the wrong night.
+    ///
+    /// Stated as positions rather than as a comment, because a stage appended to the
+    /// end of the array is the ordinary way a new one arrives and would put itself
+    /// after C11 without anyone deciding that.
+    /// </summary>
+    [Fact]
+    public void TheComputeStagesSitInDependencyOrder()
+    {
+        var order = NightlyRun.EveningOrder;
+
+        Assert.Equal(12, order.Length);
+
+        Assert.True(
+            Array.IndexOf(order, "MarketContextEngine") > Array.IndexOf(order, "IndicatorEngine"),
+            "C10 counts breadth off indicator_daily, so it cannot run before C08 wrote it.");
+
+        Assert.Equal("PercentileEngine", order[^1]);
+
+        foreach (var engine in new[]
+                 {
+                     "FlowEngine", "IndicatorEngine", "ValuationEngine", "SentimentEngine",
+                 })
+        {
+            Assert.True(
+                Array.IndexOf(order, engine) < Array.IndexOf(order, "PercentileEngine"),
+                $"C11 ranks what {engine} writes, so it cannot run before it.");
+        }
+    }
+
+    /// <summary>
     /// The convention this file follows, asserted rather than trusted to a comment.
     /// A double named for a real component writes a run_log row indistinguishable
     /// from the real one's, which is what made the FreshnessGuard count read nine

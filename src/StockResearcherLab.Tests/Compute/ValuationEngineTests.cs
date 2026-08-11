@@ -235,6 +235,80 @@ public sealed class ValuationEngineTests
     }
 
     /// <summary>
+    /// D-81. The reported <c>cash</c> line stands in for an absent
+    /// <c>cash_and_equivalents</c>, and the short-term investments are still added.
+    ///
+    /// **The figures are `NFLX.US`'s own quarter ending 2026-06-30**, which is the row
+    /// that produced the rule and the one that shows the size of the error: the old
+    /// rule read the absent part as zero and wrote 28,678,000 for a company reporting
+    /// 9,099,232,000 of cash. Both numbers are asserted, so a reversion is a failure
+    /// rather than a different-looking pass.
+    /// </summary>
+    [Fact]
+    public void TheCashLineStandsInForAnAbsentCashAndEquivalentsLine()
+    {
+        var quarters = EightQuarters().ToList();
+        quarters[0] = quarters[0] with
+        {
+            CashAndEquivalents = null,
+            Cash = 9_099_232_000m,
+            ShortTermInvestments = 28_678_000m,
+        };
+
+        var row = ValuationEngine.Compute(
+            "SRLTEST.NFLXSHAPE", AsOf, quarters, Close, [], OwnHistoryMinPoints);
+
+        Assert.Equal(9_127_910_000m, row.CashOnHand);
+
+        // What the zero-coalesce wrote, stated so the number that would appear is on
+        // the page. It is two orders of magnitude out and nothing errors.
+        Assert.NotEqual(28_678_000m, row.CashOnHand);
+    }
+
+    /// <summary>
+    /// The direction the coalesce is for, unchanged by D-81. A company reporting cash
+    /// and equivalents and no short-term investments line has none, which is zero.
+    ///
+    /// It is the rarer case by a factor of three hundred and it is still the only one
+    /// that gets a zero.
+    /// </summary>
+    [Fact]
+    public void AnAbsentShortTermInvestmentsLineIsStillZero()
+    {
+        var quarters = EightQuarters().ToList();
+        quarters[0] = quarters[0] with { ShortTermInvestments = null, Cash = 999m };
+
+        var row = ValuationEngine.Compute(
+            "SRLTEST.NOSTI", AsOf, quarters, Close, [], OwnHistoryMinPoints);
+
+        // The parts line wins over the aggregate where both are present, so the 999 is
+        // not read and the answer is the 150 of cash and equivalents alone.
+        Assert.Equal(150m, row.CashOnHand);
+    }
+
+    /// <summary>
+    /// Null when neither cash line is present, rather than the short-term investments
+    /// on their own.
+    ///
+    /// This is the one place D-81 removes a value: 5 names across the store's latest
+    /// readable quarters carried their investments figure under a column that says cash
+    /// on hand, and now carry null. An absence a reader can see is worth more than a
+    /// number that is wrong by whatever the cash line would have been [`CLAUDE.md` §6].
+    /// </summary>
+    [Fact]
+    public void BothCashLinesAbsentIsNullRatherThanTheInvestmentsAlone()
+    {
+        var quarters = EightQuarters().ToList();
+        quarters[0] = quarters[0] with { CashAndEquivalents = null, Cash = null };
+
+        var row = ValuationEngine.Compute(
+            "SRLTEST.NOCASH", AsOf, quarters, Close, [], OwnHistoryMinPoints);
+
+        Assert.Null(row.CashOnHand);
+        Assert.NotEqual(50m, row.CashOnHand);
+    }
+
+    /// <summary>
     /// Growth improving quarter on quarter, as an exact slope.
     ///
     /// The four year-over-year growth rates are 0.10, 0.20, 0.30 and 0.40 oldest first.

@@ -525,14 +525,30 @@ public sealed class ValuationEngine : IStage
     }
 
     /// <summary>
-    /// Cash and short-term investments, falling back to the aggregate the provider
-    /// sends where it sends no parts.
+    /// Cash and short-term investments, with the reported <c>cash</c> line standing in
+    /// for an absent <c>cash_and_equivalents</c> [D-81].
     ///
-    /// **The coalesce to zero here is deliberate and is the one place in this layer
-    /// that does it.** A company reporting cash and equivalents but no short-term
-    /// investments line has no short-term investments, which is zero rather than
-    /// unknown, and treating it as unknown would null the field for most of the
-    /// universe [`METRICS.md` §3].
+    /// **The coalesce to zero applies to short-term investments and to nothing else.**
+    /// A company reporting cash and equivalents but no short-term investments line has
+    /// no short-term investments, which is zero rather than unknown. That is the case
+    /// the rule is for and it occurs 5 times across the store's latest readable
+    /// quarters.
+    ///
+    /// **The mirror case is not the same fact and used to be treated as though it
+    /// were.** Short-term investments present with no cash and equivalents line occurs
+    /// 1,644 times, and reading the absent part as zero wrote the investments figure
+    /// alone: `NFLX.US` carried 28,678,000 against a reported <c>cash</c> of
+    /// 9,099,232,000. Reading another line from the same statement is not inventing
+    /// data, so the question was which line, and it was measured before the rule was
+    /// chosen [D-81, `PROGRESS.md`]. Over the 8,411 quarterly rows carrying all three
+    /// where short-term investments are non-zero, <c>cash</c> equals
+    /// <c>cash_and_equivalents</c> exactly 6,710 times and equals their sum 13 times,
+    /// so it is the parts line under another name and never the total. It is therefore
+    /// substituted for the part and the investments are still added.
+    ///
+    /// Null when both <c>cash_and_equivalents</c> and <c>cash</c> are absent, which
+    /// leaves 5 names carrying null where they previously carried their short-term
+    /// investments alone [`METRICS.md` §3].
     /// </summary>
     public static decimal? CashOnHand(Period? period)
     {
@@ -541,12 +557,9 @@ public sealed class ValuationEngine : IStage
             return null;
         }
 
-        if (p.CashAndEquivalents is null && p.ShortTermInvestments is null)
-        {
-            return p.Cash;
-        }
-
-        return (p.CashAndEquivalents ?? 0) + (p.ShortTermInvestments ?? 0);
+        return (p.CashAndEquivalents ?? p.Cash) is { } held
+            ? held + (p.ShortTermInvestments ?? 0)
+            : null;
     }
 
     /// <summary>

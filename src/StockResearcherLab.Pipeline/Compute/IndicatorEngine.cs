@@ -48,7 +48,19 @@ public sealed class IndicatorEngine : IStage
         "atr_pct", "adx14", "dist_20dma", "dist_200dma", "dist_52w_high",
         "dist_52w_high_20d_change", "volume_vs_50d_avg", "ma50_200_slope",
         "base_breakout_flag", "median_dollar_volume_20d",
+        "rs_change_21d", "rs_change_63d", "rs_21d_63d_change", "rs_20d_slope",
+        "rs_change_vs_sector",
     ];
+
+    /// <summary>
+    /// The benchmark, read from <c>price_daily</c> rather than from a store of its own.
+    ///
+    /// C02 writes every row the bulk feed returns with no universe filter, so the
+    /// series is already there among roughly fifty thousand tickers a day. D-2 puts
+    /// ETFs out of scope as candidates, which is a statement about <c>security</c> and
+    /// not about what may be read as a benchmark.
+    /// </summary>
+    public const string Benchmark = "SPY.US";
 
     private static readonly string[] ConflictTarget = ["ticker", "date"];
 
@@ -86,16 +98,24 @@ public sealed class IndicatorEngine : IStage
         // One extra bar because the first true range needs a previous close.
         var bars = Math.Max(RequiredBars, warmup + 1);
 
+        var minSectorMembers = (int) await LongAsync(context, "market.sector_composite_min_members", ct).ConfigureAwait(false);
+
         var series = await SeriesAsync(context, bars, ct).ConfigureAwait(false);
         var medians = await MedianDollarVolumeAsync(context, ct).ConfigureAwait(false);
+        var benchmark = await BenchmarkAsync(context, bars, ct).ConfigureAwait(false);
+        var sectors = await SectorsAsync(context, ct).ConfigureAwait(false);
+        var composites = await SectorCompositesAsync(context, bars, minSectorMembers, ct).ConfigureAwait(false);
 
         var rows = new List<Row>(series.Count);
 
         foreach (var (ticker, history) in series)
         {
+            var sector = sectors.GetValueOrDefault(ticker);
+
             rows.Add(Compute(
                 ticker, context.Date, history, warmup, baseLookback, baseMaxRange,
-                medians.GetValueOrDefault(ticker)));
+                medians.GetValueOrDefault(ticker), benchmark,
+                sector is null ? null : composites.GetValueOrDefault(sector)));
         }
 
         // Ordinal, so two runs over the same date write in the same order and the
@@ -121,6 +141,11 @@ public sealed class IndicatorEngine : IStage
                     await w.WriteAsync(r.Ma50200Slope, c).ConfigureAwait(false);
                     await w.WriteAsync(r.BaseBreakoutFlag, c).ConfigureAwait(false);
                     await w.WriteAsync(r.MedianDollarVolume20D, c).ConfigureAwait(false);
+                    await w.WriteAsync(r.RsChange21D, c).ConfigureAwait(false);
+                    await w.WriteAsync(r.RsChange63D, c).ConfigureAwait(false);
+                    await w.WriteAsync(r.Rs21D63DChange, c).ConfigureAwait(false);
+                    await w.WriteAsync(r.Rs20DSlope, c).ConfigureAwait(false);
+                    await w.WriteAsync(r.RsChangeVsSector, c).ConfigureAwait(false);
                 }
             }, ct).ConfigureAwait(false);
 
@@ -154,7 +179,9 @@ public sealed class IndicatorEngine : IStage
     /// </summary>
     public static Row Compute(
         string ticker, DateOnly date, IReadOnlyList<Bar> history,
-        int warmup, int baseLookback, double baseMaxRange, decimal? medianDollarVolume)
+        int warmup, int baseLookback, double baseMaxRange, decimal? medianDollarVolume,
+        IReadOnlyDictionary<DateOnly, double>? benchmark = null,
+        IReadOnlyDictionary<DateOnly, double>? sectorComposite = null)
     {
         var n = history.Count;
 
@@ -188,6 +215,16 @@ public sealed class IndicatorEngine : IStage
         var (atr, adx) = Wilder(hp, lp, cp, warmup);
         var last = cp[n - 1];
 
+        // Relative strength is the ticker's adjusted close over the benchmark's, so
+        // the change in it is the ticker's return over the benchmark's. Against the
+        // sector composite it is the same construction with a different denominator,
+        // and the composite's arbitrary seed cancels because only a change is read.
+        var rsBenchmark = Relative(history, cp, benchmark);
+        var rsSector = Relative(history, cp, sectorComposite);
+
+        var rs21 = Change(rsBenchmark, 21);
+        var rs63 = Change(rsBenchmark, 63);
+
         return new Row(
             ticker, date,
             AtrPct: atr is null || last is not > 0 ? null : (float) (atr.Value / last.Value),
@@ -199,7 +236,73 @@ public sealed class IndicatorEngine : IStage
             VolumeVs50DAvg: (float?) RatioToAverage(vp, Volume50),
             Ma50200Slope: (float?) MaSlope(cp),
             BaseBreakoutFlag: BaseBreakout(cp, hp, lp, baseLookback, baseMaxRange),
-            MedianDollarVolume20D: medianDollarVolume);
+            MedianDollarVolume20D: medianDollarVolume,
+            RsChange21D: (float?) rs21,
+            RsChange63D: (float?) rs63,
+            Rs21D63DChange: rs21 is null || rs63 is null ? null : (float?) (rs21.Value - rs63.Value),
+            Rs20DSlope: (float?) SlopeOf(rsBenchmark, SlopeWindow),
+            RsChangeVsSector: (float?) Change(rsSector, 63));
+    }
+
+    /// <summary>
+    /// The ratio of the ticker's adjusted close to a reference series, aligned on date.
+    ///
+    /// A date the reference does not carry breaks the ratio there rather than being
+    /// filled from a neighbour, because a benchmark that did not trade is not a
+    /// benchmark that was flat.
+    /// </summary>
+    private static double?[] Relative(
+        IReadOnlyList<Bar> history, double?[] cp, IReadOnlyDictionary<DateOnly, double>? reference)
+    {
+        var rs = new double?[cp.Length];
+
+        if (reference is null)
+        {
+            return rs;
+        }
+
+        for (var i = 0; i < cp.Length; i++)
+        {
+            if (cp[i] is { } c && reference.TryGetValue(history[i].Date, out var r) && r > 0)
+            {
+                rs[i] = c / r;
+            }
+        }
+
+        return rs;
+    }
+
+    /// <summary>Change in a series over n trading dates, as a fraction. Null if either endpoint is absent.</summary>
+    private static double? Change(double?[] v, int n)
+    {
+        var at = v.Length - 1;
+
+        return at - n < 0 || v[at] is not { } now || v[at - n] is not { } then || then <= 0
+            ? null
+            : (now / then) - 1;
+    }
+
+    /// <summary>Normalised slope of the last n values of a series, or null if any is absent.</summary>
+    private static double? SlopeOf(double?[] v, int n)
+    {
+        if (v.Length < n)
+        {
+            return null;
+        }
+
+        var y = new double[n];
+
+        for (var k = 0; k < n; k++)
+        {
+            if (v[v.Length - n + k] is not { } x)
+            {
+                return null;
+            }
+
+            y[k] = x;
+        }
+
+        return NormalisedSlope(y);
     }
 
     /// <summary>
@@ -594,7 +697,134 @@ public sealed class IndicatorEngine : IStage
         string Ticker, DateOnly Date,
         float? AtrPct, float? Adx14, float? Dist20Dma, float? Dist200Dma, float? Dist52WHigh,
         float? Dist52WHigh20DChange, float? VolumeVs50DAvg, float? Ma50200Slope,
-        bool? BaseBreakoutFlag, decimal? MedianDollarVolume20D);
+        bool? BaseBreakoutFlag, decimal? MedianDollarVolume20D,
+        float? RsChange21D = null, float? RsChange63D = null, float? Rs21D63DChange = null,
+        float? Rs20DSlope = null, float? RsChangeVsSector = null);
+
+    /// <summary>The benchmark's adjusted closes by date, read from `price_daily` like any other series.</summary>
+    private static async Task<IReadOnlyDictionary<DateOnly, double>> BenchmarkAsync(
+        StageContext context, int bars, CancellationToken ct)
+    {
+        var sql = $"""
+            SELECT date, adj_close
+            FROM (
+                SELECT date, adj_close,
+                       row_number() OVER (ORDER BY date DESC) AS rn
+                FROM price_daily
+                WHERE ticker = '{Benchmark}' AND date <= {Literal(context.Date)} AND adj_close IS NOT NULL
+            ) w
+            WHERE rn <= {bars.ToString(CultureInfo.InvariantCulture)}
+            ORDER BY date;
+            """;
+
+        var rows = await context.Data.ReadAsync("price_daily", sql, ct).ConfigureAwait(false);
+        var map = new Dictionary<DateOnly, double>();
+
+        foreach (var r in rows)
+        {
+            map[DateOnly.FromDateTime((DateTime) r[0]!)] = (double) (decimal) r[1]!;
+        }
+
+        return map;
+    }
+
+    /// <summary>Sector per active member, which is nullable and is null rather than guessed [C01].</summary>
+    private static async Task<IReadOnlyDictionary<string, string?>> SectorsAsync(
+        StageContext context, CancellationToken ct)
+    {
+        var rows = await context.Data.ReadAsync(
+            "security", "SELECT ticker, sector FROM security WHERE is_active ORDER BY ticker;", ct)
+            .ConfigureAwait(false);
+
+        var map = new Dictionary<string, string?>(StringComparer.Ordinal);
+
+        foreach (var r in rows)
+        {
+            map[(string) r[0]!] = r[1] as string;
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// One index per sector, equal-weighted across that sector's own universe members
+    /// and rebalanced daily, chained from the mean of their daily returns.
+    ///
+    /// **Not a sector ETF, and the reason is the constituents rather than the
+    /// convenience.** The sector SPDRs are S&amp;P 500 sector slices and this universe is
+    /// mostly outside that index, so measuring a $500M industrial against XLI measures
+    /// it against Honeywell and Caterpillar. That imports a large-cap benchmark into a
+    /// small-cap universe and tilts the trend screen by regime, which is the megacap
+    /// drift `ARCHITECTURE.html` §20 says this design exists to prevent, arriving
+    /// through a column nobody would look at. Needing no mapping is true and is not
+    /// why [D-77's sibling reasoning, `METRICS.md` §2].
+    ///
+    /// A date on which the sector has fewer than the configured minimum members is left
+    /// out of the index entirely, so a ratio spanning it is null rather than computed
+    /// against one name's noise.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyDictionary<DateOnly, double>>>
+        SectorCompositesAsync(StageContext context, int bars, int minMembers, CancellationToken ct)
+    {
+        var sql = $"""
+            WITH universe AS (
+                SELECT ticker, sector FROM security WHERE is_active AND sector IS NOT NULL
+            ),
+            windowed AS (
+                SELECT u.sector, p.ticker, p.date, p.adj_close,
+                       row_number() OVER (PARTITION BY p.ticker ORDER BY p.date DESC) AS rn
+                FROM price_daily p
+                JOIN universe u ON u.ticker = p.ticker
+                WHERE p.date <= {Literal(context.Date)} AND p.adj_close IS NOT NULL AND p.adj_close > 0
+            ),
+            kept AS (
+                SELECT sector, ticker, date, adj_close
+                FROM windowed
+                WHERE rn <= {bars.ToString(CultureInfo.InvariantCulture)}
+            ),
+            rets AS (
+                SELECT sector, date,
+                       (adj_close / lag(adj_close) OVER (PARTITION BY ticker ORDER BY date)) - 1 AS r
+                FROM kept
+            )
+            SELECT sector, date, avg(r) AS mean_return, count(*) AS members
+            FROM rets
+            WHERE r IS NOT NULL
+            GROUP BY sector, date
+            HAVING count(*) >= {minMembers.ToString(CultureInfo.InvariantCulture)}
+            ORDER BY sector, date;
+            """;
+
+        var rows = await context.Data.ReadAsync("price_daily", sql, ct).ConfigureAwait(false);
+
+        var composites = new Dictionary<string, IReadOnlyDictionary<DateOnly, double>>(StringComparer.Ordinal);
+        var current = new Dictionary<DateOnly, double>();
+        string? sector = null;
+        var level = 1.0;
+
+        foreach (var r in rows)
+        {
+            var s = (string) r[0]!;
+
+            if (sector is not null && !string.Equals(s, sector, StringComparison.Ordinal))
+            {
+                composites[sector] = current;
+                current = [];
+                level = 1.0;
+            }
+
+            sector = s;
+            level *= 1 + (double) (decimal) r[2]!;
+            current[DateOnly.FromDateTime((DateTime) r[1]!)] = level;
+        }
+
+        if (sector is not null)
+        {
+            composites[sector] = current;
+        }
+
+        return composites;
+    }
 
     private static string Literal(DateOnly d)
         => "DATE '" + d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "'";

@@ -207,6 +207,78 @@ public sealed class IndicatorEngineTests
         Assert.Null(row.Adx14);
     }
 
+    /// <summary>
+    /// A name that moves exactly with its benchmark has no relative strength change,
+    /// whatever either of them did. Relative strength is a ratio, so a flat ratio is
+    /// zero change at every horizon and zero slope, and the two horizons agree.
+    /// </summary>
+    [Fact]
+    public void MovingWithTheBenchmarkIsNoRelativeChangeAtAnyHorizon()
+    {
+        var history = Flat(Bars);
+        var reference = Level(history, 100.0);
+
+        var row = IndicatorEngine.Compute(
+            "SRLTEST.WITH", AsOf, history, Warmup, BaseLookback, BaseMaxRange, null,
+            benchmark: reference, sectorComposite: reference);
+
+        Assert.Equal(0f, row.RsChange21D!.Value, 6);
+        Assert.Equal(0f, row.RsChange63D!.Value, 6);
+        Assert.Equal(0f, row.Rs21D63DChange!.Value, 6);
+        Assert.Equal(0f, row.Rs20DSlope!.Value, 6);
+        Assert.Equal(0f, row.RsChangeVsSector!.Value, 6);
+    }
+
+    /// <summary>
+    /// Against a flat benchmark, relative strength is the price itself, so the changes
+    /// are the price's own.
+    ///
+    /// The series ends at 100 + 299 = 399 and stood at 100 + 278 = 378 twenty-one bars
+    /// earlier, so the 21-day change is 399/378 - 1 = 21/378. Sixty-three bars earlier
+    /// it stood at 336, so the 63-day change is 399/336 - 1 = 63/336. Both are exact
+    /// fractions rather than rounded, and the acceleration column is their difference.
+    /// </summary>
+    [Fact]
+    public void AgainstAFlatBenchmarkTheChangesAreThePricesOwn()
+    {
+        var history = Rising(Bars);
+
+        var row = IndicatorEngine.Compute(
+            "SRLTEST.BEAT", AsOf, history, Warmup, BaseLookback, BaseMaxRange, null,
+            benchmark: Level(history, 100.0));
+
+        Assert.Equal((float) (21.0 / 378.0), row.RsChange21D!.Value, 6);
+        Assert.Equal((float) (63.0 / 336.0), row.RsChange63D!.Value, 6);
+        Assert.Equal((float) ((21.0 / 378.0) - (63.0 / 336.0)), row.Rs21D63DChange!.Value, 6);
+
+        // Rising against a flat benchmark, so relative strength is sloping up.
+        Assert.True(row.Rs20DSlope!.Value > 0);
+    }
+
+    /// <summary>
+    /// A null sector carries a null sector-relative column rather than a comparison
+    /// against something else. C01 writes a null sector rather than a guess when the
+    /// lookup fails, and the alternative here would be to compare the name against the
+    /// whole universe under a column name that says sector.
+    /// </summary>
+    [Fact]
+    public void ANullSectorCarriesNullRatherThanAUniverseWideComparison()
+    {
+        var history = Flat(Bars);
+
+        var row = IndicatorEngine.Compute(
+            "SRLTEST.NOSEC", AsOf, history, Warmup, BaseLookback, BaseMaxRange, null,
+            benchmark: Level(history, 100.0), sectorComposite: null);
+
+        Assert.Null(row.RsChangeVsSector);
+        Assert.NotNull(row.RsChange21D);
+    }
+
+    /// <summary>A reference series flat at one level across every date the history covers.</summary>
+    private static IReadOnlyDictionary<DateOnly, double> Level(
+        IReadOnlyList<IndicatorEngine.Bar> history, double level)
+        => history.ToDictionary(b => b.Date, _ => level);
+
     /// <summary>Close 100, high 101, low 99, volume 1,000, adjusted equal to raw.</summary>
     private static IReadOnlyList<IndicatorEngine.Bar> Flat(int count)
     {

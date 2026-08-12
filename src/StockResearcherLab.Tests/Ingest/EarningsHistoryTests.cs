@@ -140,4 +140,108 @@ public sealed class EarningsHistoryTests
 
         Assert.Equal(new DateOnly(2021, 3, 31), period.PeriodEnd);
     }
+
+    // ------------------------------------------------- duplicate period ends ---
+    //
+    // Taking the period end from `date` gives up the uniqueness the object key had by
+    // construction. Two entries resolving to one (ticker, period_end) reach one COPY as
+    // two rows with the same conflict target, and Postgres raises "ON CONFLICT DO
+    // UPDATE command cannot affect row a second time": a stage failure on one ticker,
+    // mid-sweep, after the units for everything before it are spent.
+
+    private static IReadOnlyList<EarningsPeriod> ParseWith(string json, out int collisions)
+    {
+        using var doc = JsonDocument.Parse(json);
+        return EarningsHistory.Parse(doc.RootElement, "CCS.US", out collisions);
+    }
+
+    /// <summary>Two entries for one period end, different report dates. The later one wins.</summary>
+    [Fact]
+    public void TwoEntriesForOnePeriodEndWriteOneRowAndTheLaterReportDateWins()
+    {
+        var periods = ParseWith("""
+            {"Earnings":{"History":{
+              "a":{"date":"2021-03-31","reportDate":"2021-04-20","epsActual":1.0},
+              "b":{"date":"2021-03-31","reportDate":"2021-05-14","epsActual":1.1}
+            }}}
+            """, out var collisions);
+
+        var only = Assert.Single(periods);
+
+        Assert.Equal(new DateOnly(2021, 3, 31), only.PeriodEnd);
+        Assert.Equal(new DateOnly(2021, 5, 14), only.ReportDate);
+        Assert.Equal(1.1f, only.EpsActual);
+        Assert.Equal(1, collisions);
+    }
+
+    /// <summary>The order in the payload does not decide it; the report date does.</summary>
+    [Fact]
+    public void TheLaterReportDateWinsWhicheverOrderTheyArriveIn()
+    {
+        var periods = ParseWith("""
+            {"Earnings":{"History":{
+              "a":{"date":"2021-03-31","reportDate":"2021-05-14","epsActual":1.1},
+              "b":{"date":"2021-03-31","reportDate":"2021-04-20","epsActual":1.0}
+            }}}
+            """, out _);
+
+        Assert.Equal(new DateOnly(2021, 5, 14), Assert.Single(periods).ReportDate);
+    }
+
+    /// <summary>
+    /// Both report dates absent. One row, no throw, and the last in document order
+    /// wins, which is a property of the payload rather than of a hash order.
+    /// </summary>
+    [Fact]
+    public void TwoUndatedEntriesForOnePeriodEndWriteOneRowWithoutThrowing()
+    {
+        var periods = ParseWith("""
+            {"Earnings":{"History":{
+              "a":{"date":"2021-03-31","reportDate":null,"epsActual":1.0},
+              "b":{"date":"2021-03-31","reportDate":null,"epsActual":1.1}
+            }}}
+            """, out var collisions);
+
+        var only = Assert.Single(periods);
+
+        Assert.Null(only.ReportDate);
+        Assert.Equal(1.1f, only.EpsActual);
+        Assert.Equal(1, collisions);
+    }
+
+    /// <summary>
+    /// A dated entry beats an undated one whichever came first. The undated one is
+    /// unreadable under the `report_date &lt;= date` rule, so keeping it would discard
+    /// the only usable row of the pair.
+    /// </summary>
+    [Fact]
+    public void ADatedEntryBeatsAnUndatedOneWhicheverCameFirst()
+    {
+        var first = ParseWith("""
+            {"Earnings":{"History":{
+              "a":{"date":"2021-03-31","reportDate":"2021-04-20","epsActual":1.0},
+              "b":{"date":"2021-03-31","reportDate":null,"epsActual":9.9}
+            }}}
+            """, out _);
+
+        Assert.Equal(new DateOnly(2021, 4, 20), Assert.Single(first).ReportDate);
+
+        var second = ParseWith("""
+            {"Earnings":{"History":{
+              "a":{"date":"2021-03-31","reportDate":null,"epsActual":9.9},
+              "b":{"date":"2021-03-31","reportDate":"2021-04-20","epsActual":1.0}
+            }}}
+            """, out _);
+
+        Assert.Equal(new DateOnly(2021, 4, 20), Assert.Single(second).ReportDate);
+    }
+
+    /// <summary>A payload with no duplicates reports none, so the count means something when it appears.</summary>
+    [Fact]
+    public void APayloadWithNoDuplicatesReportsNoCollisions()
+    {
+        ParseWith(Payload, out var collisions);
+
+        Assert.Equal(0, collisions);
+    }
 }

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data.Eodhd;
@@ -52,6 +53,15 @@ public sealed class FundamentalsIngestor : IStage
     public static readonly string[] AttemptColumns =
         ["ticker", "last_attempted_date", "last_yield_date", "rows_last_attempt"];
 
+    /// <summary>The earnings history captured on the sweep that pays for it [D-96].</summary>
+    public static readonly string[] EarningsColumns =
+    [
+        "ticker", "period_end", "report_date", "before_after_market",
+        "eps_actual", "eps_estimate", "surprise_fraction",
+    ];
+
+    private static readonly string[] EarningsConflictTarget = ["ticker", "period_end"];
+
     private static readonly string[] AttemptConflictTarget = ["ticker"];
 
     private readonly EodhdClient _client;
@@ -70,6 +80,7 @@ public sealed class FundamentalsIngestor : IStage
     [
         new TableWrite("fundamental_snapshot", WriteOperation.Insert, Columns),
         new TableWrite("fundamental_fetch_attempt", WriteOperation.Insert, AttemptColumns),
+        new TableWrite("earnings_history", WriteOperation.Insert, EarningsColumns),
     ];
 
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
@@ -89,6 +100,10 @@ public sealed class FundamentalsIngestor : IStage
         long periods = 0;
         long substituted = 0;
         var wideFilers = new List<string>();
+
+        // Counted across the run rather than per ticker, so a condition currently
+        // assumed rare is measured [D-96].
+        var earningsCollisions = 0;
 
         // One entry per selected ticker, written below whether or not the fetch
         // yielded anything. A ticker that returns nothing still has to move down the
@@ -117,6 +132,7 @@ public sealed class FundamentalsIngestor : IStage
             periods += resolved.Value.Periods.Count;
             substituted += resolved.Value.SubstitutedCount;
             rows += resolved.Value.Written;
+            earningsCollisions += resolved.Value.EarningsCollisions;
 
             if (resolved.Value.WidestCleanGapDays is int w && w > widestAlertDays)
             {
@@ -169,12 +185,14 @@ public sealed class FundamentalsIngestor : IStage
             CultureInfo.InvariantCulture,
             "{0:N0} row(s) over {1:N0} ticker(s). Candidate pool {2:N0}, of which {3:N0} have never " +
             "been attempted; this run's selection was {4:N0} new and {5:N0} refreshed, the oldest " +
-            "attempt in it dated {6}",
+            "attempt in it dated {6}. {7:N0} earnings entr(ies) were dropped as duplicates of a " +
+            "period end already seen [D-96]",
             rows, tickers.Count, selection.PoolSize, selection.NeverAttempted,
             selection.NewInSelection, selection.RefreshedInSelection,
             selection.OldestAttemptInSelection is DateOnly d
                 ? d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
-                : "none");
+                : "none",
+            earningsCollisions);
 
         notes.Insert(0, coverage);
 
@@ -230,33 +248,54 @@ public sealed class FundamentalsIngestor : IStage
     }
 
     private readonly record struct Loaded(
-        IReadOnlyList<ResolvedPeriod> Periods, int? WidestCleanGapDays, int SubstitutedCount, long Written);
+        IReadOnlyList<ResolvedPeriod> Periods, int? WidestCleanGapDays, int SubstitutedCount, long Written,
+        int EarningsCollisions);
 
     private async Task<Loaded?> LoadAsync(StageContext context, string ticker, CancellationToken ct)
     {
         JsonDocument doc;
         try
         {
-            doc = await _client.GetAsync(
-                "fundamentals/" + ticker,
-                [("filter", "Financials")],
-                ct).ConfigureAwait(false);
+            // **Unfiltered, and it costs the same** [3.1, measured]. One call now
+            // carries `Financials`, `Earnings::History` and `General::Sector` where the
+            // filtered form carried the first alone, so the capture D-96 and D-97 need
+            // rides the sweep already being paid for [D-96].
+            doc = await _client.GetAsync("fundamentals/" + ticker, [], ct).ConfigureAwait(false);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
-            // A ticker the fundamentals endpoint does not carry is the ordinary
-            // case for an index or a fund, and the universe excludes those anyway.
-            // It is not a reason to fail the night.
+            // **A 404 alone** [3.6, open item 18]. A ticker the fundamentals endpoint
+            // does not carry is the ordinary case for an index or a fund, and the
+            // universe excludes those anyway. Everything else is rethrown: a 402 is the
+            // allowance wall reached in flight and it persists for the day, so
+            // swallowed it would write nothing for this ticker and nothing for any
+            // ticker after it, and the sweep would report a complete pass over a
+            // partial load.
             return null;
         }
 
         using (doc)
         {
-            var statements = Statements.Parse(doc.RootElement);
+            // The payload is whole now, so the statements are one level down where the
+            // filtered form put them at the root.
+            //
+            // **The ValueKind guard is not defensive padding.** This endpoint answers a
+            // ticker it carries no financials for with a bare JSON string, and
+            // `TryGetProperty` throws on anything that is not an object rather than
+            // returning false. The 0006 fixture for that shape is what caught it.
+            var financials = doc.RootElement.ValueKind == JsonValueKind.Object
+                             && doc.RootElement.TryGetProperty("Financials", out var f)
+                ? f
+                : doc.RootElement;
+
+            var statements = Statements.Parse(financials);
             if (statements.Count == 0)
             {
                 return null;
             }
+
+            var earnings = EarningsHistory.Parse(doc.RootElement, ticker, out var collisions);
+            await WriteEarningsAsync(context, earnings, ct).ConfigureAwait(false);
 
             var resolved = FilingDateRule.Resolve(
                 statements.Select(s => new RawPeriod(s.PeriodEnd, s.FilingDate)).ToList());
@@ -275,8 +314,41 @@ public sealed class FundamentalsIngestor : IStage
                 }, ct).ConfigureAwait(false);
 
             return new Loaded(
-                resolved.Periods, resolved.WidestCleanGapDays, resolved.SubstitutedCount, written);
+                resolved.Periods, resolved.WidestCleanGapDays, resolved.SubstitutedCount, written,
+                collisions);
         }
+    }
+
+    /// <summary>
+    /// The earnings history for one ticker [D-96].
+    ///
+    /// Deduped by the parse before it gets here, so the rows carry distinct period ends
+    /// and the upsert's conflict target cannot be hit twice in one statement.
+    /// </summary>
+    private static async Task WriteEarningsAsync(
+        StageContext context, IReadOnlyList<EarningsPeriod> periods, CancellationToken ct)
+    {
+        if (periods.Count == 0)
+        {
+            return;
+        }
+
+        await context.Data.BulkUpsertAsync(
+            "earnings_history", EarningsColumns, EarningsConflictTarget,
+            async (w, c) =>
+            {
+                foreach (var p in periods)
+                {
+                    await w.StartRowAsync(c).ConfigureAwait(false);
+                    await w.WriteAsync(p.Ticker, c).ConfigureAwait(false);
+                    await w.WriteAsync(p.PeriodEnd, c).ConfigureAwait(false);
+                    await w.WriteAsync(p.ReportDate, c).ConfigureAwait(false);
+                    await w.WriteAsync(p.BeforeAfterMarket, c).ConfigureAwait(false);
+                    await w.WriteAsync(p.EpsActual, c).ConfigureAwait(false);
+                    await w.WriteAsync(p.EpsEstimate, c).ConfigureAwait(false);
+                    await w.WriteAsync(p.SurpriseFraction, c).ConfigureAwait(false);
+                }
+            }, ct).ConfigureAwait(false);
     }
 
     private static async Task WriteRowAsync(

@@ -3050,6 +3050,13 @@ It is still not built here, for the reason it was not built the first time: a
 conformance test is a phase's work rather than a finding's. What this block can do is
 stop calling it a risk.
 
+**The controlled comparison arrived on 2026-08-12 and it is the reason the test is
+overdue rather than merely wanted.** §3's C09 Reads cell named `earnings_history` before
+`ValuationEngine` declared it, and `ReadDeclarationConformanceTests` failed on the next
+CI run: **one commit.** The Writes column, same document, same class of change, has
+missed three. That is not two anecdotes, it is one document where the checked column
+catches within a commit and the unchecked one does not catch at all.
+
 #### Third instance, 2026-08-12, and it is three of three
 
 **C01's Writes cell read `security` alone** while D-92 and migration 0007 give
@@ -3777,6 +3784,38 @@ read and nothing contracts that they will: the key is what the provider chose to
 by, and `date` is what the row is about. An entry with neither is dropped rather than
 given a fabricated period end, which would collide with a real one under the primary
 key.
+
+#### Duplicate period ends, and what taking the date gave up
+
+Taking the period end from the entry's own `date` gave up the uniqueness the object key
+had by construction. Object keys are unique within a payload; `date` values are not, and
+`earnings_history` is keyed on `(ticker, period_end)`. A restated quarter, an amended
+filing, or a provider indexing by report date and carrying two reports for one period
+all produce two rows with the same conflict target in one statement, and Postgres raises
+`ON CONFLICT DO UPDATE command cannot affect row a second time`. **That is a stage
+failure on one ticker, mid-sweep, after the units for everything before it are spent**,
+and 3.6's catch now rethrows anything that is not a 404, so it propagates.
+
+**The key was not the answer.** The semantic argument for `date` holds. What it needed
+was the guarantee added back explicitly rather than inherited, so the parse dedupes:
+the later `report_date` wins, and the last in document order wins where they tie or are
+absent. A dated entry beats an undated one whichever came first, the undated one being
+unreadable under the `report_date <= date` rule anyway.
+
+**The collision count is reported per run rather than swallowed**, so a condition
+currently assumed rare is measured. It lands in C03's run log line beside the coverage
+figures.
+
+**The capture half of 3.7 landed with it**, because a count that reaches no run log is
+not a measurement. C03 now fetches unfiltered, which costs the same and carries
+`Financials`, `Earnings::History` and `General::Sector` in one call, parses the earnings
+block and writes `earnings_history`. Open item 18's `when` clause is in the same edit,
+the file being open.
+
+**A fixture from 0006 caught the one defect in that.** The endpoint answers a ticker it
+carries no financials for with a bare JSON string, and `TryGetProperty` throws on a
+non-object rather than returning false, so the unfiltered read needed a `ValueKind`
+guard the filtered one never did.
 
 #### Two figures 3.7's run answers, recorded as questions rather than as answers
 

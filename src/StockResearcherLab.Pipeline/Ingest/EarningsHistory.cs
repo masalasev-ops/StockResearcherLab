@@ -51,15 +51,47 @@ public static class EarningsHistory
     /// </summary>
     /// <param name="root">The whole unfiltered payload, or the `Earnings` block alone.</param>
     public static IReadOnlyList<EarningsPeriod> Parse(JsonElement root, string ticker)
+        => Parse(root, ticker, out _);
+
+    /// <summary>
+    /// As above, reporting how many entries were dropped as duplicates of a period end
+    /// already seen.
+    ///
+    /// **Taking the period end from `date` gives up the uniqueness the object key had
+    /// by construction, and this is where it is given back** [D-96]. Object keys are
+    /// unique within a payload; `date` values are not. A restated quarter, an amended
+    /// filing, or a provider indexing by report date and carrying two reports for one
+    /// period all produce two entries resolving to one `(ticker, period_end)`, which is
+    /// `earnings_history`'s primary key. Written unguarded, the two arrive in one
+    /// statement and Postgres raises `ON CONFLICT DO UPDATE command cannot affect row a
+    /// second time`: a stage failure on one ticker, mid-sweep, after the units for
+    /// everything before it are spent.
+    ///
+    /// **The key is not the answer.** The semantic argument for `date` holds, that the
+    /// key is what the provider chose to index by and `date` is what the row is about.
+    /// What it needs is the guarantee added back explicitly rather than inherited.
+    ///
+    /// **The later report date wins, and the last seen wins where they tie or are
+    /// absent.** Document order is what `JsonDocument` preserves, so "last seen" is a
+    /// property of the payload rather than of a hash order that could differ between
+    /// runs [`CLAUDE.md` §6].
+    /// </summary>
+    /// <param name="collisions">
+    /// Entries dropped. Reported to the run log rather than swallowed, so a condition
+    /// currently assumed rare is measured [D-96].
+    /// </param>
+    public static IReadOnlyList<EarningsPeriod> Parse(JsonElement root, string ticker, out int collisions)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
+
+        collisions = 0;
 
         if (!TryHistory(root, out var history))
         {
             return [];
         }
 
-        var periods = new List<EarningsPeriod>();
+        var byPeriod = new Dictionary<DateOnly, EarningsPeriod>();
 
         foreach (var entry in history.EnumerateObject())
         {
@@ -77,19 +109,52 @@ public static class EarningsHistory
                 continue;
             }
 
-            periods.Add(new EarningsPeriod(
+            var candidate = new EarningsPeriod(
                 ticker,
                 periodEnd.Value,
                 Date(entry.Value, "reportDate"),
                 Text(entry.Value, "beforeAfterMarket"),
                 Number(entry.Value, "epsActual"),
                 Number(entry.Value, "epsEstimate"),
-                Fraction(entry.Value, "surprisePercent")));
+                Fraction(entry.Value, "surprisePercent"));
+
+            if (!byPeriod.TryGetValue(periodEnd.Value, out var existing))
+            {
+                byPeriod[periodEnd.Value] = candidate;
+                continue;
+            }
+
+            collisions++;
+
+            if (Wins(candidate, existing))
+            {
+                byPeriod[periodEnd.Value] = candidate;
+            }
         }
 
+        // Sorted out of the dictionary, because a Dictionary's enumeration order is
+        // unspecified and COPY order reaches the table [`CLAUDE.md` §6].
+        var periods = byPeriod.Values.ToList();
         periods.Sort(static (a, b) => a.PeriodEnd.CompareTo(b.PeriodEnd));
         return periods;
     }
+
+    /// <summary>
+    /// Which of two entries for one period end is kept. The later report date, and the
+    /// later in document order where they tie or are absent.
+    ///
+    /// A dated entry always beats an undated one, whichever came first: the undated one
+    /// is unreadable by the `report_date &lt;= date` rule anyway, so keeping it would
+    /// discard the only usable row of the pair.
+    /// </summary>
+    private static bool Wins(EarningsPeriod candidate, EarningsPeriod existing)
+        => (candidate.ReportDate, existing.ReportDate) switch
+        {
+            (DateOnly c, DateOnly e) => c >= e,
+            (not null, null) => true,
+            (null, not null) => false,
+            _ => true,
+        };
 
     /// <summary>
     /// The `Earnings::History` object, whether handed the whole payload or the

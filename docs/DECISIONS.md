@@ -1564,6 +1564,58 @@ and is not the same thing, and the percentile cells inherit it.
 A ticker with no fundamental rows has no sector, which resolves to the existing
 bucket-only fallback rather than to a new case.
 
+**D-98 The institutional holdings block is captured by C03 and C05 keeps form4 alone.**
+`ACTIVE`
+`FlowIngestor` calls `fundamentals/{t}` with `filter=Holders::Institutions`. C03 calls
+the same endpoint unfiltered since 3.7, so the filter is a projection of a document C03
+already receives, bought a second time at 10 units a ticker: 2,500 a night at
+`flow.max_tickers_per_run` 250, about 912,500 a year, and 28,410 for a universe pass.
+
+**That the two blocks agree is measured rather than inferred**, and the distinction
+matters because the first draft of this decision asserted it "by construction". 3.1
+confirmed the block is present in the unfiltered payload and 1.9 measured twenty entries
+in the filtered form; neither confirmed the unfiltered one carries all twenty rather
+than a truncated head, which providers do. Measured 2026-08-12 over CCS.US and NVDA.US,
+two calls each: twenty entries both ways on both tickers, agreeing row for row on name,
+date, total shares, current shares and change
+[`docs/evidence/phase-3/holders-filtered-vs-unfiltered-20260812.txt`].
+
+**Freshness improves rather than degrades.** C05's rotation covers 250 of 2,841 in 11.4
+days; C03's covers 500 of about 4,800 in 9.6. The block is a top-20 snapshot at one or
+two report dates and those move quarterly [D-69], so both cadences are far finer than
+the data changes.
+
+`institutional_holding`'s writer becomes `FundamentalsIngestor` and C05 keeps
+`insider_transaction` and `flow_fetch_attempt`. One writer rather than a split, so no
+D-77 declaration arises. §3's C03 and C05 cells move with it.
+
+**There is no deadline on this and the reasoning that suggested one does not transfer.**
+D-96 put the earnings capture inside the sweep because that history has fifty back
+periods: miss the sweep and they cost a re-sweep. Holders is a current snapshot with no
+series behind it, which is this decision's own argument for keeping it out of 3.9, so
+missing 3.7's sweep costs about ten days of C03's rotation filling it at no additional
+units. What decides the timing is that 3.9 is next and its scope depends on this, and
+that a scope written right is better than one amended afterwards. A decision resting on
+a reason that does not survive inspection gets reversed for a reason that does not
+either.
+
+**The population widens from the universe to the candidate pool**, about 4,800 names
+against 2,841. That is storage rather than correctness and is the same case as C09's
+over-write, recorded rather than narrowed.
+
+**What this couples, which is the cost side of the freshness gain.** Holders now ride
+C03's rotation, so one rotation feeds two screens' inputs. That rotation froze silently
+once and nothing in the row counts said so; `OldestAttemptInSelection` is the observable
+D-91 added to catch it, and it now covers two tables rather than one. The rotation
+health figure matters more after this than before.
+
+**3.9 does not sweep holders under any reading.** The block has no series, so a universe
+pass re-fetches a current snapshot 2,841 times for 28,410 units where the nightly
+rotation covers the universe in days. 3.9's scope is form4 alone.
+
+D-69 is not a blocker: its own text keeps this table usable as a static feature under
+either outcome, so the ingest stands whichever way `inst_ownership_change` goes.
+
 ---
 
 ---

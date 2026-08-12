@@ -1,0 +1,35 @@
+D-98's precondition, measured 2026-08-12.
+
+The claim was that the unfiltered fundamentals payload's Holders::Institutions block is
+the same block the filtered call returns, "by construction". That was an inference, not
+a measurement: 3.1 confirmed the block is present unfiltered and 1.9 measured twenty
+entries in the filtered form, and nobody had confirmed the unfiltered one carries all
+twenty rather than a truncated head, which providers do.
+
+Two tickers, two calls each, 40 units against 40 projected. The token is never printed.
+
+Rows are compared field by field and sorted, not counted: a count that matches while the
+rows differ is the failure a count-only check passes over.
+==============================================================================
+
+D-98's precondition, measured.
+Run 2026-08-12 17:59 UTC. Token never printed.
+Does the unfiltered Holders::Institutions block match the filtered call's, row for row?
+
+apiRequests opening 96
+
+=== CCS.US ===
+  filtered entries    20
+  unfiltered entries  20
+  counts agree        YES
+  rows agree          YES, row for row
+  first unfiltered row: American Century Companies Inc|2026-03-31|1.4124|401598|316922
+
+=== NVDA.US ===
+  filtered entries    20
+  unfiltered entries  20
+  counts agree        YES
+  rows agree          YES, row for row
+  first unfiltered row: Amvescap Plc.|2026-03-31|1.3521|327497096|-13493616
+
+apiRequests closing 136, spent 40 against 40 projected

@@ -3902,6 +3902,21 @@ no series behind it. What it would change is 3.9's scope: as the code stands, a 
 sweep walks both halves per ticker, so 3.9 would spend 28,410 units re-fetching a
 current snapshot 2,841 times.
 
+**Resolved as D-98 on 2026-08-12, and the precondition was measured rather than
+inferred.** The first draft asserted that the unfiltered block matches the filtered one
+"by construction". It did not: 3.1 confirmed the block is present unfiltered and 1.9
+measured twenty entries filtered, and neither confirmed the unfiltered one carries all
+twenty rather than a truncated head. Measured over CCS.US and NVDA.US, two calls each,
+40 units: **twenty entries both ways on both tickers, agreeing row for row** on name,
+date, total shares, current shares and change. The inference held; it is now a
+measurement, and a fixture built from the filtered response would have laundered it.
+
+**The deadline claim was wrong and is gone.** D-96's urgency does not transfer: the
+earnings history has fifty back periods, so missing the sweep costs a re-sweep, where
+holders is a current snapshot that C03's rotation refills in about ten days at no
+additional units. What decides the timing is that 3.9 is next and its scope depends on
+it. **This does not block 3.8.**
+
 **Reported, not moved.** Making C05's institutional half a read of what C03 stored is a
 change to two components' declared sets and to §3, which is authored. Open item 19.
 

@@ -24,7 +24,11 @@ rather than from a list of its own, so what a heading says is checked on every p
 Column lists below are the load-bearing ones, not exhaustive. Types, indexes and
 constraints are phase 0 work and are not fabricated here.
 
-**Sizes are estimates after a five-year backfill, not measurements.**
+**Size after backfill is not here.** It is `ARCHITECTURE.html` §16's column, derivable
+from the grain a heading below already states, and a third statement of it is the
+duplication D-76 exists to remove. §16's store list is held against this document in
+both directions by a test; its size column is not, and phase 3's sign-off is where
+those figures stop being estimates [`BUILD_PLAN.md` carried obligations].
 
 ---
 
@@ -57,7 +61,7 @@ a computation, it is point-in-time correct by construction and needs no column, 
 second writer on this table, and nothing to keep in step [INVARIANT 13].
 
 ### security_daily
-Grain: ticker by date. **Writer: UniverseBuilder.** ~100 MB.
+Grain: ticker by date. **Writer: UniverseBuilder.**
 
 `ticker`, `date`, `sector`, `size_bucket`, `market_cap`, `is_active`.
 
@@ -91,12 +95,12 @@ so every row C01 writes reads true.
 ## Market data
 
 ### price_daily
-Grain: ticker by day. **Writer: PriceIngestor.** ~400 MB.
+Grain: ticker by day. **Writer: PriceIngestor.**
 
 `ticker`, `date`, `open`, `high`, `low`, `close`, `adj_close`, `volume`.
 
 ### fundamental_snapshot
-Grain: ticker by fiscal period. **Writer: FundamentalsIngestor.** ~60 MB.
+Grain: ticker by fiscal period. **Writer: FundamentalsIngestor.**
 
 `ticker`, `period_end`, `filing_date`, `filing_date_effective`,
 `filing_date_unknown_reason`, `period_type`, plus the statement fields.
@@ -137,7 +141,7 @@ cannot exist and should never appear at all. The substitution rate stays measura
 rather than invisible.
 
 ### fundamental_fetch_attempt
-Grain: one row per ticker. **Writer: FundamentalsIngestor.** Tiny.
+Grain: one row per ticker. **Writer: FundamentalsIngestor.**
 
 `ticker`, `last_attempted_date`, `last_yield_date`, `rows_last_attempt`.
 
@@ -170,7 +174,7 @@ dates rather than between runs. That is the discipline every fundamental read al
 applies to `filing_date_effective` [INVARIANT 12, INVARIANT 13, `CLAUDE.md` §6].
 
 ### flow_fetch_attempt
-Grain: one row per ticker. **Writer: FlowIngestor.** Tiny.
+Grain: one row per ticker. **Writer: FlowIngestor.**
 
 `ticker`, `last_attempted_date`, `last_yield_date`, `rows_last_attempt`.
 
@@ -196,7 +200,7 @@ date so a re-run of one date selects the same names, and `last_yield_date` null 
 attempted and never yielded, which is a different fact from an absent row.
 
 ### sentiment_daily
-Grain: ticker by day, whole universe. **Writer: SentimentIngestor.** ~380 MB.
+Grain: ticker by day, whole universe. **Writer: SentimentIngestor.**
 
 `ticker`, `date`, `article_count`, `sentiment_score`.
 
@@ -208,7 +212,7 @@ absent day and it is the reason the derived table below can exist at all.
 
 ### sentiment_derived_daily
 Grain: ticker by day [D-78]. **Writers: SentimentEngine, a compute stage and not the
-ingest, inserts; PercentileEngine updates the percentile columns** [D-77]. Small.
+ingest, inserts; PercentileEngine updates the percentile columns** [D-77].
 
 `ticker`, `date`, `article_count_z_own_90d`, `sentiment_delta_7v30`,
 `sentiment_7d_level`.
@@ -229,7 +233,7 @@ pull every thinly covered name toward zero in proportion to how thinly covered i
 That is a size proxy arriving where D-12 exists to keep one out.
 
 ### headline
-Grain: candidate by day. **Writer: HeadlineIngestor.** Small.
+Grain: candidate by day. **Writer: HeadlineIngestor.**
 
 `ticker`, `date`, `published_at`, `title`, `source`, `url`.
 
@@ -238,7 +242,6 @@ and only candidates reach the dossier [D-23].
 
 ### insider_transaction
 Grain: ticker by filing by transaction, the source's own. **Writer: FlowIngestor.**
-Small.
 
 `ticker`, `accession_number`, `transaction_side`, `transaction_ordinal`,
 `filed_at`, `transaction_date`, `reporting_owner_cik`, `reporting_owner_name`,
@@ -265,7 +268,6 @@ an award is not the count the screen needs [D-61].
 
 ### institutional_holding
 Grain: ticker by holder by report date, the source's own. **Writer: FlowIngestor.**
-Small.
 
 `ticker`, `report_date`, `holder_name`, `shares`, `change`, `change_pct`.
 
@@ -281,7 +283,7 @@ list is a usable static feature; it is the change metric that has no series.
 
 ### flow_daily
 Grain: ticker by day [D-61]. **Writers: FlowEngine, a compute stage and not the ingest,
-inserts; PercentileEngine updates the percentile columns** [D-77]. ~52 MB.
+inserts; PercentileEngine updates the percentile columns** [D-77].
 
 `ticker`, `date`, `insider_net_90d_usd` [A1.a], `distinct_buyer_count`,
 `inst_ownership_change` [D-58, D-61].
@@ -303,7 +305,7 @@ not backfillable and the screen ranks on the three fields above [D-58].
 `publication_date` went with it, having been named for the field it keyed.
 
 ### events
-Grain: ticker by event. **Writer: EventsIngestor.** Small.
+Grain: ticker by event. **Writer: EventsIngestor.**
 
 `ticker`, `event_type`, `event_date`, `announced_date`.
 
@@ -313,7 +315,7 @@ Grain: ticker by event. **Writer: EventsIngestor.** Small.
 
 ### indicator_daily
 Grain: ticker by day. **Writers: IndicatorEngine inserts, PercentileEngine updates the
-percentile columns** [D-77]. ~1.2 GB, the second largest table.
+percentile columns** [D-77].
 
 **The technical columns are those with a named consumer, and the list is here rather
 than a count of it** [D-83]. `SchemaParityTests` holds the type declarations in §Types
@@ -339,7 +341,7 @@ All computed locally from `price_daily`. Never bought from the provider.
 
 ### valuation_daily
 Grain: ticker by day. **Writers: ValuationEngine inserts, PercentileEngine updates the
-percentile columns** [D-77]. ~540 MB.
+percentile columns** [D-77].
 
 `fcf_yield`, `ev_ebit`, `ev_ebit_vs_own_5y`, `roic`, `roic_4q_change`,
 `gross_margin_4q_change`, `net_debt_ebitda`, `accruals`, `share_count_change`,
@@ -350,7 +352,7 @@ Recomputed daily because price moves. Every fundamental input resolved as of
 `filing_date_effective` [D-62].
 
 ### market_context_daily
-Grain: one row per day. **Writer: MarketContextEngine.** Small.
+Grain: one row per day. **Writer: MarketContextEngine.**
 
 `date`, `breadth`, `vix`, `regime_label`, `sector_relative_strength`.
 
@@ -400,14 +402,14 @@ individually under "Columns that are not money".
 ## Selection
 
 ### gate_result
-Grain: ticker by day. **Writer: GateEngine.** ~120 MB.
+Grain: ticker by day. **Writer: GateEngine.**
 
 `ticker`, `date`, `passed`, `reasons`.
 
 Records every failing reason, not the first.
 
 ### screen_score_daily
-Grain: ticker by screen by day. **Writer: ScreenEngine.** ~1.4 GB, the largest table.
+Grain: ticker by screen by day. **Writer: ScreenEngine.**
 
 `ticker`, `screen_id`, `date`, `score`, `rank_within_screen`, `config_version`.
 
@@ -417,18 +419,18 @@ five screens every day. That is necessary rather than wasteful: the floor is the
 distribution without scoring everyone [D-9].
 
 ### screen_history
-Grain: screen by day. **Writer: ScreenEngine.** Small.
+Grain: screen by day. **Writer: ScreenEngine.**
 
 Trailing distribution summary per screen, from which the floor is computed.
 
 ### candidate_set
-Grain: ticker by day. **Writer: CandidateAllocator.** ~9 MB.
+Grain: ticker by day. **Writer: CandidateAllocator.**
 
 `ticker`, `date`, `screens_surfacing`, `size_bucket`, `slot_filled`.
 
 ### attribution
 Grain: ticker by day surfaced. **Writers: CandidateAllocator inserts,
-ForwardReturnFiller updates.** ~9 MB.
+ForwardReturnFiller updates.**
 
 `ticker`, `date`, `screens_surfacing`, `score_per_screen`, `size_bucket`,
 `sector`, `regime`, `gate_state`, `config_version`, `digest_provider`,
@@ -453,7 +455,7 @@ deletion, or survivorship bias enters the attribution table itself.
 ## Decide
 
 ### news_digest
-Grain: ticker by day. **Writer: NewsDigester.** Grows ~10 MB/yr.
+Grain: ticker by day. **Writer: NewsDigester.**
 
 `ticker`, `date`, `digest_text`, `provider`, `model_name`, `was_rotation`.
 
@@ -463,7 +465,6 @@ is separable from genuine fallthroughs.
 
 ### dossier
 Grain: one prefix per night plus one block per candidate. **Writer: DossierBuilder.**
-Grows ~40 MB/yr.
 
 `date`, `prefix_text`, `prefix_hash`, `ticker`, `block_text`.
 
@@ -472,7 +473,7 @@ possible after the fact. `prefix_hash` is what the snapshot test asserts on.
 
 ### proposal
 Grain: ticker by day by model. **Writers: ResearcherClient inserts, ProposalValidator
-updates status.** Grows ~30 MB/yr.
+updates status.**
 
 `ticker`, `date`, `model_id`, `verdict`, `p_target_before_stop`, `thesis`,
 `counter_argument`, `primary_driver`, `stop_pct`, `target_pct`, `horizon_days`,
@@ -487,7 +488,7 @@ the insert.** **ProposalValidator owns the update**, and only of `status` and
 ## Execute
 
 ### portfolio
-Grain: one row per portfolio. **Writer: configuration, not a stage.** Tiny.
+Grain: one row per portfolio. **Writer: configuration, not a stage.**
 
 `portfolio_id`, `name`, `selection_method`, `provider`, `model_id`, `use_batch`,
 `is_primary`, `state`.
@@ -500,7 +501,7 @@ Exactly one research portfolio carries `is_primary`. Screens and Random match th
 entry count to whichever it is.
 
 ### portfolio_selection
-Grain: portfolio by ticker by day. **Writer: PortfolioRunner.** Small.
+Grain: portfolio by ticker by day. **Writer: PortfolioRunner.**
 
 `portfolio_id`, `date`, `ticker`, `source`, `source_ref`.
 
@@ -517,7 +518,7 @@ read as a weak selection rule rather than a blocked one.
 
 ### order / fill / position
 Grain: per event, tagged by portfolio. **RiskGate inserts orders. PaperBroker inserts
-fills and inserts positions. PositionManager updates positions to closed.** Small.
+fills and inserts positions. PositionManager updates positions to closed.**
 
 Three tables and three components, each owning a different transition. This is the
 group the old two-exception rule could never have accommodated, and it is why the rule
@@ -531,7 +532,7 @@ so sizing, stops and caps exist in exactly one place. A split by portfolio class
 would have put them in two, and INVARIANT 8 says that voids the comparison.
 
 ### trade_outcome
-Grain: per closed trade. **Writer: PositionManager.** Small.
+Grain: per closed trade. **Writer: PositionManager.**
 
 `portfolio_id`, `ticker`, `entry_date`, `exit_date`, `pnl`, `alpha_vs_spy`,
 `alpha_vs_peers`, `mfe`, `mae`, `exit_reason`.
@@ -543,7 +544,7 @@ Grain: per closed trade. **Writer: PositionManager.** Small.
 ## Learn and configure
 
 ### config_rows
-Grain: key by version. **Writer: configuration and ScreenTuner.** Tiny.
+Grain: key by version. **Writer: configuration and ScreenTuner.**
 
 Append-only and versioned. Current is `MAX(version)` for a key. A change inserts
 version + 1. Anything reading config for a simulated date resolves as of that date,
@@ -553,7 +554,7 @@ Holds screen definitions, slot allocations, the digest provider chain, and every
 value that could plausibly be tuned. No magic numbers at call sites.
 
 ### researcher_memory
-Grain: per revision. **Writer: LessonWriter.** Small.
+Grain: per revision. **Writer: LessonWriter.**
 
 `lesson_text`, `sample_size`, `written_at`, `expires_at`, `reconfirmed_at`.
 
@@ -561,7 +562,7 @@ Maximum ten active. Requires n of at least 30. Expires after six months unless
 reconfirmed [D-44].
 
 ### calibration
-Grain: per model per screen per report. **Writer: CalibrationReporter.** Small.
+Grain: per model per screen per report. **Writer: CalibrationReporter.**
 
 Brier score, reliability buckets, sample sizes.
 
@@ -570,13 +571,13 @@ Brier score, reliability buckets, sample sizes.
 ## Operations
 
 ### run_log
-Grain: per stage per run. **Writer: RunLog.** Small.
+Grain: per stage per run. **Writer: RunLog.**
 
 `run_date`, `stage`, `status`, `started_at`, `duration_ms`, `rows_written`,
 `error`.
 
 ### cost_ledger
-Grain: per call. **Writer: CostLedger.** Small.
+Grain: per call. **Writer: CostLedger.**
 
 `date`, `model_id`, `portfolio_id`, `input_tokens`, `cache_write_tokens`,
 `cache_read_tokens`, `output_tokens`, `cost`, `was_batch`.
@@ -585,7 +586,7 @@ Validator rejection counts are recorded here per model alongside spend, since th
 is a hallucination measure worth watching independently of returns.
 
 ### alert
-Grain: per alert. **Writer: ConcentrationMonitor.** Small.
+Grain: per alert. **Writer: ConcentrationMonitor.**
 
 `date`, `alert_type`, `detail`, `acknowledged`.
 

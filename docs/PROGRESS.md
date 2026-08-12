@@ -3130,6 +3130,50 @@ not reported marked.
 
 **Test count 265 to 273.**
 
+#### Size left `SCHEMA.md` entirely, 2026-08-12
+
+**The disagreement above was closed by removing the word, not by correcting it.** Size
+after backfill is §16's column, and a size in a `SCHEMA.md` heading is a third statement
+of a fact §16 already holds and the same heading's grain already implies, which is what
+D-76 exists to remove.
+
+**It was not one heading.** 33 of the 35 table headings carried a size characterisation;
+only `security` and `local_model_config` did not. Thirty at the end of a line and three
+wrapped onto lines of their own, which a first pass over line ends would have missed
+silently: `insider_transaction`, `institutional_holding` and `dossier` each had `Small.`
+or `Grows ~40 MB/yr.` alone on the last line of the paragraph. The prior wording of all
+33 is in `CHANGELOG.md`.
+
+**The preamble line went with them.** "Sizes are estimates after a five-year backfill,
+not measurements" qualified figures the document no longer states. Leaving it would have
+been the same drift in miniature, a rule about a thing that is not there.
+
+**Two of the removals said something §16 does not.** `indicator_daily` read "the second
+largest table" and `screen_score_daily` "the largest". That is a ranking rather than a
+size and it is not carried across, §16 stating both figures and the ordering being read
+off them.
+
+**§16 is untouched by this pass**, including the 200 MB that started it. The figures stay
+the estimates they are.
+
+**What replaces the disagreement is a carried obligation**, not a corrected number:
+restate every §16 size from measurement at phase 3's sign-off, once 3.6 to 3.10 have
+loaded, and say in each row that the figure is measured. That is the first point at which
+any of them can be, since every one is derived from a grain and none has ever been
+checked against a table.
+
+**The obligation names the test's blind spot.** `StoreMatrixConformanceTests` holds the
+store list and not the size column, so a wrong size is invisible to it and stays
+invisible after the restatement unless something else is done. Whether that column is
+worth asserting once the figures are measured is a sign-off question and is deliberately
+not answered now: an assertion over estimates would pin the estimate rather than the
+size.
+
+**One line-ending correction, verified rather than assumed.** The script that stripped
+the 33 wrote the file with CRLF where it had been LF, which git would have normalised on
+commit while leaving the working tree mixed. Restored to LF before staging, so the
+commit is content and not content plus 741 line endings [`CLAUDE.md` §10].
+
 ---
 
 ## Phase 3, backfill
@@ -3681,4 +3725,4 @@ them are in `docs/archive/process-2026-08.md`.
 | 14 | **0007 leaves `sector`, `size_bucket`, `market_cap` and `is_active` on `security`**, where nothing writes them after 3.11 and nothing reads them after 3.12. They hold whatever the last live C01 run put there, so a later reader can take `security.market_cap` for a current value when it is a frozen one. `SCHEMA.md` stops listing them under D-73, which is a documentation edit and not a claim they are gone. Dropping them is one `ALTER TABLE` and it moves `ExpectedMonetary` and `SchemaParityTests`'s count back from 19 to 18, so it is a decision rather than a tidy-up | The next migration after 3.12, or whenever the counts move for another reason |
 | 15 | ~~**`ARCHITECTURE.html` §3's C05 Writes cell names two tables where the component now writes three.** D-95 and migration 0008 give FlowIngestor `flow_fetch_attempt`, `SCHEMA.md` declares it and the registry test passes, so the document that is checked is correct. The catalogue is not checked: the Writes column has no conformance test, write ownership being asserted against `SCHEMA.md`. This is the second component to gain a second write and the second to drift immediately, which is what that finding predicted. The file is human-edited only [`CLAUDE.md` §13]~~ **The cell is corrected**, human-directed on 2026-08-12, as a clean edit under D-73 with the prior wording in `CHANGELOG.md` and a diff touching that cell alone. **What stays open is the conformance test**, and the second instance is what changes its standing: two of two components that have ever gained a second write drifted at that moment, both before either predicted case was built | The Writes-column conformance test, recorded in the fundamentals-rotation finding as overdue rather than as a risk |
 | 16 | **C04's and C06's pools are survivorship-filtered by the same argument that amended C03's.** 3.7's pool became the live candidate pool plus in-window delisted names on 2026-08-12, because a historical universe member with no fundamental rows computes zero clean gaps and is absent from `security_daily` for every past date. 3.8's sentiment pass and 3.10's splits and dividends both still take their pool from the live universe, so a name that amendment admits to a 2021 `security_daily` would carry prices and fundamentals for that date and no sentiment and no distributions. The cost differs: sentiment is 5 units a ticker and splits and dividends are 1 each, so the same widening is about 5D and 2D against fundamentals' 10D. Whether either widens is authored, and neither blocks 3.7 | Before 3.8 and 3.10 are built |
-| 17 | **`SCHEMA.md` and §16 give `sentiment_derived_daily` different sizes.** The first calls it "Small", which is the word it uses for `flow_fetch_attempt` and `fundamental_fetch_attempt`; §16 carries 200 MB, derived from the grain as every figure in that column is. The store is ticker by day with six real columns, about 3.6 million rows over the window, so it sits between `flow_daily` at 52 MB and `valuation_daily` at 540 MB on column count and "Small" understates it in §16's own terms. Neither figure is measured. It is one word against one estimate and nothing reads either | Phase 3 sign-off, when the backfill makes both measurable, or whoever next edits either line |
+| 17 | ~~**`SCHEMA.md` and §16 give `sentiment_derived_daily` different sizes.** The first calls it "Small", which is the word it uses for `flow_fetch_attempt` and `fundamental_fetch_attempt`; §16 carries 200 MB, derived from the grain as every figure in that column is. The store is ticker by day with six real columns, about 3.6 million rows over the window, so it sits between `flow_daily` at 52 MB and `valuation_daily` at 540 MB on column count and "Small" understates it in §16's own terms. Neither figure is measured. It is one word against one estimate and nothing reads either~~ **Closed on 2026-08-12 by removing the word rather than correcting it.** Size after backfill is §16's column and a size in a `SCHEMA.md` heading was a third statement of it [D-76]. 33 of 35 headings carried one and all 33 are gone; §16 is unchanged. **What replaces it is a carried obligation** against phase 3's sign-off: restate every §16 size from measurement once 3.6 to 3.10 have loaded, which is the first point at which any of them can be | Closed. The restatement is a carried obligation in `BUILD_PLAN.md` |

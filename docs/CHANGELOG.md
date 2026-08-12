@@ -1077,3 +1077,79 @@ declared after all, so the marker cannot outlive the condition it records.
 **Two paragraphs are added under the matrix**, stating that the list is now held against
 `SCHEMA.md` in both directions and what the marker means. Neither replaces existing
 prose; the D-76 paragraph above them is unchanged.
+
+---
+
+## 2026-08-12, size leaves `SCHEMA.md`
+
+`SCHEMA.md` is a spec under D-73, so these are clean edits and the prior wording is
+here. Human-directed.
+
+**Size after backfill is §16's column.** A size word in a `SCHEMA.md` heading was a
+third statement of a fact already held in §16 and derivable from the grain the same
+heading states, which is the duplication D-76 exists to remove. The trigger was one
+disagreement, `sentiment_derived_daily` reading "Small" against §16's 200 MB, and the
+answer is the rule rather than the correction: **33 of the 35 table headings carried
+one and all 33 are gone.** `security` and `local_model_config` never had one.
+
+**§16 is unchanged by this.** Its figures stay the estimates they are, including the
+200 MB that started this.
+
+**The preamble sentence goes with them.** Removed:
+
+> **Sizes are estimates after a five-year backfill, not measurements.**
+
+It qualified figures this document no longer states, and a rule about a thing that is
+not there is the same drift in miniature. What replaces it says where size lives and
+that the §16 test holds the store list and not the size column.
+
+**The 33 removals, verbatim.** Each was the trailing sentence of a heading's opening
+paragraph, after the writer declaration. Thirty were at the end of a line; three had
+wrapped onto a line of their own and that line is gone, `insider_transaction`,
+`institutional_holding` and `dossier`.
+
+| Table | Removed |
+|---|---|
+| `security_daily` | ~100 MB. |
+| `price_daily` | ~400 MB. |
+| `fundamental_snapshot` | ~60 MB. |
+| `fundamental_fetch_attempt` | Tiny. |
+| `flow_fetch_attempt` | Tiny. |
+| `sentiment_daily` | ~380 MB. |
+| `sentiment_derived_daily` | Small. |
+| `headline` | Small. |
+| `insider_transaction` | Small. |
+| `institutional_holding` | Small. |
+| `flow_daily` | ~52 MB. |
+| `events` | Small. |
+| `indicator_daily` | ~1.2 GB, the second largest table. |
+| `valuation_daily` | ~540 MB. |
+| `market_context_daily` | Small. |
+| `gate_result` | ~120 MB. |
+| `screen_score_daily` | ~1.4 GB, the largest table. |
+| `screen_history` | Small. |
+| `candidate_set` | ~9 MB. |
+| `attribution` | ~9 MB. |
+| `news_digest` | Grows ~10 MB/yr. |
+| `dossier` | Grows ~40 MB/yr. |
+| `proposal` | Grows ~30 MB/yr. |
+| `portfolio` | Tiny. |
+| `portfolio_selection` | Small. |
+| `order / fill / position` | Small. |
+| `trade_outcome` | Small. |
+| `config_rows` | Tiny. |
+| `researcher_memory` | Small. |
+| `calibration` | Small. |
+| `run_log` | Small. |
+| `cost_ledger` | Small. |
+| `alert` | Small. |
+
+**Two of them said something §16 does not.** `indicator_daily` was "the second largest
+table" and `screen_score_daily` "the largest", which is a ranking rather than a size and
+is not carried across: §16 states both figures and the ordering is read off them. D-84's
+note under the matrix already makes the point about `screen_score_daily` at length.
+
+**Nothing else in the paragraphs moved.** The grain, the writer declaration and every
+decision citation are untouched, which is what `SchemaDocument.WritersByTable` and
+`SchemaDocument.Tables` parse; both still read 37 tables and the five conformance tests
+over this document pass unchanged.

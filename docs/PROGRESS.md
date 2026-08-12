@@ -3790,6 +3790,12 @@ It is stored rather than derived because the provider's figure may rest on an es
 other than the one it reports. If the two always agree, the column is a third statement
 of a derivable fact and can go. That is a query against the store once loaded [D-96].
 
+**The Reads conformance test fired on the first run, which is it working.** §3's C09
+cell named `earnings_history` and `ValuationEngine.ReadSet` did not, so the catalogue
+and the code disagreed for the length of one commit and CI said so. The declaration is
+added here; the read itself arrives with the column. That is the check the Writes column
+still lacks, doing on the Reads side what three drifts went unnoticed for on the other.
+
 **What is not in this commit.** 3.7's stage code: the widened pool, the dropped
 `filter=Financials`, the lifted rotation cap, C03's `events` read, C09 populating
 `last_two_earnings_surprises`, and open item 18's `when` clause. The decisions and the

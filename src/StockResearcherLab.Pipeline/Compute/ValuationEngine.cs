@@ -87,7 +87,13 @@ public sealed class ValuationEngine : IStage
 
     public string Name => "ValuationEngine";
 
-    public IReadOnlyList<string> ReadSet { get; } = ["price_daily", "fundamental_snapshot"];
+    // `earnings_history` is declared here from the moment §3's Reads cell names it
+    // [D-96]. The read itself arrives with `last_two_earnings_surprises`, which this
+    // stage has written null since 0001; declaring it early is what keeps the
+    // catalogue and the code agreeing, and `ReadDeclarationConformanceTests` is what
+    // caught them disagreeing for the length of one commit.
+    public IReadOnlyList<string> ReadSet { get; } =
+        ["price_daily", "fundamental_snapshot", "earnings_history"];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
         [new TableWrite("valuation_daily", WriteOperation.Insert, Columns)];

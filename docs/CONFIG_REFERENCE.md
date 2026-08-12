@@ -130,10 +130,10 @@ and both are given so the next reader can find it either way.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `backfill.window_start` | "2021-01-04" | D-94, 3.3 | NOT BOUND | 3.4 |
+| `backfill.window_start` | "2021-01-04" | D-94, 3.3 | NOT BOUND | 3.16 |
 | `backfill.ticker_concurrency` | 8 | 3.3 | NOT BOUND | 3.6 |
-| `backfill.daily_unit_allowance` | 100000 | 3.1, 3.3 | NOT BOUND | 3.4 |
-| `backfill.unit_reserve` | 50000 | 3.3 | NOT BOUND | 3.4 |
+| `backfill.daily_unit_allowance` | 100000 | 3.1, 3.3 | NOT BOUND | 3.6 |
+| `backfill.unit_reserve` | 50000 | 3.3 | NOT BOUND | 3.6 |
 | `backfill.weight_eod` | 1 | 3.1, 3.3 | NOT BOUND | 3.6 |
 | `backfill.weight_fundamentals` | 10 | 3.1, 3.3 | NOT BOUND | 3.7 |
 | `backfill.weight_sentiments_per_ticker` | 5 | 3.1, 3.3 | NOT BOUND | 3.8 |
@@ -141,10 +141,19 @@ and both are given so the next reader can find it either way.
 | `backfill.weight_splits` | 1 | 3.1, 3.3 | NOT BOUND | 3.10 |
 | `backfill.weight_dividends` | 1 | 3.1, 3.3 | NOT BOUND | 3.10 |
 
-**Every Consumer here reads `NOT BOUND` and that is the true state at 3.3.** The keys
-are seeded before the gate that reads them exists, so the column names the checkpoint
-that will fill it rather than a component nothing has confirmed. An unverified entry
-is worse than an absent one, and a guessed one is worse than both.
+**Every Consumer here reads `NOT BOUND` and that is the true state after 3.4.** The
+keys are seeded before anything resolves them, and 3.4 builds the gate they will be
+passed to rather than the sweep that resolves them: `AllowanceRule.Decide` takes the
+reserve, the weight and the configured allowance as arguments, and each sweep resolves
+its own three for the date it is working on. So the column names the checkpoint that
+will fill it rather than a component nothing has confirmed. An unverified entry is
+worse than an absent one, and a guessed one is worse than both.
+
+**The reserve is a parameter rather than resolved inside the gate, deliberately.**
+Resolving it once inside `BackfillContext` would bind the key in one place, and it
+would also mean resolving it as of something other than the date being computed, which
+is what INVARIANT 13 rules out. The gate mechanism is stated once; the resolve is one
+line per sweep and is not the duplication D-76, D-77 and D-83 removed.
 
 **`backfill.window_start` is the only date-valued key in the store and the only one
 that is not a number** [D-94]. `config_rows.value` is `jsonb`, so it is stored quoted

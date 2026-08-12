@@ -3344,6 +3344,76 @@ until 3.7 moves the sector call to C03 and takes it to about one, so a sweep sha
 Sunday with a C01 rebuild before 3.7 has less margin than the number says. Padding the
 reserve to cover it would shrink every ordinary day's sweep for a case that stops
 existing four checkpoints later.
+
+### 3.4, the range contract and the allowance gate
+
+**Nothing loads yet and no component was added** [D-93]. `IBackfillStage` is a second
+entry point on `IStage`, so `WriteSet`, `ReadSet`, the registry and §3 are unchanged
+and both conformance tests pass untouched. `BackfillRun` is the range counterpart of
+`StageRunner` and resolves through the registry exactly as it does: there is no
+instance overload that would let an unregistered stage run.
+
+**Config per date is structural rather than a convention.** `BackfillContext` carries
+no date and no config version at all, so the only route to a `StageContext` inside a
+range is `ForDateAsync`, which resolves that date's version. A context holding one
+version for a whole range would have made the wrong thing the easy thing, and the
+wrong thing here is exactly what the phase's fourth done-when line asserts against.
+
+**`run_log.run_date` takes the last date the execution finished rather than the range
+end**, so the row answers "where did it get to" directly, which is what resumption
+reads. For a completed range the two are the same. The range itself goes in
+`run_log.error`, the only free-text column that table has, and every range execution's
+line opens with `range <from>..<to>` so one pattern finds them all.
+
+#### The gate has three verdicts, not two, and 3.1 is why
+
+`Fits`, `Exhausted` and **`Stale`**. The third exists because the allowance counter
+reset inside 3.1's sweep: a read at 02:52 UTC on 2026-08-12 returned 90,518 used
+stamped 2026-08-11, and the next billable call came back against a counter reading 1.
+A gate that subtracts across that boundary gets a negative number, which is what the
+sweep's own bracket printed.
+
+**A stale reading is not read as a reset and not read as a spend.** Either assumption
+is wrong half the time and one of them is dangerous: assuming the allowance is whole
+spends into a wall, and an allowance error in flight is fatal rather than a clean halt.
+So it halts, says exactly which day the reading is stamped with, and records that the
+counter rolls on the first billable call of a new day. A nightly run clears it.
+
+**The comparison is against the UTC date and not `IClock.Today`.** `Today` is US
+Eastern, and at 02:52 UTC on 2026-08-12 New York was still on 2026-08-11 while the
+provider had already moved. An Eastern comparison would call a current reading stale
+every evening.
+
+**`Stale` and `Exhausted` are one absorbed observation apart**, which is the same
+structural distinction D-71 draws between a short page and a client that stopped
+asking. The action differs: an exhausted allowance waits for tomorrow, a stale reading
+clears the moment any billable call rolls the counter.
+
+#### `backfill.daily_unit_allowance` would have had no consumer, so it was given its job
+
+The gate reads `dailyRateLimit` from the live payload, so a configured allowance that
+decided anything would be a second source of truth and a stale one. It is passed in and
+**compared** instead: the reading governs, and a difference is named in the line the run
+log carries. That is the same rule the six weight keys follow, and it is what makes a
+provider re-pricing visible rather than a sweep that starves or spends into a wall
+while every number looks right.
+
+#### What the allowance gate is asserted on
+
+Seven cases through the rule and four through a stage. The reserve is held back rather
+than spent; a unit whose weight exactly equals what is left fits, which is where an
+off-by-one would live; a reading stamped either side of the provider date is stale; a
+sweep with 100 units above its reserve and 15 tickers at 10 each writes ten, halts on
+the eleventh and keeps the ten; the same sweep with room completes, so the halt is
+measuring the gate rather than a sweep that could never finish; and a `402` and a `429`
+reaching the paging client fail the stage while a server that ran out of pages is still
+a recorded shortfall.
+
+**The position recorded is where the next run resumes, not the last unit completed.**
+That was the wrong way round in the first draft of the test and the code was right: a
+sweep refused at its first ticker records that ticker, because "the last one that
+worked" would need the reader to know how the sweep orders its pool before it could
+take the next one.
 ---
 
 ## Open items carried forward

@@ -3247,6 +3247,57 @@ outcome].
    Whether C03's parse reopens for it, and in which phase, is authored. Nothing in
    phase 3 depends on the answer.
 
+### 3.2, migration `0007`
+
+**`security_daily`, and a date-leading index on five tables.** `security_daily` is
+`(ticker, date)` with `sector`, `size_bucket`, `market_cap` and `is_active` [D-92],
+plus `(date, ticker)` for the read that means "every member on that date". The five
+ticker-by-day tables `price_daily`, `indicator_daily`, `valuation_daily`, `flow_daily`
+and `sentiment_derived_daily` each gain `(date, ticker)`, having carried only
+`PRIMARY KEY (ticker, date)` since 0001 and 0004 while every per-date read constrains
+the column that index does not lead on.
+
+**Index rather than declarative range partitioning, and the reason is in the
+migration rather than assumed.** An index is reversible and costs nothing on an empty
+table; partitioning is a schema decision far cheaper before 1.2 GB than after.
+`SCREEN_LIFECYCLE.md` §9.3 sets the precedent of deciding it once with numbers in
+hand, and 3.15 is where the numbers arrive.
+
+**`ExpectedMonetary` moved 18 to 19, asserted rather than assumed.** `guards.ps1`
+reports 19 monetary numeric over 346 columns in 7 migration files, 0 problems, and
+`SchemaParityTests` asserts the same 19 against the live database. The two are read
+from the schema independently rather than from each other.
+
+**`is_active` is `NOT NULL` with no default**, where `security`'s column defaults to
+true. That default is what let C01 have no path that deactivates a name.
+
+#### The four columns 0007 leaves on `security`
+
+`sector`, `size_bucket`, `market_cap` and `is_active` are still physically there.
+Checkpoint 3.2 enumerates what the migration does and a drop is not in it, and the
+done-when takes `ExpectedMonetary` from 18 to 19, which holds only while
+`security.market_cap` is still counted. `SCHEMA.md` stops listing them under D-73's
+clean-edit rule, which is a documentation edit rather than a claim they are gone:
+that document states in its own opening that its column lists are the load-bearing
+ones rather than exhaustive.
+
+**After 3.11 nothing writes them and after 3.12 nothing reads them**, so what is left
+is four columns holding whatever the last live C01 run put there. The hazard is the
+ordinary one: a later reader takes `security.market_cap` for a current value when it
+is a frozen 2026 one. Dropping them is one `ALTER TABLE` and it moves two asserted
+counts back to 18, which is a decision rather than a tidy-up, so it is recorded here
+[open item 14].
+
+#### `is_active` carries no information under the writer as it stands
+
+D-92 names it as a `security_daily` column and it is built as named. C01 writes
+members only and stamps `true` on every row [`UniverseBuilder.ExecuteAsync`], so the
+column is constant across the table and membership on a date is the presence of the
+row rather than the value of the flag. That is what D-92 means by membership being
+reconstructable by construction, and it also means the column can be read from only
+if some writer ever puts `false` in it. Noted rather than changed, the column being
+authored [`CLAUDE.md` §13, §3].
+
 ---
 
 ## Open items carried forward
@@ -3269,3 +3320,4 @@ them are in `docs/archive/process-2026-08.md`.
 | 11 | **`BUILD_PLAN.md` is mid-convention and the strike sweep is outstanding.** D-73 as amended classifies by role rather than by name, and the file is a spec under that test: its checkpoint tables, done-when lines and carried obligations are all read to know what is currently owed. It now carries both conventions. Phase 3's fourth done-when line is a clean edit with its prior wording in `CHANGELOG.md`; **eight passages are struck in place**, counted rather than estimated. Six are supersessions of live text: phase P's secrets clause [D-55], checkpoint 0.8's corpus version bump [D-67], checkpoint 1.3's freshness thresholds [D-65] and its settledness mechanism [A10], checkpoint 1.13's config key count [A5 then A10 then A14], and phase 1's done-when reading `filing date` for the effective one [D-62]. Two are closure markers on carried obligations rather than supersessions, `TableWrite.Columns` [A27] and §3's C03 Writes cell [D-91], and whether a closed obligation keeping its original text is the same case is part of what the sweep decides. D-73's condition is what makes this a sweep rather than an edit taken alongside the amendment: no strike is removed until its decision names what it removed, and where a decision does not, `CHANGELOG.md` records the text before the deletion. **Three of the eight cite a correction pass rather than a decision**, being A5, A10, A14 and A27, so those take the `CHANGELOG.md` route by construction. That is a read of several decisions against eight passages, not a formatting pass. **The file is readable in the meantime and the risk is the ordinary one D-73 names**, that a session skimming takes struck text for live | A sweep, or the next phase whose planning reads the struck passages. Not a build session's to fold into unrelated work |
 | 12 | **Insider flow is not backfillable for delisted names**, measured at 3.1. `sec-filings/{t}` and `sec-filings/{t}/form4` return 404 `Symbol not found` for three delisted names, two of them delisted inside the five-year window, against the same ticker strings `eod/{t}` and `splits/{t}` answered for in the same run. Prices, fundamentals, sentiment, splits and dividends all reach delisted names; flow does not. So the backfilled `insider_transaction` history covers only names that still exist today, which is the survivorship bias `VALIDITY.md` §6 exists to mitigate reappearing in the one screen whose inputs cannot route around it. What follows from it is authored: whether S4's backfilled history is used knowing the limitation, whether the limitation is recorded against every read before the live window, or something else. **No checkpoint is blocked**, 3.9's sweep being over the live universe under every reading | An authored decision, before phase 4 tunes anything on S4's backfilled history |
 | 13 | **`last_two_earnings_surprises` has a free source in an endpoint C03 already calls**, measured at 3.1. `Earnings::History` sits in the `fundamentals/{t}` payload, 50 periods for CCS.US carrying `epsActual`, `epsEstimate`, `epsDifference` and `surprisePercent`, so the field bolded in §07 as one of five that can flip a verdict needs no new endpoint and no additional units. It needs a change to C03's parse and a column to land in, which is phase 1's ingest rather than phase 3's compute, and the checkpoint said before it ran that the outcome could not come back as work for this phase [`CLAUDE.md` §3]. It does not close the `1 → 5` earnings obligation: `reportDate` is when a period was reported, not when that schedule became public | An authored decision on when C03's parse reopens |
+| 14 | **0007 leaves `sector`, `size_bucket`, `market_cap` and `is_active` on `security`**, where nothing writes them after 3.11 and nothing reads them after 3.12. They hold whatever the last live C01 run put there, so a later reader can take `security.market_cap` for a current value when it is a frozen one. `SCHEMA.md` stops listing them under D-73, which is a documentation edit and not a claim they are gone. Dropping them is one `ALTER TABLE` and it moves `ExpectedMonetary` and `SchemaParityTests`'s count back from 19 to 18, so it is a decision rather than a tidy-up | The next migration after 3.12, or whenever the counts move for another reason |

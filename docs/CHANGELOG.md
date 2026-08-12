@@ -963,3 +963,36 @@ rewritten, and the correction lives here where a reader reaching the end finds i
 human-edited only [`CLAUDE.md` §13], so it is reported rather than changed. Its
 "Supersede visibly, never silently" paragraph names the same four and the same two as
 the definition, and it needs the same amendment for the corpus to state one rule.
+
+---
+
+## 2026-08-11, checkpoint 3.2, `security_daily`
+
+`SCHEMA.md` is a spec under D-73, so `security`'s section takes a clean edit and the
+prior wording is recorded here. D-92 moves four columns to a new per-date table.
+
+**`SCHEMA.md` §Reference, `security`'s column list and the sentence under it.**
+Removed:
+
+> `ticker`, `name`, `sector`, `size_bucket`, `market_cap`, `first_seen`, `last_seen`,
+> `delisted_date`, `is_active`.
+>
+> Size buckets: large-and-above at $10B or more, mid $2B to $10B, small $300M to $2B.
+
+The list is replaced by `ticker`, `name`, `first_seen`, `last_seen`, `delisted_date`,
+which is identity and lifespan. The size-bucket sentence is not deleted but moved: it
+belongs to `size_bucket` and `size_bucket` is now a `security_daily` column, so it is
+restated verbatim in that section. The `delisted_date` sentence and the whole clean-gap
+paragraph are unchanged and stay where they were.
+
+**Nothing else was removed.** `security_daily`'s section is new, so it has no prior
+wording to quote.
+
+**The four columns are still physically on `security` and 0007 drops nothing.**
+Checkpoint 3.2 enumerates what the migration does and a drop is not in it, and its
+done-when takes `ExpectedMonetary` from 18 to 19, which holds only while
+`security.market_cap` is still counted. A clean edit to this document is not a claim
+that a column is gone: `SCHEMA.md` says in its own opening that its column lists are
+the load-bearing ones rather than exhaustive. What is left is four columns nothing
+writes after 3.11 and nothing reads after 3.12, recorded as a finding in `PROGRESS.md`
+rather than dropped here, because dropping them moves two asserted counts.

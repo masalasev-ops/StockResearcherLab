@@ -117,7 +117,9 @@ $checks = @(
         # moves with it, deliberately.
         # Moved 17 to 18 at 2.2: fundamental_snapshot.capital_expenditures, which
         # matches through "cap" and is money [D-79].
-        ExpectedMonetary = 18
+        # Moved 18 to 19 at 3.2: security_daily.market_cap [D-92]. security.market_cap
+        # is still here and still counted; 0007 adds a table and drops nothing.
+        ExpectedMonetary = 19
 
         Why        = 'The previous mechanism was a grep for float and double with a list of files to skip. The list had reached two before phase 2, with a whole compute layer of real columns still to come, and a list like that gets extended until the guard is suppressed rather than satisfied. This asserts instead: every monetary-named column is numeric unless SCHEMA.md declares it as not money, and every real column is declared there. The set is what SCHEMA.md declares rather than a number stated here, and this check reads that declaration in both directions [D-83]. Adding a real column therefore means declaring it in the document a reader would look at'
     },

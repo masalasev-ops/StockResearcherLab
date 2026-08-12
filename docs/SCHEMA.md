@@ -33,10 +33,13 @@ constraints are phase 0 work and are not fabricated here.
 ### security
 Grain: one row per ticker. **Writer: UniverseBuilder.**
 
-`ticker`, `name`, `sector`, `size_bucket`, `market_cap`, `first_seen`, `last_seen`,
-`delisted_date`, `is_active`.
+`ticker`, `name`, `first_seen`, `last_seen`, `delisted_date` [D-92].
 
-Size buckets: large-and-above at $10B or more, mid $2B to $10B, small $300M to $2B.
+Identity and lifespan, and nothing that varies by date. Membership, sector, size
+bucket and market capitalisation are per date and are in `security_daily`. A reader
+meaning "this ticker" reads here; a reader meaning "the universe on a date" reads
+there.
+
 `delisted_date` is populated rather than the row deleted, because the historical
 universe must be reconstructable per date including names that no longer exist
 [D-48].
@@ -52,6 +55,36 @@ reading one value would admit names a live system on that date would have exclud
 and backfilled screen scores would sit on a different population than live ones. Made
 a computation, it is point-in-time correct by construction and needs no column, no
 second writer on this table, and nothing to keep in step [INVARIANT 13].
+
+### security_daily
+Grain: ticker by date. **Writer: UniverseBuilder.** ~100 MB.
+
+`ticker`, `date`, `sector`, `size_bucket`, `market_cap`, `is_active`.
+
+Size buckets: large-and-above at $10B or more, mid $2B to $10B, small $300M to $2B.
+
+**This table exists because C11's cell is `(size_bucket, sector)` on the date being
+ranked** [D-10, D-92]. `security` carries one row per ticker, so a backfilled 2021
+date ranked against it would put every name in its 2026 cell, and a percentile
+computed over a slightly wrong cell is not inspectable afterwards: nothing
+downstream can see the cell it was computed over.
+
+**Written on C01's own weekly cadence, and read as the most recent row at or before
+the date.** That is what makes a backfilled cell sit on the identical population
+rule as a live one rather than on a rule the live system does not share [D-92,
+D-58].
+
+**Sector is the one column that is not point-in-time.** This provider carries no
+sector history, so a ticker's sector is fetched once and carried across the window
+and a reclassification inside the window is invisible. It is a bounded distortion of
+cell membership, stated rather than proxied [D-92].
+
+**`is_active` is `NOT NULL` and carries no default**, where `security`'s column
+defaults to true and that default is what let C01 have no path that deactivates a
+name [`PROGRESS.md`, 2026-08-09]. Membership on a date is the presence of the row,
+so every row C01 writes reads true.
+
+**`market_cap` is `numeric`** [INVARIANT 16].
 
 ---
 

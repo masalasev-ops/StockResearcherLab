@@ -3050,6 +3050,50 @@ It is still not built here, for the reason it was not built the first time: a
 conformance test is a phase's work rather than a finding's. What this block can do is
 stop calling it a risk.
 
+#### Third instance, 2026-08-12, and it is three of three
+
+**C01's Writes cell read `security` alone** while D-92 and migration 0007 give
+UniverseBuilder `security_daily`, which `SCHEMA.md` has declared since 3.2. Corrected
+under D-73 with the prior wording in `CHANGELOG.md`.
+
+So the rate is not two of two, it is **three of three**: every component that has ever
+gained a second write has drifted at that moment, and all three drifted before either
+predicted case was built. C03 on 2026-08-11, C05 and C01 on 2026-08-12.
+
+**C01's is the one that had been wrong longest.** C03's and C05's cells were each stale
+for a day. C01's was stale from 3.2, and `SCHEMA.md` naming UniverseBuilder as
+`security_daily`'s writer since then is what makes it a drift rather than a gap: the two
+documents disagreed and only one of them is read by a test.
+
+**The §16 store list drifted the same way and further**, which is the finding below.
+
+#### §16's store list had four stores missing and nothing read it
+
+`sentiment_derived_daily` from 0004, `fundamental_fetch_attempt` from 0006,
+`security_daily` from 0007 and `flow_fetch_attempt` from 0008 were all absent from the
+store matrix while every one of them was in a migration and in `SCHEMA.md`. The oldest
+had been missing since phase 2.
+
+**D-76 is why.** It removed the writer and reader columns from §16 on the grounds that
+the conformance test holds §3 and `SCHEMA.md` together, which was right about those two
+columns and left the store list itself checked by nothing. A list nothing reads is the
+same shape of defect the Writes column has, one section over.
+
+**One store goes the other way.** `screen_evaluation` is named in §16 and not declared
+in `SCHEMA.md`, its migration being phase 4's. It cannot be added to `SCHEMA.md`, since
+`SchemaParityTests` asserts every declared table exists in the database and it does not
+exist yet. It is marked `NOT YET IN SCHEMA` in §16 instead, and the test reads the
+marker rather than carrying a list, which is where D-83 and D-76 put a rule like this.
+The marker is not a suppression: the test fails if a store carrying it is declared after
+all, so it has to come off at the moment the store lands.
+
+**One figure diverges between the two documents and is recorded rather than resolved.**
+`SCHEMA.md` calls `sentiment_derived_daily` "Small" and §16 now carries 200 MB for it.
+"Small" is a word §16 uses for low-cardinality stores; this one is ticker by day, about
+3.6 million rows over the window, and sits between `flow_daily` at 52 MB and
+`valuation_daily` at 540 MB on column count. Neither figure is measured and this pass
+did not change the one it did not have to. Open item 17.
+
 ---
 
 ## Phase 3, backfill
@@ -3601,3 +3645,4 @@ them are in `docs/archive/process-2026-08.md`.
 | 14 | **0007 leaves `sector`, `size_bucket`, `market_cap` and `is_active` on `security`**, where nothing writes them after 3.11 and nothing reads them after 3.12. They hold whatever the last live C01 run put there, so a later reader can take `security.market_cap` for a current value when it is a frozen one. `SCHEMA.md` stops listing them under D-73, which is a documentation edit and not a claim they are gone. Dropping them is one `ALTER TABLE` and it moves `ExpectedMonetary` and `SchemaParityTests`'s count back from 19 to 18, so it is a decision rather than a tidy-up | The next migration after 3.12, or whenever the counts move for another reason |
 | 15 | ~~**`ARCHITECTURE.html` §3's C05 Writes cell names two tables where the component now writes three.** D-95 and migration 0008 give FlowIngestor `flow_fetch_attempt`, `SCHEMA.md` declares it and the registry test passes, so the document that is checked is correct. The catalogue is not checked: the Writes column has no conformance test, write ownership being asserted against `SCHEMA.md`. This is the second component to gain a second write and the second to drift immediately, which is what that finding predicted. The file is human-edited only [`CLAUDE.md` §13]~~ **The cell is corrected**, human-directed on 2026-08-12, as a clean edit under D-73 with the prior wording in `CHANGELOG.md` and a diff touching that cell alone. **What stays open is the conformance test**, and the second instance is what changes its standing: two of two components that have ever gained a second write drifted at that moment, both before either predicted case was built | The Writes-column conformance test, recorded in the fundamentals-rotation finding as overdue rather than as a risk |
 | 16 | **C04's and C06's pools are survivorship-filtered by the same argument that amended C03's.** 3.7's pool became the live candidate pool plus in-window delisted names on 2026-08-12, because a historical universe member with no fundamental rows computes zero clean gaps and is absent from `security_daily` for every past date. 3.8's sentiment pass and 3.10's splits and dividends both still take their pool from the live universe, so a name that amendment admits to a 2021 `security_daily` would carry prices and fundamentals for that date and no sentiment and no distributions. The cost differs: sentiment is 5 units a ticker and splits and dividends are 1 each, so the same widening is about 5D and 2D against fundamentals' 10D. Whether either widens is authored, and neither blocks 3.7 | Before 3.8 and 3.10 are built |
+| 17 | **`SCHEMA.md` and §16 give `sentiment_derived_daily` different sizes.** The first calls it "Small", which is the word it uses for `flow_fetch_attempt` and `fundamental_fetch_attempt`; §16 carries 200 MB, derived from the grain as every figure in that column is. The store is ticker by day with six real columns, about 3.6 million rows over the window, so it sits between `flow_daily` at 52 MB and `valuation_daily` at 540 MB on column count and "Small" understates it in §16's own terms. Neither figure is measured. It is one word against one estimate and nothing reads either | Phase 3 sign-off, when the backfill makes both measurable, or whoever next edits either line |

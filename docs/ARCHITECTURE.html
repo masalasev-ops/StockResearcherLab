@@ -184,7 +184,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 <table>
 <thead><tr><th class="mono">ID</th><th>Component</th><th>Runs</th><th>Reads</th><th>Writes</th></tr></thead>
 <tbody>
-<tr><td class="mono"><b>C01</b></td><td>UniverseBuilder <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Applies section 2, assigns size buckets. The clean filing-gap exclusion is applied here with the other absolute criteria, counting the qualifying rows in <code>fundamental_snapshot</code> as of the date being built rather than reading a stored total [D-62, M.1]</span></td><td>Weekly, Sun</td><td>Symbol list, <code>price_daily</code>, <code>fundamental_snapshot</code></td><td class="mono">security</td></tr>
+<tr><td class="mono"><b>C01</b></td><td>UniverseBuilder <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Applies section 2, assigns size buckets. The clean filing-gap exclusion is applied here with the other absolute criteria, counting the qualifying rows in <code>fundamental_snapshot</code> as of the date being built rather than reading a stored total [D-62, M.1]</span></td><td>Weekly, Sun</td><td>Symbol list, <code>price_daily</code>, <code>fundamental_snapshot</code></td><td class="mono">security, security_daily <span class="rmv">D-92</span></td></tr>
 <tr><td class="mono"><b>C02</b></td><td>PriceIngestor<br><span class="muted" style="font-size:12.5px">One bulk call, entire US market</span></td><td>Daily 17:30</td><td>Bulk EOD endpoint</td><td class="mono">price_daily</td></tr>
 <tr><td class="mono"><b>C03</b></td><td>FundamentalsIngestor <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Rolling rotation, earnings jump the queue. Keyed on <code>filing_date_effective</code>, never period end and never the raw filing date <span class="rmv">D-62</span></span></td><td>Daily 17:45</td><td>Fundamentals endpoint, <code>events</code>, <code>price_daily</code> for the candidate pool, <code>security</code> for rotation order <span class="rmv">D-74</span></td><td class="mono">fundamental_snapshot, fundamental_fetch_attempt <span class="rmv">D-91</span></td></tr>
 <tr><td class="mono"><b>C04</b></td><td>SentimentIngestor <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Whole universe, no pre-selection. Feeds the sentiment screen's ranking</span></td><td>Daily 18:00</td><td>Sentiment endpoint, <code>security</code> for the universe it iterates <span class="rmv">D-74</span></td><td class="mono">sentiment_daily</td></tr>
@@ -819,21 +819,25 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 <thead><tr><th class="mono">Store</th><th>Grain</th><th class="mono">After backfill</th></tr></thead>
 <tbody>
 <tr><td class="mono"><b>security</b></td><td>one per ticker</td><td class="mono">2 MB</td></tr>
+<tr><td class="mono"><b>security_daily</b> <span class="tag new">NEW</span></td><td>ticker × date <span class="rmv">D-92</span></td><td class="mono">100 MB</td></tr>
 <tr><td class="mono"><b>price_daily</b></td><td>ticker × day</td><td class="mono">400 MB</td></tr>
 <tr><td class="mono"><b>fundamental_snapshot</b></td><td>ticker × quarter</td><td class="mono">60 MB</td></tr>
+<tr><td class="mono"><b>fundamental_fetch_attempt</b> <span class="tag new">NEW</span></td><td>one per ticker <span class="rmv">D-91</span></td><td class="mono">tiny</td></tr>
 <tr><td class="mono"><b>indicator_daily</b></td><td>ticker × day</td><td class="mono">1.2 GB</td></tr>
 <tr><td class="mono"><b>valuation_daily</b></td><td>ticker × day</td><td class="mono">540 MB</td></tr>
 <tr><td class="mono"><b>sentiment_daily</b></td><td>ticker × day</td><td class="mono">380 MB</td></tr>
+<tr><td class="mono"><b>sentiment_derived_daily</b> <span class="tag new">NEW</span></td><td>ticker × day <span class="rmv">D-78</span></td><td class="mono">200 MB</td></tr>
 <tr><td class="mono"><b>headline</b> <span class="tag new">NEW</span></td><td>candidate × day</td><td class="mono">small</td></tr>
 <tr><td class="mono"><b>insider_transaction</b> <span class="tag new">NEW</span></td><td>ticker × filing × transaction</td><td class="mono">small</td></tr>
 <tr><td class="mono"><b>institutional_holding</b> <span class="tag new">NEW</span></td><td>ticker × holder × report date</td><td class="mono">small</td></tr>
+<tr><td class="mono"><b>flow_fetch_attempt</b> <span class="tag new">NEW</span></td><td>one per ticker <span class="rmv">D-95</span></td><td class="mono">tiny</td></tr>
 <tr><td class="mono"><b>flow_daily</b></td><td>ticker × day <span class="rmv">D-61</span></td><td class="mono">52 MB</td></tr>
 <tr><td class="mono"><b>events</b></td><td>ticker × event</td><td class="mono">small</td></tr>
 <tr><td class="mono"><b>market_context_daily</b></td><td>one per day</td><td class="mono">small</td></tr>
 <tr><td class="mono"><b>gate_result</b></td><td>ticker × day</td><td class="mono">120 MB</td></tr>
 <tr><td class="mono"><b>screen_score_daily</b></td><td>ticker × registered screen × day</td><td class="mono"><b>~280 MB per registered screen</b> <span class="rmv">D-84</span></td></tr>
 <tr><td class="mono"><b>screen_history</b></td><td>screen × day</td><td class="mono">small</td></tr>
-<tr><td class="mono"><b>screen_evaluation</b> <span class="tag new">NEW</span></td><td>screen × evaluation date</td><td class="mono">tiny</td></tr>
+<tr><td class="mono"><b>screen_evaluation</b> <span class="tag new">NEW</span> <span class="tag">NOT YET IN SCHEMA</span></td><td>screen × evaluation date</td><td class="mono">tiny</td></tr>
 <tr><td class="mono"><b>config_rows</b></td><td>key by version</td><td class="mono">tiny</td></tr>
 <tr><td class="mono"><b>news_digest</b> <span class="tag new">NEW</span></td><td>ticker × day</td><td class="mono">grows 10 MB/yr</td></tr>
 <tr><td class="mono"><b>calibration</b></td><td>model × screen × report</td><td class="mono">small</td></tr>
@@ -854,6 +858,10 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 </table>
 
 <p class="muted" style="font-size:13.5px">This table states grain and size and nothing about access. Who writes a store is in section 3's Writes column and in <code>SCHEMA.md</code>'s writer declaration for that table, which a test holds against each other; who reads it is in section 3's Reads column. Stating either a third time here is what drifted <span class="rmv">D-76</span></p>
+
+<p class="muted" style="font-size:13.5px"><b>The store list is held against <code>SCHEMA.md</code> in both directions by a test.</b> D-76 removed the writer and reader columns from this table on the grounds that the conformance test holds section 3 and <code>SCHEMA.md</code> together, and left the store list itself checked by nothing. Four stores drifted out of it before anyone noticed: <code>sentiment_derived_daily</code>, <code>fundamental_fetch_attempt</code>, <code>security_daily</code> and <code>flow_fetch_attempt</code>, every one of them already in a migration and in <code>SCHEMA.md</code>.</p>
+
+<p class="muted" style="font-size:13.5px"><b>A store marked <span class="tag">NOT YET IN SCHEMA</span> is designed here and not declared there yet</b>, and the test reads that marker rather than carrying a list of its own [D-83, D-76]. The marker cannot be used to silence a real drift: the test also fails when a store carrying it <i>is</i> declared in <code>SCHEMA.md</code>, so it has to be removed at the moment the store lands rather than left behind. One row carries it today, <code>screen_evaluation</code>, whose migration is phase 4's.</p>
 
 <div class="note"><b>The screen score table is the sleeper, and it is larger than the price data it derives from.</b> Every ticker is scored by every registered screen every day, because the floor is the 98th percentile of that screen's own trailing distribution and you cannot know the distribution without scoring everyone <span class="rmv">D-84</span>. That is one row per ticker per day per registered screen rather than one, and a shadow screen costs the same as a live one. Persisting only the names that clear some lower threshold would cut it to a few hundred megabytes, but keeping everything is the right call, because the point of the project is being able to ask questions of history later and a gigabyte is a poor reason to close off questions you have not thought of yet. Storing indicator columns as 32-bit rather than 64-bit floats halves the largest table and costs nothing, since no technical indicator needs fifteen significant figures.</div>
 </section>

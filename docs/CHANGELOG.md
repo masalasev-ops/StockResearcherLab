@@ -1025,3 +1025,55 @@ column has no conformance test, where the Reads column gained one after four dev
 went unnoticed. That finding predicted the next instances would be C14 in phase 4 and
 C22 in phase 8; it has been confirmed twice before either, which moves the test from
 worth building to overdue [`PROGRESS.md`, the fundamentals rotation].
+
+---
+
+## 2026-08-12, §3's C01 Writes cell and §16's store list
+
+`ARCHITECTURE.html` is a spec under D-73, so the removals below are clean edits and the
+prior wording is here. Human-directed. Every store named is already in a migration and
+in `SCHEMA.md`; the architecture was behind them.
+
+**§3's catalogue, the C01 Writes cell.** D-92 and migration 0007 give UniverseBuilder a
+second write and the cell named one. Removed:
+
+> security
+
+It now reads `security, security_daily` with D-92 at the point of change. **This is the
+third component to drift at the moment it gained a second write**, after C03 under D-91
+and C05 under D-95, and it is recorded in the existing Writes-conformance finding rather
+than as a new one.
+
+**§16's store matrix gains four rows, and they supersede nothing.** A purely new row has
+no prior wording to quote, so what is recorded here is that they are additions and which
+they are:
+
+- `security_daily`, ticker × date, 100 MB [D-92, migration 0007]
+- `fundamental_fetch_attempt`, one per ticker, tiny [D-91, migration 0006]
+- `sentiment_derived_daily`, ticker × day, 200 MB [D-78, migration 0004]
+- `flow_fetch_attempt`, one per ticker, tiny [D-95, migration 0008]
+
+**The sizes are derived from the grain and are estimates**, as every figure in that
+column is. The two attempt records are one row per ticker and are tiny by construction.
+`security_daily` is ticker by weekly evaluation date, roughly 741,000 rows over the
+window, and 100 MB is the figure `SCHEMA.md` already carries for it.
+`sentiment_derived_daily` is ticker by day with six real columns, so it sits between
+`flow_daily` at 52 MB and `valuation_daily` at 540 MB on column count and lands near
+200 MB. `SCHEMA.md` calls that store "Small", which is a word §16 uses for
+low-cardinality stores and not for ticker-by-day ones; the divergence is recorded in
+`PROGRESS.md` rather than resolved by changing a figure neither document measured.
+
+**§16's `screen_evaluation` row gains a marker rather than losing the row.** It is the
+one store §16 names that `SCHEMA.md` does not declare, its migration being phase 4's.
+Removed from the Store cell:
+
+> <b>screen_evaluation</b> <span class="tag new">NEW</span>
+
+It now carries `NOT YET IN SCHEMA` beside the existing tag. The new test reads that
+marker rather than holding an exclusion list of its own, which is where D-83 and D-76
+put a rule like this, and it fails if a store carrying the marker turns out to be
+declared after all, so the marker cannot outlive the condition it records.
+
+**Two paragraphs are added under the matrix**, stating that the list is now held against
+`SCHEMA.md` in both directions and what the marker means. Neither replaces existing
+prose; the D-76 paragraph above them is unchanged.

@@ -3817,6 +3817,50 @@ carries no financials for with a bare JSON string, and `TryGetProperty` throws o
 non-object rather than returning false, so the unfiltered read needed a `ValueKind`
 guard the filtered one never did.
 
+#### C05 buys per ticker what C03 now receives for nothing
+
+Asked because the sector call this checkpoint removes had exactly this shape, and
+answered from payloads already fetched rather than by spending anything.
+
+**C05's holders read is the same endpoint.** `FlowIngestor.LoadHoldersAsync` calls
+`fundamentals/{ticker}` with `filter=Holders::Institutions`. C03 now calls
+`fundamentals/{ticker}` with no filter at all, so the filter is a projection of the
+document C03 already has rather than a different source. The match is by construction
+and needs no comparison run.
+
+**`Holders` is in the unfiltered payload**, confirmed off 3.1's transcript: the twelve
+top-level blocks of `fundamentals/CCS.US` are `General`, `Highlights`, `Valuation`,
+`SharesStats`, `Technicals`, `SplitsDividends`, `AnalystRatings`, **`Holders`**,
+`InsiderTransactions`, `outstandingShares`, `Earnings` and `Financials`. 1.9 separately
+measured the filtered form returning 20 entries keyed `0`, `1`, `2`, `3`.
+
+**The call costs 10 units a ticker**, which is `fundamentals/{t}`'s weight whatever the
+filter [measured 2026-08-09, re-confirmed at 3.1: filtered and unfiltered cost the
+same].
+
+| Where | Tickers | Units |
+|---|---|---|
+| A night, at `flow.max_tickers_per_run` 250 | 250 | **2,500** |
+| Measured C05 night, both halves | 250 | ~22,000 |
+| A universe pass of the holders half alone | 2,841 | **28,410** |
+
+So the holders half is about 11 percent of what C05 spends on a night, and 2,500 units
+of a 45,518-unit night, for a block C03 receives in a call it is already paying for.
+
+**One thing that would have to hold and does.** C03's rotation covers 500 of a ~4,800
+pool a night, so a given ticker's holders would be as stale as that rotation, about ten
+days. The block is a top-20 snapshot at one or two report dates and those move
+quarterly [D-69], so a ten-day cadence is finer than the data changes. C03's pool is the
+candidate set, which is broader than the universe, so every name C05 wants is in it.
+
+**The saving is on the nightly path and the backfill is unaffected**, the block having
+no series behind it. What it would change is 3.9's scope: as the code stands, a universe
+sweep walks both halves per ticker, so 3.9 would spend 28,410 units re-fetching a
+current snapshot 2,841 times.
+
+**Reported, not moved.** Making C05's institutional half a read of what C03 stored is a
+change to two components' declared sets and to §3, which is authored. Open item 19.
+
 #### Two figures 3.7's run answers, recorded as questions rather than as answers
 
 **The null `report_date` count.** 3.1 saw three populated entries on one ticker out of
@@ -3912,3 +3956,4 @@ them are in `docs/archive/process-2026-08.md`.
 | 16 | **C04's and C06's pools are survivorship-filtered by the same argument that amended C03's.** 3.7's pool became the live candidate pool plus in-window delisted names on 2026-08-12, because a historical universe member with no fundamental rows computes zero clean gaps and is absent from `security_daily` for every past date. 3.8's sentiment pass and 3.10's splits and dividends both still take their pool from the live universe, so a name that amendment admits to a 2021 `security_daily` would carry prices and fundamentals for that date and no sentiment and no distributions. The cost differs: sentiment is 5 units a ticker and splits and dividends are 1 each, so the same widening is about 5D and 2D against fundamentals' 10D. Whether either widens is authored, and neither blocks 3.7 | Before 3.8 and 3.10 are built |
 | 17 | ~~**`SCHEMA.md` and §16 give `sentiment_derived_daily` different sizes.** The first calls it "Small", which is the word it uses for `flow_fetch_attempt` and `fundamental_fetch_attempt`; §16 carries 200 MB, derived from the grain as every figure in that column is. The store is ticker by day with six real columns, about 3.6 million rows over the window, so it sits between `flow_daily` at 52 MB and `valuation_daily` at 540 MB on column count and "Small" understates it in §16's own terms. Neither figure is measured. It is one word against one estimate and nothing reads either~~ **Closed on 2026-08-12 by removing the word rather than correcting it.** Size after backfill is §16's column and a size in a `SCHEMA.md` heading was a third statement of it [D-76]. 33 of 35 headings carried one and all 33 are gone; §16 is unchanged. **What replaces it is a carried obligation** against phase 3's sign-off: restate every §16 size from measurement once 3.6 to 3.10 have loaded, which is the first point at which any of them can be | Closed. The restatement is a carried obligation in `BUILD_PLAN.md` |
 | 18 | **Three components still catch `HttpRequestException` whole at a per-ticker fetch**, where C02 was narrowed to a 404 at 3.6. `FundamentalsIngestor` at line 245, `FlowIngestor` at 338 and 475, and `UniverseBuilder` at its sector call at 294. Each swallows a 402 or a 429 as a missing ticker, so a sweep that hits the allowance wall in flight writes nothing for that name and nothing for any name after it, and returns having completed over a partial load. `EodhdClient` now carries the status code, so the fix is one `when` clause each. Not taken here: each belongs to the checkpoint that gives its component a range mode | 3.7 for C03 and C01, 3.9 for C05 |
+| 19 | **C05 buys per ticker what C03 now receives for nothing.** `FlowIngestor.LoadHoldersAsync` calls `fundamentals/{ticker}` with `filter=Holders::Institutions`; C03 now calls the same endpoint unfiltered, so the filter is a projection of a document C03 already has. 10 units a ticker, 2,500 a night at `flow.max_tickers_per_run` 250, and 28,410 for a universe pass of that half alone. C03's rotation would make a ticker's holders about ten days stale, against a block whose report dates move quarterly [D-69], and C03's pool is broader than the universe, so both conditions hold. **The backfill is unaffected**, the block having no series; the saving is nightly, and 3.9's scope shrinks by not re-fetching a current snapshot 2,841 times. Moving the read changes two components' declared sets and section 3, which is authored | Before 3.9 is written |

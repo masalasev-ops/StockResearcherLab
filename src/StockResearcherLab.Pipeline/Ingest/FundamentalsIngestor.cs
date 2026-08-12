@@ -105,6 +105,7 @@ public sealed class FundamentalsIngestor : IBackfillStage
             : pool;
 
         long rows = 0;
+        long holdingRows = 0;
         var attempts = new List<Attempt>();
         var collisions = 0;
         string? haltedAt = null;
@@ -130,6 +131,7 @@ public sealed class FundamentalsIngestor : IBackfillStage
 
             rows += written;
             collisions += resolved?.EarningsCollisions ?? 0;
+            holdingRows += resolved?.HoldingRows ?? 0;
 
             // Written for every ticker the sweep reached, yield or not, exactly as the
             // nightly path does: a name that returns nothing still has to move down the
@@ -142,8 +144,9 @@ public sealed class FundamentalsIngestor : IBackfillStage
         var detail = string.Format(
             CultureInfo.InvariantCulture,
             "{0:N0} row(s) over {1:N0} of {2:N0} pool member(s), the rotation cap lifted. {3:N0} " +
-            "earnings entr(ies) dropped as duplicates [D-96]. {4}",
-            rows, attempts.Count, pool.Count, collisions,
+            "earnings entr(ies) dropped as duplicates [D-96]. {4:N0} institutional holding row(s) " +
+            "off the same payloads [D-98]. {5}",
+            rows, attempts.Count, pool.Count, collisions, holdingRows,
             context.ResumeFrom is null ? "Full pool." : "Resumed from " + context.ResumeFrom + ".");
 
         return haltedAt is null
@@ -265,6 +268,10 @@ public sealed class FundamentalsIngestor : IBackfillStage
         new TableWrite("fundamental_snapshot", WriteOperation.Insert, Columns),
         new TableWrite("fundamental_fetch_attempt", WriteOperation.Insert, AttemptColumns),
         new TableWrite("earnings_history", WriteOperation.Insert, EarningsColumns),
+
+        // C05's until D-98. It bought the same block a second time at 10 units a
+        // ticker, filtered out of the payload this component already receives whole.
+        new TableWrite("institutional_holding", WriteOperation.Insert, InstitutionalHolders.Columns),
     ];
 
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
@@ -288,6 +295,9 @@ public sealed class FundamentalsIngestor : IBackfillStage
         // Counted across the run rather than per ticker, so a condition currently
         // assumed rare is measured [D-96].
         var earningsCollisions = 0;
+
+        // The observable C05's run-log line used to carry [D-98].
+        long holdingRows = 0;
 
         // One entry per selected ticker, written below whether or not the fetch
         // yielded anything. A ticker that returns nothing still has to move down the
@@ -317,6 +327,7 @@ public sealed class FundamentalsIngestor : IBackfillStage
             substituted += resolved.Value.SubstitutedCount;
             rows += resolved.Value.Written;
             earningsCollisions += resolved.Value.EarningsCollisions;
+            holdingRows += resolved.Value.HoldingRows;
 
             if (resolved.Value.WidestCleanGapDays is int w && w > widestAlertDays)
             {
@@ -370,13 +381,15 @@ public sealed class FundamentalsIngestor : IBackfillStage
             "{0:N0} row(s) over {1:N0} ticker(s). Candidate pool {2:N0}, of which {3:N0} have never " +
             "been attempted; this run's selection was {4:N0} new and {5:N0} refreshed, the oldest " +
             "attempt in it dated {6}. {7:N0} earnings entr(ies) were dropped as duplicates of a " +
-            "period end already seen [D-96]",
+            "period end already seen [D-96]. {8:N0} institutional holding row(s) off the same " +
+            "payloads, which C05 no longer buys separately; they are a top-20 snapshot rather than " +
+            "a series, so inst_ownership_change accumulates forward only [D-69, D-98]",
             rows, tickers.Count, selection.PoolSize, selection.NeverAttempted,
             selection.NewInSelection, selection.RefreshedInSelection,
             selection.OldestAttemptInSelection is DateOnly d
                 ? d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
                 : "none",
-            earningsCollisions);
+            earningsCollisions, holdingRows);
 
         notes.Insert(0, coverage);
 
@@ -431,9 +444,23 @@ public sealed class FundamentalsIngestor : IBackfillStage
             }, ct).ConfigureAwait(false);
     }
 
+    /// <param name="Written">
+    /// `fundamental_snapshot` rows alone, which is what the attempt record's yield
+    /// means and what the stage's row count reports. The earnings capture has ridden
+    /// this call since D-96 without being counted into it, and the holdings capture
+    /// joins it on the same terms [D-98]: a ticker that returns holders and no
+    /// financials has not yielded a fundamental, and folding either in would move the
+    /// rotation on a name whose fundamentals are still missing.
+    /// </param>
+    /// <param name="HoldingRows">
+    /// Reported separately, because C05's run-log line carried this count and that line
+    /// is gone. Without it nothing observes that the table is still being written, and
+    /// a rotation that froze would look exactly like one that had nothing to write
+    /// [D-91, D-98].
+    /// </param>
     private readonly record struct Loaded(
         IReadOnlyList<ResolvedPeriod> Periods, int? WidestCleanGapDays, int SubstitutedCount, long Written,
-        int EarningsCollisions);
+        int EarningsCollisions, long HoldingRows);
 
     private async Task<Loaded?> LoadAsync(StageContext context, string ticker, CancellationToken ct)
     {
@@ -485,6 +512,18 @@ public sealed class FundamentalsIngestor : IBackfillStage
             var earnings = EarningsHistory.Parse(doc.RootElement, ticker, out var collisions);
             await WriteEarningsAsync(context, earnings, ct).ConfigureAwait(false);
 
+            // `Holders::Institutions` off the same payload [D-98]. C05 bought this
+            // block at 10 units a ticker with `filter=Holders::Institutions`, which is
+            // a projection of the document this call already carries.
+            //
+            // **It sits after the statements guard and inherits it**, so a ticker the
+            // endpoint carries holders but no financials for writes neither. The bare
+            // JSON string is the no-financials shape the provider was observed to send
+            // and it carries no `Holders` either, so the two are the same population on
+            // everything measured [0006 fixture].
+            var holdingRows = await WriteHoldingsAsync(
+                context, InstitutionalHolders.Parse(doc.RootElement, ticker), ct).ConfigureAwait(false);
+
             var resolved = FilingDateRule.Resolve(
                 statements.Select(s => new RawPeriod(s.PeriodEnd, s.FilingDate)).ToList());
 
@@ -503,8 +542,47 @@ public sealed class FundamentalsIngestor : IBackfillStage
 
             return new Loaded(
                 resolved.Periods, resolved.WidestCleanGapDays, resolved.SubstitutedCount, written,
-                collisions);
+                collisions, holdingRows);
         }
+    }
+
+    /// <summary>
+    /// The institutional holdings for one ticker [D-98].
+    ///
+    /// Sorted by the parse before it gets here, because COPY order reaches the table
+    /// [`CLAUDE.md` §6].
+    ///
+    /// **Unlike the earnings capture beside it, nothing deduplicates the key**, and
+    /// that is carried over from C05 rather than decided here. Two entries sharing a
+    /// holder name and a report date would reach one statement under the same conflict
+    /// target and Postgres would raise `ON CONFLICT DO UPDATE command cannot affect row
+    /// a second time`, which is D-96's failure one table over. Nothing observed has
+    /// produced one; what this change moves is the exposure, from 250 tickers a night
+    /// to a whole-pool sweep. Recorded rather than closed [`PROGRESS.md` open item 21].
+    /// </summary>
+    private static async Task<long> WriteHoldingsAsync(
+        StageContext context, IReadOnlyList<HoldingRow> holdings, CancellationToken ct)
+    {
+        if (holdings.Count == 0)
+        {
+            return 0;
+        }
+
+        return await context.Data.BulkUpsertAsync(
+            "institutional_holding", InstitutionalHolders.Columns, InstitutionalHolders.Key,
+            async (w, c) =>
+            {
+                foreach (var h in holdings)
+                {
+                    await w.StartRowAsync(c).ConfigureAwait(false);
+                    await w.WriteAsync(h.Ticker, c).ConfigureAwait(false);
+                    await w.WriteAsync(h.ReportDate, c).ConfigureAwait(false);
+                    await w.WriteAsync(h.HolderName, c).ConfigureAwait(false);
+                    await w.WriteAsync(h.Shares, c).ConfigureAwait(false);
+                    await w.WriteAsync(h.Change, c).ConfigureAwait(false);
+                    await w.WriteAsync(h.ChangePct, c).ConfigureAwait(false);
+                }
+            }, ct).ConfigureAwait(false);
     }
 
     /// <summary>

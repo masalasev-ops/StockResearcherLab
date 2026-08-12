@@ -164,58 +164,6 @@ public sealed class FlowIngestorTests
         Assert.Equal("A1", rows[0].Accession);
     }
 
-    // ------------------------------------------------------------- holders ---
-
-    /// <summary>
-    /// Keyed "0", "1", "2" rather than an array, which is why a caller expecting an
-    /// array reads nothing rather than failing [1.9].
-    /// </summary>
-    [Fact]
-    public void HoldersAreReadFromAnObjectKeyedByPosition()
-    {
-        using var doc = JsonDocument.Parse("""
-            {"0":{"name":"BlackRock Inc","date":"2026-03-31","currentShares":5136591,
-                  "change":-97623,"change_p":-1.8651},
-             "1":{"name":"Dimensional Fund Advisors, Inc.","date":"2026-03-31",
-                  "currentShares":1961284,"change":-4818,"change_p":-0.2451}}
-            """);
-
-        var rows = FlowIngestor.ParseHolders("CCS.US", doc.RootElement);
-
-        Assert.Equal(2, rows.Count);
-        Assert.Equal("BlackRock Inc", rows[0].HolderName);
-        Assert.Equal(new DateOnly(2026, 3, 31), rows[0].ReportDate);
-        Assert.Equal(5136591m, rows[0].Shares);
-        Assert.Equal(-97623m, rows[0].Change);
-    }
-
-    /// <summary>
-    /// Both are key parts at the declared grain, so a row missing either cannot be
-    /// written and is dropped rather than given a placeholder date or name.
-    /// </summary>
-    [Fact]
-    public void AHolderWithNoNameOrNoDateIsDroppedRatherThanGivenAPlaceholder()
-    {
-        using var doc = JsonDocument.Parse("""
-            {"0":{"date":"2026-03-31","currentShares":10},
-             "1":{"name":"Someone","currentShares":10},
-             "2":{"name":"Real Holder","date":"2026-03-31","currentShares":10}}
-            """);
-
-        var row = Assert.Single(FlowIngestor.ParseHolders("CCS.US", doc.RootElement));
-        Assert.Equal("Real Holder", row.HolderName);
-    }
-
-    [Fact]
-    public void AnUnexpectedHoldersShapeYieldsNothing()
-    {
-        foreach (var body in new[] { "[]", "\"NA\"", "null" })
-        {
-            using var doc = JsonDocument.Parse(body);
-            Assert.Empty(FlowIngestor.ParseHolders("CCS.US", doc.RootElement));
-        }
-    }
-
     // ----------------------------------------------------------- shortfalls ---
 
     /// <summary>
@@ -263,25 +211,29 @@ public sealed class FlowIngestorTests
     // ------------------------------------------------------------ declared ---
 
     [Fact]
-    public void TheDeclaredWritesAreTheTwoSourceTablesAtTheirOwnGrainAndTheAttemptRecord()
+    public void TheDeclaredWritesAreFormFourAtItsOwnGrainAndTheAttemptRecord()
     {
         var stage = new FlowIngestor(EodhdClientDouble());
 
-        // Three at 3.5, where it was two: the attempt record is this component's own
-        // and is not shared with C03's, because two components writing one table is
-        // two claims on one triple [D-95, INVARIANT 10].
-        Assert.Equal(3, stage.WriteSet.Count);
+        // Two at D-98, where it was three. It went one to three across 3.5 and D-95,
+        // when the attempt record became this component's own rather than shared with
+        // C03's, and back to two when the holdings half moved to C03. The attempt
+        // record stays here for the same reason it arrived: two components writing one
+        // table is two claims on one triple [INVARIANT 10].
+        Assert.Equal(2, stage.WriteSet.Count);
 
         var insider = stage.WriteSet.Single(w => w.Table == "insider_transaction");
         Assert.Equal(FlowIngestor.InsiderColumns, insider.Columns);
         Assert.Contains("transaction_ordinal", insider.Columns);
         Assert.Contains("accession_number", insider.Columns);
 
-        var holding = stage.WriteSet.Single(w => w.Table == "institutional_holding");
-        Assert.Equal(FlowIngestor.HoldingColumns, holding.Columns);
-
         var attempt = stage.WriteSet.Single(w => w.Table == "flow_fetch_attempt");
         Assert.Equal(FlowIngestor.AttemptColumns, attempt.Columns);
+
+        // **C03's since D-98**, and asserted here rather than only there: the write
+        // moved, so the failure this rules out is the old call surviving the move and
+        // two components claiming institutional_holding.Insert.
+        Assert.DoesNotContain(stage.WriteSet, w => w.Table == "institutional_holding");
 
         // C03's table is C03's. This one does not touch it.
         Assert.DoesNotContain(stage.WriteSet, w => w.Table == "fundamental_fetch_attempt");

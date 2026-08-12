@@ -208,7 +208,7 @@ public sealed class FundamentalsRotationTests
     // ------------------------------------------------------- declaration ---
 
     [Fact]
-    public void TheDeclaredWriteSetNamesBothTablesAndTheirColumns()
+    public void TheDeclaredWriteSetNamesEveryTableAndItsColumns()
     {
         var stage = new FundamentalsIngestor(ClientFor(new FundamentalsHandler()));
 
@@ -219,6 +219,18 @@ public sealed class FundamentalsRotationTests
         var attempt = stage.WriteSet.Single(w => w.Table == "fundamental_fetch_attempt");
         Assert.Equal(WriteOperation.Insert, attempt.Operation);
         Assert.Equal(FundamentalsIngestor.AttemptColumns, attempt.Columns);
+
+        var earnings = stage.WriteSet.Single(w => w.Table == "earnings_history");
+        Assert.Equal(WriteOperation.Insert, earnings.Operation);
+        Assert.Equal(FundamentalsIngestor.EarningsColumns, earnings.Columns);
+
+        // C05's until D-98. Four writes off one call, three of which ride a payload
+        // bought for the first.
+        var holdings = stage.WriteSet.Single(w => w.Table == "institutional_holding");
+        Assert.Equal(WriteOperation.Insert, holdings.Operation);
+        Assert.Equal(InstitutionalHolders.Columns, holdings.Columns);
+
+        Assert.Equal(4, stage.WriteSet.Count);
 
         // Read back through the write declaration rather than declared twice, which
         // is what DeclaredAccess.CanRead permits and what fundamental_snapshot has

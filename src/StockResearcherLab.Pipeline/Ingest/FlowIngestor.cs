@@ -6,16 +6,16 @@ using StockResearcherLab.Data.Eodhd;
 namespace StockResearcherLab.Pipeline.Ingest;
 
 /// <summary>
-/// C05. Two source tables at their own natural grain, which the compute layer
-/// derives <c>flow_daily</c> from [D-61].
+/// C05. Form 4, at its own natural grain, which the compute layer derives
+/// <c>flow_daily</c> from together with the holdings C03 ingests [D-61].
 ///
-/// **The two halves do not promise the same thing** [D-69, 1.9]. Form 4 pages
-/// properly and is fully backfillable: <c>meta.total</c> matched the filings index
-/// on every ticker checked. <c>Holders::Institutions</c> is a top-20 snapshot at one
-/// or two report dates with no 13f endpoint behind it, so
-/// <c>inst_ownership_change</c> has no history to compute over and accumulates
-/// forward only. The table still ingests, because a current top-20 holder list is a
-/// usable static feature; it is the change metric that has no series.
+/// **The institutional half left at D-98** and <see cref="InstitutionalHolders"/> now
+/// carries it. It was a second call to <c>fundamentals/{t}</c>, filtered, and the
+/// filter is a projection of the document C03 receives unfiltered in a call already
+/// paid for. Form 4 stays here because <c>sec-filings/{t}/form4</c> is a different
+/// endpoint and the only one of the two that pages: <c>meta.total</c> matched the
+/// filings index on every ticker checked, so it is fully backfillable where the
+/// holdings block has no series at all [D-69, 1.9].
 ///
 /// **Never the legacy `insider-transactions` endpoint.** It returned zero over 90
 /// days for all seven probe names including the control, and market-wide it is stale
@@ -32,9 +32,6 @@ public sealed class FlowIngestor : IStage
         "total_value", "shares_owned_after", "acquired_or_disposed",
     ];
 
-    public static readonly string[] HoldingColumns =
-    ["ticker", "report_date", "holder_name", "shares", "change", "change_pct"];
-
     /// <summary>
     /// The attempt record [D-95, 0008]. Written for every ticker the run selected,
     /// whether or not the fetch yielded rows, which is the distinction the old
@@ -46,8 +43,6 @@ public sealed class FlowIngestor : IStage
 
     private static readonly string[] InsiderKey =
         ["ticker", "accession_number", "transaction_side", "transaction_ordinal"];
-
-    private static readonly string[] HoldingKey = ["ticker", "report_date", "holder_name"];
 
     private static readonly string[] AttemptConflictTarget = ["ticker"];
 
@@ -65,7 +60,6 @@ public sealed class FlowIngestor : IStage
     public IReadOnlyList<TableWrite> WriteSet { get; } =
     [
         new TableWrite("insider_transaction", WriteOperation.Insert, InsiderColumns),
-        new TableWrite("institutional_holding", WriteOperation.Insert, HoldingColumns),
         new TableWrite("flow_fetch_attempt", WriteOperation.Insert, AttemptColumns),
     ];
 
@@ -78,7 +72,6 @@ public sealed class FlowIngestor : IStage
         var tickers = selection.Tickers;
 
         long insiderRows = 0;
-        long holdingRows = 0;
 
         // Per affected ticker, because a count alone cannot say whether the missing
         // rows can reach a trailing window [D-71]. Sorted before rendering, since
@@ -93,13 +86,13 @@ public sealed class FlowIngestor : IStage
 
         foreach (var ticker in tickers)
         {
-            var insider = await LoadInsiderAsync(context, ticker, pageSize, shortfalls, ct).ConfigureAwait(false);
-            var holdings = await LoadHoldersAsync(context, ticker, ct).ConfigureAwait(false);
+            // One call a ticker since D-98, where it was two. The second was a filtered
+            // read of the payload C03 fetches whole, so what it bought at 10 units a
+            // ticker was a projection rather than a source.
+            var written = await LoadInsiderAsync(context, ticker, pageSize, shortfalls, ct)
+                .ConfigureAwait(false);
 
-            insiderRows += insider;
-            holdingRows += holdings;
-
-            var written = insider + holdings;
+            insiderRows += written;
 
             // A run that yields nothing must not erase the date a previous one did,
             // or the two absences collapse back into each other.
@@ -121,18 +114,17 @@ public sealed class FlowIngestor : IStage
         // count above it stops moving [D-95].
         var detail = string.Format(
             CultureInfo.InvariantCulture,
-            "{0:N0} insider transaction row(s) and {1:N0} institutional holding row(s) over {2:N0} " +
-            "ticker(s). Candidate pool {3:N0}, of which {4:N0} have never been attempted; {5:N0} of this " +
-            "run's selection were new and {6:N0} were refreshed, the oldest attempt among them dated " +
-            "{7}. Holdings are a top-20 snapshot rather than a series, so inst_ownership_change " +
-            "accumulates forward only [D-69]. {8}",
-            insiderRows, holdingRows, tickers.Count,
+            "{0:N0} insider transaction row(s) over {1:N0} ticker(s). Candidate pool {2:N0}, of which " +
+            "{3:N0} have never been attempted; {4:N0} of this run's selection were new and {5:N0} were " +
+            "refreshed, the oldest attempt among them dated {6}. Institutional holdings are C03's " +
+            "since D-98 and are reported there. {7}",
+            insiderRows, tickers.Count,
             selection.PoolSize, selection.NeverAttempted, selection.NewInSelection,
             selection.RefreshedInSelection,
             selection.OldestAttemptInSelection?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "none",
             DescribeShortfalls(shortfalls));
 
-        return new StageResult(insiderRows + holdingRows, "ok", detail);
+        return new StageResult(insiderRows, "ok", detail);
     }
 
     /// <param name="PoolSize">The whole active universe, which is the pool here.</param>
@@ -458,99 +450,6 @@ public sealed class FlowIngestor : IStage
         return rows;
     }
 
-    /// <summary>
-    /// The top-20 institutional holders, which is a snapshot and not a series
-    /// [D-69]. Ingested because a current holder list is a usable static feature.
-    /// </summary>
-    private async Task<long> LoadHoldersAsync(StageContext context, string ticker, CancellationToken ct)
-    {
-        JsonDocument doc;
-        try
-        {
-            doc = await _client.GetAsync(
-                "fundamentals/" + ticker,
-                [("filter", "Holders::Institutions")],
-                ct).ConfigureAwait(false);
-        }
-        catch (HttpRequestException)
-        {
-            return 0;
-        }
-
-        using (doc)
-        {
-            var rows = ParseHolders(ticker, doc.RootElement);
-            if (rows.Count == 0)
-            {
-                return 0;
-            }
-
-            return await context.Data.BulkUpsertAsync(
-                "institutional_holding", HoldingColumns, HoldingKey,
-                async (w, c) =>
-                {
-                    foreach (var h in rows)
-                    {
-                        await w.StartRowAsync(c).ConfigureAwait(false);
-                        await w.WriteAsync(h.Ticker, c).ConfigureAwait(false);
-                        await w.WriteAsync(h.ReportDate, c).ConfigureAwait(false);
-                        await w.WriteAsync(h.HolderName, c).ConfigureAwait(false);
-                        await w.WriteAsync(h.Shares, c).ConfigureAwait(false);
-                        await w.WriteAsync(h.Change, c).ConfigureAwait(false);
-                        await w.WriteAsync(h.ChangePct, c).ConfigureAwait(false);
-                    }
-                }, ct).ConfigureAwait(false);
-        }
-    }
-
-    public readonly record struct HoldingRow(
-        string Ticker, DateOnly ReportDate, string HolderName,
-        decimal? Shares, decimal? Change, float? ChangePct);
-
-    public static IReadOnlyList<HoldingRow> ParseHolders(string ticker, JsonElement root)
-    {
-        var rows = new List<HoldingRow>();
-
-        if (root.ValueKind != JsonValueKind.Object)
-        {
-            return rows;
-        }
-
-        // Keyed "0", "1", "2" rather than an array, which is why a caller expecting
-        // an array reads nothing rather than failing [1.9].
-        foreach (var entry in root.EnumerateObject())
-        {
-            if (entry.Value.ValueKind != JsonValueKind.Object)
-            {
-                continue;
-            }
-
-            var name = Text(entry.Value, "name");
-            var date = Date(entry.Value, "date");
-
-            // Both are key parts, so a row missing either cannot be written at the
-            // declared grain and is dropped rather than given a placeholder.
-            if (name is null || date is null)
-            {
-                continue;
-            }
-
-            rows.Add(new HoldingRow(
-                ticker, date.Value, name,
-                Money(entry.Value, "currentShares"),
-                Money(entry.Value, "change"),
-                Pct(entry.Value, "change_p")));
-        }
-
-        rows.Sort(static (a, b) =>
-        {
-            var t = a.ReportDate.CompareTo(b.ReportDate);
-            return t != 0 ? t : string.CompareOrdinal(a.HolderName, b.HolderName);
-        });
-
-        return rows;
-    }
-
     private static string? Text(JsonElement e, string name)
         => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String
            && !string.IsNullOrEmpty(v.GetString())
@@ -558,7 +457,7 @@ public sealed class FlowIngestor : IStage
             : null;
 
     /// <summary>
-    /// The provider sends transaction dates as ISO instants and report dates as
+    /// The provider sends transaction dates as ISO instants and filing dates as
     /// plain dates, so both forms are accepted. A trading date is a label rather
     /// than a timezone conversion, so the date part is taken as written.
     /// </summary>
@@ -603,12 +502,6 @@ public sealed class FlowIngestor : IStage
             _ => null,
         };
     }
-
-    private static float? Pct(JsonElement e, string name)
-        => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number
-           && v.TryGetSingle(out var f)
-            ? f
-            : null;
 
     private static async Task<long> LongAsync(StageContext context, string key, CancellationToken ct)
     {

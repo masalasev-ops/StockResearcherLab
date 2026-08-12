@@ -1212,3 +1212,55 @@ a split declaration [INVARIANT 10, D-77]; it would carry one sector per ticker, 
 today's sector applied to every historical date and the exact defect `security_daily`
 was created to remove; and it would put a weekly stage's read behind a nightly stage's
 write. The full reasoning is D-97.
+
+---
+
+## 2026-08-12, D-98, the holders capture moves to C03
+
+`ARCHITECTURE.html` and `SCHEMA.md` are specs under D-73, so the three edits below are
+clean and the prior wordings are here. Implementing an authored decision.
+
+**§3's catalogue, the C03 Writes cell.** D-98 gives FundamentalsIngestor a fourth
+write. Removed:
+
+> fundamental_snapshot, fundamental_fetch_attempt [D-91], earnings_history [D-96]
+
+It now names `institutional_holding` as well, with D-91 and D-96 kept beside the tables
+they decided and D-98 at the point of change.
+
+**§3's catalogue, the C05 Writes cell.** The same table leaves it. Removed:
+
+> insider_transaction, institutional_holding [D-61], flow_fetch_attempt [D-95]
+
+D-61 decided both source tables at their natural grain and stays beside the one that
+remains here, with D-98 alongside it as the decision that made form 4 the only source
+this component ingests. `git diff docs/ARCHITECTURE.html` touches those two cells and
+nothing else, two lines of a 1,000-line file.
+
+**`SCHEMA.md`'s `institutional_holding` writer declaration.** Removed:
+
+> Grain: ticker by holder by report date, the source's own. **Writer: FlowIngestor.**
+
+The grain is unchanged and the writer is now `FundamentalsIngestor`, which is what
+`WriteOwnershipConformanceTests.EveryWritingComponentIsNamedAsAWriterInSchemaDocument`
+reads: it failed on the code change alone and passes on this one, so the two statements
+are held against each other rather than maintained in parallel. A sentence is added
+below the column list saying the block rides C03's call and that no sweep re-fetches
+it, which is what stops a reader looking for the endpoint that populates this table.
+
+**§16's store matrix does not change.** No table is added or removed and the Written-by
+column left that table at D-76, so write ownership is stated in §3 and in `SCHEMA.md`
+and nowhere else. The store-list conformance test's count stays at 39.
+
+**The Reads cells did not move and one of them is now stale.** C05's still names the
+ownership endpoint, which the component no longer calls. That is an endpoint rather
+than a table, so `ReadDeclarationConformanceTests` neither sees it nor could: it
+intersects the cell against `SCHEMA.md`'s table list and drops everything else, exactly
+as it drops `digest_provider` from C29's. Recorded as open item 20 rather than
+corrected here, the file being human-edited only and this change's scope being the two
+Writes cells [`CLAUDE.md` §13].
+
+**No provider call was made and no units were spent.** The measurement D-98 rests on
+was taken on 2026-08-12 at 40 units and is not repeated; the regression test added with
+this change reads the captured block off disk and covers our parse rather than the
+provider's response [`FIXTURES.md`, the unfiltered `Holders` block].

@@ -307,7 +307,8 @@ scheduled plan activity, so a count that cannot separate an open-market purchase
 an award is not the count the screen needs [D-61].
 
 ### institutional_holding
-Grain: ticker by holder by report date, the source's own. **Writer: FlowIngestor.**
+Grain: ticker by holder by report date, the source's own.
+**Writer: FundamentalsIngestor** [D-98].
 
 `ticker`, `report_date`, `holder_name`, `shares`, `change`, `change_pct`.
 
@@ -320,6 +321,9 @@ which is why the claim survived being written. One or two distinct values per ti
 is not a history, so `inst_ownership_change` has nothing to compute a change over and
 accumulates forward only. The table still ingests, because a current top-20 holder
 list is a usable static feature; it is the change metric that has no series.
+
+The block rides the `fundamentals/{t}` call C03 already makes, so nothing fetches this
+table separately and no sweep re-fetches it [D-98].
 
 ### flow_daily
 Grain: ticker by day [D-61]. **Writers: FlowEngine, a compute stage and not the ingest,

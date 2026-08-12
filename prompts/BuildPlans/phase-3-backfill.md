@@ -505,8 +505,15 @@ needs to compute anything at all.
 
 **3.9 C05 flow, one universe sweep over form4.** About 258,000 units across three days.
 D-71's short-page classification recorded per run and per affected ticker.
-`institutional_holding` accumulates forward only and that is recorded rather than worked
-around [D-69].
+
+**Form 4 alone, and the holders half is not a deferral** [D-98]. C05 no longer fetches
+`Holders::Institutions`: C03 writes `institutional_holding` off the unfiltered
+`fundamentals/{t}` payload it was already paying for, so there is nothing here to
+sweep. Nor would there be if it had stayed: the block has no series behind it [D-69],
+so a universe pass would buy one current snapshot 2,841 times for 28,410 units where
+C03's nightly rotation covers the pool in about ten days at no additional units.
+`institutional_holding` accumulates forward only and that is recorded rather than
+worked around.
 
 *Halts on:* 3.4's allowance gate, per page at 10 units. **This is the sweep the gate exists
 for.** Three days is what the arithmetic gives, so it halts twice in the ordinary course

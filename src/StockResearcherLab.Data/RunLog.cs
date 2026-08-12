@@ -5,6 +5,21 @@ using StockResearcherLab.Core.Stages;
 
 namespace StockResearcherLab.Data;
 
+/// <summary>
+/// Where a stage's next range execution picks up [3.6].
+/// </summary>
+/// <param name="LastDateCovered">
+/// `run_date` on the newest range row. A completed or halted execution records the
+/// date it reached; a failed one records its range start, being the only position it
+/// can prove.
+/// </param>
+/// <param name="Position">
+/// The ticker a halted sweep stopped at, parsed back out of the run log line. Null for
+/// a date-partitioned execution and for a failed one, which records no position.
+/// </param>
+/// <param name="Status">`ok`, `halted` or `failed`.</param>
+public sealed record ResumePoint(DateOnly LastDateCovered, string? Position, string Status);
+
 /// <summary>One row of run_log, as SCHEMA.md declares the table.</summary>
 public sealed record RunLogEntry(
     long RunLogId,
@@ -67,6 +82,87 @@ public sealed class RunLog : IWriteOwner
 
         var id = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
         return Convert.ToInt64(id, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// The furthest point any range execution of <paramref name="stage"/> can prove it
+    /// reached, or null where it has never run one [3.6].
+    ///
+    /// **Highest `run_date`, not newest row, and not filtered by status.** A halted row
+    /// carries the date it reached and a failed one carries its range start, so every
+    /// row states a position it can prove and the maximum over them is the answer. A
+    /// status filter would be a second rule the caller has to remember; the rows are
+    /// written so that none is needed.
+    ///
+    /// The tie-break is `run_log_id` descending, so two executions ending on one date
+    /// resolve to the later one rather than to whichever the planner happened to emit
+    /// first [`CLAUDE.md` §6].
+    ///
+    /// **A range row is one whose line opens `range `**, which `BackfillRun.Describe`
+    /// guarantees. `error` is the only free-text column this table has, so that prefix
+    /// is the only marker available without a schema change.
+    /// </summary>
+    public async Task<ResumePoint?> LastRangeRunAsync(string stage, CancellationToken ct = default)
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(ct).ConfigureAwait(false);
+        await using var cmd = new NpgsqlCommand(
+            """
+            SELECT run_date, status, error
+            FROM run_log
+            WHERE stage = @stage AND error LIKE 'range %'
+            ORDER BY run_date DESC, run_log_id DESC
+            LIMIT 1;
+            """, conn);
+        cmd.Parameters.AddWithValue("stage", stage);
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        if (!await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        return new ResumePoint(
+            DateOnly.FromDateTime(reader.GetDateTime(0)),
+            PositionIn(reader.IsDBNull(2) ? null : reader.GetString(2)),
+            reader.GetString(1));
+    }
+
+    /// <summary>
+    /// The ticker out of `..., reached 2021-06-30 at AAPL.US. ...`, or null where the
+    /// line records no position.
+    ///
+    /// Parsed rather than stored in a column of its own, because a column is a schema
+    /// change and this is one writer and one reader of one sentence that
+    /// `BackfillRun.Describe` composes. Recorded as a limit rather than discovered: if
+    /// a second thing ever needs the position, it gets a column.
+    ///
+    /// **The sentence ends at a period followed by a space, never at the first
+    /// period.** Every ticker in this system carries one, so splitting on a bare `.`
+    /// returns `L07` for `L07.US` and the resumption still looks plausible: the
+    /// truncated form sorts just below the real one, so the sweep resumes at the right
+    /// place and reports the wrong ticker. Found by a test asserting what the run log
+    /// says rather than only how many calls followed.
+    /// </summary>
+    internal static string? PositionIn(string? error)
+    {
+        if (error is null)
+        {
+            return null;
+        }
+
+        const string marker = " at ";
+        var at = error.IndexOf(marker, StringComparison.Ordinal);
+        if (at < 0)
+        {
+            return null;
+        }
+
+        var rest = error[(at + marker.Length)..];
+        var stop = rest.IndexOf(". ", StringComparison.Ordinal);
+        var position = (stop < 0 ? rest : rest[..stop]).Trim().TrimEnd('.');
+
+        return position.Length == 0 ? null : position;
     }
 
     /// <summary>

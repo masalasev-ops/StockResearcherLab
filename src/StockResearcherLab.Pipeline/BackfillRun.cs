@@ -78,7 +78,16 @@ public sealed class BackfillRun
         // this context at all: the only route to one is ForDateAsync, which resolves
         // the date being computed [D-43, D-93, INVARIANT 13].
         var config = new ConfigStore(_connectionString);
-        var context = new BackfillContext(from, to, data, _clock, config, _allowance);
+
+        // Resumed only from a halt [3.6]. A completed execution has nothing left, and a
+        // failed one records no position because it cannot prove one: both start over,
+        // which is safe because every write is idempotent on its own grain [D-68].
+        var last = await _runLog.LastRangeRunAsync(stage.Name, ct).ConfigureAwait(false);
+        var resumeFrom = string.Equals(last?.Status, "halted", StringComparison.Ordinal)
+            ? last!.Position
+            : null;
+
+        var context = new BackfillContext(from, to, data, _clock, config, _allowance, resumeFrom);
 
         var startedAt = _clock.UtcNow;
         var stopwatch = Stopwatch.StartNew();
@@ -104,16 +113,46 @@ public sealed class BackfillRun
 
             // rows_written stays null rather than 0. A stage that threw wrote an
             // unknown number of rows and zero is a real value carrying meaning
-            // [CLAUDE.md section 6]. run_date falls back to the range end, there
-            // being no reached date to record.
+            // [CLAUDE.md section 6].
+            //
+            // **run_date is the range START on a throw, not its end** [3.6]. A stage
+            // that threw proved it reached its first date and nothing more, so that is
+            // what the row records. The range end was the first reading and it is the
+            // dangerous one: resumption takes the highest run_date for a stage, so a
+            // failed run stamped with its end would resume from after everything the
+            // failure skipped, and the skipped dates would never be revisited.
+            //
+            // The two errors are not symmetric. Resuming too early re-does work that
+            // is idempotent per grain and costs time [D-68]; resuming too late leaves
+            // a hole no later stage can see. So the row states the position it can
+            // prove rather than the one it hoped for, and an unfiltered read is safe
+            // without anyone remembering a status filter.
             await _runLog.RecordAsync(
-                to, stage.Name, "failed", startedAt,
+                from, stage.Name, "failed", startedAt,
                 stopwatch.ElapsedMilliseconds, null,
                 Range(from, to) + " " + ex.Message, ct).ConfigureAwait(false);
 
             throw;
         }
     }
+
+    /// <summary>
+    /// Where a stage's next range execution should pick up, or null where it has never
+    /// run one [3.6].
+    ///
+    /// **The highest `run_date` among that stage's range rows, unfiltered by status.**
+    /// A halted row carries the date it reached and a failed row carries its range
+    /// start, so the maximum is the furthest point any execution can prove it got to.
+    /// Filtering on status would be a second rule the caller has to remember, and the
+    /// row already says what it can prove.
+    ///
+    /// **Range rows are identified by the line opening with `range `**, which is what
+    /// <see cref="Describe"/> guarantees. `run_log.error` is the only free-text column
+    /// that table has, so that prefix is the only marker available without a schema
+    /// change, and it is one this class controls on both sides.
+    /// </summary>
+    public async Task<ResumePoint?> ResumeFromAsync(string stageName, CancellationToken ct = default)
+        => await _runLog.LastRangeRunAsync(stageName, ct).ConfigureAwait(false);
 
     /// <summary>
     /// The line that lands in `run_log.error`, which is the only free-text column that

@@ -3656,6 +3656,68 @@ human-edited only [`CLAUDE.md` §13], so it is reported rather than corrected he
 Open item 15. **Corrected on 2026-08-12**, human-directed, as a clean edit under D-73
 with the prior wording in `CHANGELOG.md`.
 
+### 3.6, C02 over `eod/{t}`, whole history
+
+**Built, not run.** The sweep spends 50,785 units and no sweep has been authorised, so
+what this checkpoint lands is the code and its tests against a provider double. The
+plan's own done-when lines for 3.6, a spot-checked ticker with bars across the window
+and `SPY.US` present, are checks against a loaded store and stay unmet until it runs.
+
+**The pool is the union of two symbol-list calls**, live and delisted, both filtered to
+`Common Stock` by `SymbolList` [D-2, D-4]. The two lists are disjoint, measured at 3.1,
+so it is a union rather than a superset of either.
+
+**Bulk by date is not used and the reversal is the whole point.** `eod/{t}` buys one
+name for every day at 1 unit where the bulk feed buys every name for one day at 100.
+The same rows cost 50,785 this way and about 126,000 the other.
+
+**Config resolves as of the range end here, and that is not the case D-93 governs.**
+This sweep is ticker-partitioned: there is no date being computed and no configured
+value reaches a row it writes, the bars being the provider's own. The keys it reads are
+operational. A date-partitioned stage resolves per date and 3.13 onward is where that
+distinction does work.
+
+**The gate is asked per ticker and dispatched per chunk.** Every gate in a chunk is
+asked before any of its work is dispatched, so a refusal stops the sweep at a ticker
+rather than mid-flight and the position recorded is the first ticker not dispatched.
+The overshoot is bounded by the concurrency: eight units past one reading, against a
+reserve of fifty thousand.
+
+#### The failure path, decided here because resumption is written here
+
+`BackfillRun` stamped a failed range execution with its range **end**, on the grounds
+that there was no reached date. Resumption takes the highest `run_date` among a stage's
+range rows, so that row would have been the highest and the next run would have resumed
+from after everything the failure skipped.
+
+**A failed run now records its range start.** That is the position it can prove: it
+reached its first date and nothing more. The two errors are not symmetric, which is what
+decides it. Resuming too early re-does work that is idempotent per grain and costs time
+[D-68]; resuming too late leaves a hole no later stage can see.
+
+**So the read needs no status filter**, which was the alternative. A rule the caller has
+to remember is a rule that gets forgotten once; a row that states what it can prove is
+safe read either way. The test puts a failed row above a halted one and asserts the
+unfiltered maximum still returns the halted run's reached date.
+
+**Resumption happens only from a halt.** A completed run has nothing left and a failed
+one records no position, so both start over.
+
+#### Two defects the tests found, both silent
+
+**The position parse split on the first period, and every ticker has one.** `L07.US`
+read back as `L07`. It looked correct from call counts alone: the truncated form sorts
+just below the real one, so the sweep resumed at the right place and reported the wrong
+ticker in the run log. Caught by asserting what the log says rather than only how many
+calls followed. The sentence now ends at a period followed by a space.
+
+**The first allowance double never spent.** It exposed a `Spend` method that the
+production sweep never calls, because the provider bills and `/api/user` reports. The
+reading never moved, nothing halted, and the halt tests failed for the right reason. The
+double now bills as the provider does, one unit per `eod/{t}` and per symbol list.
+
+**Test count 273 to 282.**
+
 ### Before 3.7, 2026-08-12: the fundamentals pool is amended
 
 **The pool C03 sweeps is derived from current price, liquidity and history, so it holds

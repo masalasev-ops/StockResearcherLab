@@ -263,6 +263,96 @@ public sealed class BackfillRunTests
         Assert.Contains("IBackfillStage", ex.Message, StringComparison.Ordinal);
     }
 
+    // ---------------------------------------------- the failure path [3.6] ---
+
+    /// <summary>
+    /// **A failed range execution records its range start, and this is the test that
+    /// decision was taken for** [3.6].
+    ///
+    /// Resumption takes the highest `run_date` among a stage's range rows and does not
+    /// filter on status. A failed run stamped with its range END would be the highest
+    /// row, so the next run would resume from after everything the failure skipped and
+    /// the gap would never be revisited. Stamped with its start, the maximum falls back
+    /// to whatever an earlier run can prove it reached.
+    ///
+    /// The two errors are not symmetric, which is why the conservative stamp wins:
+    /// resuming too early re-does work that is idempotent per grain, and resuming too
+    /// late leaves a hole no later stage can see [D-68].
+    /// </summary>
+    [Fact]
+    public async Task AFailedRunAboveAHaltedOneDoesNotCarryResumptionPastTheHalt()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+        await ClearRunLogAsync(HaltThenFailStage.StageName, ct).ConfigureAwait(true);
+
+        var run = new BackfillRun(
+            new StageRegistry([new HaltThenFailStage()]),
+            new RunLog(TestDatabase.ConnectionString),
+            Clock,
+            TestDatabase.ConnectionString,
+            new StubAllowance(0, 100_000, ProviderDate));
+
+        // First, a halt that reached 2022-06-03 inside a range ending 2022-06-30.
+        var halted = await run.RunAsync(
+            HaltThenFailStage.StageName, new DateOnly(2022, 6, 1), new DateOnly(2022, 6, 30), ct)
+            .ConfigureAwait(true);
+
+        Assert.True(halted.WasHalted);
+
+        // Then a run over the same range that throws. It is the newer row.
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => run.RunAsync(
+                HaltThenFailStage.StageName, new DateOnly(2022, 6, 1), new DateOnly(2022, 6, 30), ct))
+            .ConfigureAwait(true);
+
+        var failedRow = await LastRunLogAsync(HaltThenFailStage.StageName, ct).ConfigureAwait(true);
+        Assert.Equal("failed", failedRow.Status);
+
+        // The range start, not the range end. 2022-06-30 here is the defect.
+        Assert.Equal(new DateOnly(2022, 6, 1), failedRow.RunDate);
+
+        // And the unfiltered maximum is the halted run's reached date, so resumption
+        // goes back to 06-03 rather than forward to 06-30.
+        var resume = await run.ResumeFromAsync(HaltThenFailStage.StageName, ct).ConfigureAwait(true);
+
+        Assert.NotNull(resume);
+        Assert.Equal(new DateOnly(2022, 6, 3), resume!.LastDateCovered);
+        Assert.Equal("halted", resume.Status);
+        Assert.Equal("T0007", resume.Position);
+    }
+
+    /// <summary>
+    /// A sweep resumes only from a halt. A failed run records no position it can prove,
+    /// so the next one starts over, which is safe because every write is idempotent on
+    /// its own grain [D-68].
+    /// </summary>
+    [Fact]
+    public async Task AFailedRunLeavesNoPositionToResumeFrom()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+        await ClearRunLogAsync(FailingStage.StageName, ct).ConfigureAwait(true);
+
+        var run = new BackfillRun(
+            new StageRegistry([new FailingStage()]),
+            new RunLog(TestDatabase.ConnectionString),
+            Clock,
+            TestDatabase.ConnectionString,
+            new StubAllowance(0, 100_000, ProviderDate));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => run.RunAsync(FailingStage.StageName, new DateOnly(2022, 6, 1), new DateOnly(2022, 6, 30), ct))
+            .ConfigureAwait(true);
+
+        var resume = await run.ResumeFromAsync(FailingStage.StageName, ct).ConfigureAwait(true);
+
+        Assert.NotNull(resume);
+        Assert.Equal("failed", resume!.Status);
+        Assert.Null(resume.Position);
+        Assert.Equal(new DateOnly(2022, 6, 1), resume.LastDateCovered);
+    }
+
     [Fact]
     public void ARangeThatEndsBeforeItStartsIsRefusedAtConstruction()
     {
@@ -442,6 +532,54 @@ public sealed class BackfillRunTests
 
             return BackfillResult.Completed(written, context.To);
         }
+    }
+
+    private static async Task ClearRunLogAsync(string stage, CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
+        await using var cmd = new NpgsqlCommand("DELETE FROM run_log WHERE stage = @s;", conn);
+        cmd.Parameters.AddWithValue("s", stage);
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Halts at a known position on its first run, then throws on every one after.</summary>
+    private sealed class HaltThenFailStage : IBackfillStage
+    {
+        public const string StageName = "SrlTestHaltThenFail";
+
+        private int _runs;
+
+        public string Name => StageName;
+
+        public IReadOnlyList<string> ReadSet { get; } = ["price_daily"];
+
+        public IReadOnlyList<TableWrite> WriteSet { get; } = [];
+
+        public Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
+            => Task.FromResult(StageResult.None);
+
+        public Task<BackfillResult> ExecuteRangeAsync(BackfillContext context, CancellationToken ct = default)
+            => ++_runs == 1
+                ? Task.FromResult(BackfillResult.Halted(4, new DateOnly(2022, 6, 3), "T0007", "out of allowance"))
+                : throw new InvalidOperationException("SrlTest: the range execution failed.");
+    }
+
+    /// <summary>Throws on every run, so the failed row is the only one there is.</summary>
+    private sealed class FailingStage : IBackfillStage
+    {
+        public const string StageName = "SrlTestFailing";
+
+        public string Name => StageName;
+
+        public IReadOnlyList<string> ReadSet { get; } = ["price_daily"];
+
+        public IReadOnlyList<TableWrite> WriteSet { get; } = [];
+
+        public Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
+            => Task.FromResult(StageResult.None);
+
+        public Task<BackfillResult> ExecuteRangeAsync(BackfillContext context, CancellationToken ct = default)
+            => throw new InvalidOperationException("SrlTest: the range execution failed.");
     }
 
     /// <summary>A stage with a nightly mode and no range mode, which is most of them.</summary>

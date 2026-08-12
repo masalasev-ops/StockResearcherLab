@@ -26,10 +26,36 @@ public static class SymbolList
     public const string AdmittedType = "Common Stock";
 
     /// <summary>Ticker to listed name, for everything admitted. One call.</summary>
-    public static async Task<IReadOnlyDictionary<string, string>> AdmittedAsync(
+    public static Task<IReadOnlyDictionary<string, string>> AdmittedAsync(
         EodhdClient client, CancellationToken ct = default)
+        => AdmittedFromAsync(client, [], ct);
+
+    /// <summary>
+    /// The same, for instruments that have stopped trading [3.1, 3.6].
+    ///
+    /// **`delisted=1` returns only delisted instruments and is disjoint from the live
+    /// list**, measured at 3.1: 59,183 codes against the live 51,651 with an
+    /// intersection of zero. So the price pool is the union of the two calls rather
+    /// than this one alone, and a caller wanting everything makes both.
+    ///
+    /// **Both forms are called rather than assuming the parameter is honoured.** A
+    /// parameter this provider ignores comes back as a 200 holding the wrong answer,
+    /// which is how form4's paging was misread at 1.9, and the disjointness above is
+    /// what proves it is honoured here.
+    ///
+    /// 32,611 of the delisted list are common stock. The symbol list carries no
+    /// delisting date, so which of them traded inside the backfill window is not
+    /// answerable from here: it is the last bar `eod/{t}` returns, and the call is what
+    /// reveals it.
+    /// </summary>
+    public static Task<IReadOnlyDictionary<string, string>> AdmittedDelistedAsync(
+        EodhdClient client, CancellationToken ct = default)
+        => AdmittedFromAsync(client, [("delisted", "1")], ct);
+
+    private static async Task<IReadOnlyDictionary<string, string>> AdmittedFromAsync(
+        EodhdClient client, (string Name, string Value)[] query, CancellationToken ct)
     {
-        using var doc = await client.GetAsync("exchange-symbol-list/US", [], ct).ConfigureAwait(false);
+        using var doc = await client.GetAsync("exchange-symbol-list/US", query, ct).ConfigureAwait(false);
 
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
 

@@ -93,8 +93,11 @@ public sealed class BackfillContext
         IStageData data,
         IClock clock,
         IConfigStore config,
-        IUnitAllowance allowance)
+        IUnitAllowance allowance,
+        string? resumeFrom = null)
     {
+        ResumeFrom = resumeFrom;
+
         ArgumentNullException.ThrowIfNull(data);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(config);
@@ -131,6 +134,20 @@ public sealed class BackfillContext
 
     /// <summary>The remaining provider allowance, read before each unit of work.</summary>
     public IUnitAllowance Allowance { get; }
+
+    /// <summary>
+    /// Where a ticker-partitioned sweep picks up, or null to start at the beginning
+    /// [3.6].
+    ///
+    /// **Set only where the previous range execution halted**, which is the one state
+    /// that leaves a position worth resuming from. A completed run has nothing left and
+    /// a failed one records no position, so both start over: re-doing work is idempotent
+    /// per grain and costs time, where skipping it leaves a hole [D-68].
+    ///
+    /// Null for a date-partitioned execution, which resumes from `run_date` rather than
+    /// from a ticker.
+    /// </summary>
+    public string? ResumeFrom { get; }
 
     /// <summary>
     /// The date the provider would stamp a call made now, being the UTC date.

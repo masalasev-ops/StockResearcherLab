@@ -3298,6 +3298,52 @@ reconstructable by construction, and it also means the column can be read from o
 if some writer ever puts `false` in it. Noted rather than changed, the column being
 authored [`CLAUDE.md` §13, §3].
 
+### 3.3, the config keys, including the allowance
+
+**Ten keys, taking the seeded count from 32 to 42**, asserted rather than counted by
+hand as every previous move of that number was.
+
+| Key | Value | Where the value comes from |
+|---|---|---|
+| `backfill.window_start` | `"2021-01-04"` | D-94. The first session of 2021 |
+| `backfill.ticker_concurrency` | 8 | Open COPY streams and sockets, not a provider bound |
+| `backfill.daily_unit_allowance` | 100000 | `dailyRateLimit`, read at 3.1 |
+| `backfill.unit_reserve` | 50000 | A measured night is 45,518 [2026-08-09] |
+| `backfill.weight_eod` | 1 | Measured 2026-08-09, confirmed at 3.1 |
+| `backfill.weight_fundamentals` | 10 | Measured 2026-08-09, confirmed at 3.1 |
+| `backfill.weight_sentiments_per_ticker` | 5 | Measured 2026-08-09, confirmed at 3.1 over a five-year range |
+| `backfill.weight_form4_page` | 10 | Measured 2026-08-09, confirmed at 3.1 including on a 404 |
+| `backfill.weight_splits` | 1 | Measured 2026-08-08, confirmed at 3.1 |
+| `backfill.weight_dividends` | 1 | Measured 2026-08-08, confirmed at 3.1 |
+
+**`backfill.window_start` is the first string-valued key in the store**, and that is a
+defect waiting rather than a curiosity. `config_rows.value` is `jsonb` and
+`ConfigRow.Value` is that column as text, so a number arrives as `100000` and a date
+arrives as `"2021-01-04"` **with its quotes**. Every key seeded before this phase was a
+number, so nothing had ever exercised the quoted case, and the eleven existing call
+sites all run `decimal.TryParse` or `long.TryParse` on the raw text. `ConfigValue`
+parses the value as JSON instead and is what new readers use; the eleven are correct
+for numbers and are left alone rather than rewritten, which would be churn against a
+phase that is not about them.
+
+**The window is 2021-01-04 rather than five years back from the run date**, which is
+D-94's whole point: a count of years resolved against the run date moves the window on
+every re-run, so two backfills over one store would compute different date sets and the
+fourth done-when line could not be tested. The date sits after `SeedInstant`, which is
+what makes every date in the range resolvable [D-72], and it opens before the 2021
+advance rather than inside it, because the window has to contain a real drawdown and a
+drawdown needs the peak it fell from.
+
+**The Consumer column reads `NOT BOUND` for all ten and that is the true state.** The
+keys are seeded before the gate that reads them exists. The column names the checkpoint
+that will fill it instead of a component nothing has confirmed.
+
+**One thing the reserve does not cover, recorded rather than padded.** 50,000 is set
+against a measured night of 45,518. C01's weekly rebuild costs 28,401 on top of that
+until 3.7 moves the sector call to C03 and takes it to about one, so a sweep sharing a
+Sunday with a C01 rebuild before 3.7 has less margin than the number says. Padding the
+reserve to cover it would shrink every ordinary day's sweep for a case that stops
+existing four checkpoints later.
 ---
 
 ## Open items carried forward

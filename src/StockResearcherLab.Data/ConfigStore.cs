@@ -117,12 +117,15 @@ public sealed class ConfigSeeder
         new(2020, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>
-    /// Thirty-two keys. The count is asserted rather than left to be miscounted: it
+    /// Forty-two keys. The count is asserted rather than left to be miscounted: it
     /// was recorded as nine, corrected to eleven at A5, twelve at A10, fourteen at A14, fifteen at 1.4,
     /// seventeen at 1.6, nineteen at 1.7 and twenty-two at 1.8, and every correction was a key that existed with nothing seeding it.
     /// Thirty at 2.4, which is phase 2's seven plus percentile.cell_min_members:
     /// that one had been in CONFIG_REFERENCE.md since the corpus was written with
     /// nothing seeding it, which is the same defect as every correction above.
+    /// Thirty-two at 2.9, D-80's two breadth thresholds once the rule existed.
+    /// Forty-two at 3.3: the window start, the concurrency, the allowance and its
+    /// reserve, and one weight for each of the six endpoints a sweep calls.
     /// </summary>
     public static IReadOnlyList<(string Key, string Value)> Keys { get; } =
     [
@@ -245,6 +248,58 @@ public sealed class ConfigSeeder
         // meaningful there.
         ("market.regime_breadth_high", "0.60"),
         ("market.regime_breadth_low", "0.40"),
+
+        // ------------------------------------------------------- phase 3 [3.3] ---
+
+        // The backfill window start, as a stored date [D-94]. A count of years
+        // resolved against the run date moves the window on every re-run, so two
+        // backfills over one store would compute different date sets and the phase's
+        // fourth done-when line could not be tested at all.
+        //
+        // The first session of 2021, which is after SeedInstant and so resolvable
+        // [D-72], and which opens the window before the 2021 advance rather than
+        // inside it. That matters for one reason the plan states: the window has to
+        // contain a real drawdown, and a drawdown needs the peak it fell from
+        // [ARCHITECTURE.html section 05]. It is also the first string-valued key in
+        // this store, so it is quoted here and read through ConfigValue.Date.
+        ("backfill.window_start", "\"2021-01-04\""),
+
+        // How many tickers a ticker-partitioned sweep works on at once. Not a
+        // provider bound: EodhdRateLimiter already holds the 1,000-a-minute limit and
+        // a sweep of 50,785 names at one unit each is nowhere near it. This bounds
+        // how many Npgsql binary COPY streams and sockets are open at once, which is
+        // the resource that actually runs out. Measured and revised at 3.6 rather
+        // than guessed twice.
+        ("backfill.ticker_concurrency", "8"),
+
+        // The allowance and what is held back from it. dailyRateLimit read 100,000
+        // at 3.1, which is the same figure phase P and phase 1 read.
+        //
+        // The reserve is what a sweep may not eat into, so the nightly run still has
+        // an allowance after a backfill day. A measured night is 45,518 units
+        // [PROGRESS, 2026-08-09] and the rest is headroom for C04's universe-sized
+        // pass moving with the universe. C01's weekly rebuild at 28,401 is NOT in it,
+        // because 3.7 moves the sector call to C03 and takes that number to about
+        // one; until 3.7 lands, a sweep sharing a Sunday with a C01 rebuild has less
+        // margin than this number says, and that is recorded rather than padded,
+        // since padding it would shrink every ordinary day's sweep for a case that
+        // stops existing.
+        ("backfill.daily_unit_allowance", "100000"),
+        ("backfill.unit_reserve", "50000"),
+
+        // One weight per endpoint a sweep calls, so the gate can project whether the
+        // next unit of work fits before spending it. Seeded from the weights table
+        // measured 2026-08-09 and confirmed against 3.1's own brackets, every one
+        // exact. A weight at a call site is the magic number CLAUDE.md section 8
+        // rules out, and these are measurements rather than constants: they project
+        // whether the next unit fits and never decide that it did, which is what the
+        // /api/user reading does.
+        ("backfill.weight_eod", "1"),
+        ("backfill.weight_fundamentals", "10"),
+        ("backfill.weight_sentiments_per_ticker", "5"),
+        ("backfill.weight_form4_page", "10"),
+        ("backfill.weight_splits", "1"),
+        ("backfill.weight_dividends", "1"),
     ];
 
     private readonly string _connectionString;

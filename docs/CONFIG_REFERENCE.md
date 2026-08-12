@@ -126,6 +126,64 @@ the two sentiment keys at `SentimentIngestor.cs:51-52`, the two flow keys at
 at `EventsIngestor.cs:59-60`. Line numbers go stale; the file and the stage do not,
 and both are given so the next reader can find it either way.
 
+## Backfill
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `backfill.window_start` | "2021-01-04" | D-94, 3.3 | NOT BOUND | 3.4 |
+| `backfill.ticker_concurrency` | 8 | 3.3 | NOT BOUND | 3.6 |
+| `backfill.daily_unit_allowance` | 100000 | 3.1, 3.3 | NOT BOUND | 3.4 |
+| `backfill.unit_reserve` | 50000 | 3.3 | NOT BOUND | 3.4 |
+| `backfill.weight_eod` | 1 | 3.1, 3.3 | NOT BOUND | 3.6 |
+| `backfill.weight_fundamentals` | 10 | 3.1, 3.3 | NOT BOUND | 3.7 |
+| `backfill.weight_sentiments_per_ticker` | 5 | 3.1, 3.3 | NOT BOUND | 3.8 |
+| `backfill.weight_form4_page` | 10 | 3.1, 3.3 | NOT BOUND | 3.9 |
+| `backfill.weight_splits` | 1 | 3.1, 3.3 | NOT BOUND | 3.10 |
+| `backfill.weight_dividends` | 1 | 3.1, 3.3 | NOT BOUND | 3.10 |
+
+**Every Consumer here reads `NOT BOUND` and that is the true state at 3.3.** The keys
+are seeded before the gate that reads them exists, so the column names the checkpoint
+that will fill it rather than a component nothing has confirmed. An unverified entry
+is worse than an absent one, and a guessed one is worse than both.
+
+**`backfill.window_start` is the only date-valued key in the store and the only one
+that is not a number** [D-94]. `config_rows.value` is `jsonb`, so it is stored quoted
+and read through `ConfigValue.Date`, which parses the JSON rather than the raw text. A
+count of years would have needed no quoting and is what the decision rejects: resolved
+against the run date it moves the window on every re-run, so two backfills over one
+store would compute different date sets and the phase's fourth done-when line could not
+be tested at all.
+
+The value is the first session of 2021. It sits after `ConfigSeeder.SeedInstant`, which
+is what makes every date in the range resolvable at all [D-72], and it opens the window
+before the 2021 advance rather than inside it, because the window has to contain a real
+drawdown and a drawdown needs the peak it fell from [`ARCHITECTURE.html` §05].
+
+**The six weights are measurements and the gate never decides with them.** Each was
+measured by bracketing one call between two `/api/user` reads, on 2026-08-09 and again
+at 3.1, and every one came back the same. They project whether the next unit of work
+fits; what decides is the reading itself, and a drift between the projection and the
+reading is recorded rather than smoothed over. They are keys rather than literals
+because a weight at a call site is the magic number §8 rules out, and because a
+provider that re-prices makes every one of them wrong at once.
+
+**`backfill.unit_reserve` is what a sweep may not eat into**, so a backfill day still
+leaves the nightly run an allowance. A measured night is 45,518 units and the rest is
+headroom for C04's universe-sized pass moving with the universe. C01's weekly rebuild
+at 28,401 is deliberately not in it: 3.7 moves the sector call to C03 and takes that
+number to about one. Until 3.7 lands, a sweep sharing a Sunday with a C01 rebuild has
+less margin than this number says, which is recorded rather than padded, since padding
+it would shrink every ordinary day's sweep for a case that stops existing.
+
+**`backfill.ticker_concurrency` is not a provider bound.** `EodhdRateLimiter` already
+holds the 1,000-requests-a-minute limit and a sweep of 50,785 names at one unit each is
+nowhere near it. This bounds how many Npgsql binary COPY streams and sockets are open
+at once, which is the resource that runs out first.
+
+**Neither the allowance nor the reserve is tunable by the system** [INVARIANT 14]. They
+are operator configuration in the same sense as the risk caps: the tuner moves screen
+slots and touches nothing else.
+
 ## Percentiles
 
 | Key | Default | Set by | Consumer | Verified |

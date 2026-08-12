@@ -306,7 +306,11 @@ public sealed class ConfigResolutionTests
         // that same kind: it had been in CONFIG_REFERENCE.md since the corpus was
         // written and nothing seeded it, so the phase that first ranks anything
         // would have resolved nothing for it.
-        Assert.Equal(32, ConfigSeeder.Keys.Count);
+        //
+        // Forty-two at 3.3: the backfill window start, the ticker concurrency, the
+        // daily allowance and its reserve, and one weight for each of the six
+        // endpoints a sweep calls.
+        Assert.Equal(42, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)
@@ -347,10 +351,118 @@ public sealed class ConfigResolutionTests
                      // D-80's two, held back at 2.4 until the rule existed [2.9].
                      "market.regime_breadth_high",
                      "market.regime_breadth_low",
+
+                     // Phase 3 [3.3]. The window start is D-94's; the allowance, its
+                     // reserve and the six weights are what the gate at 3.4 projects
+                     // with, and a weight at a call site is the magic number
+                     // CLAUDE.md section 8 rules out.
+                     "backfill.window_start",
+                     "backfill.ticker_concurrency",
+                     "backfill.daily_unit_allowance",
+                     "backfill.unit_reserve",
+                     "backfill.weight_eod",
+                     "backfill.weight_fundamentals",
+                     "backfill.weight_sentiments_per_ticker",
+                     "backfill.weight_form4_page",
+                     "backfill.weight_splits",
+                     "backfill.weight_dividends",
                  })
         {
             Assert.Contains(ConfigSeeder.Keys, k => string.Equals(k.Key, required, StringComparison.Ordinal));
         }
+    }
+
+    /// <summary>
+    /// Every phase 3 key resolves for a simulated date, and the two that are not
+    /// plain integers are read back as what they are [3.3].
+    ///
+    /// **The date key is the one this test exists for.** `config_rows.value` is
+    /// `jsonb` and every key seeded before this phase was a number, so nothing had
+    /// ever exercised a value that arrives quoted. A consumer parsing the raw text
+    /// would get `"2021-01-04"` including its quotes and fail, or worse, trim them by
+    /// hand and be wrong the first time a JSON escape appears.
+    /// </summary>
+    [Fact]
+    public async Task EveryPhaseThreeKeyResolvesForASimulatedDateAndReadsBackAsItsType()
+    {
+        var seeder = new ConfigSeeder(TestDatabase.ConnectionString);
+        await seeder.SeedAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        var store = new ConfigStore(TestDatabase.ConnectionString);
+
+        // Inside the backfill window and years before today, so this is resolution as
+        // of a simulated date rather than as of now [D-43, INVARIANT 13].
+        var simulated = new DateOnly(2022, 6, 15);
+
+        var backfillKeys = ConfigSeeder.Keys
+            .Where(k => k.Key.StartsWith("backfill.", StringComparison.Ordinal))
+            .Select(k => k.Key)
+            .ToList();
+
+        Assert.Equal(10, backfillKeys.Count);
+
+        foreach (var key in backfillKeys)
+        {
+            var row = await store.RequireAsync(key, simulated, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal(1, row.Version);
+        }
+
+        var windowStart = ConfigValue.Date(
+            await store.RequireAsync("backfill.window_start", simulated, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true));
+
+        Assert.Equal(new DateOnly(2021, 1, 4), windowStart);
+
+        // The window start must be resolvable itself, which means at or after the seed
+        // instant. A window opening before it would give every date in the range a
+        // config version of null and fail the run rather than compute against nothing
+        // [D-72, D-94].
+        Assert.True(
+            windowStart >= DateOnly.FromDateTime(ConfigSeeder.SeedInstant.UtcDateTime),
+            "The backfill window opens before the seed instant, so no stage could resolve config " +
+            "for the first date it would compute.");
+
+        var allowance = ConfigValue.Long(
+            await store.RequireAsync("backfill.daily_unit_allowance", simulated, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true));
+
+        var reserve = ConfigValue.Long(
+            await store.RequireAsync("backfill.unit_reserve", simulated, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true));
+
+        // 100,000 is what /api/user's dailyRateLimit read at 3.1, and the reserve is
+        // what a sweep may not eat into. A reserve at or above the allowance would
+        // halt every sweep before its first call, which is a configuration that looks
+        // cautious and does nothing.
+        Assert.Equal(100_000, allowance);
+        Assert.True(reserve > 0 && reserve < allowance,
+            $"The reserve is {reserve} against an allowance of {allowance}, which leaves a sweep " +
+            "nothing to spend.");
+    }
+
+    /// <summary>
+    /// The weights are the ones measured, not plausible ones [3.1, 3.3].
+    ///
+    /// They are measurements and can go stale if the provider re-prices, which is why
+    /// the gate projects with them and never decides with them. What decides is the
+    /// reading from `/api/user`. This asserts the projection starts from what was
+    /// measured rather than from what someone remembered.
+    /// </summary>
+    [Fact]
+    public void TheSeededEndpointWeightsAreTheMeasuredOnes()
+    {
+        var weights = ConfigSeeder.Keys
+            .Where(k => k.Key.StartsWith("backfill.weight_", StringComparison.Ordinal))
+            .ToDictionary(k => k.Key, k => k.Value, StringComparer.Ordinal);
+
+        Assert.Equal("1", weights["backfill.weight_eod"]);
+        Assert.Equal("10", weights["backfill.weight_fundamentals"]);
+        Assert.Equal("5", weights["backfill.weight_sentiments_per_ticker"]);
+        Assert.Equal("10", weights["backfill.weight_form4_page"]);
+        Assert.Equal("1", weights["backfill.weight_splits"]);
+        Assert.Equal("1", weights["backfill.weight_dividends"]);
     }
 
     [Fact]

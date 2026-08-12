@@ -16,7 +16,7 @@ Correct them directly. Do not record intentions here.
 | 0 Rails | DONE | d9cb5df | Signed off 2026-08-06. Checkpoints 0.1 to 0.8, plus CI, the sign-off review, and pass O's corrections. 25 tests green. Step 1 was met by running every CI step locally, because no hosted runner has ever picked up a job on this account. Step 2 ran at `d4baeaf` and does not cover pass O's four corrected files. Both gaps are in the phase 0 block below |
 | 1 Ingest and universe | IN PROGRESS | 050d5c7 | Every checkpoint 1.1 to 1.14 landed, 136 tests. All twelve definition-of-done lines met live on 2026-08-09: the universe rebuilt to 2,840 names and `run-night` ran all seven stages end to end. Four findings are open and all four are authored questions, not build work: C01 never deactivates, the universe is 2,840 rather than roughly 2,000, C05 cannot fit any schedule, and CI cannot catch the timeout failure class. The CI runner gap is recorded below rather than at sign-off |
 | 2 Compute | IN PROGRESS | 68aafa4 | Every checkpoint 2.1 to 2.15 landed, 221 tests. Five components built: C08, C09, C10, C11 and C35. All eleven definition-of-done lines met on 2026-08-11, with `run-night` completing twelve stages on the blessed date 2026-08-07 and the compute layer digesting identically on re-run. Two components had never executed before this phase ran them and both were broken at the write, which is the phase's largest finding. `METRICS.md` is still the unauthored draft 2.1 produced and all nine of its PROPOSAL entries are now running code |
-| 3 Backfill | NOT STARTED | | |
+| 3 Backfill | IN PROGRESS | | Checkpoint 3.1 landed. Seven questions answered for 96 units against ~150 priced, and the delisted symbol list is reachable, which is the gate the checkpoint ran first to open. Two answers need an authored decision and neither blocks a later checkpoint: insider flow is not backfillable for delisted names, and `last_two_earnings_surprises` turns out to have a free source in an endpoint C03 already calls. The HEAD sha lands with the phase |
 | 4 Screens and selection | NOT STARTED | | |
 | 5 Digest chain | NOT STARTED | | |
 | 6 Researcher | NOT STARTED | | |
@@ -3027,6 +3027,228 @@ just failed.
 
 ---
 
+## Phase 3, backfill
+
+### 3.1, the endpoint sweep
+
+Run 2026-08-11 22:52 and 22:54 US Eastern, which is 2026-08-12 02:52 and 02:54 UTC,
+from a scratch file-based app outside the repository, as 1.9 and phase P's probe
+were. Transcript at `docs/evidence/phase-3/endpoint-sweep-20260811.txt`, 225 lines,
+searched for the token and for its percent-encoded form before committing and holding
+neither. Entitlement is per endpoint and invisible in the account payload, so this is
+what was called rather than what a field claims.
+
+Two passes. The first asks the seven questions. The second re-asks Q5 against names
+delisted **inside** the window, the first pass having picked one that delisted in
+2003 and so proved nothing about delisted names in general, and re-asks Q6's depth
+against a name whose distribution history is long.
+
+**96 units against the ~150 the plan priced**, over 80 calls. `/api/user` costs
+nothing, confirmed by reading it twice back to back for an unchanged 90,518. The gap
+is not the weights table going stale: every weight in it was confirmed. **60 of the
+96 went on six 404s**, which is Q5's finding rather than an overhead.
+
+| # | Question | Answer |
+|---|---|---|
+| Q1 | Does `exchange-symbol-list/US?delisted=1` return anything, and how many | **Yes. 59,183 instruments, 32,611 of them common stock, and disjoint from the live list rather than a superset of it** |
+| Q2 | Does `eod/{t}` return a full series for a delisted ticker, and how far back | To the name's first session. AAAB.US returns 1,023 bars from 1999 for a name that last traded in 2003 |
+| Q3 | Is `sentiments` still 5 units a ticker over a five-year range | Yes. 5 units for 30 days and 5 for five years. 3.8's ~14,200 stands |
+| Q4 | Does `fundamentals/{t}` return every period or a capped set | Every period. 55 quarterly balance sheets for CCS.US, the same 55 that 1.9 and phase P read |
+| Q5 | Deepest `form4` page and `meta.total`, on a delisted name | **Unreachable. Three delisted names return 404 `Symbol not found` on both the index and form4, and each 404 is billed at 10 units** |
+| Q6 | History depth from `splits/{t}` and `div/{t}` | Whole history at 1 unit, and both answer for delisted names. `div/SPY.US` returns 135 rows back to 1993-03-19 |
+| Q7 | Does the `fundamentals/{t}` payload carry an EPS actual or an estimate | **Yes, in the payload C03 already pays for.** `Earnings::History`, 50 periods, `epsActual` and `epsEstimate` on each |
+
+**Q1. The delisted list is reachable and the parameter is honoured.** D-48 and
+`VALIDITY.md` §6's survivorship mitigation had never been tested against this
+subscription and both hold. Both forms were called in the same run, because a
+parameter this provider ignores comes back as a 200 holding the wrong answer, which
+is how form4's paging was misread at 1.9.
+
+| List | Instruments | Common stock |
+|---|---|---|
+| `exchange-symbol-list/US` | 51,651 | 18,174 |
+| `exchange-symbol-list/US?delisted=1` | 59,183 | 32,611 |
+| in both | **0** | |
+
+The two sets do not intersect at all, so `delisted=1` returns **only** delisted
+instruments and the price pool is the union rather than the second list. Row keys are
+`Code,Name,Country,Exchange,Currency,Type,Isin`, and **there is no delisting date**,
+which is the field `security.delisted_date` would want and the reason the last bar
+from `eod/{t}` is the only date available for it.
+
+**Q2. Delisted price history is deep and it is not truncated.** Five delisted common
+stocks spread across the ordinal range, plus `SPY.US` first because C08's benchmark
+reads it from `price_daily` and 3.6 asserts it present.
+
+| Ticker | Bars | Range | Last bar |
+|---|---|---|---|
+| SPY.US | 8,440 | 1993-01-29 .. 2026-08-11 | live |
+| AAAB.US | 1,023 | 1999-01-04 .. 2003-01-29 | before the window |
+| DGDM.US | 1,092 | 2009-11-11 .. 2021-08-13 | **inside the window** |
+| KEYHV.US | 46 | 2022-08-18 .. 2022-10-21 | **inside the window** |
+| RCPT.US | 581 | 2013-05-09 .. 2015-08-27 | before the window |
+| ZZZOD.US | 979 | 2017-09-18 .. 2021-08-06 | before the window |
+
+**The phase's second done-when line is reachable and has two named candidates.**
+DGDM.US and KEYHV.US each last traded inside the five-year window, so each is a spot
+check with bars to its last session and none after.
+
+**Q3. The flat per-ticker sentiment weight holds over a five-year range.** 30 days
+returned 9 rows for 5 units; five years returned 603 rows, 2021-08-12 to 2026-08-05,
+for 5 units. The weight was measured at 1, 10 and 20 tickers over a narrow range only
+and the whole sentiment backfill rested on it holding wider. It does.
+
+**Q4. `fundamentals/{t}` is not capped.** CCS.US, 367,892 bytes, 12 top-level blocks.
+
+| Block | Quarterly | Yearly |
+|---|---|---|
+| Balance_Sheet | 55, 2012-12-31 .. 2026-06-30 | 14 |
+| Income_Statement | 58, 2012-03-31 .. 2026-06-30 | 14 |
+| Cash_Flow | 58, 2012-03-31 .. 2026-06-30 | 14 |
+
+55 quarterly balance sheets is exactly what 1.9 and phase P read for this name, so
+the count is the company's history rather than a cap moving with the run date.
+
+**Q6. Splits and dividends are whole-history at 1 unit, and delisted names answer.**
+`div/SPY.US` 135 rows to 1993-03-19 with `date,declarationDate,recordDate,paymentDate,period,value,unadjustedValue,currency`, which is 1.8's fixture shape. `splits/DGDM.US`
+returns a 3-for-1 on 2009-06-29 for a name that stopped trading in 2021. `splits/SPY.US`
+and `splits/CCS.US` return 0 rows, and `div/CCS.US` 21 rows from 2021-06-01, which is
+when that company began paying rather than a depth limit.
+
+#### Q5 is the finding. Insider flow cannot be backfilled for delisted names at all
+
+`sec-filings/{t}` and `sec-filings/{t}/form4` both return **404 `Symbol not found`**
+for AAAB.US, DGDM.US and KEYHV.US. Three names, six calls, two of them delisted
+inside the window, and the first was retried precisely because a 2003 delisting
+predates mandatory electronic Form 4 filing and so proved nothing.
+
+**The symbol form is not the explanation.** The same ticker strings returned 200 with
+rows from `eod/{t}` and, for DGDM.US, from `splits/{t}` in the same run against the
+same client. What is unavailable is the SEC filings endpoints for these names, not the
+names.
+
+**What it costs the phase.** 3.9 sweeps form4 over the universe, and the universe is
+live names, so the ~258,000-unit estimate is unaffected. What is affected is what the
+backfilled `insider_transaction` table can be read as: **its history covers only names
+that still exist today**, which is the survivorship bias `VALIDITY.md` §6 exists to
+mitigate, reappearing in the one screen whose inputs cannot route around it. Prices,
+fundamentals, sentiment, splits and dividends all answer for delisted names; flow does
+not.
+
+**A 404 is billed at 10 units.** Six 404s cost 60 of this sweep's 96. That is a
+measurement the corpus did not have and it bears directly on D-95: the 14 of 250 names
+that answer `404 Symbol not found` and stay never-fetched are re-asked on every run at
+10 units each, so the frozen rotation is spending 140 units a night on calls that
+cannot succeed.
+
+#### Q7 is the second finding, and it came back better than the question expected
+
+`Earnings::History` is present in the `fundamentals/{t}` payload C03 already pays for.
+50 periods for CCS.US, 2014-06-30 to 2026-09-30, each carrying `reportDate`, `date`,
+`beforeAfterMarket`, `currency`, `epsActual`, `epsEstimate`, `epsDifference` and
+`surprisePercent`. `Earnings::Trend` carries 40 entries to 2027-12-31 and
+`Earnings::Annual` 13.
+
+So `last_two_earnings_surprises`, bolded in §07 as one of five fields that can flip a
+verdict and carrying no input anywhere in the store, needs **no new endpoint and no
+additional units**. What it needs is a change to C03's parse and a column to land in,
+both of which are phase 1's ingest rather than this phase's compute.
+
+**This is reported and not taken**, which is what the checkpoint said before it was
+run. A compute backfill closing an ingest gap by widening its own scope is what
+`CLAUDE.md` §3 forbids, and the carried obligation `2 → 3` is answered as a finding
+naming what would have to be added rather than as work.
+
+**One thing it does not close.** `Earnings::History.reportDate` is when a period was
+or will be reported, not when that schedule became public. 3.10 declines to backfill
+earnings because `calendar/earnings` sends no `announced_date`, and this field is not
+that date either, so the lookahead under C12's blackout and C15's
+`days_to_next_earnings` is unchanged and the `1 → 5` obligation stands.
+
+#### The allowance counter reset mid-sweep, which is the gate's problem rather than trivia
+
+Pass 0 opened at **90,518 units used against `apiRequestsDate` 2026-08-11**, at 02:52
+UTC on 2026-08-12. The next billable call came back against a counter reading 1, and
+pass 2 read `apiRequestsDate` 2026-08-12 two minutes later. So the daily reset landed
+inside the sweep, and the first bracket printed **-90,517 units** for a call that cost
+1.
+
+**The subtraction is what broke, and the gate at 3.4 subtracts.** A gate reading
+`apiRequests` alone gets a remaining figure that is correct within a provider day and
+meaningless across the boundary. It must read `apiRequestsDate` alongside it and treat
+a count dated before the current one as stale rather than as spend.
+
+**What is measured and what is not.** Measured: the counter read 90,518 for 08-11 at
+02:52 UTC on 08-12, and read 52 for 08-12 at 02:54 UTC. Not measured: whether the
+reset fires on a clock boundary or lazily on the first billable call of a new date.
+Either is consistent with these two reads. It is not US Eastern, because 02:52 UTC on
+08-12 is 22:52 on 08-11 there and the date had already moved.
+
+**The failure direction is the safe one and that is worth stating.** A stale high
+count makes the gate halt a sweep that could have continued, and D-68's per-grain
+idempotence makes the next run resume rather than restart. The cost of the defect is a
+wasted day, not a wrong store.
+
+**`extraLimit` reads 0 where phase P read 500.** `dailyRateLimit` is unchanged at
+100,000, which is what `backfill.daily_unit_allowance` is seeded from at 3.3.
+
+#### The price pool is 50,785 names, not the ~30,000 the plan priced
+
+`SymbolList.AdmittedAsync` keeps `Type` exactly `Common Stock` [D-4], which is 18,174
+of the live list. The delisted list adds 32,611 more under the same filter, and the
+two sets are disjoint, so 3.6's pool is **50,785 tickers at 1 unit each**.
+
+| Source | Plan §2 | Measured at 3.1 |
+|---|---|---|
+| Prices, `eod/{t}` | ~30,000 | **50,785** |
+| Sentiment, `sentiments` | ~14,200 | confirmed, the flat weight holds |
+| Splits and dividends | ~5,700 | confirmed at 1 unit per call |
+| Flow, `sec-filings/{t}/form4` | ~258,000 | live names only, see Q5 |
+| Fundamentals, `fundamentals/{t}` | ~48,000 | not measured here |
+| **Phase total** | **~356,000** | **~377,000** |
+
+**It still fits a day with the reserve held back** and it does not change the
+four-day arithmetic. It is recorded because §2's table is where 3.3's weight keys are
+seeded from.
+
+**The pool cannot be narrowed by delisting date, and the reason is not a choice.**
+Three of the five sampled delisted names last traded before the window opened, so some
+share of the 32,611 is pure cost. The symbol list carries no delisting date, and
+`eod/{t}` is billed per call rather than per row, so asking with `from` at the window
+start costs the same unit and returns nothing. The call is what reveals the last bar.
+Five names is not a rate and none is claimed.
+
+#### What 3.1 hands to the checkpoints after it
+
+- **3.3.** `backfill.daily_unit_allowance` 100,000, confirmed. Weight keys `1` for
+  `eod/{t}`, `splits/{t}`, `div/{t}` and `exchange-symbol-list`, `5` per ticker for
+  `sentiments`, `10` for `fundamentals/{t}` and for `sec-filings/{t}/form4`, all
+  confirmed against this run's brackets. No key is forced beyond the plan's list.
+- **3.4.** The gate reads `apiRequestsDate` as well as `apiRequests`, and a test
+  covers a reading whose date is behind the run date.
+- **3.6.** The pool is 50,785 and `SPY.US` is present with 8,440 bars.
+- **3.8.** Contingency resolved. The flat weight holds and the sweep is one pass.
+- **3.9.** Delisted names are not sweepable and the run log has to say so per ticker
+  rather than record a 404 as an empty result.
+- **The done-when spot check** has DGDM.US and KEYHV.US as named candidates.
+
+#### Two questions came back badly enough to need a decision, and neither is written here
+
+`CLAUDE.md` §13 puts decisions outside what a build session writes, so both are
+reported rather than authored [phase plan §3, which says the same of this checkpoint's
+outcome].
+
+1. **Insider flow is not backfillable for delisted names.** Whether S4's backfilled
+   history is used knowing it is survivorship-limited, whether the limitation is
+   recorded against every read of `insider_transaction` before the live window, or
+   whether something else follows, is authored. The phase can proceed either way
+   because 3.9's sweep is over the live universe in all of them.
+2. **`last_two_earnings_surprises` has a free source in an endpoint already called.**
+   Whether C03's parse reopens for it, and in which phase, is authored. Nothing in
+   phase 3 depends on the answer.
+
+---
+
 ## Open items carried forward
 
 Found and not closed. Each names what triggers it. The pass narratives behind
@@ -3045,3 +3267,5 @@ them are in `docs/archive/process-2026-08.md`.
 | 9 | ~~`TheCompiledApiCarriesNoPipelineDependency` reads `deps.json` from disk. Its stale-artifact defect was closed by having the test project reference the Api, which holds only while the build succeeds: after a failed build, `dotnet test --no-build` reads the previous artifact and the assertion passes against it. CI is not exposed, because its Build step gates Test~~ **Observed rather than predicted at 1.12**, where `dotnet test --no-build` reported 56 passing against a stale binary after a build that had just failed with four errors. Mitigated at 1.12 by making `ci.ps1` the per-checkpoint verification command instead of a three-command sequence: it runs the same steps in the same order and exits non-zero on the first failure, so it cannot reach the test step after a failed build. Proved by committing a deliberate syntax error and running it, which exited 1 at the Build step and printed no test count. **The hazard itself is unchanged** for anyone running `dotnet test --no-build` by hand; what changed is that nothing in the corpus now tells them to | Phase 9, with item 10 |
 | 10 | The Api's `appsettings.Secrets.json` flows into the test output directory through the 0.5 project reference, so a local test run can take its connection string from a file other than the test project's own. All four are byte identical today | Whenever the two need to differ |
 | 11 | **`BUILD_PLAN.md` is mid-convention and the strike sweep is outstanding.** D-73 as amended classifies by role rather than by name, and the file is a spec under that test: its checkpoint tables, done-when lines and carried obligations are all read to know what is currently owed. It now carries both conventions. Phase 3's fourth done-when line is a clean edit with its prior wording in `CHANGELOG.md`; **eight passages are struck in place**, counted rather than estimated. Six are supersessions of live text: phase P's secrets clause [D-55], checkpoint 0.8's corpus version bump [D-67], checkpoint 1.3's freshness thresholds [D-65] and its settledness mechanism [A10], checkpoint 1.13's config key count [A5 then A10 then A14], and phase 1's done-when reading `filing date` for the effective one [D-62]. Two are closure markers on carried obligations rather than supersessions, `TableWrite.Columns` [A27] and §3's C03 Writes cell [D-91], and whether a closed obligation keeping its original text is the same case is part of what the sweep decides. D-73's condition is what makes this a sweep rather than an edit taken alongside the amendment: no strike is removed until its decision names what it removed, and where a decision does not, `CHANGELOG.md` records the text before the deletion. **Three of the eight cite a correction pass rather than a decision**, being A5, A10, A14 and A27, so those take the `CHANGELOG.md` route by construction. That is a read of several decisions against eight passages, not a formatting pass. **The file is readable in the meantime and the risk is the ordinary one D-73 names**, that a session skimming takes struck text for live | A sweep, or the next phase whose planning reads the struck passages. Not a build session's to fold into unrelated work |
+| 12 | **Insider flow is not backfillable for delisted names**, measured at 3.1. `sec-filings/{t}` and `sec-filings/{t}/form4` return 404 `Symbol not found` for three delisted names, two of them delisted inside the five-year window, against the same ticker strings `eod/{t}` and `splits/{t}` answered for in the same run. Prices, fundamentals, sentiment, splits and dividends all reach delisted names; flow does not. So the backfilled `insider_transaction` history covers only names that still exist today, which is the survivorship bias `VALIDITY.md` §6 exists to mitigate reappearing in the one screen whose inputs cannot route around it. What follows from it is authored: whether S4's backfilled history is used knowing the limitation, whether the limitation is recorded against every read before the live window, or something else. **No checkpoint is blocked**, 3.9's sweep being over the live universe under every reading | An authored decision, before phase 4 tunes anything on S4's backfilled history |
+| 13 | **`last_two_earnings_surprises` has a free source in an endpoint C03 already calls**, measured at 3.1. `Earnings::History` sits in the `fundamentals/{t}` payload, 50 periods for CCS.US carrying `epsActual`, `epsEstimate`, `epsDifference` and `surprisePercent`, so the field bolded in §07 as one of five that can flip a verdict needs no new endpoint and no additional units. It needs a change to C03's parse and a column to land in, which is phase 1's ingest rather than phase 3's compute, and the checkpoint said before it ran that the outcome could not come back as work for this phase [`CLAUDE.md` §3]. It does not close the `1 → 5` earnings obligation: `reportDate` is when a period was reported, not when that schedule became public | An authored decision on when C03's parse reopens |

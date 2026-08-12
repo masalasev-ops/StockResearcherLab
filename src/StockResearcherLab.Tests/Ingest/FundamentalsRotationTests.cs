@@ -351,6 +351,10 @@ public sealed class FundamentalsRotationTests
             "universe.min_price" => "5",
             "universe.min_adv_20d" => "2000000",
             "universe.min_history_days" => "250",
+
+            // 3.7. The rotation now reads `events` for the names that reported inside
+            // this window and ranks them above staleness [D-74].
+            "events.earnings_backward_days" => "7",
             _ => throw new InvalidOperationException($"The test config has no value for '{key}'."),
         };
     }

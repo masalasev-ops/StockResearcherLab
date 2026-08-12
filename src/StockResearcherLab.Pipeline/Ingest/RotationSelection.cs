@@ -64,18 +64,34 @@ public static class RotationSelection
     /// </param>
     /// <param name="inUniverse">The tiebreak set. Pass the pool itself where the two are the same.</param>
     /// <param name="maxPerRun">The per-run bound, which is a rate limit and never a filter [INVARIANT 1].</param>
+    /// <param name="justReported">
+    /// Tickers that have reported earnings inside the run's backward window, which jump
+    /// the queue [D-74, `ARCHITECTURE.html` §3's C03 Reads cell].
+    ///
+    /// **Below never-attempted and above staleness.** A name absent from the store
+    /// cannot be screened at all, so coverage still comes first; among names that have
+    /// been fetched, one that has just reported is stale in a way its attempt date does
+    /// not show, which is the whole reason the catalogue asks for this read.
+    ///
+    /// Empty for C05, whose pool has no earnings tier. Passing it anyway keeps one
+    /// function rather than two.
+    /// </param>
     public static Result For(
         IReadOnlyList<string> pool,
         IReadOnlyDictionary<string, DateOnly> attempted,
         IReadOnlySet<string> inUniverse,
-        int maxPerRun)
+        int maxPerRun,
+        IReadOnlySet<string>? justReported = null)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(attempted);
         ArgumentNullException.ThrowIfNull(inUniverse);
 
+        var reported = justReported ?? new HashSet<string>(StringComparer.Ordinal);
+
         var selected = pool
             .OrderBy(t => attempted.ContainsKey(t) ? 1 : 0)
+            .ThenBy(t => reported.Contains(t) ? 0 : 1)
             .ThenBy(t => attempted.TryGetValue(t, out var d) ? d : DateOnly.MinValue)
             .ThenBy(t => inUniverse.Contains(t) ? 0 : 1)
             .ThenBy(t => t, StringComparer.Ordinal)

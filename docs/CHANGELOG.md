@@ -1184,6 +1184,28 @@ money: `eps_actual` and `eps_estimate` are per-share figures rather than monetar
 totals, and `surprise_fraction` is a ratio. The monetary count is unchanged at 19,
 `sector` being text.
 
+**`BUILD_PLAN.md`'s `1 → 3` carried obligation, closed at 3.7.** A clean edit under
+D-73, `BUILD_PLAN.md` being a spec under that test. Removed:
+
+> | 1 | 3 | `FundamentalsIngestor` does not read `events`, so earnings do not jump the
+> rotation queue. `ARCHITECTURE.html` §3 gives C03 `events` in Reads and the code
+> declares `price_daily` and `security` only. The read conformance test added at the
+> post phase 1 reconciliation carries this as its one recorded deviation and fails the
+> moment it stops being one, so it cannot go stale. The catalogue is right and the code
+> is incomplete [D-74], which rules out both available shortcuts: declaring `events`
+> without reading it makes the declaration mean nothing, and removing it from the
+> catalogue is editing an authored document to match what was built. `events` has been
+> built since 1.8, so nothing blocks the work. Owed to phase 3 because that is the next
+> phase to run ingest, and a fixed rotation head leaves every name outside it unread
+> indefinitely, which is a coverage property backfill depends on. **Lands at 3.7**,
+> with the full pool sweep |
+
+C03 now reads `events` for the names that reported inside
+`events.earnings_backward_days` and ranks them above staleness in the shared rotation.
+`ReadDeclarationConformanceTests` carried it as its one recorded deviation and **failed
+the moment it stopped being one**, which is how the closure was found rather than
+remembered; that list is now empty.
+
 **Why the sector column is not on `security`**, recorded because it is the option a
 reader would expect. It would make C03 a second writer on the table C01 owns, requiring
 a split declaration [INVARIANT 10, D-77]; it would carry one sector per ticker, which is

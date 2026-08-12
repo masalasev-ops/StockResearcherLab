@@ -43,28 +43,26 @@ public sealed class ReadDeclarationConformanceTests
     private const int CataloguedComponents = 35;
 
     /// <summary>
-    /// The one place the catalogue and the code disagree, recorded rather than
-    /// silently permitted, and asserted below to still be a disagreement.
+    /// Deviations between the catalogue and the code, recorded rather than silently
+    /// permitted, and asserted below to still be deviations.
     ///
-    /// **C03's Reads cell names `events` and `FundamentalsIngestor` does not declare
-    /// it.** The catalogue is right and the code is incomplete: section 3 says
-    /// earnings jump the rotation queue, which needs the earnings calendar, and the
-    /// rotation is staleness-ordered only. `events` has been built since 1.8, so
-    /// nothing blocks closing it.
+    /// **Empty since 3.7.** The one entry was C03's Reads cell naming `events` where
+    /// `FundamentalsIngestor` did not declare it: §3 says earnings jump the rotation
+    /// queue, which needs the earnings calendar, and the rotation was staleness-ordered
+    /// only. 3.7 closed it by reading `events` for the names that reported inside
+    /// `events.earnings_backward_days` and ranking them above staleness, so the
+    /// declaration now means what it says.
     ///
-    /// **Declaring `events` to make this green would be the wrong fix.** A read set
-    /// wider than what the stage reads is a declaration that means nothing, and the
-    /// test would then report agreement about behaviour that still does not exist.
-    /// Removing `events` from the catalogue would be worse: it is editing an authored
-    /// document to match what was built [`CLAUDE.md` section 13].
+    /// **The closure was found by this test rather than remembered.** It fails when a
+    /// recorded deviation stops being one, which is the opposite of how a suppression
+    /// list usually behaves, and that is what made the entry safe to record in the
+    /// first place. The `1 → 3` carried obligation in `BUILD_PLAN.md` goes with it.
     ///
-    /// Carried in `BUILD_PLAN.md` from phase 1 to phase 3, so the planning for that
-    /// work meets it rather than only a reader of this file [`CLAUDE.md` section 7].
+    /// Declaring a table a stage does not read would have made this green and meant
+    /// nothing; removing `events` from the catalogue would have been editing an
+    /// authored document to match what was built [`CLAUDE.md` §13]. Neither was done.
     /// </summary>
-    private static readonly (string Component, string Table)[] RecordedDeviations =
-    [
-        ("FundamentalsIngestor", "events"),
-    ];
+    private static readonly (string Component, string Table)[] RecordedDeviations = [];
 
     [Fact]
     public void TheReadsCellParseFindsTablesRatherThanNothing()

@@ -3817,6 +3817,50 @@ carries no financials for with a bare JSON string, and `TryGetProperty` throws o
 non-object rather than returning false, so the unfiltered read needed a `ValueKind`
 guard the filtered one never did.
 
+#### 3.7 completed, 2026-08-12
+
+**Sector moved.** C03 writes General::Sector onto undamental_snapshot from the call
+it already makes, and C01 reads the most recent filing at or before the date being built
+[D-97]. C01's per-member call is gone: at 10 units over 2,840 members that was 28,401
+units a week buying what the payload carries for nothing, and removing it is what makes
+a per-date C01 affordable. The read is now as-of the date being built, which the call
+could never be.
+
+**C03 reads `events` and earnings jump the queue** [D-74]. Names that reported inside
+`events.earnings_backward_days` rank above staleness and below never-attempted:
+coverage still comes first, because a name absent from the store cannot be screened at
+all, but among names already fetched one that has just reported is stale in a way its
+attempt date does not show. The tier is optional on the shared `RotationSelection` and
+C05 passes nothing, so one function still serves both.
+
+**`ReadDeclarationConformanceTests` found the closure rather than being told about
+it.** Its recorded-deviation list held one entry, C03's `events`, and the test fails
+when a recorded deviation stops being one. It failed on this build. The list is now
+empty and `BUILD_PLAN.md`'s `1 → 3` obligation is closed as a clean edit with the
+prior wording in `CHANGELOG.md`.
+
+**C09 populates `last_two_earnings_surprises`**, which has been written null since
+0001. The read is keyed on `report_date <= date` and never on `period_end`, which is
+`filing_date_effective`'s rule one table over: a period end is when the quarter closed
+and a report date is when the figure became public [INVARIANT 12, D-96]. Rows with no
+`report_date` and rows with no `eps_actual` are both unreadable by construction, the
+second being the forward-dated entry the provider carries for the current quarter. Null
+rather than an empty array where a ticker has no readable earnings.
+
+**C03 has a range mode**, one full pool sweep with the rotation cap lifted. The cap is a
+rate limit and not a filter [INVARIANT 1], so lifting it is the cap doing what it is for.
+The pool is the live candidate pool plus every delisted common stock with a
+`price_daily` bar at or after `backfill.window_start`, which is the amendment before
+this checkpoint and which 3.6 is what makes computable.
+
+**The gate is asked per ticker here, not per chunk as C02's is.** Each call is 10 units
+against C02's 1, so a chunk's overshoot would be eighty units rather than eight, and this
+is the sweep that meets the wall on any day it shares with another.
+
+**What stays unmet until it runs.** Every pool member carrying a
+`fundamental_fetch_attempt` row, `fcf_yield` coverage before and after, and a gated
+halt resuming are all checks against a loaded store.
+
 #### C05 buys per ticker what C03 now receives for nothing
 
 Asked because the sector call this checkpoint removes had exactly this shape, and

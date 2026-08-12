@@ -106,6 +106,7 @@ public sealed class ValuationEngine : IStage
         var filings = await FilingsAsync(context, ct).ConfigureAwait(false);
         var closes = await ClosesAsync(context, ct).ConfigureAwait(false);
         var monthEnds = await MonthEndClosesAsync(context, ct).ConfigureAwait(false);
+        var surprises = await SurprisesAsync(context, ct).ConfigureAwait(false);
 
         var rows = new List<Row>(filings.Count);
 
@@ -116,7 +117,8 @@ public sealed class ValuationEngine : IStage
                 periods,
                 closes.GetValueOrDefault(ticker),
                 monthEnds.GetValueOrDefault(ticker, []),
-                minPoints));
+                minPoints,
+                surprises.GetValueOrDefault(ticker)));
         }
 
         // Ordinal, and load-bearing rather than tidy: the loop above walks a
@@ -151,7 +153,7 @@ public sealed class ValuationEngine : IStage
                     // document says where a surprise comes from. Null rather than a
                     // proxy, because the field is one of the five section 7 calls
                     // out as able to flip a verdict.
-                    await w.WriteAsync<float[]?>(null, c).ConfigureAwait(false);
+                    await w.WriteAsync(r.LastTwoEarningsSurprises, c).ConfigureAwait(false);
                 }
             }, ct).ConfigureAwait(false);
 
@@ -196,12 +198,65 @@ public sealed class ValuationEngine : IStage
     /// </param>
     /// <param name="close">The raw close on <paramref name="date"/>, or null if the name did not trade.</param>
     /// <param name="monthEnds">The last trading date of each month in the five years before <paramref name="date"/>, ascending.</param>
+    /// <summary>
+    /// The last two earnings surprises per ticker, newest first [D-96].
+    ///
+    /// **Keyed on `report_date &lt;= date`, never on `period_end`.** That is
+    /// `filing_date_effective`'s rule one table over: a period end is when the quarter
+    /// closed and a report date is when the figure became public, and reading on the
+    /// first hands a screen a surprise weeks before anyone had it [INVARIANT 12].
+    ///
+    /// A row with no `report_date` is unreadable by construction rather than by anyone
+    /// remembering to exclude it, and one with no `eps_actual` has not been reported at
+    /// all: the forward-dated entry the provider carries for the current quarter is
+    /// exactly that case.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyList<float>>> SurprisesAsync(
+        StageContext context, CancellationToken ct)
+    {
+        var asOf = context.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        var sql = $"""
+            SELECT ticker, surprise_fraction
+            FROM (
+                SELECT ticker, surprise_fraction,
+                       row_number() OVER (PARTITION BY ticker ORDER BY report_date DESC, period_end DESC) AS rn
+                FROM earnings_history
+                WHERE report_date IS NOT NULL
+                  AND report_date <= DATE '{asOf}'
+                  AND eps_actual IS NOT NULL
+                  AND surprise_fraction IS NOT NULL
+            ) ranked
+            WHERE rn <= 2
+            ORDER BY ticker, rn;
+            """;
+
+        var rows = await context.Data.ReadAsync("earnings_history", sql, ct).ConfigureAwait(false);
+
+        var map = new Dictionary<string, IReadOnlyList<float>>(StringComparer.Ordinal);
+
+        foreach (var r in rows)
+        {
+            var ticker = (string) r[0]!;
+            if (!map.TryGetValue(ticker, out var list))
+            {
+                list = new List<float>(2);
+                map[ticker] = list;
+            }
+
+            ((List<float>) list).Add((float) r[1]!);
+        }
+
+        return map;
+    }
+
     public static Row Compute(
         string ticker, DateOnly date,
         IReadOnlyList<Period> filings,
         decimal? close,
         IReadOnlyList<(DateOnly Date, decimal Close)> monthEnds,
-        int ownHistoryMinPoints)
+        int ownHistoryMinPoints,
+        IReadOnlyList<float>? lastTwoSurprises = null)
     {
         var readable = ReadableAt(filings, date);
 
@@ -231,7 +286,15 @@ public sealed class ValuationEngine : IStage
             ShareCountChange: (float?) ShareCountChange(latest, fourthBack),
             RevenueGrowth4QTrend: (float?) RevenueGrowthTrend(readable),
             CashOnHand: CashOnHand(latest),
-            QuarterlyBurnRate: QuarterlyBurnRate(latest));
+            QuarterlyBurnRate: QuarterlyBurnRate(latest),
+
+            // Null rather than an empty array where the ticker has no readable
+            // earnings, because absent and "reported nothing" are different facts and
+            // an empty array is a real value [CLAUDE.md section 6]. The caller has
+            // already filtered on report_date <= date [D-96, INVARIANT 12].
+            LastTwoEarningsSurprises: lastTwoSurprises is { Count: > 0 }
+                ? lastTwoSurprises.ToArray()
+                : null);
     }
 
     /// <summary>
@@ -850,5 +913,6 @@ public sealed class ValuationEngine : IStage
         string Ticker, DateOnly Date,
         float? FcfYield, float? EvEbit, float? EvEbitVsOwn5Y, float? Roic, float? Roic4QChange,
         float? GrossMargin4QChange, float? NetDebtEbitda, float? Accruals, float? ShareCountChange,
-        float? RevenueGrowth4QTrend, decimal? CashOnHand, decimal? QuarterlyBurnRate);
+        float? RevenueGrowth4QTrend, decimal? CashOnHand, decimal? QuarterlyBurnRate,
+        float[]? LastTwoEarningsSurprises = null);
 }

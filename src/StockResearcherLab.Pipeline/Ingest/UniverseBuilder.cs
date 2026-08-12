@@ -114,7 +114,7 @@ public sealed class UniverseBuilder : IStage
         // Ordinal, so two runs over the same data write in the same order.
         members.Sort(static (a, b) => string.CompareOrdinal(a.Ticker, b.Ticker));
 
-        var sectors = await SectorsAsync(members, ct).ConfigureAwait(false);
+        var sectors = await SectorsAsync(context, ct).ConfigureAwait(false);
 
         var written = await context.Data.BulkUpsertAsync(
             "security", Columns, ConflictTarget,
@@ -268,35 +268,42 @@ public sealed class UniverseBuilder : IStage
     }
 
     /// <summary>
-    /// Sector, one call per member.
+    /// Sector, read from the most recent filing at or before the date being built
+    /// [D-97].
     ///
-    /// It is not on the symbol list and it is not per fiscal period, so it belongs
-    /// to neither of this stage's two reads. C01 owns `security.sector` and this is
-    /// where it comes from. C01 runs weekly, so the cost is a few thousand calls a
-    /// week rather than a night.
+    /// **This was a call per member and is now a read.** At 10 units a name over 2,840
+    /// members that was 28,401 units a week, buying what `fundamentals/{t}` already
+    /// carries for nothing in a call C03 makes anyway. Removing it is what makes a
+    /// per-date C01 affordable at all.
+    ///
+    /// **As of the date being built, not as of now**, which the call could never be.
+    /// A backfilled 2021 date reads the sector on the newest filing readable then,
+    /// where the call read today's. Sector as of a filing is still not sector as of a
+    /// date, and that limitation is recorded rather than proxied [D-97].
+    ///
+    /// Null where the ticker has no readable filing carrying one, which resolves to the
+    /// percentile engine's existing bucket-only fallback rather than to a new case.
     /// </summary>
-    private async Task<IReadOnlyDictionary<string, string?>> SectorsAsync(
-        IReadOnlyList<Member> members, CancellationToken ct)
+    private static async Task<IReadOnlyDictionary<string, string?>> SectorsAsync(
+        StageContext context, CancellationToken ct)
     {
+        var asOf = context.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        var sql = $"""
+            SELECT DISTINCT ON (ticker) ticker, sector
+            FROM fundamental_snapshot
+            WHERE sector IS NOT NULL
+              AND filing_date_effective IS NOT NULL
+              AND filing_date_effective <= DATE '{asOf}'
+            ORDER BY ticker, filing_date_effective DESC, period_end DESC;
+            """;
+
+        var rows = await context.Data.ReadAsync("fundamental_snapshot", sql, ct).ConfigureAwait(false);
+
         var map = new Dictionary<string, string?>(StringComparer.Ordinal);
-
-        foreach (var m in members)
+        foreach (var r in rows)
         {
-            try
-            {
-                using var doc = await _client.GetAsync(
-                    "fundamentals/" + m.Ticker, [("filter", "General::Sector")], ct).ConfigureAwait(false);
-
-                map[m.Ticker] = doc.RootElement.ValueKind == JsonValueKind.String
-                    ? doc.RootElement.GetString()
-                    : null;
-            }
-            catch (HttpRequestException)
-            {
-                // Null rather than a guess. Absent means unknown, and the percentile
-                // engine falls back to size bucket alone where a cell is thin.
-                map[m.Ticker] = null;
-            }
+            map[(string) r[0]!] = r[1] as string;
         }
 
         return map;

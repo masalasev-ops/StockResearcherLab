@@ -106,6 +106,7 @@ public sealed class FundamentalsIngestor : IBackfillStage
 
         long rows = 0;
         long holdingRows = 0;
+        var holdingCollisions = 0;
         var attempts = new List<Attempt>();
         var collisions = 0;
         string? haltedAt = null;
@@ -132,6 +133,7 @@ public sealed class FundamentalsIngestor : IBackfillStage
             rows += written;
             collisions += resolved?.EarningsCollisions ?? 0;
             holdingRows += resolved?.HoldingRows ?? 0;
+            holdingCollisions += resolved?.HoldingCollisions ?? 0;
 
             // Written for every ticker the sweep reached, yield or not, exactly as the
             // nightly path does: a name that returns nothing still has to move down the
@@ -145,8 +147,8 @@ public sealed class FundamentalsIngestor : IBackfillStage
             CultureInfo.InvariantCulture,
             "{0:N0} row(s) over {1:N0} of {2:N0} pool member(s), the rotation cap lifted. {3:N0} " +
             "earnings entr(ies) dropped as duplicates [D-96]. {4:N0} institutional holding row(s) " +
-            "off the same payloads [D-98]. {5}",
-            rows, attempts.Count, pool.Count, collisions, holdingRows,
+            "off the same payloads and {5:N0} holder entr(ies) dropped as duplicates [D-98]. {6}",
+            rows, attempts.Count, pool.Count, collisions, holdingRows, holdingCollisions,
             context.ResumeFrom is null ? "Full pool." : "Resumed from " + context.ResumeFrom + ".");
 
         return haltedAt is null
@@ -296,8 +298,10 @@ public sealed class FundamentalsIngestor : IBackfillStage
         // assumed rare is measured [D-96].
         var earningsCollisions = 0;
 
-        // The observable C05's run-log line used to carry [D-98].
+        // The observable C05's run-log line used to carry, and the count that says
+        // whether the duplicate guard beside it was the right guard [D-98].
         long holdingRows = 0;
+        var holdingCollisions = 0;
 
         // One entry per selected ticker, written below whether or not the fetch
         // yielded anything. A ticker that returns nothing still has to move down the
@@ -328,6 +332,7 @@ public sealed class FundamentalsIngestor : IBackfillStage
             rows += resolved.Value.Written;
             earningsCollisions += resolved.Value.EarningsCollisions;
             holdingRows += resolved.Value.HoldingRows;
+            holdingCollisions += resolved.Value.HoldingCollisions;
 
             if (resolved.Value.WidestCleanGapDays is int w && w > widestAlertDays)
             {
@@ -382,14 +387,15 @@ public sealed class FundamentalsIngestor : IBackfillStage
             "been attempted; this run's selection was {4:N0} new and {5:N0} refreshed, the oldest " +
             "attempt in it dated {6}. {7:N0} earnings entr(ies) were dropped as duplicates of a " +
             "period end already seen [D-96]. {8:N0} institutional holding row(s) off the same " +
-            "payloads, which C05 no longer buys separately; they are a top-20 snapshot rather than " +
-            "a series, so inst_ownership_change accumulates forward only [D-69, D-98]",
+            "payloads, which C05 no longer buys separately, and {9:N0} holder entr(ies) dropped as " +
+            "duplicates of one already seen at that report date [D-98]. Holdings are a top-20 " +
+            "snapshot rather than a series, so inst_ownership_change accumulates forward only [D-69]",
             rows, tickers.Count, selection.PoolSize, selection.NeverAttempted,
             selection.NewInSelection, selection.RefreshedInSelection,
             selection.OldestAttemptInSelection is DateOnly d
                 ? d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
                 : "none",
-            earningsCollisions, holdingRows);
+            earningsCollisions, holdingRows, holdingCollisions);
 
         notes.Insert(0, coverage);
 
@@ -458,9 +464,14 @@ public sealed class FundamentalsIngestor : IBackfillStage
     /// a rotation that froze would look exactly like one that had nothing to write
     /// [D-91, D-98].
     /// </param>
+    /// <param name="HoldingCollisions">
+    /// Holder entries dropped as duplicates of one already seen at that report date.
+    /// The guard was chosen against zero observations, so the count is what says
+    /// whether it was the right one [D-98].
+    /// </param>
     private readonly record struct Loaded(
         IReadOnlyList<ResolvedPeriod> Periods, int? WidestCleanGapDays, int SubstitutedCount, long Written,
-        int EarningsCollisions, long HoldingRows);
+        int EarningsCollisions, long HoldingRows, int HoldingCollisions);
 
     private async Task<Loaded?> LoadAsync(StageContext context, string ticker, CancellationToken ct)
     {
@@ -521,8 +532,8 @@ public sealed class FundamentalsIngestor : IBackfillStage
             // JSON string is the no-financials shape the provider was observed to send
             // and it carries no `Holders` either, so the two are the same population on
             // everything measured [0006 fixture].
-            var holdingRows = await WriteHoldingsAsync(
-                context, InstitutionalHolders.Parse(doc.RootElement, ticker), ct).ConfigureAwait(false);
+            var holdings = InstitutionalHolders.Parse(doc.RootElement, ticker, out var holdingCollisions);
+            var holdingRows = await WriteHoldingsAsync(context, holdings, ct).ConfigureAwait(false);
 
             var resolved = FilingDateRule.Resolve(
                 statements.Select(s => new RawPeriod(s.PeriodEnd, s.FilingDate)).ToList());
@@ -542,7 +553,7 @@ public sealed class FundamentalsIngestor : IBackfillStage
 
             return new Loaded(
                 resolved.Periods, resolved.WidestCleanGapDays, resolved.SubstitutedCount, written,
-                collisions, holdingRows);
+                collisions, holdingRows, holdingCollisions);
         }
     }
 
@@ -552,13 +563,12 @@ public sealed class FundamentalsIngestor : IBackfillStage
     /// Sorted by the parse before it gets here, because COPY order reaches the table
     /// [`CLAUDE.md` §6].
     ///
-    /// **Unlike the earnings capture beside it, nothing deduplicates the key**, and
-    /// that is carried over from C05 rather than decided here. Two entries sharing a
-    /// holder name and a report date would reach one statement under the same conflict
-    /// target and Postgres would raise `ON CONFLICT DO UPDATE command cannot affect row
-    /// a second time`, which is D-96's failure one table over. Nothing observed has
-    /// produced one; what this change moves is the exposure, from 250 tickers a night
-    /// to a whole-pool sweep. Recorded rather than closed [`PROGRESS.md` open item 21].
+    /// **Deduplicated by the parse before it gets here**, exactly as the earnings
+    /// capture is, so the rows carry distinct holder-and-report-date pairs and the
+    /// upsert's conflict target cannot be hit twice in one statement. Unguarded, two
+    /// entries naming one institution at one report date would raise `ON CONFLICT DO
+    /// UPDATE command cannot affect row a second time` mid-sweep, after the units for
+    /// everything before them are spent.
     /// </summary>
     private static async Task<long> WriteHoldingsAsync(
         StageContext context, IReadOnlyList<HoldingRow> holdings, CancellationToken ct)

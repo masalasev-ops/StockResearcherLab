@@ -1264,3 +1264,36 @@ Writes cells [`CLAUDE.md` §13].
 was taken on 2026-08-12 at 40 units and is not repeated; the regression test added with
 this change reads the captured block off disk and covers our parse rather than the
 provider's response [`FIXTURES.md`, the unfiltered `Holders` block].
+
+---
+
+## 2026-08-12, D-98's two open items closed
+
+`ARCHITECTURE.html` is a spec under D-73, so the edit below is clean and the prior
+wording is here.
+
+**§3's catalogue, the C05 Reads cell.** D-98 stopped the component calling the
+ownership endpoint and the cell went on naming it. Removed:
+
+> Insider, ownership [D-58], `security` for the universe it iterates [D-74]
+
+D-58 dropped short interest from the flow screen and stays beside the endpoint that
+remains, with D-98 alongside it as the decision that removed the other. `git diff
+docs/ARCHITECTURE.html` touches that cell and nothing else, one line.
+
+**Nothing else in the row moved.** The Runs cell still reads `Daily 17:45` [D-75] and
+the Writes cell still names `insider_transaction` and `flow_fetch_attempt` [D-61, D-95,
+D-98].
+
+**Why no test caught it, recorded rather than built.**
+`ReadDeclarationConformanceTests` intersects the Reads cell against `SCHEMA.md`'s table
+list and drops whatever does not match, which is what lets it read `security` out of
+"for the universe it iterates" and what makes it drop `digest_provider` from C29's. The
+consequence is that the half of every Reads cell naming endpoints is checked in neither
+direction, inside the test that has caught two things this week. That is the same
+unchecked-column shape as the Writes column and it is recorded beside it in
+`PROGRESS.md`, so whoever builds one sees the other.
+
+**`institutional_holding` gains no schema change and no document change.** The
+duplicate-key guard landing with this is code and tests only: the grain, the writer
+declaration and the column list are what they already were.

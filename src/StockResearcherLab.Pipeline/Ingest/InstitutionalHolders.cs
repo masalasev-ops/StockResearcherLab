@@ -66,18 +66,60 @@ public static class InstitutionalHolders
     /// between them.
     /// </param>
     public static IReadOnlyList<HoldingRow> Parse(JsonElement root, string ticker)
+        => Parse(root, ticker, out _);
+
+    /// <summary>
+    /// As above, reporting how many entries were dropped as duplicates of a holder
+    /// already seen at that report date.
+    ///
+    /// **The grain is not unique by construction and this is where it is made so.**
+    /// The entry key is a position, so the provider's own uniqueness is over positions
+    /// rather than over holders; two entries naming one institution at one report date
+    /// both resolve to <c>(ticker, report_date, holder_name)</c>, which is
+    /// <c>institutional_holding</c>'s primary key. Written unguarded the two arrive in
+    /// one statement and Postgres raises <c>ON CONFLICT DO UPDATE command cannot affect
+    /// row a second time</c>: a stage failure on one ticker, mid-sweep, after the units
+    /// for everything before it are spent. That is D-96's failure one table over, and
+    /// this is D-96's answer.
+    ///
+    /// **The larger current share count wins, and the first in document order wins
+    /// where they tie.** Document order is the provider's own rank, so first is the
+    /// larger holding where the numbers cannot separate them. A known share count beats
+    /// an absent one whichever came first, on the same reasoning D-96 gives for a dated
+    /// entry beating an undated one: absent is unknown rather than small, and keeping
+    /// the unknown one discards the only usable figure of the pair.
+    ///
+    /// **Summing is not the rule and the difference matters.** Two rows for one
+    /// institution may be two share classes or a provider artifact, and adding them
+    /// writes a number the provider did not send. Dropping loses a holding and summing
+    /// invents one; between a known omission and an invented figure this takes the
+    /// omission, and <paramref name="collisions"/> is what records that it happened.
+    ///
+    /// **Chosen against zero observations.** Nothing measured has produced a collision:
+    /// the captured block carries none and 1.9 read none. The count is what says
+    /// whether the rule was the right one, so a run reporting a non-zero count is a
+    /// reason to look at the rows before trusting it rather than after.
+    /// </summary>
+    /// <param name="collisions">
+    /// Entries dropped. Reported to the run log rather than swallowed [D-98].
+    /// </param>
+    public static IReadOnlyList<HoldingRow> Parse(JsonElement root, string ticker, out int collisions)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
 
-        var rows = new List<HoldingRow>();
+        collisions = 0;
 
         if (!TryEntries(root, out var entries))
         {
-            return rows;
+            return [];
         }
 
+        var byHolder = new Dictionary<(DateOnly ReportDate, string HolderName), HoldingRow>();
+
         // Keyed "0", "1", "2" rather than an array, which is why a caller expecting an
-        // array reads nothing rather than failing [1.9].
+        // array reads nothing rather than failing [1.9]. `JsonDocument` preserves
+        // document order, so "first seen" is a property of the payload rather than of a
+        // hash order that could differ between runs [`CLAUDE.md` §6].
         foreach (var entry in entries.EnumerateObject())
         {
             if (entry.Value.ValueKind != JsonValueKind.Object)
@@ -95,12 +137,31 @@ public static class InstitutionalHolders
                 continue;
             }
 
-            rows.Add(new HoldingRow(
+            var candidate = new HoldingRow(
                 ticker, date.Value, name,
                 Money(entry.Value, "currentShares"),
                 Money(entry.Value, "change"),
-                Pct(entry.Value, "change_p")));
+                Pct(entry.Value, "change_p"));
+
+            var key = (date.Value, name);
+
+            if (!byHolder.TryGetValue(key, out var existing))
+            {
+                byHolder[key] = candidate;
+                continue;
+            }
+
+            collisions++;
+
+            if (Wins(candidate, existing))
+            {
+                byHolder[key] = candidate;
+            }
         }
+
+        // Sorted out of the dictionary, because a Dictionary's enumeration order is
+        // unspecified and COPY order reaches the table [`CLAUDE.md` §6].
+        var rows = byHolder.Values.ToList();
 
         rows.Sort(static (a, b) =>
         {
@@ -110,6 +171,22 @@ public static class InstitutionalHolders
 
         return rows;
     }
+
+    /// <summary>
+    /// Which of two entries for one holder and report date is kept. The larger current
+    /// share count, and the one already held where they tie, which is the first in
+    /// document order.
+    ///
+    /// Strictly greater rather than greater-or-equal, and that is what makes the tie
+    /// resolve to first rather than last.
+    /// </summary>
+    private static bool Wins(HoldingRow candidate, HoldingRow existing)
+        => (candidate.Shares, existing.Shares) switch
+        {
+            (decimal c, decimal e) => c > e,
+            (not null, null) => true,
+            _ => false,
+        };
 
     /// <summary>
     /// The entries object, whichever of the three shapes it arrived in. Absent on a

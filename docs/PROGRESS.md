@@ -16,7 +16,7 @@ Correct them directly. Do not record intentions here.
 | 0 Rails | DONE | d9cb5df | Signed off 2026-08-06. Checkpoints 0.1 to 0.8, plus CI, the sign-off review, and pass O's corrections. 25 tests green. Step 1 was met by running every CI step locally, because no hosted runner has ever picked up a job on this account. Step 2 ran at `d4baeaf` and does not cover pass O's four corrected files. Both gaps are in the phase 0 block below |
 | 1 Ingest and universe | IN PROGRESS | 050d5c7 | Every checkpoint 1.1 to 1.14 landed, 136 tests. All twelve definition-of-done lines met live on 2026-08-09: the universe rebuilt to 2,840 names and `run-night` ran all seven stages end to end. Four findings are open and all four are authored questions, not build work: C01 never deactivates, the universe is 2,840 rather than roughly 2,000, C05 cannot fit any schedule, and CI cannot catch the timeout failure class. The CI runner gap is recorded below rather than at sign-off |
 | 2 Compute | IN PROGRESS | 68aafa4 | Every checkpoint 2.1 to 2.15 landed, 221 tests. Five components built: C08, C09, C10, C11 and C35. All eleven definition-of-done lines met on 2026-08-11, with `run-night` completing twelve stages on the blessed date 2026-08-07 and the compute layer digesting identically on re-run. Two components had never executed before this phase ran them and both were broken at the write, which is the phase's largest finding. `METRICS.md` is still the unauthored draft 2.1 produced and all nine of its PROPOSAL entries are now running code |
-| 3 Backfill | IN PROGRESS | ba88b0b | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b` and 314 with D-98's implementation, `ci.ps1` green at each. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built. **Nothing has been loaded**: 3.6 to 3.10 are the sweeps and they spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them. The open findings are the table at the foot of this file rather than a second list here, and none of them blocks a later checkpoint |
+| 3 Backfill | IN PROGRESS | ba88b0b | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b`, 314 with D-98's implementation and 324 with its two open items closed, `ci.ps1` green at each. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built. **Nothing has been loaded**: 3.6 to 3.10 are the sweeps and they spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them. The open findings are the table at the foot of this file rather than a second list here, and none of them blocks a later checkpoint |
 | 4 Screens and selection | NOT STARTED | | |
 | 5 Digest chain | NOT STARTED | | |
 | 6 Researcher | NOT STARTED | | |
@@ -3074,6 +3074,51 @@ documents disagreed and only one of them is read by a test.
 
 **The §16 store list drifted the same way and further**, which is the finding below.
 
+#### The Reads column has the same blind spot, on the half of each cell that names endpoints
+
+Recorded here rather than in its own section, because whoever builds the Writes-column
+test should see this in the same read: it is the same defect in the column that already
+has a test, and one pass over §3 could close both.
+
+**`ReadDeclarationConformanceTests` checks part of a cell and reads as though it checked
+the cell.** The parse takes the Reads cell, intersects it with `SCHEMA.md`'s table list,
+and drops whatever does not match. That is deliberate and is what makes it work: it is
+how `security` is read out of "`security` for the universe it iterates", how an endpoint
+name does not become a table for C02, and how `digest_provider` is dropped from C29's
+cell rather than reported. Every one of those is asserted in
+`TheReadsCellParseFindsTablesRatherThanNothing`.
+
+**The consequence is that endpoint names in that column are checked in neither
+direction.** A cell can name an endpoint the component never calls, or stop naming one
+it does call, and both assertions pass. **Seven of the thirty-five catalogued components
+name a provider endpoint in their Reads cell**, counted rather than estimated: C01's
+symbol list, C02's bulk EOD, C03's fundamentals, C04's sentiment, C05's insider, C06's
+calendar and splits and dividends, and C29's news. Four more lead with a phrase that is
+neither an endpoint nor a table, being C13, C26, C27 and C30. Counted by extracting the
+fourth cell of every `<tr>` in §3 and taking those that do not open with a `<code>`
+table, which is eleven.
+
+**Found by drifting, on 2026-08-12.** D-98 stopped C05 calling
+`fundamentals/{t}?filter=Holders::Institutions` and its cell went on naming the
+ownership endpoint. The suite was green across that commit and the one before it, which
+is the test being right about what it checks and silent about the rest. The cell is
+corrected under D-73 with the prior wording in `CHANGELOG.md`.
+
+**What it is not.** It is not a reason to widen the intersection to every word in the
+cell: that is the parse that would name `order` for C03, which is the case
+`TheReadsCellParseFindsTablesRatherThanNothing` exists to rule out. An endpoint is not a
+declared thing in this system, so there is no set to intersect against; what would close
+it is the endpoint names themselves becoming data, which is a design question rather
+than a test. **Named, not fixed**, on the same reasoning the Writes finding gives: this
+document's job here is to say what is true.
+
+**The two together are one shape.** §3 is the table that says what each component may
+do, and nothing in it is checked in both directions except the part of the Reads column
+that names a declared table. Component names are checked one way only, from the registry
+to the catalogue, because most catalogued components are not built and the reverse
+cannot be asserted yet [`RegistryNameTests.EveryRegisteredComponentIsNamedInTheCatalogue`].
+The Runs column is read by nothing. The Writes column is read by nothing.
+
 #### §16's store list had four stores missing and nothing read it
 
 `sentiment_derived_daily` from 0004, `fundamental_fetch_attempt` from 0006,
@@ -4067,7 +4112,53 @@ and counting the collisions. The capture carries no duplicate and neither did an
 1.9 read, so nothing here says it happens. What changed is the exposure: C05 wrote 250
 tickers a night, and 3.7's sweep writes the whole pool in one run, where a single
 collision fails the stage after the units before it are spent. Not taken, because the
-move was a move and a dedupe is a behaviour change. Open item 21.
+move was a move and a dedupe is a behaviour change. Open item 21. **Both items were
+closed on 2026-08-12 and the record is the section below.**
+
+### 2026-08-12, open items 20 and 21 closed before 3.7's sweep
+
+**The guard was shown failing before it was trusted.** The duplicate rule is chosen
+against zero observations, so the only thing that makes it more than a plausible
+precaution is the failure it prevents being run rather than quoted. Removing the
+deduplication and running the stage over six tickers carrying three holder entries over
+two institutions produces `Npgsql.PostgresException 21000: ON CONFLICT DO UPDATE command
+cannot affect row a second time`, observed on 2026-08-12. The guard restored, the same
+run writes twelve rows and reports six drops.
+
+**The rule is the larger current share count, and the first in document order on a
+tie.** Document order is the provider's own rank, so first is the larger holding where
+the numbers cannot separate them. A known share count beats an absent one whichever came
+first, which is D-96's reasoning for a dated entry beating an undated one: absent is
+unknown rather than small [`CLAUDE.md` §6], so keeping the unknown one would discard the
+only usable figure of the pair.
+
+**Summing was rejected and the fixture rules it out.** Two rows for one institution may
+be two share classes or a provider artifact, and adding them writes a number the
+provider did not send. Dropping loses a holding and summing invents one; between a known
+omission and an invented figure this takes the omission, and the count is what records
+that it happened. 100 and 900 write 900, never 1,000.
+
+**The count is reported per run in both paths**, beside the holdings row count in C03's
+coverage line and in the range sweep's. **Its zero is asserted as well as its non-zero**,
+because a count absent when there is nothing to report reads the same as one that was
+never written, and a guard chosen against zero observations is only a measurement if its
+zero appears. If 3.7's sweep reports a non-zero count, the rows are inspected before the
+rule is trusted rather than after.
+
+**Nothing about the store changed.** No migration, no column, no writer declaration, no
+§16 row. The grain was always `(ticker, report_date, holder_name)`; what was missing was
+anything making the payload respect it.
+
+**C05's Reads cell names only what it reads.** One line, clean under D-73, prior wording
+in `CHANGELOG.md`. The reason no test caught it is recorded beside the Writes-column
+finding rather than here, because whoever builds one should see the other: the Reads
+parse intersects against `SCHEMA.md`'s table list and drops the rest, so the half of
+every Reads cell that names an endpoint is checked in neither direction.
+
+**324 tests, 314 before.** Seven over the duplicate rule at the parse, including the
+captured block reporting none, and three through the stage: the run-log line with both
+figures, the duplicate reaching the write, and the holdings count staying out of the
+attempt record so the rotation is not moved by them.
 
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
@@ -4093,5 +4184,5 @@ them are in `docs/archive/process-2026-08.md`.
 | 17 | ~~**`SCHEMA.md` and §16 give `sentiment_derived_daily` different sizes.** The first calls it "Small", which is the word it uses for `flow_fetch_attempt` and `fundamental_fetch_attempt`; §16 carries 200 MB, derived from the grain as every figure in that column is. The store is ticker by day with six real columns, about 3.6 million rows over the window, so it sits between `flow_daily` at 52 MB and `valuation_daily` at 540 MB on column count and "Small" understates it in §16's own terms. Neither figure is measured. It is one word against one estimate and nothing reads either~~ **Closed on 2026-08-12 by removing the word rather than correcting it.** Size after backfill is §16's column and a size in a `SCHEMA.md` heading was a third statement of it [D-76]. 33 of 35 headings carried one and all 33 are gone; §16 is unchanged. **What replaces it is a carried obligation** against phase 3's sign-off: restate every §16 size from measurement once 3.6 to 3.10 have loaded, which is the first point at which any of them can be | Closed. The restatement is a carried obligation in `BUILD_PLAN.md` |
 | 18 | **Three components still catch `HttpRequestException` whole at a per-ticker fetch**, where C02 was narrowed to a 404 at 3.6. `FundamentalsIngestor` at line 245, `FlowIngestor` at 338 and 475, and `UniverseBuilder` at its sector call at 294. Each swallows a 402 or a 429 as a missing ticker, so a sweep that hits the allowance wall in flight writes nothing for that name and nothing for any name after it, and returns having completed over a partial load. `EodhdClient` now carries the status code, so the fix is one `when` clause each. Not taken here: each belongs to the checkpoint that gives its component a range mode | 3.7 for C03 and C01, 3.9 for C05 |
 | 19 | ~~**C05 buys per ticker what C03 now receives for nothing.** `FlowIngestor.LoadHoldersAsync` calls `fundamentals/{ticker}` with `filter=Holders::Institutions`; C03 now calls the same endpoint unfiltered, so the filter is a projection of a document C03 already has. 10 units a ticker, 2,500 a night at `flow.max_tickers_per_run` 250, and 28,410 for a universe pass of that half alone. C03's rotation would make a ticker's holders about ten days stale, against a block whose report dates move quarterly [D-69], and C03's pool is broader than the universe, so both conditions hold. **The backfill is unaffected**, the block having no series; the saving is nightly, and 3.9's scope shrinks by not re-fetching a current snapshot 2,841 times. Moving the read changes two components' declared sets and section 3, which is authored~~ **Closed by D-98's implementation on 2026-08-12.** `institutional_holding`'s writer is `FundamentalsIngestor`, `LoadHoldersAsync` is gone, §3's two Writes cells and `SCHEMA.md`'s writer declaration moved with it, and 3.9's scope in the phase plan names form 4 alone. The parse is `InstitutionalHolders` and the regression test states which half of D-98's claim it covers. **Two findings came out of it and neither was taken**, being items 20 and 21 | Closed |
-| 20 | **C05's §3 Reads cell still names the ownership endpoint** it stopped calling at D-98. `ReadDeclarationConformanceTests` cannot catch it and is not failing to: the cell parse intersects against `SCHEMA.md`'s table list and drops everything that is not a table, which is what makes it able to read `security` out of "for the universe it iterates" and how it drops `digest_provider` from C29's. So the Reads column carries the same class of drift the Writes column does, with the same absence of a check over the half of each cell that names endpoints rather than tables. One cell, one clause, and the file is human-edited only [`CLAUDE.md` §13] | An authored edit to §3, or the next decision that touches C05's cell |
-| 21 | **`institutional_holding` has no guard against two entries resolving to one key.** `BulkUpsertSql.Upsert` is `INSERT ... SELECT ... ON CONFLICT (ticker, report_date, holder_name) DO UPDATE`, so two entries in one payload sharing a holder name and a report date arrive in one statement and Postgres raises `ON CONFLICT DO UPDATE command cannot affect row a second time`. **This is D-96's failure one table over**, which the earnings capture met by deduplicating in the parse and reporting the collision count to the run log, and it predates D-98 rather than arriving with it. Nothing observed says it happens: the captured block carries no duplicate and 1.9 read none. What D-98 changed is the exposure, C05 having written 250 tickers a night where 3.7's sweep writes about 4,800 in one run, and a single collision there fails the stage mid-sweep after the units before it are spent. The fix is D-96's, three lines and a counter; whether the same tie-break applies to a holder is the part that is authored | Before 3.7's sweep runs. It spends nothing to decide |
+| 20 | ~~**C05's §3 Reads cell still names the ownership endpoint** it stopped calling at D-98. `ReadDeclarationConformanceTests` cannot catch it and is not failing to: the cell parse intersects against `SCHEMA.md`'s table list and drops everything that is not a table, which is what makes it able to read `security` out of "for the universe it iterates" and how it drops `digest_provider` from C29's. So the Reads column carries the same class of drift the Writes column does, with the same absence of a check over the half of each cell that names endpoints rather than tables. One cell, one clause, and the file is human-edited only [`CLAUDE.md` §13]~~ **The cell is corrected**, human-directed on 2026-08-12, as a clean edit under D-73 with the prior wording in `CHANGELOG.md` and a one-line diff. **What stays open is the blind spot**, which is recorded beside the Writes-column finding rather than as its own item, so that whoever builds one test sees the other defect in the same read. Seven of thirty-five Reads cells name a provider endpoint and none of those names is checked in either direction | The Writes-column conformance test, with which it shares a section. Recorded beside item 15 rather than counted twice |
+| 21 | ~~**`institutional_holding` has no guard against two entries resolving to one key.** `BulkUpsertSql.Upsert` is `INSERT ... SELECT ... ON CONFLICT (ticker, report_date, holder_name) DO UPDATE`, so two entries in one payload sharing a holder name and a report date arrive in one statement and Postgres raises `ON CONFLICT DO UPDATE command cannot affect row a second time`. **This is D-96's failure one table over**, which the earnings capture met by deduplicating in the parse and reporting the collision count to the run log, and it predates D-98 rather than arriving with it. Nothing observed says it happens: the captured block carries no duplicate and 1.9 read none. What D-98 changed is the exposure, C05 having written 250 tickers a night where 3.7's sweep writes about 4,800 in one run, and a single collision there fails the stage mid-sweep after the units before it are spent. The fix is D-96's, three lines and a counter; whether the same tie-break applies to a holder is the part that is authored~~ **Closed on 2026-08-12, human-directed, before 3.7's sweep.** The parse deduplicates: the larger current share count wins, the first in document order wins on a tie, a known count beats an absent one whichever came first, and summing is rejected because adding two entries writes a number the provider did not send. The count is reported per run in both paths beside the holdings row count, and its zero is asserted as well as its non-zero. **The failure was run rather than quoted**: removing the guard reproduces `Npgsql.PostgresException 21000` through the stage, which is what makes the guard known to be load-bearing. **The rule was chosen against zero observations and the count is what audits it**, so a non-zero count from 3.7's sweep is a reason to inspect the rows before trusting it | Closed. Re-read at 3.7's sweep, where the count is the observation the rule was chosen without |

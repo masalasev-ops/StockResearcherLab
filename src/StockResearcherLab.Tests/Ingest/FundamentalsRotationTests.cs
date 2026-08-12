@@ -205,6 +205,83 @@ public sealed class FundamentalsRotationTests
         Assert.Contains("oldest attempt in it dated 2026-08-03", secondDetail, StringComparison.Ordinal);
     }
 
+    // --------------------------------------------- holdings [D-98, item 21] ---
+
+    /// <summary>
+    /// The holdings capture reaches the run log with both figures, over a clean
+    /// payload. Two institutions a ticker over six tickers is twelve rows and no
+    /// collision, and **the zero is stated rather than left silent**: a count that is
+    /// absent when there is nothing to report reads the same as one that was never
+    /// written, and the guard was chosen against zero observations, so its count is
+    /// only a measurement if its zero appears [D-98].
+    /// </summary>
+    [Fact]
+    public async Task TheCoverageLineCarriesTheHoldingsCountAndItsCollisionCount()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ResetAsync(ct).ConfigureAwait(true);
+
+        var detail = await DetailAsync(new FundamentalsHandler(), Day1, maxPerRun: 6, ct)
+            .ConfigureAwait(true);
+
+        Assert.Contains("12 institutional holding row(s)", detail, StringComparison.Ordinal);
+        Assert.Contains("0 holder entr(ies) dropped as duplicates", detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// **The failure the guard exists for, run through the stage rather than the
+    /// parse.** Three entries over two institutions at one report date reach one COPY
+    /// with the same conflict target, which Postgres answers with `ON CONFLICT DO
+    /// UPDATE command cannot affect row a second time`. Unguarded this run throws;
+    /// guarded it writes two rows a ticker, keeps the larger holding, and says so in
+    /// the log.
+    ///
+    /// Asserted at the table rather than off the parse, because the parse is where the
+    /// rule lives and the write is where the failure was.
+    /// </summary>
+    [Fact]
+    public async Task ADuplicateHolderIsOneRowWithTheLargerHoldingAndIsCountedInTheLog()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ResetAsync(ct).ConfigureAwait(true);
+
+        var detail = await DetailAsync(
+            new FundamentalsHandler(duplicateHolder: true), Day1, maxPerRun: 6, ct).ConfigureAwait(true);
+
+        // Six tickers, three entries each, two institutions each.
+        Assert.Contains("12 institutional holding row(s)", detail, StringComparison.Ordinal);
+        Assert.Contains("6 holder entr(ies) dropped as duplicates", detail, StringComparison.Ordinal);
+
+        var rows = await HoldingsAsync(Pool[0], ct).ConfigureAwait(true);
+
+        Assert.Equal(2, rows.Count);
+
+        // The larger current share count won, and summing would have written 1,000.
+        var blackrock = rows.Single(r => r.Holder == "BlackRock Inc");
+        Assert.Equal(900m, blackrock.Shares);
+        Assert.Equal(new DateOnly(2026, 3, 31), blackrock.ReportDate);
+
+        Assert.Equal(50m, rows.Single(r => r.Holder == "Vanguard Group Inc").Shares);
+    }
+
+    /// <summary>
+    /// The holdings capture does not move the rotation. A ticker with holders and no
+    /// financials has not yielded a fundamental, so the attempt record counts
+    /// `fundamental_snapshot` rows alone [D-98].
+    /// </summary>
+    [Fact]
+    public async Task HoldingRowsAreNotCountedIntoTheAttemptRecord()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ResetAsync(ct).ConfigureAwait(true);
+
+        await RunAsync(new FundamentalsHandler(), Day1, maxPerRun: 6, ct).ConfigureAwait(true);
+
+        // One fundamental period a ticker, and two holdings rows that are not in it.
+        var (_, _, rows) = await AttemptAsync(Pool[0], ct).ConfigureAwait(true);
+        Assert.Equal(1, rows);
+    }
+
     // ------------------------------------------------------- declaration ---
 
     [Fact]
@@ -291,6 +368,7 @@ public sealed class FundamentalsRotationTests
                  {
                      "DELETE FROM fundamental_fetch_attempt WHERE ticker LIKE @p",
                      "DELETE FROM fundamental_snapshot WHERE ticker LIKE @p",
+                     "DELETE FROM institutional_holding WHERE ticker LIKE @p",
                      "DELETE FROM price_daily WHERE ticker LIKE @p",
                  })
         {
@@ -313,6 +391,28 @@ public sealed class FundamentalsRotationTests
             cmd.Parameters.AddWithValue("t", ticker);
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>What actually reached `institutional_holding` for one ticker.</summary>
+    private static async Task<IReadOnlyList<(string Holder, DateOnly ReportDate, decimal? Shares)>> HoldingsAsync(
+        string ticker, CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
+        await using var cmd = new NpgsqlCommand(
+            "SELECT holder_name, report_date, shares FROM institutional_holding " +
+            "WHERE ticker = @t ORDER BY report_date, holder_name;", conn);
+        cmd.Parameters.AddWithValue("t", ticker);
+
+        var rows = new List<(string, DateOnly, decimal?)>();
+
+        await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await r.ReadAsync(ct).ConfigureAwait(false))
+        {
+            rows.Add((r.GetString(0), r.GetFieldValue<DateOnly>(1),
+                r.IsDBNull(2) ? null : r.GetFieldValue<decimal>(2)));
+        }
+
+        return rows;
     }
 
     private static async Task<(DateOnly? Attempted, DateOnly? Yielded, long Rows)> AttemptAsync(
@@ -375,12 +475,32 @@ public sealed class FundamentalsRotationTests
     /// The symbol list and the fundamentals endpoint. Records every ticker asked
     /// for, in order, which is the observable these tests assert on.
     /// </summary>
-    private sealed class FundamentalsHandler(string[]? bareString = null) : HttpMessageHandler
+    /// <param name="duplicateHolder">
+    /// Adds a third holder entry naming the institution the first one does, at the same
+    /// report date, which is the collision `institutional_holding`'s key cannot carry
+    /// [D-98, open item 21].
+    /// </param>
+    private sealed class FundamentalsHandler(string[]? bareString = null, bool duplicateHolder = false)
+        : HttpMessageHandler
     {
         private readonly HashSet<string> _bare =
             new(bareString ?? [], StringComparer.Ordinal);
 
         public List<string> Asked { get; } = [];
+
+        /// <summary>
+        /// The `Holders` block beside the statements, which is the shape C03 has read
+        /// since it dropped `filter=Financials` and the shape it takes the holdings out
+        /// of [D-98]. Two institutions, or three entries over two institutions when the
+        /// duplicate is asked for.
+        /// </summary>
+        private string Holders() => """
+            "Holders":{"Institutions":{
+              "0":{"name":"BlackRock Inc","date":"2026-03-31","currentShares":100,"change":-5,"change_p":-1.5},
+              "1":{"name":"Vanguard Group Inc","date":"2026-03-31","currentShares":50,"change":2,"change_p":4.2}
+            """ + (duplicateHolder
+                ? ""","2":{"name":"BlackRock Inc","date":"2026-03-31","currentShares":900,"change":-7,"change_p":-0.8}}}"""
+                : "}}");
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken ct)
@@ -400,15 +520,19 @@ public sealed class FundamentalsRotationTests
             Asked.Add(ticker);
 
             // A ticker the endpoint carries no financials for answers with a bare
-            // string rather than an empty object [Statements.Parse].
-            // `filter=Financials` returns the Financials object itself, so the block
-            // names sit at the root [Statements.Parse].
+            // string rather than an empty object [Statements.Parse]. It carries no
+            // `Holders` either, which is why the holdings capture inherits the
+            // statements guard rather than needing its own [D-98].
+            //
+            // The call is unfiltered since 3.7, so the statement blocks and `Holders`
+            // are siblings at the root and `Statements.Parse` reads the blocks it names
+            // and ignores the rest.
             return Json(_bare.Contains(ticker)
                 ? "\"NA\""
                 : """
                   {"Balance_Sheet":{"quarterly":{
-                    "2026-03-31":{"filing_date":"2026-05-04","totalAssets":"1000"}}}}
-                  """);
+                    "2026-03-31":{"filing_date":"2026-05-04","totalAssets":"1000"}}},
+                  """ + Holders() + "}");
         }
 
         private static Task<HttpResponseMessage> Json(string body)

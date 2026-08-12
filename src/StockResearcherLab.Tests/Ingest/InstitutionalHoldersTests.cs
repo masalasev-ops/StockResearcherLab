@@ -221,4 +221,150 @@ public sealed class InstitutionalHoldersTests
     [Fact]
     public void EveryRowCarriesTheTickerItWasParsedFor()
         => Assert.All(ParseAs(Shape.HoldersBlock), r => Assert.Equal("CCS.US", r.Ticker));
+
+    // ------------------------------------------- duplicate holders [item 21] ---
+    //
+    // The entry key is a position, so the provider's uniqueness is over positions and
+    // not over holders. Two entries naming one institution at one report date both
+    // resolve to (ticker, report_date, holder_name), reach one COPY, and Postgres
+    // raises "ON CONFLICT DO UPDATE command cannot affect row a second time": a stage
+    // failure on one ticker, mid-sweep, after the units before it are spent. That is
+    // D-96's failure one table over and this is D-96's answer.
+    //
+    // Nothing measured has produced one, which is why the count exists.
+
+    private static IReadOnlyList<HoldingRow> ParseWith(string json, out int collisions)
+    {
+        using var doc = JsonDocument.Parse(json);
+        return InstitutionalHolders.Parse(doc.RootElement, "CCS.US", out collisions);
+    }
+
+    /// <summary>Two entries for one holder at one report date. The larger holding wins.</summary>
+    [Fact]
+    public void TwoEntriesForOneHolderAndReportDateWriteOneRowAndTheLargerHoldingWins()
+    {
+        var rows = ParseWith("""
+            {"0":{"name":"BlackRock Inc","date":"2026-03-31","currentShares":100,"change_p":1.0},
+             "1":{"name":"BlackRock Inc","date":"2026-03-31","currentShares":900,"change_p":9.0}}
+            """, out var collisions);
+
+        var only = Assert.Single(rows);
+
+        Assert.Equal("BlackRock Inc", only.HolderName);
+        Assert.Equal(900m, only.Shares);
+        Assert.Equal(9.0f, only.ChangePct!.Value, 4);
+        Assert.Equal(1, collisions);
+    }
+
+    /// <summary>
+    /// The order in the payload does not decide it; the share count does. **Summed the
+    /// answer would be 1,000 and it is not**: adding them writes a number the provider
+    /// did not send, where dropping one is a known omission the count records.
+    /// </summary>
+    [Fact]
+    public void TheLargerHoldingWinsWhicheverOrderTheyArriveIn()
+    {
+        var rows = ParseWith("""
+            {"0":{"name":"BlackRock Inc","date":"2026-03-31","currentShares":900},
+             "1":{"name":"BlackRock Inc","date":"2026-03-31","currentShares":100}}
+            """, out _);
+
+        Assert.Equal(900m, Assert.Single(rows).Shares);
+    }
+
+    /// <summary>
+    /// Tied on shares, the first in document order wins. Document order is the
+    /// provider's own rank, so first is the larger holding where the numbers cannot
+    /// separate them. `JsonDocument` preserves it, so this is a property of the payload
+    /// rather than of a hash order that could differ between runs [`CLAUDE.md` §6].
+    /// </summary>
+    [Fact]
+    public void TwoEntriesTiedOnSharesKeepTheFirstInDocumentOrder()
+    {
+        var rows = ParseWith("""
+            {"0":{"name":"BlackRock Inc","date":"2026-03-31","currentShares":500,"change":-10},
+             "1":{"name":"BlackRock Inc","date":"2026-03-31","currentShares":500,"change":-99}}
+            """, out var collisions);
+
+        var only = Assert.Single(rows);
+
+        Assert.Equal(500m, only.Shares);
+        Assert.Equal(-10m, only.Change);
+        Assert.Equal(1, collisions);
+    }
+
+    /// <summary>
+    /// A known share count beats an absent one whichever came first. Absent is unknown
+    /// rather than small [`CLAUDE.md` §6], so keeping the unknown one would discard the
+    /// only usable figure of the pair, which is D-96's reasoning for a dated entry
+    /// beating an undated one.
+    /// </summary>
+    [Fact]
+    public void AKnownShareCountBeatsAnAbsentOneWhicheverCameFirst()
+    {
+        var first = ParseWith("""
+            {"0":{"name":"BlackRock Inc","date":"2026-03-31","currentShares":500},
+             "1":{"name":"BlackRock Inc","date":"2026-03-31"}}
+            """, out _);
+
+        Assert.Equal(500m, Assert.Single(first).Shares);
+
+        var second = ParseWith("""
+            {"0":{"name":"BlackRock Inc","date":"2026-03-31"},
+             "1":{"name":"BlackRock Inc","date":"2026-03-31","currentShares":500}}
+            """, out _);
+
+        Assert.Equal(500m, Assert.Single(second).Shares);
+    }
+
+    /// <summary>
+    /// Both absent is one row and no throw, which is the case the guard exists for
+    /// rather than a value judgement. The first in document order is kept.
+    /// </summary>
+    [Fact]
+    public void TwoEntriesWithNoShareCountAtAllWriteOneRowWithoutThrowing()
+    {
+        var rows = ParseWith("""
+            {"0":{"name":"BlackRock Inc","date":"2026-03-31","change":-10},
+             "1":{"name":"BlackRock Inc","date":"2026-03-31","change":-99}}
+            """, out var collisions);
+
+        var only = Assert.Single(rows);
+
+        Assert.Null(only.Shares);
+        Assert.Equal(-10m, only.Change);
+        Assert.Equal(1, collisions);
+    }
+
+    /// <summary>
+    /// **The guard collapses a duplicate and nothing else.** One holder at two report
+    /// dates is two rows, because the report date is a key part; a guard keyed on the
+    /// holder alone would silently discard the earlier quarter, which BXC.US's block
+    /// carries two of [1.9].
+    /// </summary>
+    [Fact]
+    public void TheSameHolderAtTwoReportDatesIsTwoRows()
+    {
+        var rows = ParseWith("""
+            {"0":{"name":"BlackRock Inc","date":"2026-03-31","currentShares":100},
+             "1":{"name":"BlackRock Inc","date":"2026-06-30","currentShares":900}}
+            """, out var collisions);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(0, collisions);
+        Assert.Equal([new DateOnly(2026, 3, 31), new DateOnly(2026, 6, 30)], rows.Select(r => r.ReportDate));
+    }
+
+    /// <summary>
+    /// **The captured block collides nowhere**, so the count means something when it
+    /// appears. The guard was chosen against zero observations and this is the
+    /// observation it was chosen against.
+    /// </summary>
+    [Fact]
+    public void TheCapturedBlockReportsNoCollisions()
+    {
+        ParseWith(CapturedBlock(), out var collisions);
+
+        Assert.Equal(0, collisions);
+    }
 }

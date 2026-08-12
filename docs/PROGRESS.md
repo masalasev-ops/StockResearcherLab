@@ -3094,6 +3094,42 @@ all, so it has to come off at the moment the store lands.
 `valuation_daily` at 540 MB on column count. Neither figure is measured and this pass
 did not change the one it did not have to. Open item 17.
 
+#### The store list now has a test, and it is shown failing
+
+`StoreMatrixConformanceTests`, eight assertions, both directions. Every store §16 names
+is a table `SCHEMA.md` declares, and every table `SCHEMA.md` declares is named in §16.
+Either direction alone passes while the other is broken, which is the argument
+`SchemaParityTests` already makes about the database.
+
+**Three things a naive implementation gets wrong, handled by rule rather than by name.**
+
+- **Combined rows.** `order / fill / position` and `cost_ledger / run_log` are one row
+  each covering several stores. The bold text is split on the separator, so 31 rows
+  expand to 34 before this pass and 38 after. Taking a cell whole would have left
+  `fill`, `position` and `run_log` unchecked while the count still looked plausible.
+- **The `Total` row.** Excluded by structure: it sits in `tfoot` where every store sits
+  in `tbody`, so parsing the body alone drops it and the parser never knows the word. A
+  second summary row added later drops out the same way.
+- **The store §16 names and `SCHEMA.md` does not declare.** `screen_evaluation` carries
+  the `NOT YET IN SCHEMA` marker in the document, and the test reads that rather than
+  holding a list of its own. It is checked rather than trusted: a marked store that
+  turns out to be declared fails, so the marker cannot outlive the condition.
+
+**The count is stated at 38 so the check cannot pass over an empty match set**, which is
+what `guards.ps1` does for the same reason. A test stating a count is not a spec stating
+one, so D-83 is not in tension with it, and duplicates are asserted separately because a
+store named twice would satisfy both a count and a set comparison while saying two
+different things about one table.
+
+**Shown failing rather than asserted to work.** Two fixtures mutate a copy of the
+document in memory and nothing is written. Cutting `security_daily`'s row makes the
+schema-to-matrix direction report that store by name and drops the count by exactly one,
+and the unmutated document passes, so the failure is the removal rather than the
+mutation having broken the parse. Inserting an invented store is reported unmarked and
+not reported marked.
+
+**Test count 265 to 273.**
+
 ---
 
 ## Phase 3, backfill

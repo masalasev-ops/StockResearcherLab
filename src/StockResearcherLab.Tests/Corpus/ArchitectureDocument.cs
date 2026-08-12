@@ -125,6 +125,98 @@ public static class ArchitectureDocument
         @"<code>([^<]+)</code>",
         RegexOptions.Compiled);
 
+    // ------------------------------------------- section 16, the store list ---
+
+    /// <summary>One row of §16's store matrix, expanded.</summary>
+    /// <param name="Name">The store. A row naming several yields one of these each.</param>
+    /// <param name="NotYetInSchema">
+    /// The row carries the `NOT YET IN SCHEMA` marker, meaning the store is designed
+    /// here and its migration has not landed. The marker lives in the document rather
+    /// than in an exclusion list here [D-83, D-76], and it is checked rather than
+    /// trusted: a marked store that turns out to be declared fails.
+    /// </param>
+    public readonly record struct StoreRow(string Name, bool NotYetInSchema);
+
+    /// <summary>§16's store matrix, from the document.</summary>
+    public static IReadOnlyList<StoreRow> StoreMatrix() => StoreMatrixIn(File.ReadAllText(Path));
+
+    /// <summary>
+    /// §16's store matrix, from arbitrary markup, so the check can be run against a
+    /// deliberately broken copy. A conformance test that has never failed has not been
+    /// tested, and the only way to fail this one is to hand it a different document.
+    ///
+    /// **The `Total` row is excluded by rule and not by name.** It sits in `tfoot`
+    /// where every store sits in `tbody`, so parsing the body alone drops it without
+    /// this parser ever knowing the word. A row added to the summary later drops out
+    /// the same way.
+    ///
+    /// **A row may name several stores.** `order / fill / position` and
+    /// `cost_ledger / run_log` are each one row covering several, so the bold text is
+    /// split on the separator rather than taken whole. Assuming one row is one store
+    /// would leave four tables unchecked while the count still looked plausible.
+    /// </summary>
+    public static IReadOnlyList<StoreRow> StoreMatrixIn(string html)
+    {
+        ArgumentNullException.ThrowIfNull(html);
+
+        var header = html.IndexOf(StoreHeader, StringComparison.Ordinal);
+        if (header < 0)
+        {
+            throw new InvalidOperationException(
+                "ARCHITECTURE.html section 16 has no store matrix header. This check reads that table " +
+                "and would otherwise pass over an empty set, which is the failure it exists to prevent.");
+        }
+
+        var body = TableBody.Match(html, header);
+        if (!body.Success)
+        {
+            throw new InvalidOperationException(
+                "The store matrix has a header and no tbody. The rows are read from the body so that " +
+                "the tfoot summary is excluded by structure rather than by matching the word Total.");
+        }
+
+        var rows = new List<StoreRow>();
+
+        foreach (Match row in MatrixRow.Matches(body.Groups["rows"].Value))
+        {
+            var cell = row.Groups["store"].Value;
+            var bold = BoldText.Match(cell);
+
+            if (!bold.Success)
+            {
+                throw new InvalidOperationException(
+                    "A store matrix row opens with a cell carrying no bold store name: " + cell);
+            }
+
+            var marked = cell.Contains(NotYetInSchemaMarker, StringComparison.Ordinal);
+
+            foreach (var name in bold.Groups[1].Value.Split(
+                         '/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                rows.Add(new StoreRow(name, marked));
+            }
+        }
+
+        return rows;
+    }
+
+    /// <summary>The marker a store carries while §16 names it and `SCHEMA.md` does not declare it.</summary>
+    public const string NotYetInSchemaMarker = "<span class=\"tag\">NOT YET IN SCHEMA</span>";
+
+    private const string StoreHeader = "<th class=\"mono\">Store</th>";
+
+    private static readonly Regex TableBody = new(
+        @"<tbody>(?<rows>.*?)</tbody>",
+        RegexOptions.Compiled | RegexOptions.Singleline);
+
+    // Singleline off, for the reason CatalogueRow gives: a row that lost its closing
+    // tag would otherwise swallow the rest of the table and read as one store.
+    private static readonly Regex MatrixRow = new(
+        @"<tr><td class=""mono"">(?<store>.*?)</td>",
+        RegexOptions.Compiled);
+
+    private static readonly Regex BoldText = new(@"<b>([^<]+)</b>", RegexOptions.Compiled);
+
     /// <summary>
     /// Absolute path to `ARCHITECTURE.html`. `SchemaDocument` already walks up to the
     /// repository root, reused rather than duplicated since two locators would be two

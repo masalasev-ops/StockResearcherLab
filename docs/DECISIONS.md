@@ -1494,6 +1494,76 @@ A shared table was rejected: two components writing one table is two claims on o
 [INVARIANT 10]. What is shared is the ordering function, so the two rotations cannot
 drift apart the way the code and the catalogue did.
 
+**D-96 The earnings history is captured on the sweep that pays for it.** `ACTIVE`
+`Earnings::History` sits in the `fundamentals/{t}` payload, which 3.7 fetches once for
+the whole pool. Capturing it there costs nothing; capturing it afterwards costs the
+sweep again at 10 units a ticker.
+
+**Capture is not use.** D-90 is open and this prefers no fork. What decides the timing
+is the asymmetry: a capture taken during a sweep already happening is cheap and
+reversible, and one taken after it is a re-sweep. Recording that here is what stops a
+later reader taking this as X-PEAD having been quietly favoured.
+
+**The store.** `earnings_history`, grain ticker by fiscal period, writer
+`FundamentalsIngestor`. Columns: `ticker`, `period_end`, `report_date`,
+`before_after_market`, `eps_actual`, `eps_estimate`, and the provider's own surprise.
+
+`period_end` with `ticker` is a natural key, so no surrogate and no `NULLS NOT
+DISTINCT` case arises.
+
+**The read rule.** Every read is keyed on `report_date <= date`, the analogue of
+`filing_date_effective` [INVARIANT 12]. A row whose `report_date` is null is stored and
+is unreadable, exactly as an undated fundamental row is, and the null count is recorded
+at 3.7 so coverage is a measured figure rather than an assumption: 3.1 saw three
+populated entries on one ticker out of fifty spanning 2014.
+
+That rule is not lookahead and the reason should be stated, because it looks like it
+might be. The nightly run executes after the close, so a result released after the close
+of the date being computed was public before the run began. A backfilled date inherits
+the same property, `report_date` being when the result actually landed.
+
+**`before_after_market` is load-bearing rather than descriptive.** A result released
+after the close of day D is reacted to on D+1, and one released before the open of D is
+reacted to on D. A drift screen that computes its reaction window without reading this
+column uses the wrong session for roughly half of all announcements, and the error is
+systematic rather than noisy.
+
+**The surprise column stores a fraction, not a percent** [`METRICS.md`, one rule for
+every ratio]. The provider sends a percent; it is divided on the way in and the column
+is named for what it holds.
+
+It is stored rather than derived because it may not be derivable: the provider's figure
+may rest on an estimate other than the one it reports. Whether it agrees with
+`(eps_actual - eps_estimate) / abs(eps_estimate)` is measurable once the store is
+loaded, and if it always agrees the column is a third statement of a derivable fact and
+can go. That is the question 3.7's own output answers.
+
+**D-97 Sector is stored per filing, and C01 reads it there.** `ACTIVE`
+Completes the sector move the phase 3 plan makes at 3.7.
+
+C01's per-member sector call buys at 10 units what `fundamentals/{t}` already carries
+for nothing, and 3.11 has C01 reading sector from `fundamental_snapshot`, where no such
+column exists.
+
+**The column goes on `fundamental_snapshot`**, written by C03 from `General::Sector` on
+the call it already makes. C01 reads the most recent filing at or before the date being
+built, and remains the sole writer of `security` and `security_daily`.
+
+**Not on `security`, for three reasons and the first is enough.** It would make C03 a
+second writer on the table C01 owns, requiring a split declaration [INVARIANT 10, D-77],
+where the column route needs none. It would carry one sector per ticker, which is
+today's sector applied to every historical date, the exact defect `security_daily` was
+created to remove. And it would put a weekly stage's read behind a nightly stage's
+write.
+
+**The limitation is recorded rather than proxied.** Sector as of a filing is not sector
+as of a date: a company that reclassifies between filings reads as its former sector
+until the next one lands. That is closer to point-in-time than a single current value
+and is not the same thing, and the percentile cells inherit it.
+
+A ticker with no fundamental rows has no sector, which resolves to the existing
+bucket-only fallback rather than to a new case.
+
 ---
 
 ---

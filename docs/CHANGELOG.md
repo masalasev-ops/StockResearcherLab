@@ -1153,3 +1153,40 @@ note under the matrix already makes the point about `screen_score_daily` at leng
 decision citation are untouched, which is what `SchemaDocument.WritersByTable` and
 `SchemaDocument.Tables` parse; both still read 37 tables and the five conformance tests
 over this document pass unchanged.
+
+---
+
+## 2026-08-12, D-96 and D-97, the earnings store and the sector column
+
+Two authored decisions and the store they create. `ARCHITECTURE.html` and `SCHEMA.md`
+are specs under D-73, so the two catalogue cells below are clean edits and the prior
+wording is here. Human-directed.
+
+**§3's C03 Writes cell.** D-96 gives FundamentalsIngestor a third write. Removed:
+
+> fundamental_snapshot, fundamental_fetch_attempt [D-91]
+
+It now names `earnings_history` as well, with D-91 kept beside the two tables it decided
+and D-96 at the point of change.
+
+**§3's C09 Reads cell.** D-96 gives ValuationEngine the store that feeds
+`last_two_earnings_surprises`, a column it has written null since 0001. Removed:
+
+> `price_daily`, `fundamental_snapshot`
+
+**§16's store matrix gains one row**, `earnings_history` at ticker by fiscal period and
+30 MB. A purely new row supersedes nothing, so it has no prior wording and is recorded
+here as an addition. The store-list conformance test's count moves from 38 to 39.
+
+**`SCHEMA.md` gains `earnings_history`'s section and a `sector` column on
+`fundamental_snapshot`.** Both are additions. Three `real` columns are declared as not
+money: `eps_actual` and `eps_estimate` are per-share figures rather than monetary
+totals, and `surprise_fraction` is a ratio. The monetary count is unchanged at 19,
+`sector` being text.
+
+**Why the sector column is not on `security`**, recorded because it is the option a
+reader would expect. It would make C03 a second writer on the table C01 owns, requiring
+a split declaration [INVARIANT 10, D-77]; it would carry one sector per ticker, which is
+today's sector applied to every historical date and the exact defect `security_daily`
+was created to remove; and it would put a weekly stage's read behind a nightly stage's
+write. The full reasoning is D-97.

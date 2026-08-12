@@ -3755,6 +3755,47 @@ reads are requests it counts and the payload parse runs end to end.
 
 **Test count 282 to 288.**
 
+### Before 3.7, 2026-08-12: D-96 and D-97, and the store they create
+
+**Authored.** D-95 was confirmed as the highest existing entry before the two numbers
+were taken. D-96 puts the earnings history on the sweep that pays for it; D-97 puts
+sector on `fundamental_snapshot` and has C01 read it there.
+
+**Migration `0009`** creates `earnings_history`, ticker by fiscal period, and adds
+`sector` to `fundamental_snapshot`. `SCHEMA.md` gains both, `ARCHITECTURE.html` gains
+the §16 row and the two catalogue cells, and the store-list test's count moves from 38
+to 39.
+
+**`EarningsHistory.Parse` is pure and separate from the stage**, so the shape is
+asserted against the payload 3.1 captured rather than a live call. Ten assertions,
+including the two the decisions name: a row with a null `report_date` is stored with one,
+and the provider's 106.3492 percent is stored as the fraction 1.063492.
+
+**One thing the parse decides that the decision did not.** The period end is taken from
+the entry's own `date` field rather than the object key. They agree on every entry 3.1
+read and nothing contracts that they will: the key is what the provider chose to index
+by, and `date` is what the row is about. An entry with neither is dropped rather than
+given a fabricated period end, which would collide with a real one under the primary
+key.
+
+#### Two figures 3.7's run answers, recorded as questions rather than as answers
+
+**The null `report_date` count.** 3.1 saw three populated entries on one ticker out of
+fifty spanning back to 2014, which is not a coverage figure. Every row is stored and a
+null-dated one is unreadable, so what the backfill can compute over is the populated
+share and it is measured once the sweep has run, not estimated now.
+
+**Whether `surprise_fraction` agrees with `(eps_actual - eps_estimate) / abs(eps_estimate)`.**
+It is stored rather than derived because the provider's figure may rest on an estimate
+other than the one it reports. If the two always agree, the column is a third statement
+of a derivable fact and can go. That is a query against the store once loaded [D-96].
+
+**What is not in this commit.** 3.7's stage code: the widened pool, the dropped
+`filter=Financials`, the lifted rotation cap, C03's `events` read, C09 populating
+`last_two_earnings_surprises`, and open item 18's `when` clause. The decisions and the
+store land first because a decision is recorded before the code that rests on it, and
+because the migration has to exist before the capture has anywhere to go.
+
 ### Before 3.7, 2026-08-12: the fundamentals pool is amended
 
 **The pool C03 sweeps is derived from current price, liquidity and history, so it holds

@@ -103,7 +103,15 @@ Grain: ticker by day. **Writer: PriceIngestor.**
 Grain: ticker by fiscal period. **Writer: FundamentalsIngestor.**
 
 `ticker`, `period_end`, `filing_date`, `filing_date_effective`,
-`filing_date_unknown_reason`, `period_type`, plus the statement fields.
+`filing_date_unknown_reason`, `period_type`, `sector`, plus the statement fields.
+
+**`sector` is stored per filing and C01 reads it there** [D-97, 0009]. C03 writes it
+from `General::Sector` on the call it already makes, and C01 reads the most recent
+filing at or before the date being built rather than making a call per member. Sector as
+of a filing is not sector as of a date: a company that reclassifies between filings
+reads as its former sector until the next one lands, which is closer to point-in-time
+than a single current value and is not the same thing. A ticker with no fundamental rows
+has no sector and resolves to the existing bucket-only percentile fallback.
 
 **`filing_date_effective` is the key every read filters on, never `period_end` and
 never the raw `filing_date`** [D-46, D-62, INVARIANT 12]. `period_end` and the raw
@@ -172,6 +180,38 @@ therefore sees the state the first run saw and selects the same names, so the st
 stays a pure function of its date and config version; the rotation advances between
 dates rather than between runs. That is the discipline every fundamental read already
 applies to `filing_date_effective` [INVARIANT 12, INVARIANT 13, `CLAUDE.md` §6].
+
+### earnings_history
+Grain: ticker by fiscal period. **Writer: FundamentalsIngestor.**
+
+`ticker`, `period_end`, `report_date`, `before_after_market`, `eps_actual`,
+`eps_estimate`, `surprise_fraction`.
+
+**Captured on the sweep that pays for it** [D-96, 0009]. `Earnings::History` sits in the
+`fundamentals/{t}` payload C03 already fetches, so capturing it during a sweep costs
+nothing and capturing it afterwards costs the sweep again at 10 units a ticker. Capture
+is not use: D-90 is open on whether post-earnings drift registers at all and this
+prefers no fork.
+
+**Every read is keyed on `report_date <= date`**, which is `filing_date_effective`'s
+analogue one table over [INVARIANT 12]. A row whose `report_date` is null is stored and
+is unreadable, exactly as an undated fundamental row is.
+
+That is not lookahead, and the reason is stated because it looks like it might be. The
+nightly run executes after the close, so a result released after the close of the date
+being computed was public before the run began. A backfilled date inherits the property,
+`report_date` being when the result actually landed.
+
+**`before_after_market` is load-bearing rather than descriptive.** A result released
+after the close of day D is reacted to on D+1 and one released before the open of D is
+reacted to on D, so a drift screen computing its reaction window without this column
+uses the wrong session for roughly half of all announcements.
+
+**`surprise_fraction` is a fraction and the column is named for what it holds.** The
+provider sends a percent and it is divided on the way in, which is the rule every ratio
+in this system follows. It is stored rather than derived because the provider's figure
+may rest on an estimate other than the one it reports; whether it agrees with
+`(eps_actual - eps_estimate) / abs(eps_estimate)` is what 3.7's own output answers.
 
 ### flow_fetch_attempt
 Grain: one row per ticker. **Writer: FlowIngestor.**
@@ -636,6 +676,9 @@ tables in the system [O.2].
 
 | Column | Type | What it is |
 |---|---|---|
+| `earnings_history.eps_actual` | `real` | a per-share figure, not a monetary total [D-96] |
+| `earnings_history.eps_estimate` | `real` | a per-share figure, not a monetary total [D-96] |
+| `earnings_history.surprise_fraction` | `real` | a fraction, the provider's percent divided on the way in [D-96] |
 | `indicator_daily.atr_pct` | `real` | a percentage of price, not a price |
 | `indicator_daily.adx14` | `real` | an index between 0 and 100 |
 | `indicator_daily.dist_200dma` | `real` | a distance as a fraction |

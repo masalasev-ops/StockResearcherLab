@@ -3716,7 +3716,44 @@ production sweep never calls, because the provider bills and `/api/user` reports
 reading never moved, nothing halted, and the halt tests failed for the right reason. The
 double now bills as the provider does, one unit per `eod/{t}` and per symbol list.
 
-**Test count 273 to 282.**
+#### Two fixes before the sweep runs, 2026-08-12
+
+**An allowance error in flight was swallowed as a missing ticker.** `LoadSeriesAsync`
+caught `HttpRequestException` whole, and `EodhdClient` throws that for every non-success
+status. A 402 is the allowance wall reached in flight, which the gate's reserve makes
+the designed case rather than the unlikely one, and it persists for the day: the sweep
+would write nothing for that ticker, then nothing for every ticker after it, and return
+`Completed` over a partial load. That is exactly what 3.4's
+`AllowanceErrorsAreNotShortfallsTests` asserts must not happen, arriving one layer down
+in the caller's catch rather than in the paging client.
+
+`EodhdClient` now passes `response.StatusCode` into the exception, so a caller can tell
+a 404 from a 402 without parsing text, and `LoadSeriesAsync` tolerates a 404 alone. Four
+statuses are driven through the sweep: the 404 leaves it running with 21 of 22 tickers
+written, and the 402, the 429 and the 500 each fail it with the status readable off the
+exception. `AllowanceErrorsAreNotShortfallsTests` passes unchanged.
+
+**The same broad catch is in three other places and is not touched here.**
+`FundamentalsIngestor` at its per-ticker fetch, `FlowIngestor` at both of its, and
+`UniverseBuilder` at its sector call. Each has the identical defect and each belongs to
+the checkpoint that gives it a range mode, 3.7 and 3.9, rather than to this one. Open
+item 18.
+
+**The gate was read once per ticker and doubled the request count.** `/api/user` costs
+no units and does cost a request, so the sweep was making 50,785 gate reads beside
+50,785 `eod/{t}` calls: 101,570 requests against a 1,000-a-minute limiter, taking the
+floor from about 51 minutes to about 102. It is now asked once per chunk. The property
+the per-ticker read protected is unchanged, the reserve absorbing a chunk's overspend at
+eight units against fifty thousand, and the halt still records the first ticker not
+dispatched.
+
+Asserted against the double rather than reasoned about: 22 tickers at a concurrency of
+eight is three chunks, so a full sweep makes 22 series calls, 3 gate reads and 2 symbol
+lists, **27 requests against the 46 the per-ticker read would have made**. The double
+now serves `/api/user` and the tests use the real `UnitAllowance` over it, so the gate's
+reads are requests it counts and the payload parse runs end to end.
+
+**Test count 282 to 288.**
 
 ### Before 3.7, 2026-08-12: the fundamentals pool is amended
 
@@ -3788,3 +3825,4 @@ them are in `docs/archive/process-2026-08.md`.
 | 15 | ~~**`ARCHITECTURE.html` §3's C05 Writes cell names two tables where the component now writes three.** D-95 and migration 0008 give FlowIngestor `flow_fetch_attempt`, `SCHEMA.md` declares it and the registry test passes, so the document that is checked is correct. The catalogue is not checked: the Writes column has no conformance test, write ownership being asserted against `SCHEMA.md`. This is the second component to gain a second write and the second to drift immediately, which is what that finding predicted. The file is human-edited only [`CLAUDE.md` §13]~~ **The cell is corrected**, human-directed on 2026-08-12, as a clean edit under D-73 with the prior wording in `CHANGELOG.md` and a diff touching that cell alone. **What stays open is the conformance test**, and the second instance is what changes its standing: two of two components that have ever gained a second write drifted at that moment, both before either predicted case was built | The Writes-column conformance test, recorded in the fundamentals-rotation finding as overdue rather than as a risk |
 | 16 | **C04's and C06's pools are survivorship-filtered by the same argument that amended C03's.** 3.7's pool became the live candidate pool plus in-window delisted names on 2026-08-12, because a historical universe member with no fundamental rows computes zero clean gaps and is absent from `security_daily` for every past date. 3.8's sentiment pass and 3.10's splits and dividends both still take their pool from the live universe, so a name that amendment admits to a 2021 `security_daily` would carry prices and fundamentals for that date and no sentiment and no distributions. The cost differs: sentiment is 5 units a ticker and splits and dividends are 1 each, so the same widening is about 5D and 2D against fundamentals' 10D. Whether either widens is authored, and neither blocks 3.7 | Before 3.8 and 3.10 are built |
 | 17 | ~~**`SCHEMA.md` and §16 give `sentiment_derived_daily` different sizes.** The first calls it "Small", which is the word it uses for `flow_fetch_attempt` and `fundamental_fetch_attempt`; §16 carries 200 MB, derived from the grain as every figure in that column is. The store is ticker by day with six real columns, about 3.6 million rows over the window, so it sits between `flow_daily` at 52 MB and `valuation_daily` at 540 MB on column count and "Small" understates it in §16's own terms. Neither figure is measured. It is one word against one estimate and nothing reads either~~ **Closed on 2026-08-12 by removing the word rather than correcting it.** Size after backfill is §16's column and a size in a `SCHEMA.md` heading was a third statement of it [D-76]. 33 of 35 headings carried one and all 33 are gone; §16 is unchanged. **What replaces it is a carried obligation** against phase 3's sign-off: restate every §16 size from measurement once 3.6 to 3.10 have loaded, which is the first point at which any of them can be | Closed. The restatement is a carried obligation in `BUILD_PLAN.md` |
+| 18 | **Three components still catch `HttpRequestException` whole at a per-ticker fetch**, where C02 was narrowed to a 404 at 3.6. `FundamentalsIngestor` at line 245, `FlowIngestor` at 338 and 475, and `UniverseBuilder` at its sector call at 294. Each swallows a 402 or a 429 as a missing ticker, so a sweep that hits the allowance wall in flight writes nothing for that name and nothing for any name after it, and returns having completed over a partial load. `EodhdClient` now carries the status code, so the fix is one `when` clause each. Not taken here: each belongs to the checkpoint that gives its component a range mode | 3.7 for C03 and C01, 3.9 for C05 |

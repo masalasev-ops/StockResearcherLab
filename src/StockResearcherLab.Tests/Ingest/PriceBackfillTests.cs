@@ -144,14 +144,42 @@ public sealed class PriceBackfillTests
         // The chunk is what makes this exact rather than racy: every gate in a chunk is
         // asked before any of its work is dispatched, so the overshoot is bounded by
         // the concurrency and the reserve absorbs it many times over [3.6].
-        var handler = new ProviderDouble();
-        var result = await RunAsync(handler, Allowance(handler, 49_995), ct).ConfigureAwait(true);
+        var handler = new ProviderDouble(alreadySpent: 49_995);
+        var result = await RunAsync(handler, ct).ConfigureAwait(true);
 
         Assert.True(result.WasHalted);
         Assert.Equal(8, handler.SeriesCalls);
 
         // The ninth of the twenty-two, which is the first one not dispatched.
         Assert.Equal("L07.US", result.Position);
+    }
+
+    /// <summary>
+    /// **The gate is asked once per chunk, not once per ticker** [3.6].
+    ///
+    /// `/api/user` costs no units and does cost a request. Per ticker, the sweep put
+    /// 50,785 gate reads beside 50,785 `eod/{t}` calls, so against the provider's
+    /// 1,000-a-minute limiter its floor doubled from about 51 minutes to about 102 for
+    /// a property the reserve already guarantees.
+    /// </summary>
+    [Fact]
+    public async Task TheGateIsAskedOncePerChunkRatherThanOncePerTicker()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+
+        var handler = new ProviderDouble();
+        var result = await RunAsync(handler, ct).ConfigureAwait(true);
+
+        Assert.False(result.WasHalted);
+        Assert.Equal(22, handler.SeriesCalls);
+
+        // Twenty-two tickers at a concurrency of eight is three chunks.
+        Assert.Equal(3, handler.UserCalls);
+
+        // The pool size plus the chunk count plus the two symbol lists, against the
+        // 46 the per-ticker read would have made.
+        Assert.Equal(27, handler.TotalRequests);
     }
 
     /// <summary>
@@ -165,15 +193,15 @@ public sealed class PriceBackfillTests
         var ct = TestContext.Current.CancellationToken;
         await SeedAsync(ct).ConfigureAwait(true);
 
-        var first = new ProviderDouble();
-        var halted = await RunAsync(first, Allowance(first, 49_995), ct).ConfigureAwait(true);
+        var first = new ProviderDouble(alreadySpent: 49_995);
+        var halted = await RunAsync(first, ct).ConfigureAwait(true);
 
         Assert.True(halted.WasHalted);
         Assert.Equal("L07.US", halted.Position);
 
         // Room to finish this time.
         var second = new ProviderDouble();
-        var done = await RunAsync(second, Allowance(second, 0), ct).ConfigureAwait(true);
+        var done = await RunAsync(second, ct).ConfigureAwait(true);
 
         Assert.False(done.WasHalted);
 
@@ -182,6 +210,102 @@ public sealed class PriceBackfillTests
         Assert.Equal(14, second.SeriesCalls);
         Assert.Contains("Resumed from L07.US", done.Detail ?? "", StringComparison.Ordinal);
     }
+
+    // --------------------------------------------- in flight, not pre-flight ---
+
+    /// <summary>
+    /// A ticker the endpoint does not carry writes nothing and the sweep runs on. That
+    /// is the ordinary case for a recent listing and for the delisted names 3.1 found
+    /// `sec-filings` refusing.
+    /// </summary>
+    [Fact]
+    public async Task A404OnOneTickerLeavesTheSweepRunning()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+
+        var handler = new ProviderDouble(
+            failures: new Dictionary<string, HttpStatusCode>(StringComparer.Ordinal)
+            {
+                ["L05.US"] = HttpStatusCode.NotFound,
+            });
+
+        var result = await RunAsync(handler, ct).ConfigureAwait(true);
+
+        Assert.False(result.WasHalted);
+        Assert.Equal(22, handler.SeriesCalls);
+
+        // Twenty-one wrote a bar; L05 wrote none and did not stop the other twenty-one.
+        Assert.Equal(21, result.RowsWritten);
+    }
+
+    /// <summary>
+    /// **Everything other than a 404 fails the sweep, and this is the defect that was
+    /// there before 3.6's second pass** [3.4].
+    ///
+    /// The catch was on `HttpRequestException` whole, and `EodhdClient` throws that for
+    /// every non-success status. A 402 is the allowance wall reached in flight, which
+    /// the gate's reserve makes the designed case rather than the unlikely one, and it
+    /// persists for the day: swallowed, the sweep would write nothing for that ticker
+    /// and nothing for any ticker after it, then return `Completed` over a partial
+    /// load. A stage completes or it fails the run.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.PaymentRequired)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task AnythingOtherThanA404FailsTheSweep(HttpStatusCode status)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+
+        var handler = new ProviderDouble(
+            failures: new Dictionary<string, HttpStatusCode>(StringComparer.Ordinal)
+            {
+                ["L05.US"] = status,
+            });
+
+        var thrown = await Assert.ThrowsAnyAsync<Exception>(
+            () => RunAsync(handler, ct)).ConfigureAwait(true);
+
+        var http = Unwrap(thrown);
+
+        Assert.NotNull(http);
+        Assert.Equal(status, http!.StatusCode);
+    }
+
+    /// <summary>
+    /// The status is on the exception rather than only in its message, which is what
+    /// lets the caller tell a 404 from a 402 without parsing text.
+    /// </summary>
+    [Fact]
+    public async Task TheClientsExceptionCarriesTheStatusCode()
+    {
+        var handler = new ProviderDouble(
+            failures: new Dictionary<string, HttpStatusCode>(StringComparer.Ordinal)
+            {
+                ["X.US"] = HttpStatusCode.PaymentRequired,
+            });
+
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(
+            () => Client(handler).GetAsync("eod/X.US", [], TestContext.Current.CancellationToken))
+            .ConfigureAwait(true);
+
+        Assert.Equal(HttpStatusCode.PaymentRequired, ex.StatusCode);
+    }
+
+    /// <summary>
+    /// `Parallel.ForEachAsync` surfaces one exception directly and several as an
+    /// aggregate, and which of those happens depends on scheduling. Unwrapped rather
+    /// than asserted on, so the test is about the status and not about the scheduler.
+    /// </summary>
+    private static HttpRequestException? Unwrap(Exception ex)
+        => ex switch
+        {
+            HttpRequestException http => http,
+            AggregateException agg => agg.InnerExceptions.Select(Unwrap).FirstOrDefault(e => e is not null),
+            _ => ex.InnerException is null ? null : Unwrap(ex.InnerException),
+        };
 
     // ------------------------------------------------------------- harness ---
 
@@ -206,8 +330,7 @@ public sealed class PriceBackfillTests
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
-    private static async Task<BackfillResult> RunAsync(
-        ProviderDouble handler, IUnitAllowance allowance, CancellationToken ct)
+    private static async Task<BackfillResult> RunAsync(ProviderDouble handler, CancellationToken ct)
     {
         var stage = new PriceIngestor(Client(handler));
 
@@ -216,62 +339,60 @@ public sealed class PriceBackfillTests
             new RunLog(TestDatabase.ConnectionString),
             Clock,
             TestDatabase.ConnectionString,
-            allowance);
+            Allowance(handler));
 
         return await run.RunAsync(stage.Name, new DateOnly(2021, 1, 4), new DateOnly(2021, 1, 8), ct)
             .ConfigureAwait(false);
     }
 
     /// <summary>
-    /// The allowance as the provider would report it: a starting figure plus what the
-    /// double has actually billed.
+    /// The real <c>UnitAllowance</c> over the double, so the gate's reads are HTTP
+    /// requests the double counts and `/api/user`'s parse is exercised end to end.
     ///
     /// **The stage does not tell the counter what it spent, and neither does the real
-    /// one.** An earlier version of this had the sweep call `Spend`, which the
-    /// production code never does, so the reading never moved and nothing ever halted.
-    /// The provider bills and `/api/user` reports; this models that and nothing else.
+    /// one.** An earlier version of this had the sweep call a `Spend` method the
+    /// production code never calls, so the reading never moved and nothing ever halted.
+    /// The provider bills and `/api/user` reports; the double models that.
     /// </summary>
-    private static IUnitAllowance Allowance(ProviderDouble handler, int alreadySpent)
-        => new BilledAllowance(handler, alreadySpent, limit: 100_000, stampedOn: ProviderDate);
-
-    private sealed class BilledAllowance : IUnitAllowance
-    {
-        private readonly ProviderDouble _handler;
-        private readonly int _alreadySpent;
-        private readonly int _limit;
-        private readonly DateOnly _stampedOn;
-
-        public BilledAllowance(ProviderDouble handler, int alreadySpent, int limit, DateOnly stampedOn)
-        {
-            _handler = handler;
-            _alreadySpent = alreadySpent;
-            _limit = limit;
-            _stampedOn = stampedOn;
-        }
-
-        public Task<AllowanceReading> ReadAsync(CancellationToken ct = default)
-            => Task.FromResult(new AllowanceReading(
-                _alreadySpent + _handler.BillableUnits, _limit, _stampedOn));
-    }
+    private static IUnitAllowance Allowance(ProviderDouble handler)
+        => new UnitAllowance(Client(handler));
 
     /// <summary>
-    /// Two symbol lists and a series per ticker. Twenty-two admitted common stocks
-    /// across the two lists, which is more than one chunk at the configured
-    /// concurrency, plus instruments D-4 excludes so the type filter is exercised
-    /// rather than assumed.
+    /// Two symbol lists, `/api/user`, and a series per ticker. Twenty-two admitted
+    /// common stocks across the two lists, which is more than one chunk at the
+    /// configured concurrency, plus instruments D-4 excludes so the type filter is
+    /// exercised rather than assumed.
     ///
-    /// Both endpoints are billed at one unit, which is what 3.1 measured.
+    /// `eod/{t}` and the symbol list are billed at one unit each and `/api/user` at
+    /// none, which is what 3.1 measured. Every one of them is a request.
     /// </summary>
     private sealed class ProviderDouble : HttpMessageHandler
     {
+        private readonly int _alreadySpent;
+        private readonly IReadOnlyDictionary<string, HttpStatusCode> _failures;
+
         private int _symbolListCalls;
         private int _seriesCalls;
+        private int _userCalls;
+
+        public ProviderDouble(
+            int alreadySpent = 0, IReadOnlyDictionary<string, HttpStatusCode>? failures = null)
+        {
+            _alreadySpent = alreadySpent;
+            _failures = failures ?? new Dictionary<string, HttpStatusCode>(StringComparer.Ordinal);
+        }
 
         public int SymbolListCalls => Volatile.Read(ref _symbolListCalls);
 
         public int SeriesCalls => Volatile.Read(ref _seriesCalls);
 
-        /// <summary>What the provider would have billed. `eod/{t}` and the symbol list are 1 each [3.1].</summary>
+        /// <summary>Gate reads. One per chunk since 3.6; one per ticker before it.</summary>
+        public int UserCalls => Volatile.Read(ref _userCalls);
+
+        /// <summary>Every request, billed or not. The provider's rate limiter counts these.</summary>
+        public int TotalRequests => SymbolListCalls + SeriesCalls + UserCalls;
+
+        /// <summary>What the provider would have billed. `/api/user` is free [3.1].</summary>
         public int BillableUnits => SymbolListCalls + SeriesCalls;
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -280,7 +401,17 @@ public sealed class PriceBackfillTests
 
             string body;
 
-            if (url.Contains("exchange-symbol-list", StringComparison.Ordinal))
+            if (url.Contains("/user?", StringComparison.Ordinal))
+            {
+                Interlocked.Increment(ref _userCalls);
+
+                body = string.Format(
+                    CultureInfo.InvariantCulture,
+                    """{{"apiRequests":{0},"apiRequestsDate":"{1}","dailyRateLimit":100000,"extraLimit":0}}""",
+                    _alreadySpent + BillableUnits,
+                    ProviderDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            }
+            else if (url.Contains("exchange-symbol-list", StringComparison.Ordinal))
             {
                 Interlocked.Increment(ref _symbolListCalls);
 
@@ -294,6 +425,18 @@ public sealed class PriceBackfillTests
             else if (url.Contains("/eod/", StringComparison.Ordinal))
             {
                 Interlocked.Increment(ref _seriesCalls);
+
+                var ticker = TickerIn(url);
+                if (_failures.TryGetValue(ticker, out var status))
+                {
+                    return Task.FromResult(new HttpResponseMessage(status)
+                    {
+                        Content = new StringContent(
+                            status == HttpStatusCode.NotFound ? "Symbol not found" : "refused",
+                            Encoding.UTF8, "text/plain"),
+                    });
+                }
+
                 body = """[{"date":"2021-01-04","open":1,"high":2,"low":1,"close":2,"adjusted_close":2,"volume":10}]""";
             }
             else
@@ -305,6 +448,13 @@ public sealed class PriceBackfillTests
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
             });
+        }
+
+        private static string TickerIn(string url)
+        {
+            var start = url.IndexOf("/eod/", StringComparison.Ordinal) + "/eod/".Length;
+            var end = url.IndexOf('?', start);
+            return end < 0 ? url[start..] : url[start..end];
         }
 
         private static string Symbols((string Code, string Type)[] rows)

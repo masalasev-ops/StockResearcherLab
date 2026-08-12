@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using StockResearcherLab.Core.Config;
 using StockResearcherLab.Core.Stages;
@@ -121,31 +122,34 @@ public sealed class PriceIngestor : IBackfillStage
         string? haltedAt = null;
         string? haltDetail = null;
 
-        // Ordinal order, in chunks of the configured concurrency. The gate is asked
-        // once per ticker before its chunk is dispatched, so a refusal stops the sweep
-        // at a ticker rather than mid-flight, and the position recorded is the first
-        // ticker not dispatched.
+        // Ordinal order, in chunks of the configured concurrency. **The gate is asked
+        // once per chunk, not once per ticker** [3.6]. A refusal stops the sweep at a
+        // chunk boundary and the position recorded is the first ticker not dispatched,
+        // which is what resumption reads.
         //
-        // Up to `concurrency` units can be spent past one reading, which the reserve
-        // absorbs many times over: eight units against a reserve of fifty thousand.
-        // The gate is a projection and the reading is the verdict [3.4].
+        // **Per ticker doubled the request count for nothing.** `/api/user` costs no
+        // units and does cost a request, so a gate read per ticker put 50,785 of them
+        // beside 50,785 `eod/{t}` calls, and against the provider's 1,000-a-minute
+        // limiter that takes the sweep's floor from about 51 minutes to about 102. The
+        // property the per-ticker read protected is unchanged: up to `concurrency`
+        // units are spent past one reading, which the reserve absorbs many times over
+        // at eight units against fifty thousand. The gate is a projection and the
+        // reading is the verdict [3.4].
         foreach (var chunk in Chunks(remaining, concurrency))
         {
-            var dispatch = new List<string>(chunk.Count);
+            var decision = await context.NextUnitAsync(weight, reserve, allowance, ct).ConfigureAwait(false);
 
-            foreach (var ticker in chunk)
+            List<string> dispatch;
+
+            if (decision.Fits)
             {
-                var decision = await context.NextUnitAsync(weight, reserve, allowance, ct).ConfigureAwait(false);
-
-                if (decision.Fits)
-                {
-                    dispatch.Add(ticker);
-                    continue;
-                }
-
-                haltedAt = ticker;
+                dispatch = [.. chunk];
+            }
+            else
+            {
+                dispatch = [];
+                haltedAt = chunk[0];
                 haltDetail = decision.Detail;
-                break;
             }
 
             if (dispatch.Count > 0)
@@ -218,11 +222,20 @@ public sealed class PriceIngestor : IBackfillStage
         {
             doc = await _client.GetAsync("eod/" + ticker, [("period", "d")], ct).ConfigureAwait(false);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
-            // A ticker the price endpoint does not carry writes nothing. Not a reason
-            // to fail a sweep of fifty thousand names, and the same tolerance C03 and
-            // C05 already apply per ticker.
+            // **A 404 alone, and the narrowness is the point** [3.6]. A ticker the
+            // price endpoint does not carry writes nothing and is not a reason to fail
+            // a sweep of fifty thousand names.
+            //
+            // Everything else is rethrown. A 402 or a 429 is the allowance wall reached
+            // in flight, which the gate's reserve makes the designed case rather than
+            // the unlikely one, and a 402 persists for the day: swallowed here it would
+            // write nothing for this ticker and nothing for every ticker after it,
+            // then return having completed over a partial load. A stage completes or it
+            // fails the run [`CLAUDE.md` §6], and the pre-flight gate and the in-flight
+            // error are two different observations that must not collapse into each
+            // other [3.4].
             return 0;
         }
 

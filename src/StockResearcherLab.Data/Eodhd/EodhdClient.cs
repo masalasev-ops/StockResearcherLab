@@ -178,9 +178,20 @@ public sealed class EodhdClient
             // The path is named and the token is not. The body is included because
             // this provider says useful things in it, including naming the paging
             // form in a 422.
+            //
+            // **The status code is carried on the exception and not only in the
+            // message** [3.6]. Every caller that tolerates a missing ticker does so by
+            // catching this type, and without the code the only way to tell a 404 from
+            // a 402 is to parse the text. A sweep that catches both writes nothing for
+            // the ticker that hit the wall and then nothing for every ticker after it,
+            // because a 402 persists for the day, and returns having completed over a
+            // partial load. That is the failure D-71 and the allowance gate both exist
+            // to prevent, arriving one layer down in the caller's catch.
             throw new HttpRequestException(
                 $"'{pathForErrors}' returned {(int)response.StatusCode}. Body: " +
-                (body.Length > 400 ? body[..400] + "..." : body));
+                (body.Length > 400 ? body[..400] + "..." : body),
+                inner: null,
+                statusCode: response.StatusCode);
         }
 
         return JsonDocument.Parse(body);

@@ -126,16 +126,22 @@ the two sentiment keys at `SentimentIngestor.cs:51-52`, the two flow keys at
 at `EventsIngestor.cs:59-60`. Line numbers go stale; the file and the stage do not,
 and both are given so the next reader can find it either way.
 
+The six backfill keys now bound were confirmed the same way, at
+`PriceIngestor.cs:108-111` and `FundamentalsIngestor.cs:88-94` for the range stages,
+and `Program.cs:175` for the driver's read of `backfill.window_start`. The four that
+still read NOT BOUND are the sweep weights for checkpoints not yet built, and their
+absence from a grep over `src/` is what the entry states.
+
 ## Backfill
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `backfill.window_start` | "2021-01-04" | D-94, 3.3 | NOT BOUND | 3.16 |
-| `backfill.ticker_concurrency` | 8 | 3.3 | NOT BOUND | 3.6 |
-| `backfill.daily_unit_allowance` | 100000 | 3.1, 3.3 | NOT BOUND | 3.6 |
-| `backfill.unit_reserve` | 50000 | 3.3 | NOT BOUND | 3.6 |
-| `backfill.weight_eod` | 1 | 3.1, 3.3 | NOT BOUND | 3.6 |
-| `backfill.weight_fundamentals` | 10 | 3.1, 3.3 | NOT BOUND | 3.7 |
+| `backfill.window_start` | "2021-01-04" | D-94, 3.3 | `FundamentalsIngestor` C03, `Worker` backfill driver | 3.16 |
+| `backfill.ticker_concurrency` | 8 | 3.3 | `PriceIngestor` C02 | 3.6 |
+| `backfill.daily_unit_allowance` | 100000 | 3.1, 3.3 | `PriceIngestor` C02, `FundamentalsIngestor` C03 | 3.6 |
+| `backfill.unit_reserve` | 50000 | 3.3 | `PriceIngestor` C02, `FundamentalsIngestor` C03 | 3.6 |
+| `backfill.weight_eod` | 1 | 3.1, 3.3 | `PriceIngestor` C02 | 3.6 |
+| `backfill.weight_fundamentals` | 10 | 3.1, 3.3 | `FundamentalsIngestor` C03 | 3.7 |
 | `backfill.weight_sentiments_per_ticker` | 5 | 3.1, 3.3 | NOT BOUND | 3.8 |
 | `backfill.weight_form4_page` | 10 | 3.1, 3.3 | NOT BOUND | 3.9 |
 | `backfill.weight_splits` | 1 | 3.1, 3.3 | NOT BOUND | 3.10 |

@@ -1,3 +1,5 @@
+using StockResearcherLab.Core;
+using StockResearcherLab.Data.Eodhd;
 using StockResearcherLab.Pipeline;
 using StockResearcherLab.Tests.Corpus;
 using Xunit;
@@ -92,5 +94,70 @@ public sealed class RegistryNameTests
             .ToList();
 
         Assert.DoesNotContain("NoOpStage", registered);
+    }
+
+    // ------------------------------------------- composition [3.16 driver] ---
+
+    /// <summary>
+    /// **The registry can be built over a client the caller already holds**, which is
+    /// what the backfill driver needs and why the overload exists. The rate limiter is
+    /// per client and the provider's limit is not, so a driver that took the registry
+    /// from one client and `UnitAllowance` from another would run two sliding windows
+    /// of 1,000 a minute against one limit of 1,000 and meet it as a 429 mid-sweep.
+    ///
+    /// Asserted as the two routes agreeing on the component set, because that is the
+    /// property the refactor could have broken: the token overload now delegates here
+    /// rather than constructing its own owners.
+    /// </summary>
+    [Fact]
+    public void BothCompositionRoutesRegisterTheSameComponents()
+    {
+        var viaToken = PipelineComposition
+            .BuildRegistry(TestDatabase.ConnectionString, "not-a-real-token-registry-only", new FixedClock(
+                new DateTimeOffset(2026, 8, 12, 3, 0, 0, TimeSpan.Zero), new DateOnly(2026, 8, 12)))
+            .Owners.Select(o => o.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
+
+        var viaClient = PipelineComposition
+            .BuildRegistry(TestDatabase.ConnectionString, EodhdClientDouble())
+            .Owners.Select(o => o.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
+
+        Assert.Equal(viaToken, viaClient);
+        Assert.Equal(14, viaClient.Count);
+        Assert.Contains("PriceIngestor", viaClient);
+        Assert.Contains("FundamentalsIngestor", viaClient);
+    }
+
+    /// <summary>
+    /// No client is the no-token case and it is not the same registry. The seven
+    /// provider-backed stages are absent, which is the branch that once made the write
+    /// conformance tests run over two components while reading green [sign-off finding
+    /// A], so it is asserted rather than assumed to have survived the refactor.
+    /// </summary>
+    [Fact]
+    public void NoClientLeavesTheProviderBackedStagesOut()
+    {
+        var owners = PipelineComposition
+            .BuildRegistry(TestDatabase.ConnectionString, eodhd: null)
+            .Owners.Select(o => o.Name).ToList();
+
+        Assert.Equal(7, owners.Count);
+        Assert.DoesNotContain("PriceIngestor", owners);
+        Assert.DoesNotContain("FundamentalsIngestor", owners);
+
+        // The compute layer and RunLog are registered whether or not a token exists,
+        // because none of them calls a provider.
+        Assert.Contains("PercentileEngine", owners);
+        Assert.Contains("RunLog", owners);
+    }
+
+    private static EodhdClient EodhdClientDouble()
+        => new(new HttpClient(new NeverCalled()), "fake-token", new FixedClock(
+            new DateTimeOffset(2026, 8, 12, 3, 0, 0, TimeSpan.Zero), new DateOnly(2026, 8, 12)));
+
+    /// <summary>Building a registry makes no call, which this proves by failing if one is made.</summary>
+    private sealed class NeverCalled : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+            => throw new InvalidOperationException("Composing the registry must not make a call.");
     }
 }

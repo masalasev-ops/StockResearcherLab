@@ -24,6 +24,28 @@ public static class PipelineComposition
     /// <param name="clock">Injected; nothing here reads system time [INVARIANT 11].</param>
     public static StageRegistry BuildRegistry(
         string connectionString, string? apiToken = null, IClock? clock = null)
+        => BuildRegistry(
+            connectionString,
+            string.IsNullOrWhiteSpace(apiToken)
+                ? null
+                : new EodhdClient(EodhdClient.CreateHttpClient(), apiToken, clock ?? new SystemClock()));
+
+    /// <summary>
+    /// The same registry over a client the caller already holds.
+    ///
+    /// **This exists because the rate limiter is per client and the provider's limit is
+    /// not** [`EodhdRateLimiter`, 1,000 requests a minute]. A backfill needs both the
+    /// registry and `UnitAllowance`, which reads `/api/user` before every unit of work,
+    /// so a driver that let this method build its own client would be running two
+    /// independent sliding windows of 1,000 against one limit of 1,000 and would meet it
+    /// as a 429 in the middle of a sweep, which is a failed stage after the units before
+    /// it are spent. One client, one window.
+    /// </summary>
+    /// <param name="eodhd">
+    /// Null builds a registry whose provider-backed stages are absent, which is the
+    /// no-token case above.
+    /// </param>
+    public static StageRegistry BuildRegistry(string connectionString, EodhdClient? eodhd)
     {
         var owners = new List<IWriteOwner>
         {
@@ -41,11 +63,8 @@ public static class PipelineComposition
             new PercentileEngine(),
         };
 
-        if (!string.IsNullOrWhiteSpace(apiToken))
+        if (eodhd is not null)
         {
-            var http = EodhdClient.CreateHttpClient();
-            var eodhd = new EodhdClient(http, apiToken, clock ?? new SystemClock());
-
             owners.Add(new PriceIngestor(eodhd));
             owners.Add(new FreshnessGuard(eodhd));
             owners.Add(new FundamentalsIngestor(eodhd));

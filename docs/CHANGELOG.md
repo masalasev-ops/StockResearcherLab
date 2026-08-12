@@ -1297,3 +1297,17 @@ unchecked-column shape as the Writes column and it is recorded beside it in
 **`institutional_holding` gains no schema change and no document change.** The
 duplicate-key guard landing with this is code and tests only: the grain, the writer
 declaration and the column list are what they already were.
+
+---
+
+## 2026-08-12, the backfill driver
+
+No spec document changed. `CONFIG_REFERENCE.md`'s Consumer column moved from NOT BOUND
+to a named component for six backfill keys, which is verified content rather than a
+supersession: each was confirmed by reading the line that consumes it, at
+`PriceIngestor.cs:108-111`, `FundamentalsIngestor.cs:88-94` and `Program.cs:175`. The
+four still reading NOT BOUND are sweep weights for checkpoints not yet built.
+
+`ARCHITECTURE.html`, `SCHEMA.md` and `RUNBOOK.md` are untouched. The driver is a Worker
+command over `BackfillRun`, which §3 already accounts for, and it adds no component, no
+table and no config key.

@@ -16,7 +16,7 @@ Correct them directly. Do not record intentions here.
 | 0 Rails | DONE | d9cb5df | Signed off 2026-08-06. Checkpoints 0.1 to 0.8, plus CI, the sign-off review, and pass O's corrections. 25 tests green. Step 1 was met by running every CI step locally, because no hosted runner has ever picked up a job on this account. Step 2 ran at `d4baeaf` and does not cover pass O's four corrected files. Both gaps are in the phase 0 block below |
 | 1 Ingest and universe | IN PROGRESS | 050d5c7 | Every checkpoint 1.1 to 1.14 landed, 136 tests. All twelve definition-of-done lines met live on 2026-08-09: the universe rebuilt to 2,840 names and `run-night` ran all seven stages end to end. Four findings are open and all four are authored questions, not build work: C01 never deactivates, the universe is 2,840 rather than roughly 2,000, C05 cannot fit any schedule, and CI cannot catch the timeout failure class. The CI runner gap is recorded below rather than at sign-off |
 | 2 Compute | IN PROGRESS | 68aafa4 | Every checkpoint 2.1 to 2.15 landed, 221 tests. Five components built: C08, C09, C10, C11 and C35. All eleven definition-of-done lines met on 2026-08-11, with `run-night` completing twelve stages on the blessed date 2026-08-07 and the compute layer digesting identically on re-run. Two components had never executed before this phase ran them and both were broken at the write, which is the phase's largest finding. `METRICS.md` is still the unauthored draft 2.1 produced and all nine of its PROPOSAL entries are now running code |
-| 3 Backfill | IN PROGRESS | ba88b0b | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b`, 314 with D-98's implementation and 324 with its two open items closed, `ci.ps1` green at each. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built. **Nothing has been loaded**: 3.6 to 3.10 are the sweeps and they spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them. The open findings are the table at the foot of this file rather than a second list here, and none of them blocks a later checkpoint |
+| 3 Backfill | IN PROGRESS | ba88b0b | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b`, 314 with D-98's implementation, 324 with its two open items closed and 326 with the backfill driver, `ci.ps1` green at each. **No sweep has been run**: the driver exists and the first one is blocked on open item 22. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built. **Nothing has been loaded**: 3.6 to 3.10 are the sweeps and they spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them. The open findings are the table at the foot of this file rather than a second list here, and none of them blocks a later checkpoint |
 | 4 Screens and selection | NOT STARTED | | |
 | 5 Digest chain | NOT STARTED | | |
 | 6 Researcher | NOT STARTED | | |
@@ -4160,6 +4160,73 @@ captured block reporting none, and three through the stage: the run-log line wit
 figures, the duplicate reaching the write, and the holdings count staying out of the
 attempt record so the rotation is not moved by them.
 
+### 2026-08-12, the backfill driver, which is 3.16's single-stage half pulled forward
+
+**`Worker backfill <stage> [from] [to]`.** `from` defaults to `backfill.window_start`
+and `to` to today; the command resolves the window, prints where it is resuming from,
+calls `BackfillRun` and reports what came back. The sources-in-order form stays with
+3.16, because what 3.6 and 3.7 need is one named stage at a time.
+
+**Nothing was run and no unit was spent.** The command was exercised on the paths that
+make no provider call: the help text, a missing stage name, a stage name the registry
+does not have, a registered stage with no range mode, and a range whose start is after
+its end. `backfill FlowEngine` printed `range 2021-01-04..2026-08-12`, which is
+`backfill.window_start` resolved out of the store and today's date, and then the D-93
+refusal. The two refusals write no `run_log` row, checked against the table rather than
+inferred: the throw is before the try block that records.
+
+**Three outcomes, three exit codes.** 0 completed, 2 halted on the allowance gate, 1
+failed. A multi-day sweep halts in the ordinary course, so collapsing a halt into a
+failure would make the gate working and the run breaking read the same to whatever
+called it. The throw is caught for the exit code alone and the whole exception including
+its stack still goes to stderr, because a throw here is a defect rather than an expected
+state.
+
+**One composition change, and it is a correctness one rather than tidying.**
+`PipelineComposition.BuildRegistry` gained an overload taking an `EodhdClient` the
+caller already holds, and the token overload now delegates to it. The rate limiter is
+per client and the provider's limit is not: the gate reads `/api/user` before every unit
+of work, so a driver building its own client for `UnitAllowance` while the registry
+built another would have run two sliding windows of 1,000 a minute against one limit of
+1,000, and met it as a 429 in flight, which the design makes a failed stage after the
+units before it are spent. Two tests hold the two routes to the same component set and
+the no-client route to the seven that call nothing.
+
+**326 tests, 324 before.**
+
+#### The driver's first act was to find the thing that would have made 3.6 wrong
+
+**The developer database holds a halted `PriceIngestor` range row, and it is a test
+fixture.** `run_log` id 1311, status `halted`, `run_date` 2021-01-08, line `range
+2021-01-04..2021-01-08, reached 2021-01-08 at L07.US`. It is what
+`PriceBackfillTests`'s twenty-two-ticker gated sweep leaves behind: `SeedAsync` clears
+`run_log WHERE stage = 'PriceIngestor'` **before** each test rather than after, so the
+last test in the class leaves its row standing, and that class runs the real component
+under its real name rather than an `SrlTest` double. It is the only real component name
+with range rows; the other four are doubles.
+
+**`BackfillRun` would have resumed from it.** Resumption reads the newest range row for
+the stage, takes it when the status is `halted`, and the first real 3.6 sweep on this
+machine would have started at `L07.US` and skipped every admitted ticker ordering below
+it. The sweep would have completed, reported a plausible row count, and left a hole no
+later stage can see, which is `CLAUDE.md` §1's failure mode rather than an ordinary bug.
+
+**It was found because the driver prints the resume point before running**, which is the
+line that exists for exactly this and earned itself on its first use against a real
+store. It was not found by any test, and no test can find it: the row is data.
+
+**The deeper half is that resumption does not compare ranges.**
+`RunLog.LastRangeRunAsync` matches on the stage name and the `range ` prefix and nothing
+else, so a halt recorded over 2021-01-04..2021-01-08 is a valid resume point for a
+sweep over 2021-01-04..2026-08-12. Whether a resume point should be scoped to the range
+that produced it is a question about D-68 and D-93 rather than a defect to patch, and
+the two candidate fixes are not equivalent: a test that cleans up after itself still
+leaves a row when it crashes, and range-scoped resumption closes both. Reported.
+
+**CI is not exposed.** `ci.ps1` drops and recreates `stockresearcherlab_ci` before every
+run, so the row cannot exist there. This is the developer database, which is also the
+test database [open item 10]. Open item 22.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
@@ -4185,4 +4252,5 @@ them are in `docs/archive/process-2026-08.md`.
 | 18 | **Three components still catch `HttpRequestException` whole at a per-ticker fetch**, where C02 was narrowed to a 404 at 3.6. `FundamentalsIngestor` at line 245, `FlowIngestor` at 338 and 475, and `UniverseBuilder` at its sector call at 294. Each swallows a 402 or a 429 as a missing ticker, so a sweep that hits the allowance wall in flight writes nothing for that name and nothing for any name after it, and returns having completed over a partial load. `EodhdClient` now carries the status code, so the fix is one `when` clause each. Not taken here: each belongs to the checkpoint that gives its component a range mode | 3.7 for C03 and C01, 3.9 for C05 |
 | 19 | ~~**C05 buys per ticker what C03 now receives for nothing.** `FlowIngestor.LoadHoldersAsync` calls `fundamentals/{ticker}` with `filter=Holders::Institutions`; C03 now calls the same endpoint unfiltered, so the filter is a projection of a document C03 already has. 10 units a ticker, 2,500 a night at `flow.max_tickers_per_run` 250, and 28,410 for a universe pass of that half alone. C03's rotation would make a ticker's holders about ten days stale, against a block whose report dates move quarterly [D-69], and C03's pool is broader than the universe, so both conditions hold. **The backfill is unaffected**, the block having no series; the saving is nightly, and 3.9's scope shrinks by not re-fetching a current snapshot 2,841 times. Moving the read changes two components' declared sets and section 3, which is authored~~ **Closed by D-98's implementation on 2026-08-12.** `institutional_holding`'s writer is `FundamentalsIngestor`, `LoadHoldersAsync` is gone, §3's two Writes cells and `SCHEMA.md`'s writer declaration moved with it, and 3.9's scope in the phase plan names form 4 alone. The parse is `InstitutionalHolders` and the regression test states which half of D-98's claim it covers. **Two findings came out of it and neither was taken**, being items 20 and 21 | Closed |
 | 20 | ~~**C05's §3 Reads cell still names the ownership endpoint** it stopped calling at D-98. `ReadDeclarationConformanceTests` cannot catch it and is not failing to: the cell parse intersects against `SCHEMA.md`'s table list and drops everything that is not a table, which is what makes it able to read `security` out of "for the universe it iterates" and how it drops `digest_provider` from C29's. So the Reads column carries the same class of drift the Writes column does, with the same absence of a check over the half of each cell that names endpoints rather than tables. One cell, one clause, and the file is human-edited only [`CLAUDE.md` §13]~~ **The cell is corrected**, human-directed on 2026-08-12, as a clean edit under D-73 with the prior wording in `CHANGELOG.md` and a one-line diff. **What stays open is the blind spot**, which is recorded beside the Writes-column finding rather than as its own item, so that whoever builds one test sees the other defect in the same read. Seven of thirty-five Reads cells name a provider endpoint and none of those names is checked in either direction | The Writes-column conformance test, with which it shares a section. Recorded beside item 15 rather than counted twice |
+| 22 | **A test fixture's halted range row would be resumed from by the first real sweep.** `run_log` id 1311 on the developer database is `PriceIngestor`, `halted`, `run_date` 2021-01-08, `reached 2021-01-08 at L07.US`, left by `PriceBackfillTests`, which clears `run_log WHERE stage = 'PriceIngestor'` before each test rather than after and runs the real component under its real name. `BackfillRun` resumes from the newest range row when its status is `halted`, so 3.6 would have started at `L07.US`, skipped every admitted ticker below it, completed, and reported a plausible count over a partial load. **Two fixes and they are not equivalent**: a test that also clears afterwards still leaves a row when it crashes, where scoping a resume point to the range that produced it closes both, since `RunLog.LastRangeRunAsync` matches on stage name and the `range ` prefix and never on the range itself. The second is a question about D-68 and D-93 rather than a patch. **CI is not exposed**, `ci.ps1` dropping its database before every run; this is the developer database, which is also the test database [item 10]. **The row is data and no test can find it**; what found it is the driver printing its resume point before running | Before 3.6's sweep is run. The row has to go either way, and which fix lands is authored |
 | 21 | ~~**`institutional_holding` has no guard against two entries resolving to one key.** `BulkUpsertSql.Upsert` is `INSERT ... SELECT ... ON CONFLICT (ticker, report_date, holder_name) DO UPDATE`, so two entries in one payload sharing a holder name and a report date arrive in one statement and Postgres raises `ON CONFLICT DO UPDATE command cannot affect row a second time`. **This is D-96's failure one table over**, which the earnings capture met by deduplicating in the parse and reporting the collision count to the run log, and it predates D-98 rather than arriving with it. Nothing observed says it happens: the captured block carries no duplicate and 1.9 read none. What D-98 changed is the exposure, C05 having written 250 tickers a night where 3.7's sweep writes about 4,800 in one run, and a single collision there fails the stage mid-sweep after the units before it are spent. The fix is D-96's, three lines and a counter; whether the same tie-break applies to a holder is the part that is authored~~ **Closed on 2026-08-12, human-directed, before 3.7's sweep.** The parse deduplicates: the larger current share count wins, the first in document order wins on a tie, a known count beats an absent one whichever came first, and summing is rejected because adding two entries writes a number the provider did not send. The count is reported per run in both paths beside the holdings row count, and its zero is asserted as well as its non-zero. **The failure was run rather than quoted**: removing the guard reproduces `Npgsql.PostgresException 21000` through the stage, which is what makes the guard known to be load-bearing. **The rule was chosen against zero observations and the count is what audits it**, so a non-zero count from 3.7's sweep is a reason to inspect the rows before trusting it | Closed. Re-read at 3.7's sweep, where the count is the observation the rule was chosen without |

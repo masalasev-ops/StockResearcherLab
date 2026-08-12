@@ -1311,3 +1311,22 @@ four still reading NOT BOUND are sweep weights for checkpoints not yet built.
 `ARCHITECTURE.html`, `SCHEMA.md` and `RUNBOOK.md` are untouched. The driver is a Worker
 command over `BackfillRun`, which §3 already accounts for, and it adds no component, no
 table and no config key.
+
+---
+
+## 2026-08-12, range-scoped resumption
+
+`RUNBOOK.md` is a spec under D-73 and this is an addition rather than a supersession, so
+nothing is removed. Its Backfill section gains a "Running an ingest sweep" subsection
+before the existing two-pass text, which is now under "The two-pass screen build". The
+new text says to pass both dates for a multi-day sweep, what each exit code means, and
+what to do when a refusal names a row. The reason it has to be stated is that `to`
+defaults to today and today moves at midnight.
+
+**No other document changed.** `ARCHITECTURE.html`, `SCHEMA.md` and `CONFIG_REFERENCE.md`
+are untouched: no component, table, column or config key moved. The rule is a change to
+how `BackfillRun` reads a `run_log` row it already read.
+
+**One `run_log` row was deleted from the developer database**, id 1311, and its text and
+consequence are in `PROGRESS.md` rather than here, because it was data rather than a
+document and the record has to sit where the finding does.

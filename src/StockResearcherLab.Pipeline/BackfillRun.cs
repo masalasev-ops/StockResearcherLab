@@ -83,9 +83,36 @@ public sealed class BackfillRun
         // failed one records no position because it cannot prove one: both start over,
         // which is safe because every write is idempotent on its own grain [D-68].
         var last = await _runLog.LastRangeRunAsync(stage.Name, ct).ConfigureAwait(false);
-        var resumeFrom = string.Equals(last?.Status, "halted", StringComparison.Ordinal)
-            ? last!.Position
-            : null;
+
+        // **A resume point belongs to the range that produced it** [item 22]. The
+        // position is a ticker and the pool it indexes into is decided by the range, so
+        // a position taken from a narrower range resumes into a wider pool and skips
+        // every name the narrow one did not contain. Found as a test fixture's halt
+        // standing in front of a real sweep, which would have completed and reported a
+        // plausible count over a partial load.
+        //
+        // **A mismatch refuses rather than starting over**, which is the half that is
+        // not obvious. `to` defaults to today, so a sweep halted on day one and
+        // re-invoked on day two carries a different range: falling through to a fresh
+        // start is idempotent and therefore not corrupt, and it burns a day of
+        // allowance re-doing finished work and never reaches the end. Refusing makes
+        // both the fixture row and the midnight rollover loud, and the operator either
+        // passes the recorded range explicitly or clears the row deliberately.
+        if (last is { } row && row.WasHalted && !row.CoversRange(from, to))
+        {
+            throw new InvalidOperationException(
+                $"'{stage.Name}' has a halted range run recorded over {row.RecordedRange} and this run " +
+                $"asks for {Range(from, to)[6..]}. A resume point belongs to the range that produced it: " +
+                "the position is a ticker and which pool it indexes into is decided by the range, so " +
+                "resuming a wider sweep from a narrower one's position skips every name the narrow one " +
+                $"did not contain. run_log row {row.RunLogId.ToString(CultureInfo.InvariantCulture)}" +
+                (row.Position is null ? "" : $", halted at {row.Position}") +
+                ". Either pass the recorded range explicitly and resume it, or delete that row " +
+                "deliberately and start over. Starting over is not done for you, because `to` defaults " +
+                "to today and a sweep re-invoked the next day would silently restart and never finish.");
+        }
+
+        var resumeFrom = last is { } point && point.WasHalted ? point.Position : null;
 
         var context = new BackfillContext(from, to, data, _clock, config, _allowance, resumeFrom);
 

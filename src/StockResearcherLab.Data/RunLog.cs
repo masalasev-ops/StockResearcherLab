@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Npgsql;
 using StockResearcherLab.Core;
 using StockResearcherLab.Core.Stages;
@@ -18,7 +19,38 @@ namespace StockResearcherLab.Data;
 /// a date-partitioned execution and for a failed one, which records no position.
 /// </param>
 /// <param name="Status">`ok`, `halted` or `failed`.</param>
-public sealed record ResumePoint(DateOnly LastDateCovered, string? Position, string Status);
+/// <param name="RunLogId">
+/// The row, so a refusal can name the thing the operator has to look at rather than
+/// describe it.
+/// </param>
+/// <param name="From">
+/// The range start the row records, or null where the line cannot be parsed for one.
+/// **A resume point belongs to the range that produced it** [item 22]: the position is
+/// a ticker, and which pool that ticker indexes into is decided by the range, so a
+/// position taken from a narrower range resumes into a wider pool and skips every name
+/// the narrow one did not contain.
+/// </param>
+/// <param name="To">The range end the row records, on the same reasoning.</param>
+public sealed record ResumePoint(
+    DateOnly LastDateCovered, string? Position, string Status, long RunLogId,
+    DateOnly? From, DateOnly? To)
+{
+    /// <summary>
+    /// Whether this row was produced by the range now being asked for. A row whose
+    /// range could not be parsed matches nothing, which fails towards the refusal
+    /// rather than towards a resume.
+    /// </summary>
+    public bool CoversRange(DateOnly from, DateOnly to) => From == from && To == to;
+
+    public bool WasHalted => string.Equals(Status, "halted", StringComparison.Ordinal);
+
+    /// <summary>The recorded range as it appears in the line, for a message to quote.</summary>
+    public string RecordedRange =>
+        From is DateOnly f && To is DateOnly t
+            ? f.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".." +
+              t.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+            : "(unparsed)";
+}
 
 /// <summary>One row of run_log, as SCHEMA.md declares the table.</summary>
 public sealed record RunLogEntry(
@@ -101,6 +133,13 @@ public sealed class RunLog : IWriteOwner
     /// **A range row is one whose line opens `range `**, which `BackfillRun.Describe`
     /// guarantees. `error` is the only free-text column this table has, so that prefix
     /// is the only marker available without a schema change.
+    ///
+    /// **One row decides everything and it is the newest**, which is what makes the
+    /// range check a comparison rather than a search [item 22]. Returning the newest
+    /// row whose range happened to match would let an old matching halt outrank a newer
+    /// execution over a different range, and data has been written since that newer one.
+    /// So this reads the last thing that happened and `BackfillRun` decides what it
+    /// means: matching resumes, differing refuses.
     /// </summary>
     public async Task<ResumePoint?> LastRangeRunAsync(string stage, CancellationToken ct = default)
     {
@@ -108,7 +147,7 @@ public sealed class RunLog : IWriteOwner
         await conn.OpenAsync(ct).ConfigureAwait(false);
         await using var cmd = new NpgsqlCommand(
             """
-            SELECT run_date, status, error
+            SELECT run_date, status, error, run_log_id
             FROM run_log
             WHERE stage = @stage AND error LIKE 'range %'
             ORDER BY run_date DESC, run_log_id DESC
@@ -122,11 +161,48 @@ public sealed class RunLog : IWriteOwner
             return null;
         }
 
+        var error = reader.IsDBNull(2) ? null : reader.GetString(2);
+        var (from, to) = RangeIn(error);
+
         return new ResumePoint(
             DateOnly.FromDateTime(reader.GetDateTime(0)),
-            PositionIn(reader.IsDBNull(2) ? null : reader.GetString(2)),
-            reader.GetString(1));
+            PositionIn(error),
+            reader.GetString(1),
+            reader.GetInt64(3),
+            from,
+            to);
     }
+
+    /// <summary>
+    /// The range out of `range 2021-01-04..2021-01-08, reached ...`, or two nulls where
+    /// the line does not open with one.
+    ///
+    /// Anchored at the start and exact on the format, because `BackfillRun.Range`
+    /// composes it in invariant culture and a permissive parse here would accept a
+    /// shape that side never writes. A line this cannot read yields nulls, which
+    /// `CoversRange` turns into a refusal rather than into a resume.
+    /// </summary>
+    private static (DateOnly? From, DateOnly? To) RangeIn(string? error)
+    {
+        if (error is null)
+        {
+            return (null, null);
+        }
+
+        var match = RangePattern.Match(error);
+
+        return match.Success
+               && DateOnly.TryParseExact(match.Groups[1].Value, "yyyy-MM-dd",
+                   CultureInfo.InvariantCulture, DateTimeStyles.None, out var from)
+               && DateOnly.TryParseExact(match.Groups[2].Value, "yyyy-MM-dd",
+                   CultureInfo.InvariantCulture, DateTimeStyles.None, out var to)
+            ? (from, to)
+            : (null, null);
+    }
+
+    private static readonly Regex RangePattern = new(
+        @"^range (\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
     /// The ticker out of `..., reached 2021-06-30 at AAPL.US. ...`, or null where the

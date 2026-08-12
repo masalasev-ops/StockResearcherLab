@@ -19,9 +19,26 @@ namespace StockResearcherLab.Tests.Ingest;
 /// **No live call.** The handler below serves the two symbol lists and the per-ticker
 /// series, so the pool arithmetic and the halt are exercised against a fixed answer
 /// rather than against what the endpoint happened to do today.
+///
+/// **This class runs the real component under its real name, so its `run_log` rows are
+/// indistinguishable from a real sweep's** [item 22]. It cleared them before each test
+/// and not after, and the halted row the last test left stood in front of the first
+/// real 3.6 sweep: `BackfillRun` would have resumed from `L07.US` and skipped every
+/// admitted ticker below it. `DisposeAsync` clears now, which stops the ordinary case
+/// arriving; it does not close the case of a test crashing before it, and that is why
+/// the range-matching rule rather than this is what carries the weight.
 /// </summary>
-public sealed class PriceBackfillTests
+public sealed class PriceBackfillTests : IAsyncLifetime
 {
+    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
+
+    /// <summary>
+    /// Runs after every test in this class, passing or failing, which is the half
+    /// `SeedAsync` could not do by clearing first.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+        => await ClearRunLogAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
+
     private static readonly DateTimeOffset Now = new(2026, 8, 12, 2, 52, 0, TimeSpan.Zero);
 
     private static IClock Clock => new FixedClock(Now, new DateOnly(2026, 8, 11));
@@ -307,6 +324,34 @@ public sealed class PriceBackfillTests
             _ => ex.InnerException is null ? null : Unwrap(ex.InnerException),
         };
 
+    // ------------------------------------------------ leaving nothing [22] ---
+
+    /// <summary>
+    /// **The cleanup is checked against the table rather than assumed** [item 22]. A
+    /// test cannot assert what its own `DisposeAsync` does after it, so this asserts the
+    /// thing `DisposeAsync` calls: a sweep writes a range row, and the clear removes it.
+    ///
+    /// The row this leaves behind is the one that stood in front of the first real 3.6
+    /// sweep, so the count going to zero is the whole of what changed here.
+    /// </summary>
+    [Fact]
+    public async Task TheHarnessLeavesNoRangeRowBehind()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+
+        var handler = new ProviderDouble(alreadySpent: 49_995);
+        var result = await RunAsync(handler, ct).ConfigureAwait(true);
+
+        // The sweep really did write one, so the assertion below is not vacuous.
+        Assert.True(result.WasHalted);
+        Assert.Equal(1, await RangeRowCountAsync(ct).ConfigureAwait(true));
+
+        await ClearRunLogAsync(ct).ConfigureAwait(true);
+
+        Assert.Equal(0, await RangeRowCountAsync(ct).ConfigureAwait(true));
+    }
+
     // ------------------------------------------------------------- harness ---
 
     private static EodhdClient Client(HttpMessageHandler handler)
@@ -323,11 +368,28 @@ public sealed class PriceBackfillTests
     private static async Task SeedAsync(CancellationToken ct)
     {
         await new ConfigSeeder(TestDatabase.ConnectionString).SeedAsync(ct).ConfigureAwait(false);
+        await ClearRunLogAsync(ct).ConfigureAwait(false);
+    }
 
+    /// <summary>
+    /// This stage's `run_log` rows, gone. Called before each test and again from
+    /// `DisposeAsync` after it [item 22].
+    /// </summary>
+    private static async Task ClearRunLogAsync(CancellationToken ct)
+    {
         await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
         await using var cmd = new Npgsql.NpgsqlCommand(
             "DELETE FROM run_log WHERE stage = 'PriceIngestor';", conn);
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    private static async Task<long> RangeRowCountAsync(CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
+        await using var cmd = new Npgsql.NpgsqlCommand(
+            "SELECT count(*) FROM run_log WHERE stage = 'PriceIngestor' AND error LIKE 'range %';", conn);
+
+        return (long) (await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false))!;
     }
 
     private static async Task<BackfillResult> RunAsync(ProviderDouble handler, CancellationToken ct)

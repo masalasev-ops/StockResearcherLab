@@ -92,6 +92,29 @@ past date, which is lookahead bias arriving through the back door.
 
 ## Backfill
 
+### Running an ingest sweep
+
+`Worker backfill <stage> [from] [to]`, one stage at a time.
+
+**Pass both dates.** `from` defaults to `backfill.window_start` and `to` defaults to
+today, and today moves at midnight. A resume point belongs to the range that produced
+it, so a sweep halted on day one and re-invoked on day two with the defaults is asking
+for a different range and is refused. Passing both dates makes every invocation of one
+sweep the same range, which is what lets the second one resume.
+
+**A halt is the mechanism working.** The allowance gate stops the sweep when the next
+unit will not fit above `backfill.unit_reserve`, keeps everything written, records
+where it reached, and exits 2. Run the same command again after the provider's day
+rolls over. Exit 0 is a completed range and exit 1 is a failure.
+
+**A refusal names the row.** If the command reports a halted range run over a different
+range, something else produced that row: either re-invoke with the range it names and
+resume it, or delete that `run_log` row deliberately and start over. It does not start
+over on its own, because a silent restart on a multi-day sweep burns a day of allowance
+re-doing finished work and never reaches the end.
+
+### The two-pass screen build
+
 Run in two passes. Pass one computes raw screen scores for every ticker on every
 date, fully date-parallel with no cross-date dependency. Pass two computes floors and
 applies them in a single window function over the completed table.

@@ -353,6 +353,184 @@ public sealed class BackfillRunTests
         Assert.Equal(new DateOnly(2022, 6, 1), resume.LastDateCovered);
     }
 
+    // ------------------------------- a resume point belongs to its range [22] ---
+    //
+    // The position is a ticker and which pool it indexes into is decided by the range,
+    // so a position taken from a narrower range resumes into a wider pool and skips
+    // every name the narrow one did not contain. Found as a test fixture's halt
+    // standing in front of a real sweep, which would have completed and reported a
+    // plausible count over a partial load.
+
+    /// <summary>
+    /// The half that has to keep working. Same stage, same range, halted: the position
+    /// is taken and the sweep picks up where it stopped.
+    /// </summary>
+    [Fact]
+    public async Task AHaltedRunResumesFromItsPositionWhenTheRangeMatches()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+        await ClearRunLogAsync(ResumeProbeStage.StageName, ct).ConfigureAwait(true);
+
+        var from = new DateOnly(2022, 6, 1);
+        var to = new DateOnly(2022, 6, 30);
+
+        // A halt at T0007 over 2022-06-01..2022-06-30.
+        var halting = new ResumeProbeStage(haltAt: "T0007");
+        await RunFor(halting).RunAsync(ResumeProbeStage.StageName, from, to, ct).ConfigureAwait(true);
+
+        // The same range again. The stage records what it was handed.
+        var resuming = new ResumeProbeStage(haltAt: null);
+        var result = await RunFor(resuming).RunAsync(ResumeProbeStage.StageName, from, to, ct)
+            .ConfigureAwait(true);
+
+        Assert.Equal("T0007", resuming.ResumedFrom);
+        Assert.False(result.WasHalted);
+    }
+
+    /// <summary>
+    /// **A halted row over a different range refuses, and refusing is the point.**
+    ///
+    /// Falling through to a fresh start is the wrong half of the fix, because `to`
+    /// defaults to today: a sweep halted on day one and re-invoked on day two carries a
+    /// different range, would match nothing, and would start again from the beginning.
+    /// That is idempotent and therefore not corrupt, and it burns a day of allowance
+    /// re-doing finished work and never reaches the end.
+    ///
+    /// The message has to name both ranges and the row, because the operator's next act
+    /// is either to pass the recorded range or to delete that row, and neither is
+    /// possible without knowing which row it is.
+    /// </summary>
+    [Fact]
+    public async Task AHaltedRunOverADifferentRangeRefusesAndNamesBothRangesAndTheRow()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+        await ClearRunLogAsync(ResumeProbeStage.StageName, ct).ConfigureAwait(true);
+
+        // Halted over the narrow range, which is the fixture row's shape.
+        var halting = new ResumeProbeStage(haltAt: "L07.US");
+        await RunFor(halting).RunAsync(
+            ResumeProbeStage.StageName, new DateOnly(2021, 1, 4), new DateOnly(2021, 1, 8), ct)
+            .ConfigureAwait(true);
+
+        // The real sweep asks for the wide one.
+        var wide = new ResumeProbeStage(haltAt: null);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => RunFor(wide).RunAsync(
+                ResumeProbeStage.StageName, new DateOnly(2021, 1, 4), new DateOnly(2026, 8, 12), ct))
+            .ConfigureAwait(true);
+
+        // Both ranges, so the operator can see which is which.
+        Assert.Contains("2021-01-04..2021-01-08", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("2021-01-04..2026-08-12", ex.Message, StringComparison.Ordinal);
+
+        // The row, by id, because "delete the row" is not actionable without one.
+        var row = await LastRunLogAsync(ResumeProbeStage.StageName, ct).ConfigureAwait(true);
+        Assert.Contains(
+            row.RunLogId.ToString(CultureInfo.InvariantCulture), ex.Message, StringComparison.Ordinal);
+        Assert.Contains("L07.US", ex.Message, StringComparison.Ordinal);
+
+        // **It refused rather than starting over**, which is the assertion that
+        // separates this fix from the wrong half of it. The stage never ran.
+        Assert.False(wide.Ran);
+
+        // And it did not record a run of its own: the refusal is before the try block
+        // that writes, so the halted row is still the newest and still says what it
+        // said. A refusal that logged would move the row it is complaining about.
+        Assert.Equal("halted", row.Status);
+    }
+
+    /// <summary>
+    /// A completed run over a different range is not a refusal. Only a halt carries a
+    /// position, so only a halt can carry the wrong one.
+    /// </summary>
+    [Fact]
+    public async Task ACompletedRunOverADifferentRangeDoesNotRefuse()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+        await ClearRunLogAsync(ResumeProbeStage.StageName, ct).ConfigureAwait(true);
+
+        var first = new ResumeProbeStage(haltAt: null);
+        await RunFor(first).RunAsync(
+            ResumeProbeStage.StageName, new DateOnly(2022, 6, 1), new DateOnly(2022, 6, 5), ct)
+            .ConfigureAwait(true);
+
+        var second = new ResumeProbeStage(haltAt: null);
+        var result = await RunFor(second).RunAsync(
+            ResumeProbeStage.StageName, new DateOnly(2022, 6, 1), new DateOnly(2022, 6, 30), ct)
+            .ConfigureAwait(true);
+
+        Assert.True(second.Ran);
+        Assert.Null(second.ResumedFrom);
+        Assert.False(result.WasHalted);
+    }
+
+    /// <summary>
+    /// The range is read back off the line `BackfillRun.Describe` composes, which is
+    /// what the comparison rests on. Asserted through `ResumePoint` rather than against
+    /// the parser, because the parser is private and the public surface is the answer.
+    /// </summary>
+    [Fact]
+    public async Task AResumePointCarriesTheRangeItsRowRecorded()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+        await ClearRunLogAsync(ResumeProbeStage.StageName, ct).ConfigureAwait(true);
+
+        var run = RunFor(new ResumeProbeStage(haltAt: "T0007"));
+        await run.RunAsync(
+            ResumeProbeStage.StageName, new DateOnly(2022, 6, 1), new DateOnly(2022, 6, 30), ct)
+            .ConfigureAwait(true);
+
+        var resume = await run.ResumeFromAsync(ResumeProbeStage.StageName, ct).ConfigureAwait(true);
+
+        Assert.NotNull(resume);
+        Assert.Equal(new DateOnly(2022, 6, 1), resume!.From);
+        Assert.Equal(new DateOnly(2022, 6, 30), resume.To);
+        Assert.Equal("2022-06-01..2022-06-30", resume.RecordedRange);
+        Assert.True(resume.CoversRange(new DateOnly(2022, 6, 1), new DateOnly(2022, 6, 30)));
+        Assert.False(resume.CoversRange(new DateOnly(2022, 6, 1), new DateOnly(2022, 6, 29)));
+    }
+
+    /// <summary>
+    /// **A line whose range cannot be read fails towards the refusal.** The row is a
+    /// range row by its prefix, so it is found, and it carries no range this can
+    /// compare, so `CoversRange` is false and the run refuses. The alternative default
+    /// is a resume against an unknown range, which is the thing the whole rule exists
+    /// to stop.
+    ///
+    /// Written straight into `run_log`, because `BackfillRun.Describe` cannot produce
+    /// this shape and the point is what happens when something else does.
+    /// </summary>
+    [Fact]
+    public async Task ARangeRowWhoseRangeCannotBeReadRefusesRatherThanResuming()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+        await ClearRunLogAsync(ResumeProbeStage.StageName, ct).ConfigureAwait(true);
+
+        await InsertUnparseableRangeRowAsync(ct).ConfigureAwait(true);
+
+        var resume = await RunFor(new ResumeProbeStage(haltAt: null))
+            .ResumeFromAsync(ResumeProbeStage.StageName, ct).ConfigureAwait(true);
+
+        Assert.NotNull(resume);
+        Assert.Null(resume!.From);
+        Assert.Equal("(unparsed)", resume.RecordedRange);
+
+        var stage = new ResumeProbeStage(haltAt: null);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => RunFor(stage).RunAsync(
+                ResumeProbeStage.StageName, new DateOnly(2021, 1, 4), new DateOnly(2026, 8, 12), ct))
+            .ConfigureAwait(true);
+
+        Assert.False(stage.Ran);
+    }
+
     [Fact]
     public void ARangeThatEndsBeforeItStartsIsRefusedAtConstruction()
     {
@@ -531,6 +709,65 @@ public sealed class BackfillRunTests
             }
 
             return BackfillResult.Completed(written, context.To);
+        }
+    }
+
+    /// <summary>
+    /// A range row `BackfillRun.Describe` could not have written: it opens with the
+    /// prefix the reader keys on and carries no dates the parse can take.
+    /// </summary>
+    private static async Task InsertUnparseableRangeRowAsync(CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
+        await using var cmd = new NpgsqlCommand(
+            """
+            INSERT INTO run_log (run_date, stage, status, started_at, duration_ms, rows_written, error)
+            VALUES (DATE '2021-01-08', @s, 'halted', now(), 1, 1,
+                    'range whenever..whenever, reached 2021-01-08 at L07.US. HALTED.');
+            """, conn);
+        cmd.Parameters.AddWithValue("s", ResumeProbeStage.StageName);
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    private static BackfillRun RunFor(IBackfillStage stage)
+        => new(
+            new StageRegistry([stage]),
+            new RunLog(TestDatabase.ConnectionString),
+            Clock,
+            TestDatabase.ConnectionString,
+            new StubAllowance(0, 100_000, ProviderDate));
+
+    /// <summary>
+    /// Records the resume position it was handed and whether it ran at all, and halts
+    /// at a position of the caller's choosing. Both are what the range-matching rule is
+    /// asserted through: a refusal has to be visible as the stage not running, not only
+    /// as an exception type.
+    /// </summary>
+    private sealed class ResumeProbeStage(string? haltAt) : IBackfillStage
+    {
+        public const string StageName = "SrlTestResumeProbe";
+
+        public string Name => StageName;
+
+        public IReadOnlyList<string> ReadSet { get; } = ["price_daily"];
+
+        public IReadOnlyList<TableWrite> WriteSet { get; } = [];
+
+        public bool Ran { get; private set; }
+
+        public string? ResumedFrom { get; private set; }
+
+        public Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
+            => Task.FromResult(StageResult.None);
+
+        public Task<BackfillResult> ExecuteRangeAsync(BackfillContext context, CancellationToken ct = default)
+        {
+            Ran = true;
+            ResumedFrom = context.ResumeFrom;
+
+            return Task.FromResult(haltAt is null
+                ? BackfillResult.Completed(1, context.To, "probe completed.")
+                : BackfillResult.Halted(1, context.To, haltAt, "probe halted."));
         }
     }
 

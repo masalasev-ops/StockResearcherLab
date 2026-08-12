@@ -49,9 +49,13 @@ switch (command)
         Console.WriteLine("  backfill <stage> [from] [to]");
         Console.WriteLine("                        run one stage over a range. From defaults to");
         Console.WriteLine("                        backfill.window_start and to defaults to today.");
-        Console.WriteLine("                        Resumes a halt automatically. Exit 0 completed, 2 halted");
-        Console.WriteLine("                        on the allowance, 1 failed. A halt is the gate working:");
-        Console.WriteLine("                        run it again after the provider's day rolls over.");
+        Console.WriteLine("                        PASS BOTH DATES FOR A MULTI-DAY SWEEP. A resume point");
+        Console.WriteLine("                        belongs to the range that produced it, and the default");
+        Console.WriteLine("                        `to` moves at midnight, so a halt resumed the next day");
+        Console.WriteLine("                        on defaults is a different range and is refused.");
+        Console.WriteLine("                        Exit 0 completed, 2 halted on the allowance, 1 failed.");
+        Console.WriteLine("                        A halt is the gate working: run it again, with the same");
+        Console.WriteLine("                        two dates, after the provider's day rolls over.");
         return 0;
 }
 
@@ -190,10 +194,13 @@ async Task<int> BackfillAsync()
     var resume = await run.ResumeFromAsync(stageName).ConfigureAwait(false);
     Console.WriteLine(resume is null
         ? "  no previous range run for this stage, starting from the beginning of the range"
-        : $"  last range run {resume.Status}, reached {Iso(resume.LastDateCovered)}" +
+        : $"  last range run {resume.Status} over {resume.RecordedRange}, reached " +
+          Iso(resume.LastDateCovered) +
           (resume.Position is null ? "" : $", position {resume.Position}") +
-          (string.Equals(resume.Status, "halted", StringComparison.Ordinal)
-              ? ". Resuming from there [D-68]."
+          (resume.WasHalted
+              ? resume.CoversRange(from, to)
+                  ? ". Same range, so this resumes from there [D-68]."
+                  : ". DIFFERENT RANGE, so this refuses rather than resuming or restarting [item 22]."
               : ". Not a halt, so this starts over; every write is idempotent on its own grain [D-68]."));
 
     BackfillResult result;

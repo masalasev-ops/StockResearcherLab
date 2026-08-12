@@ -88,17 +88,40 @@ spends 45,518 of them.
 
 | Source | Endpoint | Weight | Pass | Units |
 |---|---|---|---|---|
-| Prices | `eod/{t}` | 1 | every admitted common stock, live and delisted | ~30,000 |
-| Fundamentals | `fundamentals/{t}` | 10 | the ~4,800 candidate pool | ~48,000 |
+| Prices | `eod/{t}` | 1 | every admitted common stock, live and delisted | **50,785**, counted at 3.1 |
+| Fundamentals | `fundamentals/{t}` | 10 | the ~4,800 candidate pool **plus every delisted common stock with a bar inside the window** | **48,000 + 10D**, D counted at 3.6 |
 | Sentiment | `sentiments` | 5 per ticker | 2,841 names, one wide range | ~14,200 |
-| Flow | `sec-filings/{t}/form4` | 10 per page | the universe | ~258,000 |
+| Flow | `sec-filings/{t}/form4` | 10 per page | the universe, live names only [3.1] | ~258,000 |
 | Splits, dividends | `splits/{t}`, `div/{t}` | 1 | the universe | ~5,700 |
-| | | | **total** | **~356,000** |
+| | | | **total** | **376,685 + 10D** |
 
-Roughly four days of allowance, and the flow sweep is three of them. That figure is a
-fixed cost the design already accepted; deferring it does not reduce it, and deferring it
-would guarantee S4 has no backfilled history at exactly the moment D-69 asks whether S4
-survives, which is the deferral pre-deciding the question it claims to be waiting on.
+**The price line is measured rather than estimated.** 3.1 read 18,174 live common
+stocks and 32,611 delisted ones, disjoint, so the pool is 50,785 at one unit each
+against the ~30,000 this table first carried.
+
+**D is the count 3.6 produces and nothing here estimates it.** It is the number of
+delisted common stocks with at least one `price_daily` bar at or after
+`backfill.window_start`, which 3.6 is what makes computable: the symbol list carries no
+delisting date, so the last bar is the only date there is and the call is what reveals
+it. Names that stopped trading before the window start are excluded and cost nothing.
+
+**The bracket, stated so nobody is surprised by either end.** D is between 0 and
+32,611, so the phase total is between **376,685 and 702,795 units**, which is four days
+and seven. Three of 3.1's five sampled delisted names last traded before the window and
+two inside it, and five names is not a rate; no figure is claimed from it.
+
+**Seven days is affordable and is stated rather than avoided.** The allowance gate at
+3.4 makes a multi-day sweep work by construction: it halts cleanly at the wall, records
+where it reached, and resumes on D-68's per-grain idempotence. What the upper bound
+costs is calendar time, not correctness, and the alternative is a reconstruction that is
+survivorship-clean on price and not on membership. If 3.6 returns a D that changes that
+reading, the number goes in `PROGRESS.md` and the pool is not narrowed to fit.
+
+Roughly four to seven days of allowance, and the flow sweep is three of them. That
+figure is a fixed cost the design already accepted; deferring it does not reduce it, and
+deferring it would guarantee S4 has no backfilled history at exactly the moment D-69
+asks whether S4 survives, which is the deferral pre-deciding the question it claims to
+be waiting on.
 
 **Four days of allowance needs a day boundary, and the checkpoints carry it.** A bounded
 parallel loop over roughly 30,000 tickers hits the wall mid-sweep and learns by failing.
@@ -442,13 +465,27 @@ from `A.US` to `CCBG.US` [`0006 → 3`], and C03 not reading `events` so earning
 the queue [`1 → 3`, D-74]. `events` has been built since 1.8 and the read conformance test
 carries this as its one recorded deviation, which fails the moment it stops being one.
 
+**The pool is the live candidate pool plus every delisted common stock with a bar
+inside the window, and the second half is not optional.** C03's pool is derived from
+current price, liquidity and history, so it contains no name that has since delisted. A
+name liquid in 2021 and delisted in 2023 would carry prices from 3.6 and no fundamental
+rows at all, compute zero clean gaps, fail D-62's four-gap floor, and be absent from
+`security_daily` on every historical date. The reconstructed universe would then be
+exactly the survivorship-biased set §2's price-pool paragraph exists to prevent, one
+table over: survivorship-clean on price and not on membership.
+
+3.6 runs first and is what makes that set computable, so the ordering already holds and
+no new information is needed. The count is D in §2's table, priced there at both ends
+and recorded in `PROGRESS.md` from the run rather than estimated here.
+
 **The sector call moves here and C01 loses it.** `fundamentals/{t}` unfiltered costs the
 same as filtered and carries `General::Sector` [`PROGRESS.md`, endpoint weights], so C01's
 per-member sector call is buying at 10 units what C03 can carry for nothing. That is what
 makes a per-date C01 affordable at all.
 
-*Halts on:* 3.4's allowance gate, per ticker at 10 units. About 48,000 for the pool, so
-this one meets the gate on any day it shares with another sweep.
+*Halts on:* 3.4's allowance gate, per ticker at 10 units. 48,000 for the live pool and
+ten more per in-window delisted name, so this one meets the gate on any day it shares
+with another sweep and may meet it alone.
 
 *Done when:* every pool member has a `fundamental_fetch_attempt` row; `fcf_yield` coverage
 is recorded before and after; C03 declares and reads `events` and the recorded deviation is

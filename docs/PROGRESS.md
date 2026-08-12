@@ -3025,6 +3025,31 @@ document's job at this point is to say what is true.
 a table it has never had, both in phase 4 and phase 8. Those are exactly the case that
 just failed.
 
+#### Second instance, 2026-08-12, and it arrived before either predicted one
+
+**C05 gained `flow_fetch_attempt` at 3.5 and its Writes cell named two tables.** D-95
+and migration 0008 are the decision and the schema; `SCHEMA.md` declares the table, the
+registry test passes, and the catalogue said something else. The cell is corrected under
+D-73 with the prior wording in `CHANGELOG.md`.
+
+**Two components have now gained a second write and both drifted immediately.** The
+prediction above named C14 in phase 4 and C22 in phase 8 as the next cases. Neither has
+been built and the count is already two, one day apart, which is the base rate being
+worse than the estimate rather than the estimate being unlucky: **every component that
+has ever gained a second write has drifted at that moment, two of two.**
+
+**That moves the test from worth building to overdue.** The shape has not changed and
+is still cheap: `ArchitectureDocument` already parses catalogue rows into cells and
+takes the fourth for Reads, and the fifth is the Writes cell. Intersecting it with
+`SchemaDocument.Tables()` in both directions against the registry's `AllWrites()` is the
+same assertion the Reads path already makes. What has changed is the evidence for
+building it: it was one instance and a prediction, and it is now two instances and the
+same prediction still outstanding.
+
+It is still not built here, for the reason it was not built the first time: a
+conformance test is a phase's work rather than a finding's. What this block can do is
+stop calling it a risk.
+
 ---
 
 ## Phase 3, backfill
@@ -3164,6 +3189,43 @@ or will be reported, not when that schedule became public. 3.10 declines to back
 earnings because `calendar/earnings` sends no `announced_date`, and this field is not
 that date either, so the lookahead under C12's blackout and C15's
 `days_to_next_earnings` is unchanged and the `1 → 5` obligation stands.
+
+#### The report date, asked against the same response and answered 2026-08-12
+
+**The field is `reportDate`**, one per `Earnings::History` entry, with
+`beforeAfterMarket` beside it. Read off the 3.1 transcript rather than a new call,
+which is the route Q7 itself took.
+
+| Period | `reportDate` | `beforeAfterMarket` | `epsActual` |
+|---|---|---|---|
+| 2026-09-30 | 2026-10-21 | AfterMarket | null, not reported yet |
+| 2026-06-30 | 2026-07-22 | AfterMarket | 1.3 |
+| 2026-03-31 | 2026-04-22 | AfterMarket | 0.88 |
+
+**Coverage, stated for what was actually read.** Three of three printed entries carry a
+non-null `reportDate`, on one ticker, out of 50 entries spanning 2014-06-30 to
+2026-09-30. **Coverage across the other 47 periods and across other tickers is not
+established**, and it cannot be without a call: the payload is not persisted, C03
+fetches with `filter=Financials` and has therefore never stored the block, and a
+`fundamentals/{t}` response costs 10 units whether filtered or not. It was not spent,
+the question having been asked at no additional units.
+
+**What it means for D-90, stated and not acted on.** That decision is open because past
+earnings dates were held to be unobtainable: `events.earnings_backward_days` is 7, so
+the store reaches a week back, and `announced_date` is null. The first half of that no
+longer holds. A multi-year history of **when a result was reported** sits in a response
+C03 already pays for, so the option D-90 describes as widening the backward window and
+backfilling earnings history first has a source that costs no additional units.
+
+**The second half is untouched and the distinction is the whole of it.** `reportDate`
+is when the result landed, not when the schedule became public. `announced_date` stays
+null, a rescheduled report still overwrites its old date without trace, and the
+forward-dated entry above is a schedule whose publication date is unknown, which is the
+lookahead 3.10 declines to load earnings over. What a drift measurement needs for a
+**past** event is the date the result landed, and that is what this field is.
+
+Whether X-PEAD registers, and on what surprise measure, stays D-90's to settle. Nothing
+is designed here and no option is preferred. Recorded against open item 13.
 
 #### The allowance counter reset mid-sweep, which is the gate's problem rather than trivia
 
@@ -3467,7 +3529,53 @@ document that is checked is correct and the one that is not has drifted.
 **This is the second component to gain a second write and the second to drift
 immediately**, which is what that finding predicted. `ARCHITECTURE.html` is
 human-edited only [`CLAUDE.md` §13], so it is reported rather than corrected here.
-Open item 15.
+Open item 15. **Corrected on 2026-08-12**, human-directed, as a clean edit under D-73
+with the prior wording in `CHANGELOG.md`.
+
+### Before 3.7, 2026-08-12: the fundamentals pool is amended
+
+**The pool C03 sweeps is derived from current price, liquidity and history, so it holds
+no name that has since delisted.** A name liquid in 2021 and delisted in 2023 would
+carry prices from 3.6 and no fundamental rows at all, compute zero clean gaps, fail
+D-62's four-gap floor, and be absent from `security_daily` on every historical date. The
+reconstructed universe would then be exactly the survivorship-biased set §2's price-pool
+paragraph exists to prevent, one table over: **survivorship-clean on price and not on
+membership.**
+
+**Amended, human-directed.** 3.7's pool is the live candidate pool plus every delisted
+common stock with at least one `price_daily` bar at or after `backfill.window_start`.
+3.6 runs first and is what makes that set computable, so the ordering already held and
+no new information was needed.
+
+**Repriced in §2 with the count named rather than estimated.** The count is D, produced
+by 3.6, being delisted common stocks with an in-window bar. The table now reads
+`48,000 + 10D` for fundamentals and `376,685 + 10D` for the phase, and the price line
+moved from an estimated ~30,000 to the measured 50,785.
+
+| D | Phase total | Days at 100,000 |
+|---|---|---|
+| 0 | 376,685 | 4 |
+| 32,611, every delisted common stock | 702,795 | 7 |
+
+**Seven days is the affordability answer and it is stated rather than avoided.** The
+allowance gate makes a multi-day sweep work by construction, so the upper bound costs
+calendar time and not correctness. Three of 3.1's five sampled delisted names last
+traded before the window and two inside it; five names is not a rate and no figure is
+claimed from it. If 3.6 returns a D that changes the reading, it goes here as a number
+and the pool is not narrowed to fit.
+
+**The same argument reaches two other sweeps and neither is amended here.** C04's
+sentiment pass at 3.8 and C06's splits and dividends at 3.10 both take their pool from
+the live universe, so a name admitted to a 2021 `security_daily` by this amendment would
+have prices and fundamentals for that date and no sentiment and no distributions. That
+is the same defect at two more tables and it is reported rather than taken, the
+instruction having been specific to the fundamentals pool. Open item 16.
+
+**The plan copies now differ and that is deliberate.** `prompts/spent/phase-3-backfill.md`
+is the plan as issued and archived before any code, so it is not edited [`CLAUDE.md`
+§14]. `prompts/BuildPlans/phase-3-backfill.md` carries the amendment, at §2's table and
+at 3.7, both checkpoints unrun.
+
 ---
 
 ## Open items carried forward
@@ -3488,7 +3596,8 @@ them are in `docs/archive/process-2026-08.md`.
 | 9 | ~~`TheCompiledApiCarriesNoPipelineDependency` reads `deps.json` from disk. Its stale-artifact defect was closed by having the test project reference the Api, which holds only while the build succeeds: after a failed build, `dotnet test --no-build` reads the previous artifact and the assertion passes against it. CI is not exposed, because its Build step gates Test~~ **Observed rather than predicted at 1.12**, where `dotnet test --no-build` reported 56 passing against a stale binary after a build that had just failed with four errors. Mitigated at 1.12 by making `ci.ps1` the per-checkpoint verification command instead of a three-command sequence: it runs the same steps in the same order and exits non-zero on the first failure, so it cannot reach the test step after a failed build. Proved by committing a deliberate syntax error and running it, which exited 1 at the Build step and printed no test count. **The hazard itself is unchanged** for anyone running `dotnet test --no-build` by hand; what changed is that nothing in the corpus now tells them to | Phase 9, with item 10 |
 | 10 | The Api's `appsettings.Secrets.json` flows into the test output directory through the 0.5 project reference, so a local test run can take its connection string from a file other than the test project's own. All four are byte identical today | Whenever the two need to differ |
 | 11 | **`BUILD_PLAN.md` is mid-convention and the strike sweep is outstanding.** D-73 as amended classifies by role rather than by name, and the file is a spec under that test: its checkpoint tables, done-when lines and carried obligations are all read to know what is currently owed. It now carries both conventions. Phase 3's fourth done-when line is a clean edit with its prior wording in `CHANGELOG.md`; **eight passages are struck in place**, counted rather than estimated. Six are supersessions of live text: phase P's secrets clause [D-55], checkpoint 0.8's corpus version bump [D-67], checkpoint 1.3's freshness thresholds [D-65] and its settledness mechanism [A10], checkpoint 1.13's config key count [A5 then A10 then A14], and phase 1's done-when reading `filing date` for the effective one [D-62]. Two are closure markers on carried obligations rather than supersessions, `TableWrite.Columns` [A27] and §3's C03 Writes cell [D-91], and whether a closed obligation keeping its original text is the same case is part of what the sweep decides. D-73's condition is what makes this a sweep rather than an edit taken alongside the amendment: no strike is removed until its decision names what it removed, and where a decision does not, `CHANGELOG.md` records the text before the deletion. **Three of the eight cite a correction pass rather than a decision**, being A5, A10, A14 and A27, so those take the `CHANGELOG.md` route by construction. That is a read of several decisions against eight passages, not a formatting pass. **The file is readable in the meantime and the risk is the ordinary one D-73 names**, that a session skimming takes struck text for live | A sweep, or the next phase whose planning reads the struck passages. Not a build session's to fold into unrelated work |
-| 12 | **Insider flow is not backfillable for delisted names**, measured at 3.1. `sec-filings/{t}` and `sec-filings/{t}/form4` return 404 `Symbol not found` for three delisted names, two of them delisted inside the five-year window, against the same ticker strings `eod/{t}` and `splits/{t}` answered for in the same run. Prices, fundamentals, sentiment, splits and dividends all reach delisted names; flow does not. So the backfilled `insider_transaction` history covers only names that still exist today, which is the survivorship bias `VALIDITY.md` §6 exists to mitigate reappearing in the one screen whose inputs cannot route around it. What follows from it is authored: whether S4's backfilled history is used knowing the limitation, whether the limitation is recorded against every read before the live window, or something else. **No checkpoint is blocked**, 3.9's sweep being over the live universe under every reading | An authored decision, before phase 4 tunes anything on S4's backfilled history |
-| 13 | **`last_two_earnings_surprises` has a free source in an endpoint C03 already calls**, measured at 3.1. `Earnings::History` sits in the `fundamentals/{t}` payload, 50 periods for CCS.US carrying `epsActual`, `epsEstimate`, `epsDifference` and `surprisePercent`, so the field bolded in §07 as one of five that can flip a verdict needs no new endpoint and no additional units. It needs a change to C03's parse and a column to land in, which is phase 1's ingest rather than phase 3's compute, and the checkpoint said before it ran that the outcome could not come back as work for this phase [`CLAUDE.md` §3]. It does not close the `1 → 5` earnings obligation: `reportDate` is when a period was reported, not when that schedule became public | An authored decision on when C03's parse reopens |
+| 12 | **Insider flow is not backfillable for delisted names**, measured at 3.1. `sec-filings/{t}` and `sec-filings/{t}/form4` return 404 `Symbol not found` for three delisted names, two of them delisted inside the five-year window, against the same ticker strings `eod/{t}` and `splits/{t}` answered for in the same run. Prices, fundamentals, sentiment, splits and dividends all reach delisted names; flow does not. So the backfilled `insider_transaction` history covers only names that still exist today, which is the survivorship bias `VALIDITY.md` §6 exists to mitigate reappearing in the one screen whose inputs cannot route around it. **The bias has a direction and it is not neutral.** Insider activity in companies that subsequently failed is absent, so every backfilled flow metric is measured over survivors alone and is optimistic about insider buying as a signal: the names where insiders bought into a decline are exactly the ones missing. D-69 asks whether S4 survives, and the backfilled evidence that question would be decided on is biased toward keeping it. **It also contaminates the comparison, which is worse than the level being wrong.** The shadow family reads `valuation_daily`, which is built from fundamentals, and fundamentals do reach delisted names, so a head-to-head between S4 and any shadow puts a survivor-only screen against clean ones and the difference is not attributable. What follows from it is authored: whether S4's backfilled history is used knowing the limitation, whether the limitation is recorded against every read before the live window, or something else. **No checkpoint is blocked**, 3.9's sweep being over the live universe under every reading | An authored decision, before phase 4 tunes anything on S4's backfilled history. Pointed at from D-69 |
+| 13 | **`last_two_earnings_surprises` has a free source in an endpoint C03 already calls**, measured at 3.1. `Earnings::History` sits in the `fundamentals/{t}` payload, 50 periods for CCS.US carrying `epsActual`, `epsEstimate`, `epsDifference` and `surprisePercent`, so the field bolded in §07 as one of five that can flip a verdict needs no new endpoint and no additional units. It needs a change to C03's parse and a column to land in, which is phase 1's ingest rather than phase 3's compute, and the checkpoint said before it ran that the outcome could not come back as work for this phase [`CLAUDE.md` §3]. It does not close the `1 → 5` earnings obligation: `reportDate` is when a period was reported, not when that schedule became public. **The same block carries `reportDate` and `beforeAfterMarket` per period**, checked 2026-08-12 against the same transcript, which meets the half of D-90's blocker that says past earnings dates are unobtainable: a multi-year history of when a result was reported is in a response C03 already pays for. It does not meet the other half, `announced_date` being null, so the fork stays D-90's. Coverage is three of three printed entries on one ticker out of fifty, and establishing it across tickers costs 10 units each | An authored decision on when C03's parse reopens, and D-90's fork |
 | 14 | **0007 leaves `sector`, `size_bucket`, `market_cap` and `is_active` on `security`**, where nothing writes them after 3.11 and nothing reads them after 3.12. They hold whatever the last live C01 run put there, so a later reader can take `security.market_cap` for a current value when it is a frozen one. `SCHEMA.md` stops listing them under D-73, which is a documentation edit and not a claim they are gone. Dropping them is one `ALTER TABLE` and it moves `ExpectedMonetary` and `SchemaParityTests`'s count back from 19 to 18, so it is a decision rather than a tidy-up | The next migration after 3.12, or whenever the counts move for another reason |
-| 15 | **`ARCHITECTURE.html` §3's C05 Writes cell names two tables where the component now writes three.** D-95 and migration 0008 give FlowIngestor `flow_fetch_attempt`, `SCHEMA.md` declares it and the registry test passes, so the document that is checked is correct. The catalogue is not checked: the Writes column has no conformance test, write ownership being asserted against `SCHEMA.md`. This is the second component to gain a second write and the second to drift immediately, which is what that finding predicted. The file is human-edited only [`CLAUDE.md` §13] | A human edit to §3, or the Writes-column conformance test that finding proposes |
+| 15 | ~~**`ARCHITECTURE.html` §3's C05 Writes cell names two tables where the component now writes three.** D-95 and migration 0008 give FlowIngestor `flow_fetch_attempt`, `SCHEMA.md` declares it and the registry test passes, so the document that is checked is correct. The catalogue is not checked: the Writes column has no conformance test, write ownership being asserted against `SCHEMA.md`. This is the second component to gain a second write and the second to drift immediately, which is what that finding predicted. The file is human-edited only [`CLAUDE.md` §13]~~ **The cell is corrected**, human-directed on 2026-08-12, as a clean edit under D-73 with the prior wording in `CHANGELOG.md` and a diff touching that cell alone. **What stays open is the conformance test**, and the second instance is what changes its standing: two of two components that have ever gained a second write drifted at that moment, both before either predicted case was built | The Writes-column conformance test, recorded in the fundamentals-rotation finding as overdue rather than as a risk |
+| 16 | **C04's and C06's pools are survivorship-filtered by the same argument that amended C03's.** 3.7's pool became the live candidate pool plus in-window delisted names on 2026-08-12, because a historical universe member with no fundamental rows computes zero clean gaps and is absent from `security_daily` for every past date. 3.8's sentiment pass and 3.10's splits and dividends both still take their pool from the live universe, so a name that amendment admits to a 2021 `security_daily` would carry prices and fundamentals for that date and no sentiment and no distributions. The cost differs: sentiment is 5 units a ticker and splits and dividends are 1 each, so the same widening is about 5D and 2D against fundamentals' 10D. Whether either widens is authored, and neither blocks 3.7 | Before 3.8 and 3.10 are built |

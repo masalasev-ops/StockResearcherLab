@@ -1552,6 +1552,16 @@ drawn from a two-input distribution during backfill and a three-input one
 live, which D-58 rejected. Or source ownership from SEC EDGAR 13F, free and
 complete, at the cost of a second provider and a real ingest.
 
+**The two insider inputs are backfillable and are not clean, measured at 3.1.**
+`sec-filings/{t}` and `sec-filings/{t}/form4` return `404 Symbol not found` for every
+delisted name tested, against the same ticker strings `eod/{t}` and `splits/{t}`
+answered for in the same run. So the sentence above, that
+`insider_net_90d_usd` and `distinct_buyer_count` are unaffected, holds only for names
+that still exist. Whichever option is taken here is taken on evidence measured over
+survivors, and the direction of that bias is toward keeping S4 rather than cutting it
+[`PROGRESS.md` open item 12, which carries the reasoning and the
+shadow-comparison consequence].
+
 The timeboxed check A12 asked for was run and is in the same transcript. The
 subscription exposes no dated or market-wide institutional feed. It does expose
 a market-wide legacy `insider-transactions` endpoint, 1,000 rows in one call,

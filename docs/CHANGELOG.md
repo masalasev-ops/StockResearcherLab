@@ -996,3 +996,32 @@ that a column is gone: `SCHEMA.md` says in its own opening that its column lists
 the load-bearing ones rather than exhaustive. What is left is four columns nothing
 writes after 3.11 and nothing reads after 3.12, recorded as a finding in `PROGRESS.md`
 rather than dropped here, because dropping them moves two asserted counts.
+
+---
+
+## 2026-08-12, §3's C05 Writes cell
+
+`ARCHITECTURE.html` is a spec under D-73, so this is a clean edit and the prior wording
+is recorded here. Human-directed.
+
+**§3's catalogue, the C05 Writes cell.** D-95 and migration 0008 give FlowIngestor a
+third write and the cell named two. Removed:
+
+> insider_transaction, institutional_holding [D-61]
+
+It now names `flow_fetch_attempt` as well, with D-61 kept beside the two tables it
+decided and D-95 at the point of change. `git diff docs/ARCHITECTURE.html` touches that
+cell and nothing else.
+
+**Nothing else in the row moved.** The Runs cell still reads `Daily 17:45` [D-75] and
+the Reads cell still names the insider and ownership endpoints and `security` [D-58,
+D-74]. `flow_fetch_attempt` is deliberately absent from the Reads cell: a stage may read
+what it writes, which is what `DeclaredAccess.CanRead` says and what C03's cell already
+relies on.
+
+**This is the second Writes-cell drift in two days.** C03's was corrected under D-91 on
+2026-08-11 and C05's is corrected here. The finding underneath both is that the Writes
+column has no conformance test, where the Reads column gained one after four deviations
+went unnoticed. That finding predicted the next instances would be C14 in phase 4 and
+C22 in phase 8; it has been confirmed twice before either, which moves the test from
+worth building to overdue [`PROGRESS.md`, the fundamentals rotation].

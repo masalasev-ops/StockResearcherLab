@@ -263,11 +263,14 @@ public sealed class FlowIngestorTests
     // ------------------------------------------------------------ declared ---
 
     [Fact]
-    public void TheDeclaredWritesAreTheTwoSourceTablesAtTheirOwnGrain()
+    public void TheDeclaredWritesAreTheTwoSourceTablesAtTheirOwnGrainAndTheAttemptRecord()
     {
         var stage = new FlowIngestor(EodhdClientDouble());
 
-        Assert.Equal(2, stage.WriteSet.Count);
+        // Three at 3.5, where it was two: the attempt record is this component's own
+        // and is not shared with C03's, because two components writing one table is
+        // two claims on one triple [D-95, INVARIANT 10].
+        Assert.Equal(3, stage.WriteSet.Count);
 
         var insider = stage.WriteSet.Single(w => w.Table == "insider_transaction");
         Assert.Equal(FlowIngestor.InsiderColumns, insider.Columns);
@@ -276,6 +279,12 @@ public sealed class FlowIngestorTests
 
         var holding = stage.WriteSet.Single(w => w.Table == "institutional_holding");
         Assert.Equal(FlowIngestor.HoldingColumns, holding.Columns);
+
+        var attempt = stage.WriteSet.Single(w => w.Table == "flow_fetch_attempt");
+        Assert.Equal(FlowIngestor.AttemptColumns, attempt.Columns);
+
+        // C03's table is C03's. This one does not touch it.
+        Assert.DoesNotContain(stage.WriteSet, w => w.Table == "fundamental_fetch_attempt");
 
         // flow_daily is derived by C34 and is not written here [D-61].
         Assert.DoesNotContain(stage.WriteSet, w => w.Table == "flow_daily");
@@ -293,80 +302,141 @@ public sealed class FlowIngestorTests
         => Enumerable.Range(1, n).Select(i => string.Format(
             System.Globalization.CultureInfo.InvariantCulture, "T{0:D2}.US", i)).ToList();
 
+    /// <summary>
+    /// The pool is the universe here, so the tiebreak set is the pool and that tier
+    /// never fires. C03 is the component where it does.
+    /// </summary>
+    private static RotationSelection.Result Select(
+        IReadOnlyList<string> pool, IReadOnlyDictionary<string, DateOnly> attempted, int maxPerRun)
+        => RotationSelection.For(pool, attempted, pool.ToHashSet(StringComparer.Ordinal), maxPerRun);
+
+    /// <summary>One night's worth: every selected ticker gets an attempt row, yield or not [D-95].</summary>
+    private static void RecordAttempts(
+        Dictionary<string, DateOnly> attempted, RotationSelection.Result selection, DateOnly on)
+    {
+        foreach (var t in selection.Selected)
+        {
+            attempted[t] = on;
+        }
+    }
+
     [Fact]
     public void TwoConsecutivePassesOverAnUnchangedUniverseSelectDisjointHeads()
     {
         var pool = Pool(10);
-        var fetched = new HashSet<string>(StringComparer.Ordinal);
+        var attempted = new Dictionary<string, DateOnly>(StringComparer.Ordinal);
 
-        var first = FlowIngestor.SelectionFor(pool, fetched, 4);
-        foreach (var t in first.Tickers)
-        {
-            fetched.Add(t);
-        }
+        var first = Select(pool, attempted, 4);
+        RecordAttempts(attempted, first, new DateOnly(2026, 8, 9));
 
-        var second = FlowIngestor.SelectionFor(pool, fetched, 4);
+        var second = Select(pool, attempted, 4);
 
-        Assert.Equal(["T01.US", "T02.US", "T03.US", "T04.US"], first.Tickers);
-        Assert.Equal(["T05.US", "T06.US", "T07.US", "T08.US"], second.Tickers);
-        Assert.Empty(first.Tickers.Intersect(second.Tickers, StringComparer.Ordinal));
+        Assert.Equal(["T01.US", "T02.US", "T03.US", "T04.US"], first.Selected);
+        Assert.Equal(["T05.US", "T06.US", "T07.US", "T08.US"], second.Selected);
+        Assert.Empty(first.Selected.Intersect(second.Selected, StringComparer.Ordinal));
     }
 
     [Fact]
     public void CoverageCompletesRatherThanStoppingAtTheFirstPage()
     {
         var pool = Pool(10);
-        var fetched = new HashSet<string>(StringComparer.Ordinal);
+        var attempted = new Dictionary<string, DateOnly>(StringComparer.Ordinal);
 
         for (var pass = 0; pass < 3; pass++)
         {
-            foreach (var t in FlowIngestor.SelectionFor(pool, fetched, 4).Tickers)
-            {
-                fetched.Add(t);
-            }
+            RecordAttempts(attempted, Select(pool, attempted, 4), new DateOnly(2026, 8, 9).AddDays(pass));
         }
 
         // Every name reached, which the truncating version could never do.
-        Assert.Equal(pool.Count, fetched.Count);
-        Assert.Equal(0, FlowIngestor.SelectionFor(pool, fetched, 4).NeverFetched);
+        Assert.Equal(pool.Count, attempted.Count);
+        Assert.Equal(0, Select(pool, attempted, 4).NeverAttempted);
+    }
+
+    /// <summary>
+    /// **The rotation keeps cycling after coverage completes, which is what D-95
+    /// closes** [D-91's counterpart for C05]. Keyed on rows in
+    /// `insider_transaction` the never-fetched group empties and the same
+    /// alphabetically-first names are selected for ever; keyed on the attempt date it
+    /// keeps moving.
+    /// </summary>
+    [Fact]
+    public void TheRotationKeepsCyclingAfterCoverageCompletes()
+    {
+        var pool = Pool(8);
+        var attempted = new Dictionary<string, DateOnly>(StringComparer.Ordinal);
+        var day = new DateOnly(2026, 8, 9);
+
+        // Two passes of four cover the pool.
+        RecordAttempts(attempted, Select(pool, attempted, 4), day);
+        RecordAttempts(attempted, Select(pool, attempted, 4), day.AddDays(1));
+
+        var third = Select(pool, attempted, 4);
+        RecordAttempts(attempted, third, day.AddDays(2));
+        var fourth = Select(pool, attempted, 4);
+
+        // Coverage is complete, so every selection from here is a refresh and the
+        // oldest attempt is what says the rotation is moving.
+        Assert.Equal(0, third.NeverAttempted);
+        Assert.Equal(["T01.US", "T02.US", "T03.US", "T04.US"], third.Selected);
+        Assert.Equal(["T05.US", "T06.US", "T07.US", "T08.US"], fourth.Selected);
+        Assert.Equal(day, third.OldestAttemptInSelection);
+        Assert.Equal(day.AddDays(1), fourth.OldestAttemptInSelection);
     }
 
     [Fact]
     public void TheCoverageCountsAreReportedTheWayCThreeReportsThem()
     {
         var pool = Pool(10);
-        var fetched = new HashSet<string>(StringComparer.Ordinal) { "T01.US", "T02.US" };
+        var attempted = new Dictionary<string, DateOnly>(StringComparer.Ordinal)
+        {
+            ["T01.US"] = new DateOnly(2026, 8, 1),
+            ["T02.US"] = new DateOnly(2026, 8, 1),
+        };
 
-        var selection = FlowIngestor.SelectionFor(pool, fetched, 4);
+        var selection = Select(pool, attempted, 4);
 
         Assert.Equal(10, selection.PoolSize);
-        Assert.Equal(8, selection.NeverFetched);
+        Assert.Equal(8, selection.NeverAttempted);
 
-        // The whole selection is new, because two fetched names sort behind eight
-        // unfetched ones rather than ahead of them.
+        // The whole selection is new, because two attempted names sort behind eight
+        // unattempted ones rather than ahead of them.
         Assert.Equal(4, selection.NewInSelection);
-        Assert.Equal(["T03.US", "T04.US", "T05.US", "T06.US"], selection.Tickers);
+        Assert.Equal(0, selection.RefreshedInSelection);
+        Assert.Null(selection.OldestAttemptInSelection);
+        Assert.Equal(["T03.US", "T04.US", "T05.US", "T06.US"], selection.Selected);
     }
 
+    /// <summary>
+    /// **D-95's own done-when line.** A name that answers `404 Symbol not found`
+    /// writes no rows and is re-offered on a later pass rather than held at the head.
+    ///
+    /// Under the old ordering it stayed never-fetched for ever, so the 14 of 250 that
+    /// answer 404 were re-asked on every single run. 3.1 measured what that costs: a
+    /// 404 is billed at 10 units, so the frozen head was spending 140 units a night on
+    /// calls that cannot succeed.
+    /// </summary>
     [Fact]
-    public void ANameThatReturnedNoRowsIsOfferedAgainRatherThanSkipped()
+    public void A404NameIsReOfferedOnALaterPassRatherThanHeldAtTheHead()
     {
-        // The residue a high-water mark would close, asserted so it is a known
-        // property rather than a surprise: 14 of 250 answer 404 and write nothing,
-        // so they stay never-fetched. Coverage still advances by every name that
-        // does return rows, which is why this is not an invariant breach.
         var pool = Pool(10);
-        var fetched = new HashSet<string>(StringComparer.Ordinal);
+        var attempted = new Dictionary<string, DateOnly>(StringComparer.Ordinal);
+        var day = new DateOnly(2026, 8, 9);
 
-        var first = FlowIngestor.SelectionFor(pool, fetched, 4);
+        var first = Select(pool, attempted, 4);
+        Assert.Contains("T01.US", first.Selected);
 
-        // T01 answered 404, so nothing was written for it.
-        foreach (var t in first.Tickers.Where(t => t != "T01.US"))
-        {
-            fetched.Add(t);
-        }
+        // T01 answered 404 and wrote nothing. The attempt is still recorded, which is
+        // the whole of what the attempt record is for.
+        RecordAttempts(attempted, first, day);
 
-        Assert.Equal("T01.US", FlowIngestor.SelectionFor(pool, fetched, 4).Tickers[0]);
+        var second = Select(pool, attempted, 4);
+        Assert.DoesNotContain("T01.US", second.Selected);
+        RecordAttempts(attempted, second, day.AddDays(1));
+
+        // Re-offered once the never-attempted names are exhausted, at the position its
+        // staleness earns rather than at the head.
+        var third = Select(pool, attempted, 4);
+        Assert.Equal(["T09.US", "T10.US", "T01.US", "T02.US"], third.Selected);
     }
 
     [Fact]
@@ -375,11 +445,36 @@ public sealed class FlowIngestorTests
         // Two runs of one stage over one pool must select the same set
         // [CLAUDE.md section 6].
         var pool = new[] { "ZZ.US", "aa.US", "AA.US", "BB.US" };
-        var fetched = new HashSet<string>(StringComparer.Ordinal);
+        var attempted = new Dictionary<string, DateOnly>(StringComparer.Ordinal);
 
-        var selection = FlowIngestor.SelectionFor(pool, fetched, 3);
+        var selection = Select(pool, attempted, 3);
 
-        Assert.Equal(["AA.US", "BB.US", "ZZ.US"], selection.Tickers);
+        Assert.Equal(["AA.US", "BB.US", "ZZ.US"], selection.Selected);
+    }
+
+    /// <summary>
+    /// The two rotations share the rule rather than a table [D-95, INVARIANT 10]. One
+    /// pool through both call sites gives one answer, which is the drift a shared
+    /// function removes: C05's ordering was copied from C03's by hand at 1.7 and then
+    /// kept the defect after C03's was fixed.
+    /// </summary>
+    [Fact]
+    public void BothRotationsGetTheSameAnswerFromTheSameInputs()
+    {
+        var pool = Pool(10);
+        var attempted = new Dictionary<string, DateOnly>(StringComparer.Ordinal)
+        {
+            ["T01.US"] = new DateOnly(2026, 8, 1),
+            ["T05.US"] = new DateOnly(2026, 7, 20),
+        };
+
+        var universe = new HashSet<string>(StringComparer.Ordinal) { "T01.US", "T05.US" };
+
+        var once = RotationSelection.For(pool, attempted, universe, 5);
+        var twice = RotationSelection.For(pool, attempted, universe, 5);
+
+        Assert.Equal(once.Selected, twice.Selected);
+        Assert.Equal(["T02.US", "T03.US", "T04.US", "T06.US", "T07.US"], once.Selected);
     }
 
     private static StockResearcherLab.Data.Eodhd.EodhdClient EodhdClientDouble()

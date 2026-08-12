@@ -169,6 +169,32 @@ stays a pure function of its date and config version; the rotation advances betw
 dates rather than between runs. That is the discipline every fundamental read already
 applies to `filing_date_effective` [INVARIANT 12, INVARIANT 13, `CLAUDE.md` §6].
 
+### flow_fetch_attempt
+Grain: one row per ticker. **Writer: FlowIngestor.** Tiny.
+
+`ticker`, `last_attempted_date`, `last_yield_date`, `rows_last_attempt`.
+
+**The same record as `fundamental_fetch_attempt` for the component D-91 explicitly
+left open** [D-95, 0008]. C05's ordering was copied from C03's by hand at 1.7 and kept
+the defect after C03's was fixed: never-fetched first, where fetched meant any row in
+`insider_transaction`, so once the pool is covered that group is empty and the same
+alphabetically-first names are selected on every run for ever.
+
+**The 14 of 250 that answer `404 Symbol not found` are what makes it expensive.** They
+write no rows, so they stayed never-fetched and were re-asked every run, and a 404 is
+billed at 10 units [3.1]. The frozen head was spending 140 units a night on calls that
+cannot succeed.
+
+**A shared table was rejected and the ordering function is shared instead.** Two
+components writing one table is two claims on one component-table-operation triple
+[INVARIANT 10]. `RotationSelection` is what both read, so the two rotations cannot
+drift apart the way the code and the catalogue did.
+
+The three properties carry over from `fundamental_fetch_attempt` unchanged: the record
+is of the attempt rather than the result, attempts are read strictly before the run
+date so a re-run of one date selects the same names, and `last_yield_date` null means
+attempted and never yielded, which is a different fact from an absent row.
+
 ### sentiment_daily
 Grain: ticker by day, whole universe. **Writer: SentimentIngestor.** ~380 MB.
 

@@ -366,44 +366,20 @@ public sealed class FundamentalsIngestor : IStage
         // `security` still decides order and no longer decides membership.
         var pool = await BootstrapPoolAsync(context, minPrice, minAdv, minHistory, ct).ConfigureAwait(false);
 
-        // Never attempted first, then oldest attempt first, then universe members,
-        // then ordinal. That is what makes this a rotation and keeps it one after
-        // coverage completes.
-        //
-        // **Attempted, not fetched, and the difference is the whole defect** [0006].
-        // The previous ordering asked whether a ticker had a row in
-        // `fundamental_snapshot`. Once the pool was covered that group was empty, so
-        // every subsequent run re-selected the same alphabetically-first names for
-        // ever, and a ticker whose fetch returned nothing was never distinguishable
-        // from one nobody had asked about.
-        //
-        // Coverage before freshness while coverage is incomplete, because a name
-        // absent from the store cannot be screened at all where a name whose figures
-        // are a few days old still can.
-        //
-        // **The universe tier is a tiebreak and not a tier.** Ranking it above
-        // freshness would starve every pool member outside `security` permanently,
-        // which is this same defect in another dress: the universe is refreshed every
-        // run and is therefore never exhausted. Among names of equal staleness a
-        // universe member goes first, which is the preference the old tier was
-        // reaching for without the starvation.
-        var selected = pool
-            .OrderBy(t => attempted.ContainsKey(t) ? 1 : 0)
-            .ThenBy(t => attempted.TryGetValue(t, out var d) ? d : DateOnly.MinValue)
-            .ThenBy(t => inUniverse.Contains(t) ? 0 : 1)
-            .ThenBy(t => t, StringComparer.Ordinal)
-            .Take(maxPerRun)
-            .ToList();
-
-        var refreshed = selected.Where(attempted.ContainsKey).ToList();
+        // The ordering moved to RotationSelection at 3.5, unchanged, so C05 can share
+        // the rule rather than a copy of it [D-95]. It was copied by hand once
+        // already and then kept this component's defect after this component was
+        // fixed, which is the drift a shared function removes. The reasoning behind
+        // each tier is there rather than restated here.
+        var rotation = RotationSelection.For(pool, attempted, inUniverse, maxPerRun);
 
         return new Selection(
-            selected,
-            pool.Count,
-            pool.Count(t => !attempted.ContainsKey(t)),
-            selected.Count - refreshed.Count,
-            refreshed.Count,
-            refreshed.Count == 0 ? null : refreshed.Min(t => attempted[t]),
+            rotation.Selected,
+            rotation.PoolSize,
+            rotation.NeverAttempted,
+            rotation.NewInSelection,
+            rotation.RefreshedInSelection,
+            rotation.OldestAttemptInSelection,
             priorYield);
     }
 

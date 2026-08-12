@@ -35,10 +35,21 @@ public sealed class FlowIngestor : IStage
     public static readonly string[] HoldingColumns =
     ["ticker", "report_date", "holder_name", "shares", "change", "change_pct"];
 
+    /// <summary>
+    /// The attempt record [D-95, 0008]. Written for every ticker the run selected,
+    /// whether or not the fetch yielded rows, which is the distinction the old
+    /// ordering could not make. Same four columns as C03's, because it is the same
+    /// record of the same kind of act.
+    /// </summary>
+    public static readonly string[] AttemptColumns =
+        ["ticker", "last_attempted_date", "last_yield_date", "rows_last_attempt"];
+
     private static readonly string[] InsiderKey =
         ["ticker", "accession_number", "transaction_side", "transaction_ordinal"];
 
     private static readonly string[] HoldingKey = ["ticker", "report_date", "holder_name"];
+
+    private static readonly string[] AttemptConflictTarget = ["ticker"];
 
     private readonly EodhdClient _client;
 
@@ -46,12 +57,16 @@ public sealed class FlowIngestor : IStage
 
     public string Name => "FlowIngestor";
 
+    // `flow_fetch_attempt` is not here and belongs in neither list twice. A stage may
+    // read what it writes, which is what `DeclaredAccess.CanRead` says: the rotation
+    // reads it back to decide what to fetch next [0008].
     public IReadOnlyList<string> ReadSet { get; } = ["security"];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
     [
         new TableWrite("insider_transaction", WriteOperation.Insert, InsiderColumns),
         new TableWrite("institutional_holding", WriteOperation.Insert, HoldingColumns),
+        new TableWrite("flow_fetch_attempt", WriteOperation.Insert, AttemptColumns),
     ];
 
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
@@ -70,33 +85,110 @@ public sealed class FlowIngestor : IStage
         // the tickers are walked in a fixed order but the list still reaches output.
         var shortfalls = new List<Shortfall>();
 
+        // One entry per selected ticker, written below whether or not the fetch
+        // yielded anything. A ticker that returns nothing still has to move down the
+        // rotation, or it sits at the head of it for ever [D-95]. The 14 of 250 that
+        // answer 404 are exactly that case, and 3.1 measured a 404 at 10 units.
+        var attempts = new List<Attempt>(tickers.Count);
+
         foreach (var ticker in tickers)
         {
-            insiderRows += await LoadInsiderAsync(context, ticker, pageSize, shortfalls, ct).ConfigureAwait(false);
-            holdingRows += await LoadHoldersAsync(context, ticker, ct).ConfigureAwait(false);
+            var insider = await LoadInsiderAsync(context, ticker, pageSize, shortfalls, ct).ConfigureAwait(false);
+            var holdings = await LoadHoldersAsync(context, ticker, ct).ConfigureAwait(false);
+
+            insiderRows += insider;
+            holdingRows += holdings;
+
+            var written = insider + holdings;
+
+            // A run that yields nothing must not erase the date a previous one did,
+            // or the two absences collapse back into each other.
+            DateOnly? lastYield = written > 0
+                ? context.Date
+                : selection.PriorYield.TryGetValue(ticker, out var prior) ? prior : null;
+
+            attempts.Add(new Attempt(ticker, context.Date, lastYield, written));
         }
+
+        await RecordAttemptsAsync(context, attempts, ct).ConfigureAwait(false);
 
         // Coverage first, exactly as C03 reports it. A run that re-walks the same
         // 250 names and one that reaches 250 new ones look identical from a row
         // count, which is how the truncation below went unseen until sign-off.
+        //
+        // The oldest attempt in the selection is the number that says the rotation is
+        // still moving once coverage completes: it advances run by run, where every
+        // count above it stops moving [D-95].
         var detail = string.Format(
             CultureInfo.InvariantCulture,
             "{0:N0} insider transaction row(s) and {1:N0} institutional holding row(s) over {2:N0} " +
-            "ticker(s). Candidate pool {3:N0}, of which {4:N0} have never been fetched; {5:N0} of this " +
-            "run's selection were new. Holdings are a top-20 snapshot rather than a series, so " +
-            "inst_ownership_change accumulates forward only [D-69]. {6}",
+            "ticker(s). Candidate pool {3:N0}, of which {4:N0} have never been attempted; {5:N0} of this " +
+            "run's selection were new and {6:N0} were refreshed, the oldest attempt among them dated " +
+            "{7}. Holdings are a top-20 snapshot rather than a series, so inst_ownership_change " +
+            "accumulates forward only [D-69]. {8}",
             insiderRows, holdingRows, tickers.Count,
-            selection.PoolSize, selection.NeverFetched, selection.NewInSelection,
+            selection.PoolSize, selection.NeverAttempted, selection.NewInSelection,
+            selection.RefreshedInSelection,
+            selection.OldestAttemptInSelection?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "none",
             DescribeShortfalls(shortfalls));
 
         return new StageResult(insiderRows + holdingRows, "ok", detail);
     }
 
     /// <param name="PoolSize">The whole active universe, which is the pool here.</param>
-    /// <param name="NeverFetched">Pool members with no row in <c>insider_transaction</c> yet.</param>
+    /// <param name="NeverAttempted">Pool members with no row in <c>flow_fetch_attempt</c> yet.</param>
     /// <param name="NewInSelection">How many of this run's selection were among them.</param>
+    /// <param name="RefreshedInSelection">The rest, which have been attempted before.</param>
+    /// <param name="OldestAttemptInSelection">The oldest attempt date among those, or null.</param>
+    /// <param name="PriorYield">
+    /// The yield date each selected ticker already had, so a run that yields nothing
+    /// does not erase it.
+    /// </param>
     public readonly record struct Selection(
-        IReadOnlyList<string> Tickers, int PoolSize, int NeverFetched, int NewInSelection);
+        IReadOnlyList<string> Tickers,
+        int PoolSize,
+        int NeverAttempted,
+        int NewInSelection,
+        int RefreshedInSelection,
+        DateOnly? OldestAttemptInSelection,
+        IReadOnlyDictionary<string, DateOnly> PriorYield);
+
+    /// <summary>One attempt, written whether or not it yielded rows [D-95].</summary>
+    private readonly record struct Attempt(
+        string Ticker, DateOnly AttemptedOn, DateOnly? LastYield, long Rows);
+
+    /// <summary>
+    /// The attempt record for every ticker this run selected.
+    ///
+    /// One upsert on `ticker`, so a second run over the same date writes what the
+    /// first wrote [D-68]. Sorted before the copy, because COPY order reaches the
+    /// table and an unsorted enumeration is not a deterministic output
+    /// [`CLAUDE.md` §6].
+    /// </summary>
+    private static async Task RecordAttemptsAsync(
+        StageContext context, List<Attempt> attempts, CancellationToken ct)
+    {
+        if (attempts.Count == 0)
+        {
+            return;
+        }
+
+        attempts.Sort((a, b) => string.CompareOrdinal(a.Ticker, b.Ticker));
+
+        await context.Data.BulkUpsertAsync(
+            "flow_fetch_attempt", AttemptColumns, AttemptConflictTarget,
+            async (w, c) =>
+            {
+                foreach (var a in attempts)
+                {
+                    await w.StartRowAsync(c).ConfigureAwait(false);
+                    await w.WriteAsync(a.Ticker, c).ConfigureAwait(false);
+                    await w.WriteAsync(a.AttemptedOn, c).ConfigureAwait(false);
+                    await w.WriteAsync(a.LastYield, c).ConfigureAwait(false);
+                    await w.WriteAsync(a.Rows, c).ConfigureAwait(false);
+                }
+            }, ct).ConfigureAwait(false);
+    }
 
     /// <param name="Position">
     /// `interior` means at least one page before the last came back short, so the
@@ -156,10 +248,11 @@ public sealed class FlowIngestor : IStage
     /// a cap every name eventually passes through is a bound on a night's spend,
     /// which is what this now is.
     ///
-    /// The ordering is C03's, at `FundamentalsIngestor.CandidatesAsync`: never
-    /// fetched first, then the rest, then ticker ordinal. C03's middle group,
-    /// fetched-and-in-universe against fetched-and-outside-it, collapses here
-    /// because the pool is the universe.
+    /// **The ordering is `RotationSelection`, shared with C03 rather than copied from
+    /// it** [D-95]. It was copied by hand at 1.7 and then kept this component's
+    /// defect after C03's was fixed at D-91, which is the drift a shared function
+    /// removes. C03's universe tier is a tiebreak here too and simply never fires,
+    /// because this pool is the universe.
     /// </summary>
     private static async Task<Selection> UniverseAsync(
         StageContext context, int maxPerRun, CancellationToken ct)
@@ -170,45 +263,53 @@ public sealed class FlowIngestor : IStage
 
         var pool = rows.Select(r => (string) r[0]!).ToList();
 
+        // **Strictly before the run date** [D-95]. A re-run of one date therefore sees
+        // the state the first run saw and selects the same names, so the stage stays a
+        // pure function of its date and config version; the rotation advances between
+        // dates rather than between runs [`CLAUDE.md` §6, INVARIANT 13].
+        //
         // Reading what it writes, which DeclaredAccess permits without a second
         // declaration: the read set would otherwise say this stage reads a table it
         // owns, which is not what a read set means.
-        var already = await context.Data.ReadAsync(
-            "insider_transaction", "SELECT DISTINCT ticker FROM insider_transaction;", ct)
-            .ConfigureAwait(false);
+        var asOf = context.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-        var fetched = already.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
+        var attemptRows = await context.Data.ReadAsync(
+            "flow_fetch_attempt",
+            $"""
+             SELECT ticker, last_attempted_date, last_yield_date
+             FROM flow_fetch_attempt
+             WHERE last_attempted_date < DATE '{asOf}'
+             ORDER BY ticker;
+             """,
+            ct).ConfigureAwait(false);
 
-        return SelectionFor(pool, fetched, maxPerRun);
-    }
+        var attempted = new Dictionary<string, DateOnly>(StringComparer.Ordinal);
+        var priorYield = new Dictionary<string, DateOnly>(StringComparer.Ordinal);
 
-    /// <summary>
-    /// The ordering, as a pure function so two consecutive passes can be asserted
-    /// without a provider or a database.
-    ///
-    /// **A name that returns no rows stays never-fetched and is offered again.** For
-    /// the 14 of 250 that answer `404 Symbol not found` that is a re-ask every run,
-    /// and it is the residue a high-water mark would close. Not built here: it is a
-    /// separate decision and its absence does not breach an invariant, because
-    /// coverage still advances by every name that does return rows.
-    /// </summary>
-    public static Selection SelectionFor(
-        IReadOnlyList<string> pool, IReadOnlySet<string> fetched, int maxPerRun)
-    {
-        ArgumentNullException.ThrowIfNull(pool);
-        ArgumentNullException.ThrowIfNull(fetched);
+        // `date` comes back as DateTime through the generic reader, which is the form
+        // every other stage in this project converts from.
+        foreach (var r in attemptRows)
+        {
+            var t = (string) r[0]!;
+            attempted[t] = DateOnly.FromDateTime((DateTime) r[1]!);
 
-        var selected = pool
-            .OrderBy(t => fetched.Contains(t) ? 1 : 0)
-            .ThenBy(t => t, StringComparer.Ordinal)
-            .Take(maxPerRun)
-            .ToList();
+            if (r[2] is DateTime y)
+            {
+                priorYield[t] = DateOnly.FromDateTime(y);
+            }
+        }
+
+        var inUniverse = pool.ToHashSet(StringComparer.Ordinal);
+        var rotation = RotationSelection.For(pool, attempted, inUniverse, maxPerRun);
 
         return new Selection(
-            selected,
-            pool.Count,
-            pool.Count(t => !fetched.Contains(t)),
-            selected.Count(t => !fetched.Contains(t)));
+            rotation.Selected,
+            rotation.PoolSize,
+            rotation.NeverAttempted,
+            rotation.NewInSelection,
+            rotation.RefreshedInSelection,
+            rotation.OldestAttemptInSelection,
+            priorYield);
     }
 
     /// <summary>

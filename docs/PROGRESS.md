@@ -3414,6 +3414,60 @@ That was the wrong way round in the first draft of the test and the code was rig
 sweep refused at its first ticker records that ticker, because "the last one that
 worked" would need the reader to know how the sweep orders its pool before it could
 take the next one.
+
+### 3.5, C05's rotation, closed
+
+**Migration `0008` gives C05 its own `flow_fetch_attempt`**, four columns, the same
+record D-91 gave C03 for the component D-91 explicitly named as not closed by it
+[D-95]. First in stage B, because the flow sweep at 3.9 cannot complete a universe pass
+against a frozen head.
+
+**What was wrong.** `FlowIngestor.SelectionFor` ordered never-fetched first, where
+fetched meant any row in `insider_transaction`, then ticker ordinal. Once the pool is
+covered that first group is empty and the same alphabetically-first names are selected
+on every run afterwards.
+
+**3.1 priced the residue.** The 14 of 250 that answer `404 Symbol not found` write no
+rows, so they stayed never-fetched and were re-asked every run, and a 404 is billed at
+10 units. The frozen head was spending **140 units a night on calls that cannot
+succeed**. That figure did not exist when D-95 was authored and it is the strongest
+argument the decision has.
+
+**The ordering moved to `RotationSelection` and both components read it.** A shared
+table was rejected because two components writing one table is two claims on one triple
+[INVARIANT 10]; what is shared is the rule. That is not tidiness: C05's ordering was
+copied from C03's by hand at 1.7 and then kept C03's defect after C03 was fixed, which
+is exactly the drift a shared function removes. C03's behaviour is unchanged, the
+extraction being verbatim.
+
+**C05's universe tier never fires and is still passed.** `RotationSelection` ranks pool
+members that are in the universe ahead of those that are not, among names of equal
+staleness. C05's pool is the universe, so the set and the pool are the same and the
+tier is a no-op. Passing it anyway keeps one function rather than two.
+
+**The run log separates new from refreshed and names the oldest attempt in the
+selection.** That last number is the one that says the rotation is still moving once
+coverage completes: it advances run by run, where every count beside it stops moving.
+
+**A test changed meaning rather than being deleted.**
+`ANameThatReturnedNoRowsIsOfferedAgainRatherThanSkipped` asserted the defect as a known
+property, which was right while it was a known property. It is now
+`A404NameIsReOfferedOnALaterPassRatherThanHeldAtTheHead` and asserts the closure: the
+name drops out of the next pass and returns on the one after, at the position its
+staleness earns.
+
+#### `ARCHITECTURE.html` §3's C05 Writes cell now understates by one table
+
+D-95 gives C05 a third write and the catalogue still names two. Nothing failed, because
+the Writes column has no conformance test: write ownership is asserted against
+`SCHEMA.md` and nothing reads those cells [`PROGRESS.md`, the fundamentals rotation].
+`SCHEMA.md` has its `flow_fetch_attempt` section and the registry test passes, so the
+document that is checked is correct and the one that is not has drifted.
+
+**This is the second component to gain a second write and the second to drift
+immediately**, which is what that finding predicted. `ARCHITECTURE.html` is
+human-edited only [`CLAUDE.md` §13], so it is reported rather than corrected here.
+Open item 15.
 ---
 
 ## Open items carried forward
@@ -3437,3 +3491,4 @@ them are in `docs/archive/process-2026-08.md`.
 | 12 | **Insider flow is not backfillable for delisted names**, measured at 3.1. `sec-filings/{t}` and `sec-filings/{t}/form4` return 404 `Symbol not found` for three delisted names, two of them delisted inside the five-year window, against the same ticker strings `eod/{t}` and `splits/{t}` answered for in the same run. Prices, fundamentals, sentiment, splits and dividends all reach delisted names; flow does not. So the backfilled `insider_transaction` history covers only names that still exist today, which is the survivorship bias `VALIDITY.md` §6 exists to mitigate reappearing in the one screen whose inputs cannot route around it. What follows from it is authored: whether S4's backfilled history is used knowing the limitation, whether the limitation is recorded against every read before the live window, or something else. **No checkpoint is blocked**, 3.9's sweep being over the live universe under every reading | An authored decision, before phase 4 tunes anything on S4's backfilled history |
 | 13 | **`last_two_earnings_surprises` has a free source in an endpoint C03 already calls**, measured at 3.1. `Earnings::History` sits in the `fundamentals/{t}` payload, 50 periods for CCS.US carrying `epsActual`, `epsEstimate`, `epsDifference` and `surprisePercent`, so the field bolded in §07 as one of five that can flip a verdict needs no new endpoint and no additional units. It needs a change to C03's parse and a column to land in, which is phase 1's ingest rather than phase 3's compute, and the checkpoint said before it ran that the outcome could not come back as work for this phase [`CLAUDE.md` §3]. It does not close the `1 → 5` earnings obligation: `reportDate` is when a period was reported, not when that schedule became public | An authored decision on when C03's parse reopens |
 | 14 | **0007 leaves `sector`, `size_bucket`, `market_cap` and `is_active` on `security`**, where nothing writes them after 3.11 and nothing reads them after 3.12. They hold whatever the last live C01 run put there, so a later reader can take `security.market_cap` for a current value when it is a frozen one. `SCHEMA.md` stops listing them under D-73, which is a documentation edit and not a claim they are gone. Dropping them is one `ALTER TABLE` and it moves `ExpectedMonetary` and `SchemaParityTests`'s count back from 19 to 18, so it is a decision rather than a tidy-up | The next migration after 3.12, or whenever the counts move for another reason |
+| 15 | **`ARCHITECTURE.html` §3's C05 Writes cell names two tables where the component now writes three.** D-95 and migration 0008 give FlowIngestor `flow_fetch_attempt`, `SCHEMA.md` declares it and the registry test passes, so the document that is checked is correct. The catalogue is not checked: the Writes column has no conformance test, write ownership being asserted against `SCHEMA.md`. This is the second component to gain a second write and the second to drift immediately, which is what that finding predicted. The file is human-edited only [`CLAUDE.md` §13] | A human edit to §3, or the Writes-column conformance test that finding proposes |

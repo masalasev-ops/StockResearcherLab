@@ -4708,6 +4708,67 @@ over exactly the complement of the attempt set.
 `0010_price_fetch_attempt.sql` was read by the schema check and not tracked, so CI would
 not have seen it. That is the scope assertion doing what it was written for.
 
+#### 2026-08-13, `price_fetch_attempt` seeded from the loaded store
+
+`price_fetch_attempt` was empty, so the resumed sweep would have re-fetched all 50,737
+pool members: just over a day's spendable allowance, and twenty thousand of them rewrites
+of already-loaded rows, which is the update path that produced the bloat the vacuum had
+just cleared.
+
+**The rule.** A ticker whose bars reach back before today minus 450 days can only have
+them from a sweep: the nightly bulk reload has accumulated about 274 trading dates, some
+383 calendar days, so nothing shallower reaches that far. Each such ticker gets an
+attempt row stamped with the range start, carrying its latest bar as the yield date and
+its bar count. One statement, run once, not a code path.
+
+**The sanity check failed and the inspection is what this section is for.** The expected
+split was roughly 20,000 seeded and 31,000 remaining. Measured, it is close to the
+reverse. Four things came out of establishing why.
+
+**`price_daily` holds 78,809 distinct tickers against a pool of 50,737.** The nightly
+bulk feed writes the whole US market, so 37,602 of them are ETFs, funds, warrants and
+units that no sweep ever touches. Any count taken over the table rather than over the
+pool is answering a different question.
+
+**The pool is 50,737 today, not the 50,785 3.1 measured.** Live is 18,126 against 18,174;
+the delisted list is unchanged at 32,611. The symbol list drifts and the difference is
+too small to matter here, but a figure quoted from 3.1 is no longer the figure.
+
+**32,379 pool members carry pre-cutoff history, which is more than the sweeps' unit
+counts suggested.** Run 1414 spent 29,667 units. The union across every 3.6 sweep is
+larger than any single one of them, and the store is the record rather than the ledger.
+
+**A contamination exists and does not reach the pool.** 426 tickers carry exactly one
+bar dated 2021-01-04, which is `PriceBackfillTests`'s old fixture date, and `AAA.US` and
+`BBB.US` sit among them carrying nightly depth plus that one stray bar. Every one of them
+is outside the admitted pool; exactly **one** pool member has a single bar on that date.
+So the predicate is safe, and it was worth proving rather than assuming: a pool member
+with one stray old bar and nightly depth is precisely the shape a `min(date)` test would
+mark attempted and skip, leaving a hole.
+
+**Two narrowings were taken, both in the safe direction.** The statement is scoped to the
+admitted pool, so no test residue enters the table resumption now depends on. And it
+requires **two** bars below the cutoff rather than one: 454 pool members carry exactly
+one, on scattered dates, and from the data alone a genuine one-day listing and a stray
+bar are the same shape. Re-fetching them costs 454 units against the possibility of 454
+silent holes.
+
+| | Tickers |
+|---|---|
+| pool | 50,737 |
+| seeded | **31,925** |
+| remaining | **18,812** |
+
+The remaining set decomposes exactly: 8,828 pool members with only nightly-depth bars,
+9,530 with no bars at all, and the 454 held back deliberately.
+
+**Spot check.** `GE.US` 16,261 bars over 64.6 years, `AAPL.US` 11,508 over 45.7,
+`AAME.US` 10,707 over 46.4, `A.US` 6,722 over 26.7. Years rather than months.
+
+**The skip, observed rather than assumed.** One minute in, 294 units spent and 352 new
+attempt rows, growing one for one. A sweep re-fetching seeded tickers would leave the row
+count at 31,925 while the units climbed, those writes being updates.
+
 #### A decision number is owed
 
 This changes how every ticker-partitioned backfill resumes, and it supersedes the

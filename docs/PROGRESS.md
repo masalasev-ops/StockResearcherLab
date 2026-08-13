@@ -4692,6 +4692,22 @@ reach the store one uninterrupted run would, asserted over the 22-ticker fixture
 mechanism the line names that is gone. Not edited, being authored scope [`CLAUDE.md`
 §13].
 
+#### The gate
+
+`ci.ps1` ok at `5be4d33`, **336 passed, 0 failed**, guards ok over 105 files, ten
+migrations from an empty server and the idempotence gate passed.
+
+**336 against 338, and the two are a removal rather than a regression.** Four tests
+existed only for the range-matching refusal and two replaced them, asserting that a
+halted row over a different range and a row nothing could have written both stop
+nothing. `PriceBackfillTests` lost the two frontier tests and gained three: the
+completed-sweep re-invocation, the 404 that is not re-asked, and the failure resuming
+over exactly the complement of the attempt set.
+
+**`guards.ps1` caught the new migration before CI could**, reporting that
+`0010_price_fetch_attempt.sql` was read by the schema check and not tracked, so CI would
+not have seen it. That is the scope assertion doing what it was written for.
+
 #### A decision number is owed
 
 This changes how every ticker-partitioned backfill resumes, and it supersedes the

@@ -1352,3 +1352,21 @@ system is for values the experiment turns on [`CLAUDE.md` §8].
 established per ticker rested on a sound reading of the stack. It is not what happens:
 7 physical opens over 402 tickers at a worker count of 8. Nothing was changed about
 pooling, because there was nothing wrong with it.
+
+---
+
+## 2026-08-13, the candidate pool derived without a whole-table window
+
+No document changed. D-4's criteria are untouched, no component, table, column or config
+key moved, and the pool is the same set: 7,320 tickers both ways with 0 missing and 0
+extra, proved against the shipped statement extracted verbatim out of the source rather
+than against a copy of it.
+
+What changed is one SQL statement in `FundamentalsIngestor.BootstrapPoolAsync`, from
+169.9 seconds to 11 against a 78,087,416-row `price_daily`. Both the nightly path and the
+range path call it, so both are fixed by the one change.
+
+**The sixty-day trailing slice the work was specified around is not in the code**, and
+`PROGRESS.md` carries the measurement that rejected it: it returns 4,834 tickers where
+the old statement returns 7,320, dropping every delisted name whose last bar predates the
+window, and it is not faster. The call site states that rather than stating a width.

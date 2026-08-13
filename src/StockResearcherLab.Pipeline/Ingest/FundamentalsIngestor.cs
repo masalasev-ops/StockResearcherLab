@@ -757,33 +757,77 @@ public sealed class FundamentalsIngestor : IBackfillStage
         // still has absolute filters living only in the universe definition. C01
         // applies every one of these again and remains the only component that
         // decides membership [D-5, INVARIANT 1].
+        // **Rewritten at item 24 and D-4's criteria are unchanged.** The pool is the
+        // same set; what changed is how it is derived. Measured against the 78,087,416
+        // row store the 3.6 sweep left: the old statement took 193.1s and this takes
+        // 9.7s, both returning the same 7,320 tickers, compared set against set rather
+        // than by count [`PROGRESS.md`, 2026-08-12].
+        //
+        // **The old shape windowed the whole table.** `row_number() OVER (PARTITION BY
+        // ticker ORDER BY date DESC)` across every row matching the date bound, then a
+        // second full scan to count each ticker's bars. At ten million rows that was
+        // ordinary; at seventy-eight it sorts and spills and does not finish inside the
+        // command timeout, which is the component that consumes the backfill being
+        // stopped by it.
+        //
+        // **There is no trailing date slice here, and the obvious one is wrong.**
+        // Bounding the scan to the last sixty calendar days before windowing looks
+        // sufficient, twenty trading days fitting inside it comfortably, and it is not:
+        // it silently drops every ticker whose most recent bar is older than the slice.
+        // Measured, that is 2,486 of 7,320, all of them delisted names the backfill
+        // loaded, and it was no faster either. A pool that quietly loses a third of
+        // itself is a redefinition rather than a rewrite.
+        //
+        // **What replaces it is a seek per ticker rather than a scan.** The distinct
+        // tickers come off the `(ticker, date)` primary key, then a LATERAL takes each
+        // ticker's twenty most recent bars by index, however far back they are, which
+        // is exactly what `rn <= 20` meant. The history depth is asked last, of the few
+        // thousand names that already cleared price and liquidity rather than of all
+        // 78,806, because the criteria are a conjunction and that ordering is what took
+        // it from 51s to under 10.
+        //
+        // `count(*) >= min_history_days` is preserved as an offset rather than replaced
+        // by a calendar test: "has at least N bars" and "has a bar N days ago" are
+        // different questions and the second admits a ticker with ten bars spread over
+        // a year.
         var sql = $"""
-            WITH bars AS (
-                SELECT ticker, date, close, volume,
-                       row_number() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
-                FROM price_daily
-                WHERE date <= DATE '{asOf}'
+            WITH tickers AS (
+                SELECT DISTINCT ticker FROM price_daily WHERE date <= DATE '{asOf}'
             ),
-            latest AS (SELECT ticker, close FROM bars WHERE rn = 1),
+            recent AS (
+                SELECT t.ticker, b.close, b.volume, b.rn
+                FROM tickers t
+                CROSS JOIN LATERAL (
+                    SELECT close, volume, row_number() OVER (ORDER BY date DESC) AS rn
+                    FROM price_daily p
+                    WHERE p.ticker = t.ticker AND p.date <= DATE '{asOf}'
+                    ORDER BY p.date DESC
+                    LIMIT 20
+                ) b
+            ),
+            latest AS (SELECT ticker, close FROM recent WHERE rn = 1),
             mdv AS (
                 SELECT ticker,
                        percentile_cont(0.5) WITHIN GROUP (ORDER BY close * volume) AS median_dollar_volume
-                FROM bars WHERE rn <= 20 AND close IS NOT NULL AND volume IS NOT NULL
+                FROM recent WHERE close IS NOT NULL AND volume IS NOT NULL
                 GROUP BY ticker
             ),
-            span AS (
-                SELECT ticker, count(*) AS days
-                FROM price_daily WHERE date <= DATE '{asOf}' GROUP BY ticker
+            liquid AS (
+                SELECT l.ticker
+                FROM latest l
+                JOIN mdv m ON m.ticker = l.ticker
+                WHERE l.close >= {minPrice.ToString(CultureInfo.InvariantCulture)}
+                  AND m.median_dollar_volume >= {minAdv.ToString(CultureInfo.InvariantCulture)}
+                  AND l.ticker NOT LIKE '^%'
             )
-            SELECT l.ticker
-            FROM latest l
-            JOIN mdv m ON m.ticker = l.ticker
-            JOIN span s ON s.ticker = l.ticker
-            WHERE l.close >= {minPrice.ToString(CultureInfo.InvariantCulture)}
-              AND m.median_dollar_volume >= {minAdv.ToString(CultureInfo.InvariantCulture)}
-              AND s.days >= {minHistory.ToString(CultureInfo.InvariantCulture)}
-              AND l.ticker NOT LIKE '^%'
-            ORDER BY l.ticker;
+            SELECT q.ticker
+            FROM liquid q
+            WHERE EXISTS (
+                SELECT 1 FROM price_daily h
+                WHERE h.ticker = q.ticker AND h.date <= DATE '{asOf}'
+                OFFSET {(minHistory - 1).ToString(CultureInfo.InvariantCulture)} LIMIT 1
+            )
+            ORDER BY q.ticker;
             """;
 
         var rows = await context.Data.ReadAsync("price_daily", sql, ct).ConfigureAwait(false);

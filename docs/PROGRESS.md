@@ -4425,6 +4425,88 @@ own database so every test there runs against an empty `price_daily`.
 **The remaining 42 percent roughly doubles the table**, to something like 135 million
 rows and 20 GB, so this gets worse before 3.7 needs it. Open item 24.
 
+### 2026-08-13, the candidate pool derived without a whole-table window
+
+**D-4's criteria are unchanged and the pool is the same set.** Proved rather than
+spot-checked: the old statement's ticker set was dumped once, the shipped statement was
+extracted verbatim out of `FundamentalsIngestor.cs` so the proof ran the code rather
+than a copy of it, and the two were compared element by element.
+
+| | tickers | seconds |
+|---|---|---|
+| The statement being replaced | **7,320** | 169.9, 193.1 on two runs |
+| The statement shipped | **7,320** | 11.6, 11.6, 10.5 on three runs |
+
+**0 missing, 0 extra, and the orders match too.** Both against `price_daily` at
+78,087,416 rows and 12 GB, on PostgreSQL 18.4.
+
+#### The trailing slice the instruction asked for is not in the code, and the measurement is why
+
+The shape prescribed was to bound the scan by date before windowing, twenty trading
+dates fitting inside about sixty calendar days, cutting the input from 78 million rows
+to roughly 1.5 million. The reasoning is sound and the result is wrong.
+
+| | tickers | seconds |
+|---|---|---|
+| Old | 7,320 | 193.1 |
+| **Sixty-day slice** | **4,834** | 196.5 |
+
+**It drops 2,486 of 7,320 and it is not faster.** Every one of them is a name whose most
+recent bar predates the slice, which is what the backfill has just filled the table with:
+`AABA.US`, `AAWW.US`, `ABC.US`, `AAM_old.US` and the rest of the delisted set. A pool
+that quietly loses a third of itself is a redefinition rather than a rewrite, and the
+instruction's own rule is that the old statement stands until a decision says otherwise.
+So there is no slice, and the call site states that and why rather than stating a width.
+
+#### What actually costs the time, measured per part
+
+| Step | Seconds |
+|---|---|
+| `SELECT DISTINCT ticker`, 78,806 of them | 3.1 |
+| LATERAL top-20 bars per ticker, 1,527,256 rows | 2.8 |
+| History depth over all 78,806 tickers | 51.4 |
+| A loose index scan for the tickers, tried and rejected | 30.1 |
+
+**PostgreSQL 18's skip scan is why the first line is cheap**, and it is why the loose
+index-scan trick that a reader would reach for is ten times slower here than the plain
+`DISTINCT` it was meant to replace.
+
+**The history test is the whole cost, and asking it last is the whole fix.** The criteria
+are a conjunction, so the order is free: applied to the few thousand names that have
+already cleared price and liquidity rather than to all 78,806, the same test stops being
+the dominant term. That is what takes the query from 163 seconds to 11.
+
+`count(*) >= min_history_days` is kept as an `OFFSET`, not swapped for a calendar test.
+"Has at least N bars" and "has a bar N days ago" are different questions, and the second
+admits a ticker with ten bars spread over a year.
+
+#### One caveat, recorded rather than smoothed over
+
+The query took **over 300 seconds once**, hitting the client's `Command Timeout`, on the
+run immediately following the old statement. That statement sorts and spills the whole
+table, so it evicts the buffer cache and fills the OS cache with its own temp files, and
+the seek-driven query that follows finds nothing warm. Steady state is 10 to 12 seconds
+and a moderately cold run was 18.7. Nothing does that full-table sort once the old
+statement is gone, so the case is being recorded rather than designed around, but a first
+query against a cold server is a real case and 11 seconds is not its number.
+
+#### The other whole-table readers of `price_daily`, named and not fixed
+
+- **C01 `UniverseBuilder.LiquidAsync` carries the identical shape**, the same unbounded
+  window plus the same second full scan for `count(*)`. It is the same defect in the
+  component that builds `security`, and it is not a copy-paste of this fix because it
+  also returns `first_seen` and `last_seen`, which this pool does not compute.
+- **C07 `FreshnessGuard`** runs `SELECT date, count(*) FROM price_daily GROUP BY date`
+  with **no date bound at all**, every night, and takes the newest rows off the end.
+- **C08 `IndicatorEngine`** and **C10 `MarketContextEngine`** use the same window shape
+  but join `security WHERE is_active` first, so the partition set is about 2,800 tickers
+  rather than 78,806. Unbounded in date and so growing with the backfill, two orders of
+  magnitude smaller than the case that stopped.
+- **C09 `ValuationEngine`** is bounded on both sides already, by covered tickers and by a
+  five-year date range, and is the one that does not have the shape.
+
+Named here so the next one is found before it stops a phase rather than during it.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
@@ -4450,7 +4532,8 @@ them are in `docs/archive/process-2026-08.md`.
 | 18 | **Three components still catch `HttpRequestException` whole at a per-ticker fetch**, where C02 was narrowed to a 404 at 3.6. `FundamentalsIngestor` at line 245, `FlowIngestor` at 338 and 475, and `UniverseBuilder` at its sector call at 294. Each swallows a 402 or a 429 as a missing ticker, so a sweep that hits the allowance wall in flight writes nothing for that name and nothing for any name after it, and returns having completed over a partial load. `EodhdClient` now carries the status code, so the fix is one `when` clause each. Not taken here: each belongs to the checkpoint that gives its component a range mode | 3.7 for C03 and C01, 3.9 for C05 |
 | 19 | ~~**C05 buys per ticker what C03 now receives for nothing.** `FlowIngestor.LoadHoldersAsync` calls `fundamentals/{ticker}` with `filter=Holders::Institutions`; C03 now calls the same endpoint unfiltered, so the filter is a projection of a document C03 already has. 10 units a ticker, 2,500 a night at `flow.max_tickers_per_run` 250, and 28,410 for a universe pass of that half alone. C03's rotation would make a ticker's holders about ten days stale, against a block whose report dates move quarterly [D-69], and C03's pool is broader than the universe, so both conditions hold. **The backfill is unaffected**, the block having no series; the saving is nightly, and 3.9's scope shrinks by not re-fetching a current snapshot 2,841 times. Moving the read changes two components' declared sets and section 3, which is authored~~ **Closed by D-98's implementation on 2026-08-12.** `institutional_holding`'s writer is `FundamentalsIngestor`, `LoadHoldersAsync` is gone, §3's two Writes cells and `SCHEMA.md`'s writer declaration moved with it, and 3.9's scope in the phase plan names form 4 alone. The parse is `InstitutionalHolders` and the regression test states which half of D-98's claim it covers. **Two findings came out of it and neither was taken**, being items 20 and 21 | Closed |
 | 20 | ~~**C05's §3 Reads cell still names the ownership endpoint** it stopped calling at D-98. `ReadDeclarationConformanceTests` cannot catch it and is not failing to: the cell parse intersects against `SCHEMA.md`'s table list and drops everything that is not a table, which is what makes it able to read `security` out of "for the universe it iterates" and how it drops `digest_provider` from C29's. So the Reads column carries the same class of drift the Writes column does, with the same absence of a check over the half of each cell that names endpoints rather than tables. One cell, one clause, and the file is human-edited only [`CLAUDE.md` §13]~~ **The cell is corrected**, human-directed on 2026-08-12, as a clean edit under D-73 with the prior wording in `CHANGELOG.md` and a one-line diff. **What stays open is the blind spot**, which is recorded beside the Writes-column finding rather than as its own item, so that whoever builds one test sees the other defect in the same read. Seven of thirty-five Reads cells name a provider endpoint and none of those names is checked in either direction | The Writes-column conformance test, with which it shares a section. Recorded beside item 15 rather than counted twice |
-| 24 | **`FundamentalsIngestor.BootstrapPoolAsync` does not complete against a backfilled `price_daily`**, measured 2026-08-12: the statement run alone on an idle server gave up at a 120-second timeout, with the table at 78,087,416 rows and 12 GB after a 3.6 sweep that reached 58 percent of its pool. It opens with `row_number() OVER (PARTITION BY ticker ORDER BY date DESC)` over every row matching `date <= asOf` and then scans the table again for the history count, so it sorts and spills where at 10 million rows it did neither. **It is on the nightly path**, `CandidatesAsync` calling it on every C03 run, and on 3.7's, `RangePoolAsync` calling it again, so the sweep that succeeded has made the component consuming its output unrunnable and 3.7 is next. The remaining 42 percent roughly doubles the table. **CI is unaffected**, its database being dropped and recreated per run, so the gate stays valid while the developer database does not. What it needs is the pool derived without a whole-table window, which is a rewrite of one statement rather than a change to what the pool means, and 0007's date-leading index may or may not be the half that helps | Before 3.7, and before any nightly run against the backfilled store. Found by the suite hanging rather than by a check |
+| 25 | **Three more components read `price_daily` with an unbounded shape, and C01's is the same defect item 24 just closed.** `UniverseBuilder.LiquidAsync` windows `row_number() OVER (PARTITION BY ticker ORDER BY date DESC)` over every row matching its date bound and then scans the table again for `count(*)`, which is what took 169.9s in C03 before the rewrite. It is not a copy-paste of that fix: it also returns `first_seen` and `last_seen`, which the pool query does not compute. `FreshnessGuard` runs `SELECT date, count(*) FROM price_daily GROUP BY date` with **no date bound at all**, every night, and keeps the newest rows. `IndicatorEngine` and `MarketContextEngine` carry the window shape but join `security WHERE is_active` first, so they partition about 2,800 tickers rather than 78,806 and are two orders of magnitude away from the case that stopped; they still grow with the backfill. `ValuationEngine` is bounded on both sides and is the one that does not have the shape. **Nothing here is measured**: the times are C03's, and what these cost has not been read | C01 before 3.11, which runs it per evaluation date, and before any weekly universe build against the backfilled store. C07 before the next nightly run |
+| 24 | ~~**`FundamentalsIngestor.BootstrapPoolAsync` does not complete against a backfilled `price_daily`**, measured 2026-08-12: the statement run alone on an idle server gave up at a 120-second timeout, with the table at 78,087,416 rows and 12 GB after a 3.6 sweep that reached 58 percent of its pool. It opens with `row_number() OVER (PARTITION BY ticker ORDER BY date DESC)` over every row matching `date <= asOf` and then scans the table again for the history count, so it sorts and spills where at 10 million rows it did neither. **It is on the nightly path**, `CandidatesAsync` calling it on every C03 run, and on 3.7's, `RangePoolAsync` calling it again, so the sweep that succeeded has made the component consuming its output unrunnable and 3.7 is next. The remaining 42 percent roughly doubles the table. **CI is unaffected**, its database being dropped and recreated per run, so the gate stays valid while the developer database does not. What it needs is the pool derived without a whole-table window, which is a rewrite of one statement rather than a change to what the pool means, and 0007's date-leading index may or may not be the half that helps ~~ **Closed on 2026-08-13 by deriving the pool without the window.** Distinct tickers off the primary key, a LATERAL taking each ticker's twenty most recent bars by index however far back they are, and the history depth asked last of the names that already cleared price and liquidity rather than of all 78,806. **Proved the same set rather than spot-checked**: 7,320 tickers both ways, 0 missing and 0 extra, the shipped statement extracted verbatim out of the source for the comparison. 169.9s to 11s. **The prescribed sixty-day slice was measured and rejected**, dropping 2,486 of 7,320 delisted names and no faster. **Both call paths are fixed by the one change**, `RangePoolAsync` calling `BootstrapPoolAsync`. What stays open is the same shape in C01, C07, C08 and C10, named in the narrative and not touched | Closed. C01's is the one that matters next |
 | 23 | **What broke the pooled connector at 29,500 tickers is not established.** The 3.6 sweep failed at a `TimeoutException` inside `AuthenticateSASL`, which only runs on a physical open, and pooling was then measured working: **7 opens over 402 tickers at a worker count of 8**, off `pg_stat_database.sessions`. So the open was the pool replacing a connector that had broken, and what broke it is the part with no evidence behind it. Two candidates and neither is confirmed: a `count(*)` over 59 million rows run against the sweep by this session, which the client abandoned after five minutes without stopping the server-side scan, and the sweep's own load at eight concurrent COPY streams with `Command Timeout=300`. **The exposure is now bounded rather than closed** — the open retries twice and a failure costs one chunk instead of a sweep — so this is a question about the database rather than a blocker. What would answer it is the retry count in the run log across a full sweep: regularly non-zero means the pool is being broken repeatedly and the cause is worth chasing; zero or one means it was the one-off it looks like | The 3.6 re-run's run-log line, which reports the count. No extra measurement is needed |
 | 22 | ~~**A test fixture's halted range row would be resumed from by the first real sweep.** `run_log` id 1311 on the developer database is `PriceIngestor`, `halted`, `run_date` 2021-01-08, `reached 2021-01-08 at L07.US`, left by `PriceBackfillTests`, which clears `run_log WHERE stage = 'PriceIngestor'` before each test rather than after and runs the real component under its real name. `BackfillRun` resumes from the newest range row when its status is `halted`, so 3.6 would have started at `L07.US`, skipped every admitted ticker below it, completed, and reported a plausible count over a partial load. **Two fixes and they are not equivalent**: a test that also clears afterwards still leaves a row when it crashes, where scoping a resume point to the range that produced it closes both, since `RunLog.LastRangeRunAsync` matches on stage name and the `range ` prefix and never on the range itself. The second is a question about D-68 and D-93 rather than a patch. **CI is not exposed**, `ci.ps1` dropping its database before every run; this is the developer database, which is also the test database [item 10]. **The row is data and no test can find it**; what found it is the driver printing its resume point before running~~ **Closed on 2026-08-12, human-directed, and both halves were taken.** A resume point now has to record the range being asked for, and a halted row over a different range throws naming both ranges and the row id rather than falling through to a fresh start, because `to` defaults to today and a silent restart on a multi-day sweep burns a day of allowance and never finishes. `PriceBackfillTests` clears afterwards as well, which stops the ordinary case arriving without closing the crash case. Row 1311 is gone and its text and consequence are recorded in the narrative above, since a row deleted without a record teaches nothing twice | Closed |
 | 21 | ~~**`institutional_holding` has no guard against two entries resolving to one key.** `BulkUpsertSql.Upsert` is `INSERT ... SELECT ... ON CONFLICT (ticker, report_date, holder_name) DO UPDATE`, so two entries in one payload sharing a holder name and a report date arrive in one statement and Postgres raises `ON CONFLICT DO UPDATE command cannot affect row a second time`. **This is D-96's failure one table over**, which the earnings capture met by deduplicating in the parse and reporting the collision count to the run log, and it predates D-98 rather than arriving with it. Nothing observed says it happens: the captured block carries no duplicate and 1.9 read none. What D-98 changed is the exposure, C05 having written 250 tickers a night where 3.7's sweep writes about 4,800 in one run, and a single collision there fails the stage mid-sweep after the units before it are spent. The fix is D-96's, three lines and a counter; whether the same tie-break applies to a holder is the part that is authored~~ **Closed on 2026-08-12, human-directed, before 3.7's sweep.** The parse deduplicates: the larger current share count wins, the first in document order wins on a tie, a known count beats an absent one whichever came first, and summing is rejected because adding two entries writes a number the provider did not send. The count is reported per run in both paths beside the holdings row count, and its zero is asserted as well as its non-zero. **The failure was run rather than quoted**: removing the guard reproduces `Npgsql.PostgresException 21000` through the stage, which is what makes the guard known to be load-bearing. **The rule was chosen against zero observations and the count is what audits it**, so a non-zero count from 3.7's sweep is a reason to inspect the rows before trusting it | Closed. Re-read at 3.7's sweep, where the count is the observation the rule was chosen without |

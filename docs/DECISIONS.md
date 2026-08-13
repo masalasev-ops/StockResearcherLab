@@ -1616,6 +1616,44 @@ rotation covers the universe in days. 3.9's scope is form4 alone.
 D-69 is not a blocker: its own text keeps this table usable as a static feature under
 either outcome, so the ingest stands whichever way `inst_ownership_change` goes.
 
+**D-99 A ticker-partitioned backfill resumes by attempt record, not by position.**
+`ACTIVE`
+Supersedes the resume-position reasoning recorded under open item 22.
+
+**A recorded position only survives a throw inside the tracked region.** A command
+timeout, a process kill and an out-of-memory record nothing, the log write being the last
+thing a run does. Three failures in one day produced two full restarts.
+
+**Each restart re-wrote rows that already existed, which is not free work.** In MVCC an
+update is a new tuple, a dead one behind it and an index entry in every index that is not
+a heap-only update: 27 million dead tuples, and an upsert that had crossed its 300-second
+command timeout by the third pass over the same rows. The claim that re-work is safe
+because every write is idempotent is true for correctness and false for cost.
+
+**So a sweep asks what is left rather than remembering where it stopped.** The remaining
+set is the pool minus the tickers carrying an attempt record for that range. A hard kill
+and a clean halt resume identically because neither is consulted.
+
+**The stamp differs between C02 and C03 and the reason is not arbitrary.** For C03 the
+nightly call and the sweep call are the same call, `fundamentals/{t}` returning full
+history either way, so a ticker attempted by the nightly rotation is as complete as one
+attempted by the sweep and skipping it is correct. Its attempt stamps the range end,
+which also keeps `last_attempted_date` honest as the rotation's freshness ordering. For
+C02 the two calls differ in depth: the nightly reload takes a twenty-date window and the
+sweep takes whole history, so the sweep's marker has to be one no nightly run can
+produce, which is the range start.
+
+That is recorded because the two look inconsistent side by side and the next reader will
+try to harmonise them. They are the same rule applied to two endpoints that differ in
+what a nightly call already achieves.
+
+**One column serves two purposes on C03**, the rotation's freshness ordering and the
+attempt marker, and that is why the asymmetry exists at all. **This is the thing to split
+if it ever bites, and it is not split now.** A second column would let the sweep stamp
+what it likes without moving the rotation, at the cost of a schema change and a second
+write for a conflict that has not arisen. What would make it bite is a sweep whose range
+end is a date the rotation should not treat as fresh.
+
 ---
 
 ---

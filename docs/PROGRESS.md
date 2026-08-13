@@ -4771,11 +4771,32 @@ count at 31,925 while the units climbed, those writes being updates.
 
 #### A decision number is owed
 
-This changes how every ticker-partitioned backfill resumes, and it supersedes the
+~~This changes how every ticker-partitioned backfill resumes, and it supersedes the
 reasoning recorded under item 22 in the same week. `DECISIONS.md` ends at D-98 and a
 decision is authored content [`CLAUDE.md` §13], so the citation in `SCHEMA.md`,
 `ARCHITECTURE.html` and `RUNBOOK.md` is the checkpoint and the migration until one
-exists.
+exists.~~ **Authored the same day as D-99**, human-directed, and the citations are
+redirected: `SCHEMA.md` to `[D-99, 0010]` on its own `[D-95, 0008]` precedent,
+`ARCHITECTURE.html`'s two citation spans to `D-99`, `FIXTURES.md`'s four Registered
+entries and one inline clause to `D-99`, and `RUNBOOK.md` gaining `[D-99]` on the
+paragraph that states the rule, having cited nothing at all.
+
+D-99 records two things this narrative had left implicit. **The stamp asymmetry with its
+reason**: C03's nightly call and sweep call are the same call, so a ticker the rotation
+attempted is as complete as one the sweep attempted and its attempt stamps the range end,
+which also keeps `last_attempted_date` honest as the rotation's freshness ordering; C02's
+two calls differ in depth, twenty dates against whole history, so its marker has to be one
+no nightly run can produce. **And the one column serving two purposes on C03**, which is
+why the asymmetry exists at all, recorded as the thing to split if it ever bites and
+deliberately not split.
+
+**The phase 3 plan named a recorded position in three passages, not the one this section
+reported.** 3.4's gate paragraph and its done-when carried it as well as 3.6's done-when;
+all three are clean edits in `prompts/BuildPlans/`, with the prior wordings verbatim in
+`CHANGELOG.md`. `prompts/spent/` is untouched, keeping the plan as issued [D-63]. Two
+further passages were read and left alone: §2's "records where it reached" names a date
+that `run_log.run_date` still carries, and 3.16's "resumable from where an interruption
+left it" is unchanged in meaning.
 
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.

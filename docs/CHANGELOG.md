@@ -1419,3 +1419,83 @@ replacement.
 **No config key moved and no decision number was taken.** A decision is owed for the
 resumption design and `PROGRESS.md` says so; the citation in the two documents is the
 checkpoint until one exists.
+
+---
+
+## 2026-08-13, D-99 authored and the citations redirected
+
+`DECISIONS.md` gains **D-99 A ticker-partitioned backfill resumes by attempt record, not
+by position**, `ACTIVE`, superseding the resume-position reasoning recorded under open
+item 22. Nothing is removed from that register: a superseded entry keeps its number and
+item 22's record keeps its strikes [D-73].
+
+**Four documents cited the checkpoint or the migration where D-99 is now the source, and
+each is a clean edit with the citation at the point of change.** The prior wordings,
+verbatim:
+
+`SCHEMA.md`, in the `price_fetch_attempt` section:
+
+> **What a ticker-partitioned sweep resumes on, and the only thing it resumes on**
+> [0010].
+
+`ARCHITECTURE.html`, §3's C02 Writes cell and §16's store row, both carrying the
+checkpoint in the citation span:
+
+> price_daily, price_fetch_attempt <span class="rmv">3.6</span>
+
+> <b>price_fetch_attempt</b> <span class="tag new">NEW</span> | one per ticker <span
+> class="rmv">3.6</span> | tiny
+
+`FIXTURES.md`, four rows registering against the migration in the Registered column and
+one clause citing it inline:
+
+> | A price ticker that answers 404 | 0010 |
+
+> | A middle ticker that throws inside the parallel body | 0010 |
+
+> | A halt over one range and a sweep asking for another | 0010 |
+
+> | A sweep's own rows, cleared and counted | item 22, 0010 |
+
+> The fixture range starts at 2019-06-03 rather than at `backfill.window_start`, so a
+> fixture attempt can never be read as a real one [0010]
+
+`RUNBOOK.md` cited neither and stated the rule uncited, which is the same defect one step
+further on [`CLAUDE.md` §13]. It gains `[D-99]` on the paragraph that states it rather
+than losing a wording.
+
+**The migration citation is kept beside the decision in `SCHEMA.md` and dropped
+elsewhere**, on that document's own convention: it already reads `[D-95, 0008]` and
+`[D-97, 0009]`, the decision carrying the reasoning and the migration the DDL.
+`ARCHITECTURE.html`'s citation spans carry decision numbers and correction-pass letters
+and have never carried a migration number, and `FIXTURES.md`'s Registered column names
+the thing that caused the fixture to exist.
+
+---
+
+## 2026-08-13, the phase 3 plan stops naming a recorded position
+
+`prompts/BuildPlans/phase-3-backfill.md` is read to know the current plan and takes clean
+edits. **Three passages named a recorded position, not one.** `prompts/spent/` is
+untouched: it keeps the plan as issued.
+
+3.4's gate paragraph:
+
+> A clean halt records the position reached in the run log and exits with a status an
+> operator can see, so tomorrow's run resumes rather than restarts.
+
+3.4's done-when:
+
+> a seeded allowance below the next unit's weight halts the sweep with its position
+> recorded and no rows lost
+
+3.6's done-when:
+
+> a run halted by the gate resumes from its recorded position and reaches the same store
+> as an uninterrupted one.
+
+**One further passage was read and left alone.** §2's seven-days paragraph says the gate
+"halts cleanly at the wall, records where it reached, and resumes on D-68's per-grain
+idempotence". That names a date rather than a position and `run_log.run_date` still
+carries it, so it is true as written. 3.16's "resumable from where an interruption left
+it" is likewise unchanged in meaning.

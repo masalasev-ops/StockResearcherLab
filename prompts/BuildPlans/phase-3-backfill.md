@@ -429,15 +429,16 @@ yet.
 rather than written out five times, which is the duplication D-76, D-77 and D-83 each
 removed. Before each unit of work a sweep reads the remaining allowance from `/api/user`,
 which costs nothing, and halts cleanly when the projected weight of the next unit exceeds
-what is left above `backfill.unit_reserve`. A clean halt records the position reached in
+what is left above `backfill.unit_reserve`. A clean halt records the date it reached in
 the run log and exits with a status an operator can see, so tomorrow's run resumes rather
-than restarts. Resumption rests on D-68's per-grain idempotence rather than on a
-transaction, which is what D-68 chose for this phase by name.
+than restarts. What a ticker-partitioned sweep resumes over is its own attempt record
+rather than a position [D-99]. Resumption rests on D-68's per-grain idempotence rather
+than on a transaction, which is what D-68 chose for this phase by name.
 
 *Done when:* the registry is unchanged and both conformance tests pass; a stage
 implementing both interfaces resolves config per date inside a range; an undeclared table
 still throws before a connection opens; a seeded allowance below the next unit's weight
-halts the sweep with its position recorded and no rows lost; a `402` or a `429` reaching
+halts the sweep with everything written kept and no rows lost; a `402` or a `429` reaching
 the paging client fails the stage rather than being recorded as a D-71 shortfall, asserted
 as a test because those two are one absorbed observation apart.
 
@@ -456,8 +457,8 @@ reserve held back, and the gate is what makes that a measurement rather than a h
 *Done when:* a spot-checked ticker has bars across the whole window; a name delisted inside
 the window has bars to its last session and none after; `SPY.US` is present, which C08's
 benchmark reads from `price_daily`; re-loading one ticker writes identical rows; a run
-halted by the gate resumes from its recorded position and reaches the same store as an
-uninterrupted one.
+halted by the gate resumes over the tickers carrying no attempt for that range and
+reaches the same store as an uninterrupted one [D-99].
 
 **3.7 C03, one full pool sweep.** Rotation cap lifted for the sweep. Closes two obligations
 at once: `fcf_yield` at 464 of 5,713 rows and `capital_expenditures` running contiguously

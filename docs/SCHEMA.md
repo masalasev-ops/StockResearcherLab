@@ -105,7 +105,7 @@ Grain: one row per ticker. **Writer: PriceIngestor.**
 `ticker`, `last_attempted_date`, `last_yield_date`, `rows_last_attempt`.
 
 **What a ticker-partitioned sweep resumes on, and the only thing it resumes on**
-[0010]. The price sweep resumed from a ticker parsed back out of the `run_log` line.
+[D-99, 0010]. The price sweep resumed from a ticker parsed back out of the `run_log` line.
 Three real failures in one day produced that position once: the first fault arrived in
 the allowance gate's own call rather than inside the dispatch loop and recorded nothing,
 a test fixture's cleanup deleted the row carrying the second, and the third recorded one

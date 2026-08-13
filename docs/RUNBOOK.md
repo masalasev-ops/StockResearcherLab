@@ -108,11 +108,11 @@ unit will not fit above `backfill.unit_reserve`, keeps everything written, and e
 Run the same command again after the provider's day rolls over. Exit 0 is a completed
 range and exit 1 is a failure.
 
-**Every exit resumes the same way, including a killed process.** What a sweep has done
-is in its attempt record, written as it goes, so a clean halt, a command timeout and a
-`kill -9` are the same thing to the next run: it dispatches the pool members carrying no
-attempt row for this range start. A re-invocation of a finished sweep fetches nothing. A
-failure costs at most the chunk in flight, whose rows were never recorded.
+**Every exit resumes the same way, including a killed process** [D-99]. What a sweep has
+done is in its attempt record, written as it goes, so a clean halt, a command timeout and
+a `kill -9` are the same thing to the next run: it dispatches the pool members carrying
+no attempt row for this range start. A re-invocation of a finished sweep fetches nothing.
+A failure costs at most the chunk in flight, whose rows were never recorded.
 
 **The provider's day rolls lazily, on the first billable call.** After the UTC boundary
 the counter still reads the previous date until something spends a unit, and the gate

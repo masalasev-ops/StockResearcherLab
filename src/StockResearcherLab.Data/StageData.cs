@@ -69,6 +69,14 @@ public sealed class StageData : IStageData
     /// `NpgsqlConnector.ConnectAsync`. A predicate naming only `NpgsqlException` would
     /// have looked correct, matched the failure that prompted it, and missed the
     /// commoner one.
+    ///
+    /// **A socket error decides on its code and overrides both shapes** [D-100]. The
+    /// predicate above named exception types, and a connect-phase `SocketException` is
+    /// neither of them, so the commonest transient database fault was not retried at
+    /// all while a wrapped `HostNotFound` was retried three times for nothing.
+    /// <see cref="TransientFault"/> names the retryable codes once for this layer and
+    /// for the provider client, because two separately reasoned rules for one
+    /// distinction drift.
     /// </summary>
     private async Task<NpgsqlConnection> OpenAsync(CancellationToken ct)
     {
@@ -82,9 +90,7 @@ public sealed class StageData : IStageData
                 return conn;
             }
             catch (Exception ex) when (
-                (ex is NpgsqlException and not PostgresException || ex is TimeoutException)
-                && attempt < OpenAttempts
-                && !ct.IsCancellationRequested)
+                ShouldRetryOpen(ex) && attempt < OpenAttempts && !ct.IsCancellationRequested)
             {
                 await conn.DisposeAsync().ConfigureAwait(false);
 
@@ -99,6 +105,27 @@ public sealed class StageData : IStageData
             }
         }
     }
+
+    /// <summary>
+    /// Whether a failed handshake is worth attempting again [D-100].
+    ///
+    /// **A socket error is decided on its code and nothing else looks at it.** That is
+    /// what stops `HostNotFound`, which is a connection string that is wrong, from
+    /// spending three attempts and the backoff on an answer that cannot change, and it
+    /// stops a bare `ConnectionReset` from failing a sweep on the first occurrence.
+    ///
+    /// **The type test only runs where there is no socket error to read.** Npgsql
+    /// raises timeouts of its own during the handshake with nothing underneath them,
+    /// and those stay retryable on the reasoning [item 23] established: a handshake
+    /// that did not complete wrote nothing and read nothing.
+    /// </summary>
+    private static bool ShouldRetryOpen(Exception ex)
+        => TransientFault.ClassifySocket(ex) switch
+        {
+            SocketVerdict.Transient => true,
+            SocketVerdict.Permanent => false,
+            _ => ex is NpgsqlException and not PostgresException || ex is TimeoutException,
+        };
 
     public async Task<IReadOnlyList<IReadOnlyList<object?>>> ReadAsync(
         string table, string sql, CancellationToken ct = default)

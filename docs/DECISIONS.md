@@ -1654,6 +1654,55 @@ what it likes without moving the rotation, at the cost of a schema change and a 
 write for a conflict that has not arisen. What would make it bite is a sweep whose range
 end is a date the rotation should not treat as fresh.
 
+**D-100 A transient fault is decided by its error code, and one rule decides it at
+every layer.** `ACTIVE`
+Closes open items 28 and 29, which are one question asked twice.
+
+**The distinction is in `SocketErrorCode`, not in the exception type.** The database
+layer retried `NpgsqlException and not PostgresException` or `TimeoutException`, which
+named types. A connect-phase `SocketException` is neither, so the commonest transient
+database fault was not retried at all, while a `HostNotFound` wrapped in an
+`NpgsqlException` was retried three times for an answer that cannot change. One fault
+reaches a caller in three shapes depending on where in the handshake it lands, and a
+predicate reading the outermost type treats one fault as three.
+
+**Retryable: `TimedOut`, `ConnectionReset`, `ConnectionRefused`, `HostUnreachable`,
+`NetworkUnreachable`, `TryAgain`.** Everything else fails on the first attempt,
+`HostNotFound` included. `HostNotFound` is a connection string that is wrong, not a
+network that is briefly unwell, and retrying it spends the attempts and the backoff on
+something that will never succeed while the run learns at the third failure what it knew
+at the first. `TryAgain` is the resolver saying it could not answer this time rather than
+that there is nothing to answer, which is the one DNS failure that is transient.
+
+**The socket error decides wherever it sits in the exception chain**, because that is
+what makes the rule independent of which layer wrapped it.
+
+**The provider client takes the same rule with its own vocabulary.** `EodhdClient`
+retried nothing, and one reset socket in roughly 50,000 requests ended a 128-minute sweep
+on the free gate read. Its transient set is those socket codes plus `429`, `502`, `503`
+and `504`. **`402` stays fatal**: an exhausted allowance persists for the provider's day,
+so a retry spends the wall clock against a wall that will not move and the stage has to
+fail rather than complete over a partial load. **`404` stays "not carried"**, being a
+fact about the ticker rather than a fault, and the callers that tolerate it record zero
+rows.
+
+**One decision rather than two, and that is the point rather than tidiness.** Two
+separately reasoned rules for one distinction drift, and each drifts toward whichever
+failure its own layer saw last. The retryable codes are named in one place in code as
+well, `TransientFault`, cited at both call sites.
+
+**A retry at the client can cost a unit and that is accepted.** A request that reached
+the provider and then lost its connection may already have been billed, so two units can
+be spent for one series. Against that, the fault it exists for cost a sweep and about
+13,500 tickers' work. The allowance gate's reserve absorbs the difference many times
+over.
+
+**What is not retried anywhere: a statement on an open connection.** That reasoning is
+unchanged and is `RUNBOOK.md`'s. A failed write is a lost write for data already fetched
+and paid for, and tolerating one reports a completed sweep over a partial load. Only the
+establishment of a connection and the issuing of a request retry, both being asks that
+left nothing behind when they failed.
+
 ---
 
 ---

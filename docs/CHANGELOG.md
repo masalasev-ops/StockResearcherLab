@@ -1584,3 +1584,24 @@ and appeared in no figure.
 
 It is added beside `config_rows`, naming its readers, since a store whose reader is
 unnamed is the drift this document keeps producing. Nothing was removed.
+
+---
+
+## 2026-08-13, section 2's backfill ticker count is repriced from a measurement
+
+3.6's load makes D a query rather than an estimate: admitted delisted names carrying at
+least one bar at or after `backfill.window_start`. Measured 2026-08-13, **16,862** of
+32,611 admitted delisted names. The prior wording put the whole distinct-ticker count
+across the backfill at roughly 2,500, which implied about 500 delisted additions on top
+of the live universe, and the candidate pool is 34 times that. The figure it is replaced
+with is a bound rather than a count, because what clears section 2's criteria on any
+given date is C01's answer and is not measured.
+
+The prior wording, verbatim:
+
+> Around 2,000 names live, and roughly 2,500 distinct tickers across the five-year
+> backfill once delisted names are included.
+
+"Around 2,000 names live" is unchanged and is deliberately left alone. Phase 1 measured
+2,840 and that gap is an open authored question recorded in `PROGRESS.md`, so correcting
+it here would answer it in passing.

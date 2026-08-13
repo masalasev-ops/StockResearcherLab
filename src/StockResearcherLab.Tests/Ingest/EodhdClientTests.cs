@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using StockResearcherLab.Core;
@@ -282,6 +283,156 @@ public sealed class EodhdClientTests
         public DateOnly Today => DateOnly.FromDateTime(_now.UtcDateTime);
 
         public void Advance(TimeSpan by) => _now = _now.Add(by);
+    }
+
+    // ------------------------------------ the transport retry [D-100] ---
+    //
+    // Run 1515 lost a 128-minute sweep and about 13,500 tickers' work to one reset
+    // socket in roughly 50,000 requests, on the free gate read. This client asked once
+    // and threw on anything. What is retried is decided on the socket error code and on
+    // four statuses, and everything else still fails on the first attempt.
+
+    /// <summary>
+    /// A reset connection is the fault that ended run 1515. The second attempt is
+    /// allowed to be the one that works.
+    /// </summary>
+    [Fact]
+    public async Task AResetConnectionIsRetriedAndTheAttemptAfterItSucceeds()
+    {
+        var handler = new TransportFaultHandler(SocketError.ConnectionReset, failFor: 1);
+        var client = Client(handler);
+
+        using var doc = await client.GetAsync("eod/AAA.US", [], TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Equal(JsonValueKind.Array, doc.RootElement.ValueKind);
+        Assert.Equal(2, handler.Calls);
+        Assert.Equal(1, client.TransportRetries);
+    }
+
+    /// <summary>
+    /// **`HostNotFound` is a configuration error wearing a transport error's type.** It
+    /// answers the same way three times, so the attempts and the backoff buy nothing.
+    /// This is the case that makes the rule a code test rather than a type test.
+    /// </summary>
+    [Fact]
+    public async Task AHostThatDoesNotResolveIsNotRetried()
+    {
+        var handler = new TransportFaultHandler(SocketError.HostNotFound, failFor: int.MaxValue);
+        var client = Client(handler);
+
+        await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.GetAsync("eod/AAA.US", [], TestContext.Current.CancellationToken))
+            .ConfigureAwait(true);
+
+        Assert.Equal(1, handler.Calls);
+        Assert.Equal(0, client.TransportRetries);
+    }
+
+    /// <summary>
+    /// 429 is the provider asking for a moment, which the rate limiter is supposed to
+    /// prevent and does not guarantee. It is one of four statuses worth asking again on.
+    /// </summary>
+    [Fact]
+    public async Task AThrottledResponseIsRetried()
+    {
+        var handler = new StatusHandler(HttpStatusCode.TooManyRequests, failFor: 1);
+        var client = Client(handler);
+
+        using var doc = await client.GetAsync("eod/AAA.US", [], TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Equal(JsonValueKind.Array, doc.RootElement.ValueKind);
+        Assert.Equal(2, handler.Calls);
+        Assert.Equal(1, client.TransportRetries);
+    }
+
+    /// <summary>
+    /// **402 stays fatal on the first attempt.** An exhausted allowance persists for the
+    /// provider's day, so a retry spends the wall clock against a wall that will not
+    /// move, and the stage has to fail rather than complete over a partial load [3.4].
+    /// </summary>
+    [Fact]
+    public async Task AnExhaustedAllowanceIsNotRetried()
+    {
+        var handler = new StatusHandler(HttpStatusCode.PaymentRequired, failFor: int.MaxValue);
+        var client = Client(handler);
+
+        var thrown = await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.GetAsync("eod/AAA.US", [], TestContext.Current.CancellationToken))
+            .ConfigureAwait(true);
+
+        Assert.Equal(HttpStatusCode.PaymentRequired, thrown.StatusCode);
+        Assert.Equal(1, handler.Calls);
+        Assert.Equal(0, client.TransportRetries);
+    }
+
+    /// <summary>
+    /// **404 stays a fact about the ticker.** The callers that tolerate it catch it and
+    /// record zero rows, which `PriceBackfillTests` asserts end to end; asking again
+    /// would put the same true question twice.
+    /// </summary>
+    [Fact]
+    public async Task ATickerTheProviderDoesNotCarryIsNotRetried()
+    {
+        var handler = new StatusHandler(HttpStatusCode.NotFound, failFor: int.MaxValue);
+        var client = Client(handler);
+
+        var thrown = await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.GetAsync("eod/AAA.US", [], TestContext.Current.CancellationToken))
+            .ConfigureAwait(true);
+
+        Assert.Equal(HttpStatusCode.NotFound, thrown.StatusCode);
+        Assert.Equal(1, handler.Calls);
+        Assert.Equal(0, client.TransportRetries);
+    }
+
+    /// <summary>
+    /// A transport fault of the given socket code for the first <paramref name="failFor"/>
+    /// calls, then an empty array. Shaped the way <see cref="HttpClient"/> surfaces one,
+    /// which is an <see cref="HttpRequestException"/> with the socket error inside it and
+    /// no status code.
+    /// </summary>
+    private sealed class TransportFaultHandler(SocketError code, int failFor) : HttpMessageHandler
+    {
+        public int Calls { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Calls++;
+
+            if (Calls <= failFor)
+            {
+                throw new HttpRequestException(
+                    $"stub transport fault {code}", new SocketException((int) code));
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("[]", Encoding.UTF8, "application/json"),
+            });
+        }
+    }
+
+    /// <summary>The given status for the first <paramref name="failFor"/> calls, then an empty array.</summary>
+    private sealed class StatusHandler(HttpStatusCode status, int failFor) : HttpMessageHandler
+    {
+        public int Calls { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Calls++;
+
+            return Task.FromResult(Calls <= failFor
+                ? new HttpResponseMessage(status)
+                {
+                    Content = new StringContent("{\"message\":\"stub\"}", Encoding.UTF8, "application/json"),
+                }
+                : new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("[]", Encoding.UTF8, "application/json"),
+                });
+        }
     }
 
     private sealed class NeverCalledHandler : HttpMessageHandler

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using StockResearcherLab.Core;
 
@@ -166,7 +167,85 @@ public sealed class EodhdClient
         return await SendAsync(relative, path, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Attempts at one request, this one included. Three, which is two retries. The
+    /// same shape as the database layer's connection retry, because it is the same
+    /// rule [D-100].
+    /// </summary>
+    private const int SendAttempts = 3;
+
+    private static readonly TimeSpan[] SendBackoff =
+        [TimeSpan.FromMilliseconds(250), TimeSpan.FromSeconds(1)];
+
+    /// <summary>
+    /// The four statuses worth asking about again, this layer's own vocabulary on top
+    /// of D-100's socket codes.
+    ///
+    /// **402 is deliberately absent.** An exhausted allowance is not transient: it
+    /// persists for the provider's day, so a retry spends the wall clock against a wall
+    /// that will not move and the stage has to fail [3.4].
+    ///
+    /// **404 is absent for a different reason.** It is a fact about the ticker rather
+    /// than a fault, and the callers that tolerate it catch it and record zero rows
+    /// [3.6]. Retrying it would ask the same true question twice.
+    /// </summary>
+    private static readonly HttpStatusCode[] RetryableStatuses =
+    [
+        HttpStatusCode.TooManyRequests,
+        HttpStatusCode.BadGateway,
+        HttpStatusCode.ServiceUnavailable,
+        HttpStatusCode.GatewayTimeout,
+    ];
+
+    private int _transportRetries;
+
+    /// <summary>
+    /// How many times a request had to be asked again across this client's life, over
+    /// both a transient socket error and a retryable status.
+    ///
+    /// Reported for the same reason the database layer's is: a count that fires
+    /// constantly is a provider or a network problem still present, and one nobody
+    /// reports is a symptom nobody sees.
+    /// </summary>
+    public int TransportRetries => Volatile.Read(ref _transportRetries);
+
+    /// <summary>
+    /// One request, retried on a transient transport fault and on four statuses
+    /// [D-100].
+    ///
+    /// **The rate limiter is re-entered on every attempt**, so a retry is paced like any
+    /// other request rather than jumping the queue, and the backoff is not the only
+    /// spacing between the two.
+    ///
+    /// **A retry can cost a unit and that is accepted deliberately.** A request that
+    /// reached the provider and then lost its connection may already have been billed,
+    /// so two units can be spent for one series. Against that, run 1515 lost a
+    /// 128-minute sweep and about 13,500 tickers' work to one reset socket in roughly
+    /// 50,000 requests. Two units is the cheaper failure by three orders of magnitude,
+    /// and the allowance gate's reserve absorbs it.
+    /// </summary>
     private async Task<JsonDocument> SendAsync(string relative, string pathForErrors, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await SendOnceAsync(relative, pathForErrors, ct).ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex) when (
+                attempt < SendAttempts && !ct.IsCancellationRequested && (
+                    TransientFault.ClassifySocket(ex) == SocketVerdict.Transient
+                    || (ex.StatusCode is { } status && Array.IndexOf(RetryableStatuses, status) >= 0)))
+            {
+                Interlocked.Increment(ref _transportRetries);
+
+                await Task.Delay(SendBackoff[attempt - 1], ct).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async Task<JsonDocument> SendOnceAsync(
+        string relative, string pathForErrors, CancellationToken ct)
     {
         await _limiter.WaitAsync(ct).ConfigureAwait(false);
 

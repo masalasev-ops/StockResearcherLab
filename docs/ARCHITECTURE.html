@@ -37,6 +37,19 @@ section{margin-top:58px;border-top:1px solid var(--rule);padding-top:26px}
 .row{display:flex;gap:14px;align-items:stretch;justify-content:center;flex-wrap:wrap}
 .arrow{color:var(--ink3);font-size:15px;line-height:1;padding:7px 0;font-family:var(--mono)}
 .harrow{display:flex;align-items:center;color:var(--ink3);font-family:var(--mono);padding:0 4px}
+.group{display:flex;flex-direction:column;align-items:center;
+  border:1px solid var(--rule);border-radius:9px;background:var(--surface-2);
+  padding:28px 16px 16px;position:relative;width:100%;box-sizing:border-box}
+.glabel{position:absolute;top:9px;left:14px;font-family:var(--mono);font-size:9.5px;
+  font-weight:600;letter-spacing:.1em;color:var(--ink3);text-transform:uppercase}
+.group .arrow{padding:9px 0}
+.g-ingest{border-left:3px solid var(--ingest)}
+.g-compute{border-left:3px solid var(--compute)}
+.g-select{border-left:3px solid var(--select)}
+.g-decide{border-left:3px solid var(--decide)}
+.g-execute{border-left:3px solid var(--execute)}
+.g-hot{border-left:3px solid var(--hot);background:#FDF7F6}
+.flow{width:100%}
 .node{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--ink3);
   border-radius:6px;padding:9px 13px;min-width:190px;max-width:300px;text-align:left}
 .node .id{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.08em;color:var(--ink3)}
@@ -230,43 +243,56 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 <div class="board">
 <p class="cap">Figure 2 — evening pipeline, ingest through order</p>
 <div class="flow">
-  <div class="row">
-    <div class="node n-ingest"><span class="id">C02 · 17:30</span><div class="nm">PriceIngestor</div><div class="rl">Bulk EOD, whole US market</div></div>
-    <div class="node n-ingest"><span class="id">C03 C05 C06 · 17:45</span><div class="nm">Fundamentals · Flow · Events</div><div class="rl">Rotation plus event triggers</div></div>
-    <div class="node n-ingest"><span class="id">C04 · 18:00</span><div class="nm">SentimentIngestor</div><div class="rl">Whole universe, no pre-selection</div></div>
+  <div class="group g-ingest"><span class="glabel">Ingest · 17:30–18:00</span>
+    <div class="row">
+      <div class="node n-ingest"><span class="id">C02 · 17:30</span><div class="nm">PriceIngestor</div><div class="rl">Bulk EOD, whole US market</div></div>
+      <div class="node n-ingest"><span class="id">C03 C05 C06 · 17:45</span><div class="nm">Fundamentals · Flow · Events</div><div class="rl">Rotation plus event triggers</div></div>
+      <div class="node n-ingest"><span class="id">C04 · 18:00</span><div class="nm">SentimentIngestor</div><div class="rl">Whole universe, no pre-selection</div></div>
+    </div>
   </div>
   <div class="arrow">↓</div>
-  <div class="node n-hot" style="max-width:460px"><span class="id">C07 · 17:40</span><div class="nm">FreshnessGuard</div><div class="rl"><span class="rmv">D-65</span> Three checks, and they are three different things. <b>Recency</b>: the newest date in <code>price_daily</code> is not older than the most recent completed trading session. <b>Completeness</b>: the row count is at or above the abort floor. <b>Settledness</b>: the date's row count is at or above a configured fraction of the median count of the dates before it, computed from <code>price_daily</code> alone. Ingest loads the newest date passing all three. Recency or completeness failing aborts the run and produces no orders; settledness failing walks back to the newest date that passes, because the date is incomplete rather than wrong.</div></div>
-  <div class="arrow">↓</div>
-  <div class="row">
-    <div class="node n-compute"><span class="id">C08</span><div class="nm">IndicatorEngine</div><div class="rl"><span class="rmv">D-83</span> The technical columns, which are those with a named consumer. <code>SCHEMA.md</code>'s <code>indicator_daily</code> section carries the list.</div></div>
-    <div class="node n-compute"><span class="id">C09</span><div class="nm">ValuationEngine</div><div class="rl">Ratios against sector and own history</div></div>
-    <div class="node n-compute"><span class="id">C10</span><div class="nm">MarketContextEngine</div><div class="rl">Breadth, VIX, regime, sector strength</div></div>
-    <div class="node n-compute"><span class="id">C34</span><div class="nm">FlowEngine</div><div class="rl">Two source tables at their own grain become three daily metrics</div></div>
+  <div class="group g-hot"><span class="glabel">Guard · 17:40</span>
+    <div class="node n-hot" style="max-width:460px"><span class="id">C07 · 17:40</span><div class="nm">FreshnessGuard</div><div class="rl"><span class="rmv">D-65</span> Three checks, and they are three different things. <b>Recency</b>: the newest date in <code>price_daily</code> is not older than the most recent completed trading session. <b>Completeness</b>: the row count is at or above the abort floor. <b>Settledness</b>: the date's row count is at or above a configured fraction of the median count of the dates before it, computed from <code>price_daily</code> alone. Ingest loads the newest date passing all three. Recency or completeness failing aborts the run and produces no orders; settledness failing walks back to the newest date that passes, because the date is incomplete rather than wrong.</div></div>
   </div>
   <div class="arrow">↓</div>
-  <div class="node n-compute" style="max-width:460px"><span class="id">C11 · 18:15</span><div class="nm">PercentileEngine</div><div class="rl">Every metric becomes a percentile inside its size and sector cell. Each screen then draws whichever columns it needs.</div></div>
-  <div class="arrow">↓</div>
-  <div class="row">
-    <div class="node n-select"><span class="id">C12 · 18:20</span><div class="nm">GateEngine</div><div class="rl">Earnings blackout, gap, halt, held, cooldown</div></div>
-    <div class="node n-select"><span class="id">C13 · 18:25</span><div class="nm">ScreenEngine</div><div class="rl">Every registered screen, each with its own ranking and its own floor <span class="rmv">D-84</span></div></div>
+  <div class="group g-compute"><span class="glabel">Compute · 18:05–18:15</span>
+    <div class="row">
+      <div class="node n-compute"><span class="id">C08 · 18:05</span><div class="nm">IndicatorEngine</div><div class="rl"><span class="rmv">D-83</span> The technical columns, which are those with a named consumer. <code>SCHEMA.md</code>'s <code>indicator_daily</code> section carries the list.</div></div>
+      <div class="node n-compute"><span class="id">C09 · 18:05</span><div class="nm">ValuationEngine</div><div class="rl">Ratios against sector and own history</div></div>
+      <div class="node n-compute"><span class="id">C10 · 18:05</span><div class="nm">MarketContextEngine</div><div class="rl">Breadth, VIX, regime, sector strength. Reads <code>indicator_daily</code> for breadth, so it runs after C08; that is the one ordering constraint inside this group and the other four have no dependency on each other.</div></div>
+      <div class="node n-compute"><span class="id">C34 · 18:05</span><div class="nm">FlowEngine</div><div class="rl">Two source tables at their own grain become three daily metrics</div></div>
+      <div class="node n-compute"><span class="id">C35 · 18:05</span><div class="nm">SentimentEngine</div><div class="rl">The article count and the tone become the three metrics the screens actually rank on <span class="rmv">D-78</span></div></div>
+    </div>
+    <div class="arrow">↓</div>
+    <div class="node n-compute" style="max-width:460px"><span class="id">C11 · 18:15</span><div class="nm">PercentileEngine</div><div class="rl">Every metric becomes a percentile inside its size and sector cell. Each screen then draws whichever columns it needs.</div></div>
   </div>
   <div class="arrow">↓</div>
-  <div class="node n-select" style="max-width:460px"><span class="id">C14 · 18:30</span><div class="nm">CandidateAllocator</div><div class="rl">Up to 8 per screen under a 2/3/3 size quota, deduplicated. Typically 26 to 30 names. Writes one attribution row per candidate with scores frozen as they stand tonight.</div></div>
-  <div class="arrow">↓</div>
-  <div class="node n-ingest" style="max-width:460px"><span class="id">C29 · 18:32</span><div class="nm">HeadlineIngestor</div><div class="rl">The one ingest step that runs inside the select layer, because the candidates it fetches for do not exist until the allocator has run.</div></div>
-  <div class="arrow">↓</div>
-  <div class="node n-select" style="max-width:460px"><span class="id">C33 · 18:33 · LOCAL MODEL</span><div class="nm">NewsDigester</div><div class="rl">Each candidate's recent articles condensed to ~150 tokens on the local GPU. Free at the margin, so full article text never reaches Opus. Records which local model produced each digest.</div></div>
-  <div class="arrow">↓</div>
-  <div class="node n-select" style="max-width:460px"><span class="id">C15 · 18:35</span><div class="nm">DossierBuilder</div><div class="rl">Shared prefix of ~4,600 tokens carrying all five rubrics, lessons, calibration and market context, plus one ~800 token block per candidate.</div></div>
-  <div class="arrow">↓</div>
-  <div class="row">
-    <div class="node n-decide"><span class="id">C16 · 18:40</span><div class="nm">ResearcherClient</div><div class="rl">~29 calls, prefix cached after the first</div></div>
-    <div class="harrow">→</div>
-    <div class="node n-decide"><span class="id">C17 · 18:45</span><div class="nm">ProposalValidator</div><div class="rl">Schema, then every figure checked back against the dossier</div></div>
+  <div class="group g-select"><span class="glabel">Select · 18:20–18:35</span>
+    <div class="row">
+      <div class="node n-select"><span class="id">C12 · 18:20</span><div class="nm">GateEngine</div><div class="rl">Earnings blackout, gap, halt, held, cooldown</div></div>
+      <div class="node n-select"><span class="id">C13 · 18:25</span><div class="nm">ScreenEngine</div><div class="rl">Every registered screen, each with its own ranking and its own floor <span class="rmv">D-84</span></div></div>
+    </div>
+    <div class="arrow">↓</div>
+    <div class="node n-select" style="max-width:460px"><span class="id">C14 · 18:30</span><div class="nm">CandidateAllocator</div><div class="rl">Up to 8 per screen under a 2/3/3 size quota, deduplicated. Typically 26 to 30 names. Writes one attribution row per candidate with scores frozen as they stand tonight.</div></div>
+    <div class="arrow">↓</div>
+    <div class="node n-ingest" style="max-width:460px"><span class="id">C29 · 18:32</span><div class="nm">HeadlineIngestor</div><div class="rl">The one ingest step that runs inside the select layer, because the candidates it fetches for do not exist until the allocator has run.</div></div>
+    <div class="arrow">↓</div>
+    <div class="node n-select" style="max-width:460px"><span class="id">C33 · 18:33 · LOCAL MODEL</span><div class="nm">NewsDigester</div><div class="rl">Each candidate's recent articles condensed to ~150 tokens on the local GPU. Free at the margin, so full article text never reaches Opus. Records which local model produced each digest.</div></div>
+    <div class="arrow">↓</div>
+    <div class="node n-select" style="max-width:460px"><span class="id">C15 · 18:35</span><div class="nm">DossierBuilder</div><div class="rl">Shared prefix of ~4,600 tokens carrying all five rubrics, lessons, calibration and market context, plus one ~800 token block per candidate.</div></div>
   </div>
   <div class="arrow">↓</div>
-  <div class="node n-execute" style="max-width:460px"><span class="id">C18 C25 · 18:50</span><div class="nm">RiskGate and PortfolioRunner</div><div class="rl">Arbitration in the two research lanes, then sizing and caps applied identically to all four. Entry count matched.</div></div>
+  <div class="group g-decide"><span class="glabel">Decide · 18:40–18:45</span>
+    <div class="row">
+      <div class="node n-decide"><span class="id">C16 · 18:40</span><div class="nm">ResearcherClient</div><div class="rl">~29 calls, prefix cached after the first</div></div>
+      <div class="harrow">→</div>
+      <div class="node n-decide"><span class="id">C17 · 18:45</span><div class="nm">ProposalValidator</div><div class="rl">Schema, then every figure checked back against the dossier</div></div>
+    </div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="group g-execute"><span class="glabel">Execute · 18:50</span>
+    <div class="node n-execute" style="max-width:460px"><span class="id">C18 C25 · 18:50</span><div class="nm">RiskGate and PortfolioRunner</div><div class="rl">Arbitration in the two research lanes, then sizing and caps applied identically to all four. Entry count matched.</div></div>
+  </div>
   <div class="arrow">↓</div>
   <div class="row">
     <div class="store"><b>order</b>queued for tomorrow's open</div>
@@ -292,8 +318,9 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
     <div class="node n-select" style="min-width:176px;max-width:186px"><span class="id">S4</span><div class="nm">Flow</div><div class="rl">Insider net buying, distinct buyers <span class="rmv">D-58</span>, institutional ownership change</div></div>
     <div class="node n-select" style="min-width:176px;max-width:186px"><span class="id">S5</span><div class="nm">Mean reversion</div><div class="rl">Quality names beaten down, now with a stabilisation gate</div></div>
   </div>
+  <div class="count">the five live screens today · a screen is live because its config row says so <span class="rmv">D-84</span></div>
   <div class="arrow">↓</div>
-  <div class="node n-select" style="max-width:470px"><span class="id">FLOOR, APPLIED PER SCREEN</span><div class="nm">98th percentile of that screen's own trailing 250-day score distribution</div><div class="rl">Self-referential rather than fixed, so it adapts to dispersion instead of going dark in a quiet market. A screen returns nothing when nothing clears it, which is expected rather than an error.</div></div>
+  <div class="node n-select" style="max-width:470px"><span class="id">FLOOR, APPLIED PER SCREEN</span><div class="nm">98th percentile of that screen's own trailing 250-day score distribution</div><div class="rl">Self-referential rather than fixed, so it adapts to dispersion instead of going dark in a quiet market. A screen returns nothing when nothing clears it, which is expected rather than an error. <b>Every registered screen is scored here and maintains its own distribution, shadows included; only the live ones are allocated slots</b> <span class="rmv">D-84, D-85</span>.</div></div>
   <div class="arrow">↓</div>
   <div class="store"><b>screen_score_daily</b>ticker × screen × day</div>
 </div>
@@ -332,7 +359,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 <div class="board">
 <p class="cap">Figure 4 — slot allocation, quota and deduplication</p>
 <div class="flow">
-  <div class="store" style="min-width:340px"><b>screen_score_daily</b>five ranked lists, floors already applied</div>
+  <div class="store" style="min-width:340px"><b>screen_score_daily</b>one ranked list per registered screen, floors already applied <span class="rmv">D-84</span></div>
   <div class="arrow">↓</div>
   <div class="node n-select" style="max-width:460px"><span class="id">CEILING</span><div class="nm">8 slots per screen</div><div class="rl">A ceiling, never a target. If only three names clear a screen's floor, that screen returns three.</div></div>
   <div class="arrow">↓</div>
@@ -560,7 +587,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
     </div>
     <div class="lane" style="min-width:210px">
       <div class="lanehd">SCREENS</div>
-      <div class="step"><b>Fixed rotation</b><span>Each screen's top-ranked name, rotating so all five get equal turns</span></div>
+      <div class="step"><b>Fixed rotation</b><span>Each live screen's top-ranked name, rotating so they take equal turns. Shadows are excluded, a control rotating over screens that surface nothing being a corrupted control rather than a lost one <span class="rmv">D-39, D-85</span></span></div>
       <div class="count">↓ order already fixed</div>
       <div class="step" style="border-style:dashed"><span class="muted">Nothing to arbitrate</span></div>
       <div class="count">↓ 2 chosen</div>
@@ -707,6 +734,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
   <div class="arrow">↓</div>
   <div class="row">
     <div class="store"><b>config_rows</b>→ C13, C14</div>
+    <div class="store"><b>screen_evaluation</b>→ C22 itself next month, for the consecutive-fail count the nomination rule reads rather than recomputes, and U4 <span class="rmv">D-87</span></div>
     <div class="store"><b>researcher_memory</b>→ C15</div>
     <div class="store"><b>calibration</b>→ C15</div>
   </div>

@@ -1499,3 +1499,88 @@ untouched: it keeps the plan as issued.
 idempotence". That names a date rather than a position and `run_log.run_date` still
 carries it, so it is true as written. 3.16's "resumable from where an interruption left
 it" is likewise unchanged in meaning.
+
+---
+
+## 2026-08-13, Figure 2 gains a component, times and layer boxes
+
+Human-directed correction to `ARCHITECTURE.html` [`CLAUDE.md` §13]. Clean edits under
+D-73. No decision changes; every figure below is brought into line with one already
+authored.
+
+**C35 SentimentEngine was in Figure 1's layer 2 list and in the §3 catalogue and not in
+Figure 2**, so the figure showed four compute components where the system has five. It
+is added after C34. Nothing was removed to make room.
+
+**The four compute nodes were the only ones in the figure carrying no clock time**, which
+is what let the row read as two rows when it wrapped. All five now carry `id · time`. The
+prior wordings, verbatim:
+
+> <div class="node n-compute"><span class="id">C08</span>
+
+> <div class="node n-compute"><span class="id">C09</span>
+
+> <div class="node n-compute"><span class="id">C10</span>
+
+> <div class="node n-compute"><span class="id">C34</span>
+
+**C10's ordering constraint was invisible.** Its §3 Reads cell names `indicator_daily`
+for breadth, so it must follow C08, while the row presented the five as
+interchangeable. Its prior `rl`, verbatim:
+
+> Breadth, VIX, regime, sector strength
+
+**Each layer is now a labelled `.group` box** rather than a bare row, the row having
+been the figure's only device for grouping and a wrapped row reading as a sequence
+step. Six boxes in flow order, labels matching Figure 1's layer names: ingest, the
+guard alone because it is the abort point, compute, select, decide, execute. The
+trailing `order` store and C31 stay outside. The left border colour ties each box to
+its layer in Figure 1, so the two figures use one visual language.
+
+The stylesheet gains `.group`, `.glabel`, `.group .arrow`, the six `.g-*` colour
+variants and `width:100%` on `.flow`. The container is a centred flex column rather
+than a plain block, without which the arrow divs stretch to full width and their glyph
+lands at the left edge.
+
+---
+
+## 2026-08-13, three figures stop saying five screens where the live set governs
+
+D-84 gave a screen's config row a state, so a screen can be registered and scored
+without being allocated slots, and D-85 made the allocator read the live ones. `shadow`
+appeared fourteen times in `ARCHITECTURE.html` and in no figure. This is D-83's family:
+a figure stating a count where a rule governs the set.
+
+**Figure 3** is the figure a reader uses to learn what a screen is, so it is where the
+distinction belongs. The five stay named, being the live set today, and the figure now
+says what makes them the live set: a line under the row, and a clause on the floor node
+stating that every registered screen is scored there and maintains its own
+distribution, shadows included, while only the live ones are allocated slots. Nothing
+was removed.
+
+**Figure 4 contradicted itself.** Its dedupe step already read "Union across the live
+screens [D-85]" and its megacap bound already held at every live-screen count rather
+than only at five. Only the input line was missed. Its prior wording, verbatim:
+
+> <div class="store" style="min-width:340px"><b>screen_score_daily</b>five ranked lists,
+> floors already applied</div>
+
+**Figure 7 is the one that matters most**, because unfiltered the Screens control would
+rotate over every registered screen including shadows that surface no candidates, and
+corrupting a control is worse than losing one [D-39]. Its prior wording, verbatim:
+
+> <div class="step"><b>Fixed rotation</b><span>Each screen's top-ranked name, rotating
+> so all five get equal turns</span></div>
+
+---
+
+## 2026-08-13, Figure 10 names where the tuner's measurements land
+
+The figure showed `config_rows → C13, C14` as the tuner's output. C22 also writes
+`screen_evaluation`, which D-87 exists for: the sustained-fail rule needs the
+consecutive count to be a record rather than a recomputation, since recomputing applies
+today's definitions to a past evaluation [D-40]. The store is in §16 and in `SCHEMA.md`
+and appeared in no figure.
+
+It is added beside `config_rows`, naming its readers, since a store whose reader is
+unnamed is the drift this document keeps producing. Nothing was removed.

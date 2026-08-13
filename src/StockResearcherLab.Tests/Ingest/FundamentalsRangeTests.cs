@@ -48,6 +48,18 @@ public sealed class FundamentalsRangeTests
     private static readonly DateOnly To = new(2026, 8, 5);
 
     /// <summary>
+    /// The run's instant, fixed. **The gate's provider date is
+    /// `DateOnly.FromDateTime(Clock.UtcNow.UtcDateTime)` and not `IClock.Today`**, so
+    /// the reading the double stamps has to be derived from the same instant or every
+    /// verdict is `Stale` and nothing is ever dispatched. Reading the ambient clock
+    /// here instead would make the test's own correctness depend on the hour it ran,
+    /// and `guards.ps1` refuses it [INVARIANT 11].
+    /// </summary>
+    private static readonly DateTimeOffset Now = new(2026, 8, 5, 2, 52, 0, TimeSpan.Zero);
+
+    private static DateOnly ProviderDate => DateOnly.FromDateTime(Now.UtcDateTime);
+
+    /// <summary>
     /// Spent units that leave room for exactly three tickers.
     ///
     /// The pool build bills two symbol lists at one each, so the gate first sees
@@ -154,21 +166,21 @@ public sealed class FundamentalsRangeTests
     private static async Task<BackfillResult> RunAsync(
         RangeHandler handler, DateOnly to, CancellationToken ct)
     {
-        var stage = new FundamentalsIngestor(Client(handler, to));
+        var stage = new FundamentalsIngestor(Client(handler));
 
         var run = new BackfillRun(
             new StageRegistry([stage]),
             new RunLog(TestDatabase.ConnectionString),
-            new FrozenClock(to),
+            new FixedClock(Now, to),
             TestDatabase.ConnectionString,
-            new UnitAllowance(Client(handler, to)));
+            new UnitAllowance(Client(handler)));
 
         return await run.RunAsync(stage.Name, From, to, ct).ConfigureAwait(false);
     }
 
-    private static EodhdClient Client(RangeHandler handler, DateOnly to)
+    private static EodhdClient Client(RangeHandler handler)
         => new(new HttpClient(handler) { BaseAddress = new Uri(EodhdUrl.BaseAddress) },
-            "test-token", new FrozenClock(to));
+            "test-token", new FixedClock(Now, To));
 
     /// <summary>This fixture's tickers carrying an attempt at the range end, ordinal.</summary>
     private static async Task<IReadOnlyList<string>> AttemptedAsync(CancellationToken ct)
@@ -227,12 +239,13 @@ public sealed class FundamentalsRangeTests
     }
 
     /// <summary>
-    /// The run's clock. Nothing here depends on it moving, and the gate reads the
-    /// provider's day rather than this [Allowance.cs].
+    /// The run's clock, fixed at <see cref="Now"/>. `Today` is the trading date and
+    /// `UtcNow` is what the gate derives the provider's day from, which is why they are
+    /// supplied separately rather than one being computed from the other.
     /// </summary>
-    private sealed class FrozenClock(DateOnly today) : IClock
+    private sealed class FixedClock(DateTimeOffset utcNow, DateOnly today) : IClock
     {
-        public DateTimeOffset UtcNow => new(today.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        public DateTimeOffset UtcNow => utcNow;
 
         public DateOnly Today => today;
     }
@@ -254,13 +267,6 @@ public sealed class FundamentalsRangeTests
         public List<string> Asked { get; } = [];
 
         private int Billable => _symbolListCalls + (_fundamentalsCalls * 10);
-
-        /// <summary>
-        /// The real UTC date, because the gate compares the reading's stamp against the
-        /// provider's day rather than against `IClock.Today`, and a mismatch is a
-        /// `Stale` verdict that halts without spending.
-        /// </summary>
-        private static DateOnly ProviderDate => DateOnly.FromDateTime(DateTime.UtcNow);
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {

@@ -1370,3 +1370,52 @@ range path call it, so both are fixed by the one change.
 `PROGRESS.md` carries the measurement that rejected it: it returns 4,834 tickers where
 the old statement returns 7,320, dropping every delisted name whose last bar predates the
 window, and it is not faster. The call site states that rather than stating a width.
+
+---
+
+## 2026-08-13, resumption is an attempt record and the frontier goes
+
+`SCHEMA.md` gains `### price_fetch_attempt`, declaring its writer, its four columns and
+why presence in `price_daily` is not the predicate. `ARCHITECTURE.html` gains the store
+in §16 and the table in C02's Writes cell. Both are additions and nothing is removed
+from either, so there is no prior wording to record.
+
+**A prior wording is recorded here, and it is a code contract rather than a document
+sentence.** `BackfillResult` carried a `Position`, `BackfillContext` carried a
+`ResumeFrom`, `RunLog` returned a `ResumePoint` carrying a parsed ticker and a parsed
+range, and `BackfillRun` refused a run whose range did not match the recorded one. All
+of that is gone. What it said, so the reasoning is not lost with it:
+
+> A resume point belongs to the range that produced it. The position is a ticker and
+> which pool it indexes into is decided by the range, so resuming a wider sweep from a
+> narrower one's position skips every name the narrow one did not contain. A mismatch
+> refuses rather than starting over, because `to` defaults to today and a sweep
+> re-invoked the next day would silently restart and never finish.
+
+That was right about the position and is answered differently: an attempt record keys on
+the range start, so a sweep re-invoked the next morning reads its own rows whatever `to`
+resolves to, and there is nothing left for a mismatch to corrupt.
+
+**Three failures in one day are what the change rests on**, and they are in
+`PROGRESS.md` rather than here. The position was produced once out of three, and the two
+that produced nothing were not unlucky: one fault arrived in the allowance gate's own
+call, outside the dispatch loop the frontier watched, and one row was deleted by a test
+fixture's cleanup.
+
+**`RUNBOOK.md` is a spec under D-73 and this both adds and supersedes.** Its "Running an
+ingest sweep" subsection loses the instruction to pass both dates on a resume and the
+paragraph on what a failure records. The prior wordings:
+
+> A multi-day sweep passes both dates. `to` defaults to today, so a sweep resumed the
+> next morning without them asks for a different range and is refused, naming the row.
+
+> A failure records the lowest ticker still in flight. Everything strictly below it was
+> dispatched and finished, so the next run re-dispatches that one and everything above
+> rather than the whole pool.
+
+It gains a paragraph on vacuuming after a bulk load, which is new rather than a
+replacement.
+
+**No config key moved and no decision number was taken.** A decision is owed for the
+resumption design and `PROGRESS.md` says so; the citation in the two documents is the
+checkpoint until one exists.

@@ -30,12 +30,13 @@ public interface IBackfillStage : IStage
 }
 
 /// <summary>
-/// What a range execution did, and where it got to.
+/// What a range execution did.
 ///
-/// <see cref="LastDateCovered"/> and <see cref="Position"/> are what resumption
-/// reads. A clean halt is not a failure and does not look like one: the sweep has
-/// spent what it could and recorded where it stopped, and tomorrow's run continues
-/// from there rather than starting again.
+/// **It records no position and nothing resumes from it** [3.6, 0010]. A
+/// ticker-partitioned sweep resumes on its own attempt record, so a clean halt, a
+/// command timeout and a killed process all resume identically. A clean halt is still
+/// not a failure and still does not look like one: the sweep has spent what it could
+/// and everything written is kept.
 /// </summary>
 /// <param name="RowsWritten">Rows written across the whole range.</param>
 /// <param name="Status">
@@ -48,29 +49,18 @@ public interface IBackfillStage : IStage
 /// range end; for a halted one it is where it reached, which is why `run_log.run_date`
 /// takes it rather than the range end.
 /// </param>
-/// <param name="Position">
-/// Where inside that date the halt landed, for a sweep that partitions by ticker
-/// rather than by date. Null where the partition is the date itself.
-///
-/// **It is where the next run resumes, not the last unit completed**, so a sweep
-/// refused at its first ticker records that ticker rather than nothing. Resumption is
-/// what reads this, and "the last one that worked" would need the reader to know how
-/// the sweep orders its pool before it could take the next one.
-/// </param>
 public readonly record struct BackfillResult(
     long RowsWritten,
     string Status,
     string? Detail,
-    DateOnly LastDateCovered,
-    string? Position = null)
+    DateOnly LastDateCovered)
 {
     public static BackfillResult Completed(long rowsWritten, DateOnly lastDateCovered, string? detail = null)
         => new(rowsWritten, "ok", detail, lastDateCovered);
 
     /// <summary>Stopped by the allowance gate, with everything written so far kept.</summary>
-    public static BackfillResult Halted(
-        long rowsWritten, DateOnly lastDateCovered, string? position, string detail)
-        => new(rowsWritten, "halted", detail, lastDateCovered, position);
+    public static BackfillResult Halted(long rowsWritten, DateOnly lastDateCovered, string detail)
+        => new(rowsWritten, "halted", detail, lastDateCovered);
 
     public bool WasHalted => string.Equals(Status, "halted", StringComparison.Ordinal);
 }
@@ -93,11 +83,8 @@ public sealed class BackfillContext
         IStageData data,
         IClock clock,
         IConfigStore config,
-        IUnitAllowance allowance,
-        string? resumeFrom = null)
+        IUnitAllowance allowance)
     {
-        ResumeFrom = resumeFrom;
-
         ArgumentNullException.ThrowIfNull(data);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(config);
@@ -134,20 +121,6 @@ public sealed class BackfillContext
 
     /// <summary>The remaining provider allowance, read before each unit of work.</summary>
     public IUnitAllowance Allowance { get; }
-
-    /// <summary>
-    /// Where a ticker-partitioned sweep picks up, or null to start at the beginning
-    /// [3.6].
-    ///
-    /// **Set only where the previous range execution halted**, which is the one state
-    /// that leaves a position worth resuming from. A completed run has nothing left and
-    /// a failed one records no position, so both start over: re-doing work is idempotent
-    /// per grain and costs time, where skipping it leaves a hole [D-68].
-    ///
-    /// Null for a date-partitioned execution, which resumes from `run_date` rather than
-    /// from a ticker.
-    /// </summary>
-    public string? ResumeFrom { get; }
 
     /// <summary>
     /// The date the provider would stamp a call made now, being the UTC date.

@@ -96,33 +96,46 @@ past date, which is lookahead bias arriving through the back door.
 
 `Worker backfill <stage> [from] [to]`, one stage at a time.
 
-**Pass both dates.** `from` defaults to `backfill.window_start` and `to` defaults to
-today, and today moves at midnight. A resume point belongs to the range that produced
-it, so a sweep halted on day one and re-invoked on day two with the defaults is asking
-for a different range and is refused. Passing both dates makes every invocation of one
-sweep the same range, which is what lets the second one resume.
+**Pass `from`, and pass `to` as well if the range end matters.** A sweep's attempt rows
+are stamped with `from`, so that is the argument one sweep has to keep constant across
+the days it spans. `from` defaults to `backfill.window_start`, which is a stored date
+and does not move, so the defaults are safe for the standard window; a sweep over
+anything else states its start every time. `to` defaults to today and moves at midnight,
+and nothing resumes on it.
 
 **A halt is the mechanism working.** The allowance gate stops the sweep when the next
-unit will not fit above `backfill.unit_reserve`, keeps everything written, records
-where it reached, and exits 2. Run the same command again after the provider's day
-rolls over. Exit 0 is a completed range and exit 1 is a failure.
+unit will not fit above `backfill.unit_reserve`, keeps everything written, and exits 2.
+Run the same command again after the provider's day rolls over. Exit 0 is a completed
+range and exit 1 is a failure.
 
-**A refusal names the row.** If the command reports a halted range run over a different
-range, something else produced that row: either re-invoke with the range it names and
-resume it, or delete that `run_log` row deliberately and start over. It does not start
-over on its own, because a silent restart on a multi-day sweep burns a day of allowance
-re-doing finished work and never reaches the end.
+**Every exit resumes the same way, including a killed process.** What a sweep has done
+is in its attempt record, written as it goes, so a clean halt, a command timeout and a
+`kill -9` are the same thing to the next run: it dispatches the pool members carrying no
+attempt row for this range start. A re-invocation of a finished sweep fetches nothing. A
+failure costs at most the chunk in flight, whose rows were never recorded.
 
-**A failure records where it reached and costs one chunk, not the sweep.** A
-ticker-partitioned sweep dispatches in sorted order, so every ticker below the lowest
-one still in flight was dispatched and finished. That minimum is recorded as the
-position, the run still fails, and the next run re-dispatches that ticker and everything
-above it. The line says `FAILED rather than halted`, because a halt is the gate working
-and a failure is a fault nobody has explained yet.
+**The provider's day rolls lazily, on the first billable call.** After the UTC boundary
+the counter still reads the previous date until something spends a unit, and the gate
+refuses to spend against a stale reading, so a backfill run alone can sit in front of a
+day it is entitled to. A nightly run clears it. `/api/user` is free and never will.
+
+**The run log reports and decides nothing.** The pre-run line names the last range run's
+status, date and row id so an operator can see what happened before spending another
+day. Deleting those rows loses the account and changes no behaviour.
 
 **Establishing a connection retries twice; nothing else retries.** The count is in every
 range run's line, including its zero. A count that is regularly non-zero is not the
 retry working, it is the database or the pool needing attention.
+
+**Vacuum after a bulk load, deliberately.** `VACUUM price_daily`, never `FULL`. A sweep
+re-fetching ground it has already covered turns every write into an `ON CONFLICT DO
+UPDATE`, and at this size autovacuum does not trigger until roughly 15.6 million dead
+tuples and then scans the whole table while the sweep is still writing. Left alone it
+falls behind: 2026-08-13 measured 27 million dead tuples against 77 million live, the
+upsert crossing its 300 second command timeout on the third pass over the same rows
+after clearing the first two. Plain vacuum makes the dead space reusable and the
+remaining inserts consume it. `FULL` rewrites 16 GB under an exclusive lock to shrink a
+file the sweep then refills.
 
 ### Why a per-ticker write failure is not tolerated
 
@@ -141,8 +154,8 @@ downstream can detect.
 
 It also fails worst exactly when it matters most. A database unavailable for ten minutes
 would burn hundreds of tickers as tolerated failures, spend their units, write nothing,
-and exit zero. The frontier position above is the answer instead: the run fails, loudly,
-having recorded a position that costs one chunk to re-do.
+and exit zero. The attempt record above is the answer instead: the run fails, loudly,
+and the chunk in flight recorded no attempts, so it costs one chunk to re-do.
 
 ### The two-pass screen build
 

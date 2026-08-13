@@ -39,8 +39,9 @@ public sealed class StoreMatrixConformanceTests
     {
         var stores = ArchitectureDocument.StoreMatrix();
 
-        // Thirty-nine at 3.7, which added earnings_history [D-96].
-        Assert.Equal(39, stores.Count);
+        // Thirty-nine at 3.7, which added earnings_history [D-96]. Forty at 3.6's
+        // second pass, which added price_fetch_attempt [0010].
+        Assert.Equal(40, stores.Count);
 
         // Distinct, because a store named twice would satisfy a count and a set
         // comparison while saying two different things about one table.

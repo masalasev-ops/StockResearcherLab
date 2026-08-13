@@ -100,16 +100,26 @@ public sealed class FundamentalsIngestor : IBackfillStage
         var pool = await RangePoolAsync(settings, minPrice, minAdv, minHistory, windowStart, ct)
             .ConfigureAwait(false);
 
-        var remaining = context.ResumeFrom is string from
-            ? pool.Where(t => string.CompareOrdinal(t, from) >= 0).ToList()
-            : pool;
+        // **Resumption is a set difference against this stage's own attempt record**,
+        // which replaced the ticker position the run log used to carry [0010]. The
+        // sweep stamps every attempt with `settings.Date`, being the range end, so the
+        // remaining set is the pool minus the tickers already carrying one at that
+        // date.
+        //
+        // **The range end here, where C02 keys on the range start.** This column is
+        // also what the nightly rotation orders on, read strictly before the run date
+        // [0006], so an attempt stamped with a 2021 window start would put every swept
+        // ticker back at the head of the rotation the next night. The sweep's own date
+        // is the one that means "attempted recently" to both readers.
+        var already = await AttemptedOnAsync(settings, ct).ConfigureAwait(false);
+        var remaining = pool.Where(t => !already.Contains(t)).ToList();
 
         long rows = 0;
         long holdingRows = 0;
         var holdingCollisions = 0;
-        var attempts = new List<Attempt>();
+        var dispatched = 0;
         var collisions = 0;
-        string? haltedAt = null;
+        var halted = false;
         string? haltDetail = null;
 
         // One at a time. Each call is 10 units against C02's 1, so the gate is asked per
@@ -122,7 +132,7 @@ public sealed class FundamentalsIngestor : IBackfillStage
 
             if (!decision.Fits)
             {
-                haltedAt = ticker;
+                halted = true;
                 haltDetail = decision.Detail;
                 break;
             }
@@ -134,26 +144,60 @@ public sealed class FundamentalsIngestor : IBackfillStage
             collisions += resolved?.EarningsCollisions ?? 0;
             holdingRows += resolved?.HoldingRows ?? 0;
             holdingCollisions += resolved?.HoldingCollisions ?? 0;
+            dispatched++;
 
-            // Written for every ticker the sweep reached, yield or not, exactly as the
-            // nightly path does: a name that returns nothing still has to move down the
-            // rotation [0006].
-            attempts.Add(new Attempt(ticker, settings.Date, written > 0 ? settings.Date : null, written));
+            // **Written per ticker rather than batched to the end** [0010]. Written for
+            // every ticker the sweep reached, yield or not, exactly as the nightly path
+            // does: a name that returns nothing still has to move down the rotation
+            // [0006]. What changed is when it lands. A batch held to the end is lost
+            // entirely to a killed process, and this is now the only record of what the
+            // sweep did, so it is committed as it goes. One small upsert against a
+            // ten-unit call is not a cost worth optimising.
+            await RecordAttemptsAsync(
+                settings,
+                [new Attempt(ticker, settings.Date, written > 0 ? settings.Date : null, written)],
+                ct).ConfigureAwait(false);
         }
-
-        await RecordAttemptsAsync(settings, attempts, ct).ConfigureAwait(false);
 
         var detail = string.Format(
             CultureInfo.InvariantCulture,
             "{0:N0} row(s) over {1:N0} of {2:N0} pool member(s), the rotation cap lifted. {3:N0} " +
             "earnings entr(ies) dropped as duplicates [D-96]. {4:N0} institutional holding row(s) " +
-            "off the same payloads and {5:N0} holder entr(ies) dropped as duplicates [D-98]. {6}",
-            rows, attempts.Count, pool.Count, collisions, holdingRows, holdingCollisions,
-            context.ResumeFrom is null ? "Full pool." : "Resumed from " + context.ResumeFrom + ".");
+            "off the same payloads and {5:N0} holder entr(ies) dropped as duplicates [D-98]. {6:N0} " +
+            "carried an attempt for this sweep already and were not dispatched [0010].",
+            rows, dispatched, pool.Count, collisions, holdingRows, holdingCollisions,
+            pool.Count - remaining.Count);
 
-        return haltedAt is null
-            ? BackfillResult.Completed(rows, context.To, detail)
-            : BackfillResult.Halted(rows, context.To, haltedAt, detail + " " + haltDetail);
+        return halted
+            ? BackfillResult.Halted(rows, context.To, detail + " " + haltDetail)
+            : BackfillResult.Completed(rows, context.To, detail);
+    }
+
+    /// <summary>
+    /// The pool members already carrying an attempt at this sweep's date, which are the
+    /// ones it does not dispatch again [0010].
+    ///
+    /// **At the date rather than strictly before it**, which is the opposite of the
+    /// rotation's read and is the point. The rotation asks what happened on earlier
+    /// dates so that a re-run of one date selects the same names; a sweep asks what
+    /// this run has already done so that it does not pay for it twice.
+    /// </summary>
+    private static async Task<HashSet<string>> AttemptedOnAsync(
+        StageContext context, CancellationToken ct)
+    {
+        var asOf = context.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        var rows = await context.Data.ReadAsync(
+            "fundamental_fetch_attempt",
+            $"""
+             SELECT ticker
+             FROM fundamental_fetch_attempt
+             WHERE last_attempted_date = DATE '{asOf}'
+             ORDER BY ticker;
+             """,
+            ct).ConfigureAwait(false);
+
+        return rows.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>

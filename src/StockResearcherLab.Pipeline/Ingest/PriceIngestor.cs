@@ -36,6 +36,16 @@ public sealed class PriceIngestor : IBackfillStage
 
     private static readonly string[] ConflictTarget = ["ticker", "date"];
 
+    /// <summary>
+    /// The attempt record [0010]. Written for every ticker a sweep dispatched, whether
+    /// or not the fetch yielded bars, which is what makes an absent row mean never
+    /// attempted rather than never yielded.
+    /// </summary>
+    public static readonly string[] AttemptColumns =
+        ["ticker", "last_attempted_date", "last_yield_date", "rows_last_attempt"];
+
+    private static readonly string[] AttemptConflictTarget = ["ticker"];
+
     private readonly EodhdClient _client;
 
     public PriceIngestor(EodhdClient client) => _client = client;
@@ -45,11 +55,18 @@ public sealed class PriceIngestor : IBackfillStage
     /// <summary>
     /// Nothing. The bulk feed is the source and it is not a table, so the declared
     /// read set is empty and the guard has nothing to permit.
+    ///
+    /// `price_fetch_attempt` is not here and belongs in neither list twice. A stage may
+    /// read what it writes, which is what `DeclaredAccess.CanRead` says: the sweep
+    /// reads its own attempt record back to decide what is left to dispatch [0010].
     /// </summary>
     public IReadOnlyList<string> ReadSet { get; } = [];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
-        [new TableWrite("price_daily", WriteOperation.Insert, Columns)];
+        [
+            new TableWrite("price_daily", WriteOperation.Insert, Columns),
+            new TableWrite("price_fetch_attempt", WriteOperation.Insert, AttemptColumns),
+        ];
 
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
     {
@@ -112,20 +129,29 @@ public sealed class PriceIngestor : IBackfillStage
 
         var pool = await PoolAsync(ct).ConfigureAwait(false);
 
-        var resumeFrom = context.ResumeFrom;
-        var remaining = resumeFrom is null
-            ? pool
-            : pool.Where(t => string.CompareOrdinal(t, resumeFrom) >= 0).ToList();
+        // **Resumption is a set difference against the attempt record** [0010]. Every
+        // attempt in one sweep is stamped with the range start, so the remaining set is
+        // the pool minus the tickers already carrying one at that date. A sweep that
+        // halted on the gate, one whose upsert timed out and one whose process was
+        // killed all resume identically, because none of them is asked what it did:
+        // the rows say.
+        //
+        // **The range start rather than the range end**, because a sweep spans days and
+        // `to` defaults to today. Keying on the end would make a sweep re-invoked the
+        // next morning a different sweep with an empty attempt set, which is the whole
+        // pool again.
+        var already = await AttemptedAsync(settings, context.From, ct).ConfigureAwait(false);
+        var remaining = pool.Where(t => !already.Contains(t)).ToList();
 
         long written = 0;
         var loaded = 0;
-        string? haltedAt = null;
+        var halted = false;
         string? haltDetail = null;
 
         // Ordinal order, in chunks of the configured concurrency. **The gate is asked
         // once per chunk, not once per ticker** [3.6]. A refusal stops the sweep at a
-        // chunk boundary and the position recorded is the first ticker not dispatched,
-        // which is what resumption reads.
+        // chunk boundary, so the tickers it did not reach are exactly the ones carrying
+        // no attempt row, which is what the next run dispatches.
         //
         // **Per ticker doubled the request count for nothing.** `/api/user` costs no
         // units and does cost a request, so a gate read per ticker put 50,785 of them
@@ -148,7 +174,11 @@ public sealed class PriceIngestor : IBackfillStage
             else
             {
                 dispatch = [];
-                haltedAt = chunk[0];
+
+                // A flag rather than the detail's nullness. The halt is a fact about
+                // the gate and the line is a description of it, so reading the second
+                // for the first makes an empty string a completed sweep.
+                halted = true;
                 haltDetail = decision.Detail;
             }
 
@@ -161,62 +191,29 @@ public sealed class PriceIngestor : IBackfillStage
                 // (ticker, date) [D-68, CLAUDE.md section 6].
                 var counts = new long[dispatch.Count];
 
-                // **The frontier, so a failure can prove a position.** Tickers are
-                // dispatched in sorted order, so every ticker strictly below the lowest
-                // one still in flight was dispatched and finished. That makes the
-                // minimum of this set a position the execution can prove, where the
-                // completed set cannot be one: it is not a prefix, because workers
-                // finish out of order.
-                var inFlight = new SortedSet<string>(StringComparer.Ordinal);
+                await Parallel.ForEachAsync(
+                    Enumerable.Range(0, dispatch.Count),
+                    new ParallelOptions { MaxDegreeOfParallelism = concurrency, CancellationToken = ct },
+                    async (i, token) =>
+                        counts[i] = await LoadSeriesAsync(settings, ticker: dispatch[i], token)
+                            .ConfigureAwait(false))
+                    .ConfigureAwait(false);
 
-                try
-                {
-                    await Parallel.ForEachAsync(
-                        Enumerable.Range(0, dispatch.Count),
-                        new ParallelOptions { MaxDegreeOfParallelism = concurrency, CancellationToken = ct },
-                        async (i, token) =>
-                        {
-                            var ticker = dispatch[i];
-
-                            lock (inFlight)
-                            {
-                                inFlight.Add(ticker);
-                            }
-
-                            counts[i] = await LoadSeriesAsync(settings, ticker, token).ConfigureAwait(false);
-
-                            lock (inFlight)
-                            {
-                                inFlight.Remove(ticker);
-                            }
-                        })
-                        .ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    // **The run still fails and nothing is tolerated.** What changes is
-                    // the blast radius: at most this chunk rather than the whole sweep.
-                    // A ticker that threw is still in flight by this reckoning, so the
-                    // position never sits above it and nothing is skipped.
-                    //
-                    // Tickers dispatched in an earlier chunk are not in this set and do
-                    // not need to be: the chunks are walked in order, so the lowest
-                    // in-flight ticker of the current chunk is below every ticker any
-                    // later chunk would hold.
-                    string? reached;
-                    lock (inFlight)
-                    {
-                        reached = inFlight.Count == 0 ? dispatch[0] : inFlight.Min;
-                    }
-
-                    throw new RangeExecutionFailedException(reached, ex);
-                }
+                // **Committed per chunk, which is what bounds a hard kill's cost**
+                // [0010]. The attempt rows land after the bars they describe, so a
+                // process killed between the two re-fetches this chunk and writes the
+                // same bars again rather than skipping them: the failure that costs
+                // work is the safe one and the failure that skips work cannot happen.
+                // A chunk whose fetch throws records no attempts at all, so at most
+                // `concurrency` tickers are re-dispatched.
+                await RecordAttemptsAsync(settings, dispatch, counts, context.From, ct)
+                    .ConfigureAwait(false);
 
                 written += counts.Sum();
                 loaded += dispatch.Count;
             }
 
-            if (haltedAt is not null)
+            if (halted)
             {
                 break;
             }
@@ -224,14 +221,85 @@ public sealed class PriceIngestor : IBackfillStage
 
         var detail = string.Format(
             CultureInfo.InvariantCulture,
-            "{0:N0} bar(s) over {1:N0} of {2:N0} admitted common stock(s), live and delisted. {3}",
-            written, loaded, pool.Count,
-            resumeFrom is null ? "Full pool." : "Resumed from " + resumeFrom + ".");
+            "{0:N0} bar(s) over {1:N0} of {2:N0} admitted common stock(s), live and delisted. {3:N0} " +
+            "carried an attempt for this range already and were not dispatched [0010].",
+            written, loaded, pool.Count, pool.Count - remaining.Count);
 
-        return haltedAt is null
-            ? BackfillResult.Completed(written, context.To, detail)
-            : BackfillResult.Halted(written, context.To, haltedAt, detail + " " + haltDetail);
+        return halted
+            ? BackfillResult.Halted(written, context.To, detail + " " + haltDetail)
+            : BackfillResult.Completed(written, context.To, detail);
     }
+
+    /// <summary>
+    /// The tickers already carrying an attempt at this range's start, which are the
+    /// ones this run does not dispatch [0010].
+    ///
+    /// The whole set is read once rather than a row per ticker, the pool being fifty
+    /// thousand names and the table one row each.
+    /// </summary>
+    private static async Task<HashSet<string>> AttemptedAsync(
+        StageContext context, DateOnly rangeStart, CancellationToken ct)
+    {
+        var asOf = rangeStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        var rows = await context.Data.ReadAsync(
+            "price_fetch_attempt",
+            $"""
+             SELECT ticker
+             FROM price_fetch_attempt
+             WHERE last_attempted_date = DATE '{asOf}'
+             ORDER BY ticker;
+             """,
+            ct).ConfigureAwait(false);
+
+        return rows.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// One attempt row per dispatched ticker, upserted on ticker so a re-run over the
+    /// same range writes what the first run wrote [D-68].
+    ///
+    /// `last_yield_date` carries the range start where the ticker returned bars and
+    /// null where it returned none, which is the distinction an absent row cannot make:
+    /// absent means never attempted, null means attempted and empty [0010,
+    /// `CLAUDE.md` §6]. A ticker the price endpoint answers `404` for is therefore
+    /// attempted once and never re-fetched, where a presence test would re-ask it for
+    /// ever.
+    ///
+    /// Sorted before the copy, because COPY order reaches the table and an unsorted
+    /// enumeration is not a deterministic output [`CLAUDE.md` §6].
+    /// </summary>
+    private static async Task RecordAttemptsAsync(
+        StageContext context, IReadOnlyList<string> dispatched, long[] counts,
+        DateOnly rangeStart, CancellationToken ct)
+    {
+        var attempts = new List<Attempt>(dispatched.Count);
+
+        for (var i = 0; i < dispatched.Count; i++)
+        {
+            attempts.Add(new Attempt(
+                dispatched[i], rangeStart, counts[i] > 0 ? rangeStart : null, counts[i]));
+        }
+
+        attempts.Sort((a, b) => string.CompareOrdinal(a.Ticker, b.Ticker));
+
+        await context.Data.BulkUpsertAsync(
+            "price_fetch_attempt", AttemptColumns, AttemptConflictTarget,
+            async (w, c) =>
+            {
+                foreach (var a in attempts)
+                {
+                    await w.StartRowAsync(c).ConfigureAwait(false);
+                    await w.WriteAsync(a.Ticker, c).ConfigureAwait(false);
+                    await w.WriteAsync(a.AttemptedOn, c).ConfigureAwait(false);
+                    await w.WriteAsync(a.LastYield, c).ConfigureAwait(false);
+                    await w.WriteAsync(a.Rows, c).ConfigureAwait(false);
+                }
+            }, ct).ConfigureAwait(false);
+    }
+
+    private sealed record Attempt(
+        string Ticker, DateOnly AttemptedOn, DateOnly? LastYield, long Rows);
 
     /// <summary>
     /// Every admitted common stock, live and delisted, ordinal.

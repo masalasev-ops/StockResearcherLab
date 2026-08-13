@@ -99,6 +99,44 @@ Grain: ticker by day. **Writer: PriceIngestor.**
 
 `ticker`, `date`, `open`, `high`, `low`, `close`, `adj_close`, `volume`.
 
+### price_fetch_attempt
+Grain: one row per ticker. **Writer: PriceIngestor.**
+
+`ticker`, `last_attempted_date`, `last_yield_date`, `rows_last_attempt`.
+
+**What a ticker-partitioned sweep resumes on, and the only thing it resumes on**
+[0010]. The price sweep resumed from a ticker parsed back out of the `run_log` line.
+Three real failures in one day produced that position once: the first fault arrived in
+the allowance gate's own call rather than inside the dispatch loop and recorded nothing,
+a test fixture's cleanup deleted the row carrying the second, and the third recorded one
+and resumed correctly. A killed process records nothing at all, the log write being the
+last thing a run does. An attempt row is written as the sweep goes, so a clean halt, a
+command timeout and a `kill -9` all resume identically.
+
+**A sweep's attempts are stamped with the range start**, so the remaining set is the
+pool minus the tickers carrying one at that date. The range end defaults to today and
+moves under a sweep re-invoked the next morning; the start does not.
+
+**Tickers already present in `price_daily` is the predicate this replaces, and it does
+not work.** C02's nightly reload has been loading every admitted name since phase 2,
+where the table held 13,091,293 rows over 274 dates, so presence says almost nothing
+about whether a ticker was swept: a swept ticker has years of bars and a nightly-only
+ticker has the last twenty dates. Resuming on it would skip most of the pool.
+
+**`last_yield_date` null means attempted and yielded nothing, which is a different fact
+from an absent row, which means never attempted** [`CLAUDE.md` §6]. That is also the
+leak the presence predicate carries: a ticker the price endpoint answers `404` for
+writes no bars and would be re-asked on every run for ever, which is the defect 0008
+measured at C05 one table over.
+
+**No counter column, because a tally would not be idempotent.** Each column is a
+function of the last attempt alone, so a second run over one range writes what the first
+wrote [D-68].
+
+**The rotation shape is deliberately absent.** Its two neighbours order a rotation and
+read attempts strictly before the run date; this is a set difference and reads them at
+one date. The table is the same and the question asked of it is not.
+
 ### fundamental_snapshot
 Grain: ticker by fiscal period. **Writer: FundamentalsIngestor.**
 

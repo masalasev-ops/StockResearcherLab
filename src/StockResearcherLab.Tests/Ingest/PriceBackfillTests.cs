@@ -21,13 +21,28 @@ namespace StockResearcherLab.Tests.Ingest;
 /// series, so the pool arithmetic and the halt are exercised against a fixed answer
 /// rather than against what the endpoint happened to do today.
 ///
-/// **This class runs the real component under its real name, so its `run_log` rows are
-/// indistinguishable from a real sweep's** [item 22]. It cleared them before each test
-/// and not after, and the halted row the last test left stood in front of the first
-/// real 3.6 sweep: `BackfillRun` would have resumed from `L07.US` and skipped every
-/// admitted ticker below it. `DisposeAsync` clears now, which stops the ordinary case
-/// arriving; it does not close the case of a test crashing before it, and that is why
-/// the range-matching rule rather than this is what carries the weight.
+/// **This class runs the real component under its real name against the real database,
+/// so what it writes is indistinguishable from a real sweep's** [item 22]. That has cut
+/// both ways already. A halted `run_log` row it left behind stood in front of the first
+/// real 3.6 sweep, which would have resumed from `L07.US` and skipped every admitted
+/// ticker below it; the `DisposeAsync` clear added for that then deleted the real failed
+/// sweep's row, because it deletes by stage name and the stage name is the same one.
+///
+/// **Resumption now lives in `price_fetch_attempt`, so the same collision would skip
+/// tickers rather than lose a log line.** Two things keep it off the real rows, and
+/// neither is a promise to remember something:
+///
+/// The fixture range starts at a date no real sweep uses, `backfill.window_start` being
+/// 2021-01-04, so a fixture attempt is never read as a real one.
+///
+/// The clear names the fixture's own tickers rather than a date or a prefix. Deleting by
+/// `last_attempted_date` would take out a real sweep's whole record, and deleting by
+/// `L%` would take out real tickers.
+///
+/// **What is left costs a re-fetch and cannot cost a skip.** If a fixture ticker name
+/// collides with a real one, the fixture overwrites that ticker's attempt row and the
+/// next real sweep fetches it again for one unit. It cannot make a real sweep skip a
+/// ticker, because a fixture row carries the fixture's date and the sweep reads its own.
 /// </summary>
 public sealed class PriceBackfillTests : IAsyncLifetime
 {
@@ -38,13 +53,26 @@ public sealed class PriceBackfillTests : IAsyncLifetime
     /// `SeedAsync` could not do by clearing first.
     /// </summary>
     public async ValueTask DisposeAsync()
-        => await ClearRunLogAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
+        => await ClearAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
 
     private static readonly DateTimeOffset Now = new(2026, 8, 12, 2, 52, 0, TimeSpan.Zero);
 
     private static IClock Clock => new FixedClock(Now, new DateOnly(2026, 8, 11));
 
     private static DateOnly ProviderDate => DateOnly.FromDateTime(Now.UtcDateTime);
+
+    /// <summary>
+    /// The fixture range. **The start is deliberately not `backfill.window_start`**,
+    /// which is 2021-01-04: attempts are stamped with the range start, so sharing one
+    /// with the real sweep would let a fixture row be read as a real one.
+    /// </summary>
+    private static readonly DateOnly From = new(2019, 6, 3);
+
+    /// <summary>
+    /// The range end, which is what config resolves as of, so it stays inside the
+    /// seeded configuration's life [D-72, D-94].
+    /// </summary>
+    private static readonly DateOnly To = new(2021, 1, 8);
 
     // ------------------------------------------------------------ the parse ---
 
@@ -145,11 +173,11 @@ public sealed class PriceBackfillTests : IAsyncLifetime
     // ------------------------------------------------------------- the gate ---
 
     /// <summary>
-    /// The gate stops the sweep at a ticker rather than mid-flight, and the position
-    /// recorded is the first ticker not dispatched.
+    /// The gate stops the sweep at a chunk boundary rather than mid-flight, and what it
+    /// reached is in the attempt record rather than in a position [0010].
     /// </summary>
     [Fact]
-    public async Task TheSweepHaltsAtATickerAndRecordsTheFirstOneItDidNotReach()
+    public async Task TheSweepHaltsAtAChunkBoundaryAndOnlyTheDispatchedTickersCarryAnAttempt()
     {
         var ct = TestContext.Current.CancellationToken;
         await SeedAsync(ct).ConfigureAwait(true);
@@ -168,8 +196,12 @@ public sealed class PriceBackfillTests : IAsyncLifetime
         Assert.True(result.WasHalted);
         Assert.Equal(8, handler.SeriesCalls);
 
-        // The ninth of the twenty-two, which is the first one not dispatched.
-        Assert.Equal("L07.US", result.Position);
+        // Eight attempts and no ninth. `L07.US` is the ninth ticker ordinally and the
+        // first one not dispatched, so its absence is what the next run reads.
+        var attempted = await AttemptedAsync(ct).ConfigureAwait(true);
+
+        Assert.Equal(8, attempted.Count);
+        Assert.DoesNotContain("L07.US", attempted);
     }
 
     /// <summary>
@@ -201,12 +233,11 @@ public sealed class PriceBackfillTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// The next run picks up where the halt left off rather than starting over, which
-    /// is the whole of what the position is for. Everything before it is skipped and
-    /// nothing is re-fetched.
+    /// The next run picks up the tickers with no attempt row rather than starting over,
+    /// which is the whole of what the record is for [0010].
     /// </summary>
     [Fact]
-    public async Task TheNextRunResumesFromTheHaltRatherThanStartingOver()
+    public async Task TheNextRunDispatchesOnlyTheTickersWithNoAttemptForThisRange()
     {
         var ct = TestContext.Current.CancellationToken;
         await SeedAsync(ct).ConfigureAwait(true);
@@ -215,7 +246,7 @@ public sealed class PriceBackfillTests : IAsyncLifetime
         var halted = await RunAsync(first, ct).ConfigureAwait(true);
 
         Assert.True(halted.WasHalted);
-        Assert.Equal("L07.US", halted.Position);
+        Assert.Equal(8, first.SeriesCalls);
 
         // Room to finish this time.
         var second = new ProviderDouble();
@@ -223,10 +254,88 @@ public sealed class PriceBackfillTests : IAsyncLifetime
 
         Assert.False(done.WasHalted);
 
-        // Fourteen rather than twenty-two: the eight the halted run loaded are not
-        // asked for again, which is the whole of what the position is for.
+        // Fourteen rather than twenty-two: the eight the halted run loaded carry an
+        // attempt for this range and are not asked for again.
         Assert.Equal(14, second.SeriesCalls);
-        Assert.Contains("Resumed from L07.US", done.Detail ?? "", StringComparison.Ordinal);
+        Assert.Equal(22, (await AttemptedAsync(ct).ConfigureAwait(true)).Count);
+        Assert.Contains("8 carried an attempt", done.Detail ?? "", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// **A completed sweep re-invoked over the same range dispatches nothing** [0010].
+    ///
+    /// The two symbol-list calls still happen, the pool being what the difference is
+    /// taken against, and not one `eod/{t}` follows them. Before the attempt record this
+    /// was the case that spent a whole day of allowance re-fetching a finished load,
+    /// which is what happened on 2026-08-13.
+    /// </summary>
+    [Fact]
+    public async Task ACompletedSweepReInvokedOverTheSameRangeDispatchesNothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+
+        var first = new ProviderDouble();
+        var done = await RunAsync(first, ct).ConfigureAwait(true);
+
+        Assert.False(done.WasHalted);
+        Assert.Equal(22, first.SeriesCalls);
+
+        var again = new ProviderDouble();
+        var second = await RunAsync(again, ct).ConfigureAwait(true);
+
+        Assert.False(second.WasHalted);
+        Assert.Equal(0, again.SeriesCalls);
+        Assert.Equal(0, second.RowsWritten);
+        Assert.Contains("22 carried an attempt", second.Detail ?? "", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// **A ticker that yields no rows is not re-fetched on the next run** [0010].
+    ///
+    /// This is the leak the presence predicate carries and the reason the record is of
+    /// the attempt. A name the price endpoint answers `404` for writes no bars, so a
+    /// test on rows in `price_daily` would call it never fetched and re-ask it on every
+    /// run for ever. 0008 measured that at C05: fourteen of two hundred and fifty names,
+    /// billed at ten units each, every night.
+    ///
+    /// `last_yield_date` is what keeps the two absences apart: null here, and an absent
+    /// row for a ticker never dispatched.
+    /// </summary>
+    [Fact]
+    public async Task ATickerThatYieldsNothingIsAttemptedOnceAndNotAskedAgain()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+
+        var failures = new Dictionary<string, HttpStatusCode>(StringComparer.Ordinal)
+        {
+            ["L05.US"] = HttpStatusCode.NotFound,
+        };
+
+        var first = new ProviderDouble(failures: failures);
+        await RunAsync(first, ct).ConfigureAwait(true);
+
+        Assert.Equal(22, first.SeriesCalls);
+
+        // Attempted, and recorded as having yielded nothing rather than as absent.
+        var attempt = await AttemptAsync("L05.US", ct).ConfigureAwait(true);
+
+        Assert.NotNull(attempt);
+        Assert.Equal(From, attempt!.Value.Attempted);
+        Assert.Null(attempt.Value.Yield);
+        Assert.Equal(0, attempt.Value.Rows);
+
+        // And a ticker that did yield carries the date, so null above is a fact rather
+        // than the column never being written.
+        var yielded = await AttemptAsync("L04.US", ct).ConfigureAwait(true);
+
+        Assert.Equal(From, yielded!.Value.Yield);
+
+        var second = new ProviderDouble(failures: failures);
+        await RunAsync(second, ct).ConfigureAwait(true);
+
+        Assert.Equal(0, second.SeriesCalls);
     }
 
     // --------------------------------------------- in flight, not pre-flight ---
@@ -376,17 +485,22 @@ public sealed class PriceBackfillTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// **A failure records the lowest ticker still in flight** [item 23]. The completed
-    /// set is not a prefix, because workers finish out of order; the frontier is, so
-    /// every ticker strictly below the minimum in-flight one was dispatched and
-    /// finished.
+    /// **A sweep that dies resumes over exactly the tickers with no attempt row, and
+    /// nothing else** [0010]. This is the property the frontier was reaching for and
+    /// could only approximate: the completed set is not a prefix, because workers finish
+    /// out of order, so a position had to be the lowest ticker still in flight and give
+    /// back everything above it in that chunk.
     ///
     /// The fixture is a middle ticker whose series comes back as an object, which
-    /// `LoadSeriesAsync` calls a shape change and throws on. Lower tickers in earlier
-    /// chunks have completed.
+    /// `LoadSeriesAsync` calls a shape change and throws on. It stands in for every way
+    /// a sweep stops without saying so: the exception propagates out of the stage, and
+    /// nothing about it is written down or read back.
+    ///
+    /// **The assertion is set equality rather than a count**, because a count is
+    /// satisfied by re-dispatching the wrong tickers.
     /// </summary>
     [Fact]
-    public async Task AFailureRecordsTheLowestTickerStillInFlight()
+    public async Task AFailedSweepResumesOverExactlyTheTickersWithNoAttemptRow()
     {
         var ct = TestContext.Current.CancellationToken;
         await SeedAsync(ct).ConfigureAwait(true);
@@ -394,66 +508,28 @@ public sealed class PriceBackfillTests : IAsyncLifetime
         // The 200th of 400, so many chunks completed before it.
         const string Throws = "L0200.US";
 
-        var handler = new ProviderDouble(liveCount: 400, malformed: Throws);
-
-        await Assert.ThrowsAsync<RangeExecutionFailedException>(
-            () => RunAsync(handler, ct)).ConfigureAwait(true);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => RunAsync(new ProviderDouble(liveCount: 400, malformed: Throws), ct)).ConfigureAwait(true);
 
         var row = await LastRangeRowAsync(ct).ConfigureAwait(true);
 
         Assert.Equal("failed", row.Status);
+        Assert.Contains("FAILED", row.Error ?? "", StringComparison.Ordinal);
 
-        var position = PositionIn(row.Error);
-
-        // A position at all, which the old rule could not produce.
-        Assert.NotNull(position);
-
-        // **Never above the ticker that threw**, which is the property that matters: a
-        // position above it would skip the failure itself and everything between.
-        Assert.True(string.CompareOrdinal(position, Throws) <= 0,
-            $"recorded position {position} is above the ticker that threw, {Throws}.");
-
-        // And it is inside the failing ticker's own chunk rather than back at the start
-        // of the pool, so the blast radius really is bounded by the concurrency.
-        var concurrency = await ConcurrencyAsync(ct).ConfigureAwait(true);
-        var pool = await new PriceIngestor(Client(new ProviderDouble(liveCount: 400)))
-            .PoolAsync(ct).ConfigureAwait(true);
-
-        var throwsAt = pool.ToList().IndexOf(Throws);
-        var positionAt = pool.ToList().IndexOf(position!);
-
-        Assert.True(throwsAt - positionAt < concurrency,
-            $"position {position} is {throwsAt - positionAt} tickers below {Throws}, which is more than " +
-            $"the concurrency of {concurrency}. The blast radius is meant to be one chunk.");
-
-        // The line says which kind of position this is, because a halt and a failure
-        // mean different things to whoever reads the log.
-        Assert.Contains("FAILED rather than halted", row.Error ?? "", StringComparison.Ordinal);
-
-        // And the retry count is stated, including its zero.
+        // And the retry count is stated, including its zero [item 23].
         Assert.Contains("connection open(s) retried", row.Error ?? "", StringComparison.Ordinal);
-    }
 
-    /// <summary>
-    /// **The resume re-dispatches the recorded ticker and everything above it**, so the
-    /// failure costs at most one chunk rather than the sweep. It re-fetches the position
-    /// itself rather than starting after it, which is what makes the ticker that threw
-    /// get another attempt.
-    /// </summary>
-    [Fact]
-    public async Task AResumeFromAFailurePositionReDispatchesThatTickerAndEverythingAbove()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        await SeedAsync(ct).ConfigureAwait(true);
+        var attempted = await AttemptedAsync(ct).ConfigureAwait(true);
 
-        const string Throws = "L0200.US";
+        // The failing chunk recorded nothing, so the ticker that threw is re-dispatched
+        // rather than skipped past. That is the direction that matters: a re-fetch costs
+        // a unit and a skip costs a hole no later stage can see.
+        Assert.DoesNotContain(Throws, attempted);
 
-        await Assert.ThrowsAsync<RangeExecutionFailedException>(
-            () => RunAsync(new ProviderDouble(liveCount: 400, malformed: Throws), ct)).ConfigureAwait(true);
+        // The sweep really did get most of the way, so the assertion below is not being
+        // made over an empty attempt set.
+        Assert.True(attempted.Count > 100, $"only {attempted.Count} attempt row(s) before the throw.");
 
-        var position = PositionIn((await LastRangeRowAsync(ct).ConfigureAwait(true)).Error)!;
-
-        // The same range, so the resume is not refused, and nothing malformed this time.
         var second = new ProviderDouble(liveCount: 400);
         var result = await RunAsync(second, ct).ConfigureAwait(true);
 
@@ -462,28 +538,30 @@ public sealed class PriceBackfillTests : IAsyncLifetime
         var pool = await new PriceIngestor(Client(new ProviderDouble(liveCount: 400)))
             .PoolAsync(ct).ConfigureAwait(true);
 
-        var expected = pool.Count(t => string.CompareOrdinal(t, position) >= 0);
+        // Exactly the complement, by set rather than by count. Two symbol-list calls are
+        // not series calls and are not counted here.
+        Assert.Equal(
+            pool.Where(t => !attempted.Contains(t)).ToList(),
+            second.Fetched);
 
-        // Exactly the tail from the recorded position, inclusive. Two symbol-list calls
-        // are not series calls and are not counted here.
-        Assert.Equal(expected, second.SeriesCalls);
-
-        // The one that threw is in that set rather than skipped past.
-        Assert.True(string.CompareOrdinal(Throws, position) >= 0);
+        // And afterwards every pool member carries one, so the two runs together are the
+        // sweep the first one was meant to be.
+        Assert.Equal(pool.Count, (await AttemptedAsync(ct).ConfigureAwait(true)).Count);
     }
 
     // ------------------------------------------------ leaving nothing [22] ---
 
     /// <summary>
-    /// **The cleanup is checked against the table rather than assumed** [item 22]. A
+    /// **The cleanup is checked against the tables rather than assumed** [item 22]. A
     /// test cannot assert what its own `DisposeAsync` does after it, so this asserts the
-    /// thing `DisposeAsync` calls: a sweep writes a range row, and the clear removes it.
+    /// thing `DisposeAsync` calls: a sweep writes a range row and a set of attempt rows,
+    /// and the clear removes both.
     ///
-    /// The row this leaves behind is the one that stood in front of the first real 3.6
-    /// sweep, so the count going to zero is the whole of what changed here.
+    /// The attempt rows are the half that matters now. A run log row left behind is read
+    /// by an operator; an attempt row left behind makes the next sweep skip a ticker.
     /// </summary>
     [Fact]
-    public async Task TheHarnessLeavesNoRangeRowBehind()
+    public async Task TheHarnessLeavesNoRangeRowAndNoAttemptRowBehind()
     {
         var ct = TestContext.Current.CancellationToken;
         await SeedAsync(ct).ConfigureAwait(true);
@@ -491,13 +569,15 @@ public sealed class PriceBackfillTests : IAsyncLifetime
         var handler = new ProviderDouble(alreadySpent: 49_995);
         var result = await RunAsync(handler, ct).ConfigureAwait(true);
 
-        // The sweep really did write one, so the assertion below is not vacuous.
+        // The sweep really did write both, so the assertions below are not vacuous.
         Assert.True(result.WasHalted);
         Assert.Equal(1, await RangeRowCountAsync(ct).ConfigureAwait(true));
+        Assert.Equal(8, (await AttemptedAsync(ct).ConfigureAwait(true)).Count);
 
-        await ClearRunLogAsync(ct).ConfigureAwait(true);
+        await ClearAsync(ct).ConfigureAwait(true);
 
         Assert.Equal(0, await RangeRowCountAsync(ct).ConfigureAwait(true));
+        Assert.Empty(await AttemptedAsync(ct).ConfigureAwait(true));
     }
 
     // ------------------------------------------------------------- harness ---
@@ -516,19 +596,83 @@ public sealed class PriceBackfillTests : IAsyncLifetime
     private static async Task SeedAsync(CancellationToken ct)
     {
         await new ConfigSeeder(TestDatabase.ConnectionString).SeedAsync(ct).ConfigureAwait(false);
-        await ClearRunLogAsync(ct).ConfigureAwait(false);
+        await ClearAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// This stage's `run_log` rows, gone. Called before each test and again from
+    /// What this class wrote, gone. Called before each test and again from
     /// `DisposeAsync` after it [item 22].
+    ///
+    /// **The attempt rows are deleted by ticker and never by date**, because the date is
+    /// what a real sweep's whole record shares: one `DELETE ... WHERE
+    /// last_attempted_date = ...` against the wrong date would erase the thing 0010
+    /// exists to keep. The ticker list comes from the double rather than from a pattern,
+    /// so it cannot widen by accident the way `LIKE 'L%'` would.
+    ///
+    /// The `run_log` clear still goes by stage name, and that is still the sharp edge
+    /// that deleted the real failed sweep's row on 2026-08-13. It is survivable now
+    /// rather than fixed: those rows are read by an operator and nothing resumes from
+    /// them [0010, item 26].
     /// </summary>
-    private static async Task ClearRunLogAsync(CancellationToken ct)
+    private static async Task ClearAsync(CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
+
+        await using (var cmd = new Npgsql.NpgsqlCommand(
+            "DELETE FROM run_log WHERE stage = 'PriceIngestor';", conn))
+        {
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
+
+        await using (var cmd = new Npgsql.NpgsqlCommand(
+            "DELETE FROM price_fetch_attempt WHERE ticker = ANY(@t);", conn))
+        {
+            cmd.Parameters.AddWithValue("t", ProviderDouble.EveryFixtureTicker());
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>The tickers carrying an attempt for the fixture range, ordinal.</summary>
+    private static async Task<IReadOnlyList<string>> AttemptedAsync(CancellationToken ct)
     {
         await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
         await using var cmd = new Npgsql.NpgsqlCommand(
-            "DELETE FROM run_log WHERE stage = 'PriceIngestor';", conn);
-        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            "SELECT ticker FROM price_fetch_attempt WHERE ticker = ANY(@t) " +
+            "AND last_attempted_date = @d ORDER BY ticker;", conn);
+        cmd.Parameters.AddWithValue("t", ProviderDouble.EveryFixtureTicker());
+        cmd.Parameters.AddWithValue("d", From);
+
+        var rows = new List<string>();
+        await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await r.ReadAsync(ct).ConfigureAwait(false))
+        {
+            rows.Add(r.GetString(0));
+        }
+
+        return rows;
+    }
+
+    /// <summary>One attempt row, or null where the ticker has never been attempted.</summary>
+    private static async Task<(DateOnly Attempted, DateOnly? Yield, long Rows)?> AttemptAsync(
+        string ticker, CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
+        await using var cmd = new Npgsql.NpgsqlCommand(
+            "SELECT last_attempted_date, last_yield_date, rows_last_attempt " +
+            "FROM price_fetch_attempt WHERE ticker = @t;", conn);
+        cmd.Parameters.AddWithValue("t", ticker);
+
+        await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        if (!await r.ReadAsync(ct).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        return (DateOnly.FromDateTime(r.GetDateTime(0)),
+                await r.IsDBNullAsync(1, ct).ConfigureAwait(false)
+                    ? null
+                    : DateOnly.FromDateTime(r.GetDateTime(1)),
+                r.GetInt64(2));
     }
 
     /// <summary>
@@ -548,7 +692,7 @@ public sealed class PriceBackfillTests : IAsyncLifetime
     /// <summary>The worker count the sweep actually used, read from the seeded config rather than assumed.</summary>
     private static async Task<int> ConcurrencyAsync(CancellationToken ct)
         => (int) ConfigValue.Long(await new ConfigStore(TestDatabase.ConnectionString)
-            .RequireAsync("backfill.ticker_concurrency", new DateOnly(2021, 1, 8), ct).ConfigureAwait(false));
+            .RequireAsync("backfill.ticker_concurrency", To, ct).ConfigureAwait(false));
 
     /// <summary>The newest range row for this stage.</summary>
     private static async Task<(string Status, string? Error)> LastRangeRowAsync(CancellationToken ct)
@@ -562,31 +706,6 @@ public sealed class PriceBackfillTests : IAsyncLifetime
         Assert.True(await r.ReadAsync(ct).ConfigureAwait(false), "No range row for PriceIngestor.");
 
         return (r.GetString(0), await r.IsDBNullAsync(1, ct).ConfigureAwait(false) ? null : r.GetString(1));
-    }
-
-    /// <summary>
-    /// The ticker out of a run log line, the same way `RunLog` reads it. Duplicated
-    /// here rather than reaching for the internal, because the parser is private and
-    /// this asserts what the line says rather than what the parser does.
-    /// </summary>
-    private static string? PositionIn(string? error)
-    {
-        if (error is null)
-        {
-            return null;
-        }
-
-        const string marker = " at ";
-        var at = error.IndexOf(marker, StringComparison.Ordinal);
-        if (at < 0)
-        {
-            return null;
-        }
-
-        var rest = error[(at + marker.Length)..];
-        var stop = rest.IndexOf(". ", StringComparison.Ordinal);
-
-        return (stop < 0 ? rest : rest[..stop]).Trim().TrimEnd('.') is { Length: > 0 } p ? p : null;
     }
 
     private static async Task<long> RangeRowCountAsync(CancellationToken ct)
@@ -609,8 +728,7 @@ public sealed class PriceBackfillTests : IAsyncLifetime
             TestDatabase.ConnectionString,
             Allowance(handler));
 
-        return await run.RunAsync(stage.Name, new DateOnly(2021, 1, 4), new DateOnly(2021, 1, 8), ct)
-            .ConfigureAwait(false);
+        return await run.RunAsync(stage.Name, From, To, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -643,6 +761,8 @@ public sealed class PriceBackfillTests : IAsyncLifetime
         private int _seriesCalls;
         private int _userCalls;
 
+        private readonly List<string> _fetched = [];
+
         private readonly int _liveCount;
         private readonly string? _malformed;
 
@@ -666,6 +786,37 @@ public sealed class PriceBackfillTests : IAsyncLifetime
         public int SymbolListCalls => Volatile.Read(ref _symbolListCalls);
 
         public int SeriesCalls => Volatile.Read(ref _seriesCalls);
+
+        /// <summary>
+        /// Which tickers were asked for, ordinal. Sorted here rather than recorded in
+        /// order, because the workers finish out of order and an assertion against the
+        /// arrival sequence would be asserting the scheduler.
+        /// </summary>
+        public IReadOnlyList<string> Fetched
+        {
+            get
+            {
+                lock (_fetched)
+                {
+                    var copy = _fetched.ToList();
+                    copy.Sort(StringComparer.Ordinal);
+                    return copy;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Every ticker any fixture in this class can produce, for a cleanup that names
+        /// what it deletes instead of matching a pattern.
+        ///
+        /// Generated wider than the fixtures actually use, at both the two-digit and the
+        /// four-digit width, so adding a `liveCount` between them does not silently leave
+        /// rows behind. Deleting a name no test wrote is free.
+        /// </summary>
+        public static string[] EveryFixtureTicker()
+            => [.. Enumerable.Range(1, 99).Select(i => "L" + i.ToString("D2", CultureInfo.InvariantCulture) + ".US"),
+                .. Enumerable.Range(1, 999).Select(i => "L" + i.ToString("D4", CultureInfo.InvariantCulture) + ".US"),
+                "LETF.US", "LFUND.US", "D01.US", "D02.US", "DFUND.US"];
 
         /// <summary>Gate reads. One per chunk since 3.6; one per ticker before it.</summary>
         public int UserCalls => Volatile.Read(ref _userCalls);
@@ -713,6 +864,12 @@ public sealed class PriceBackfillTests : IAsyncLifetime
                 Interlocked.Increment(ref _seriesCalls);
 
                 var ticker = TickerIn(url);
+
+                lock (_fetched)
+                {
+                    _fetched.Add(ticker);
+                }
+
                 if (_failures.TryGetValue(ticker, out var status))
                 {
                     return Task.FromResult(new HttpResponseMessage(status)

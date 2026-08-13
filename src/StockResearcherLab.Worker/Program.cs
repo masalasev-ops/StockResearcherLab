@@ -188,20 +188,20 @@ async Task<int> BackfillAsync()
 
     Console.WriteLine($"backfill {stageName}  range {Iso(from)}..{Iso(to)}");
 
-    // Stated before the run rather than inferred from the result. A sweep resuming
-    // and a sweep starting over look identical from a row count, and the second
-    // spends the whole range again.
-    var resume = await run.ResumeFromAsync(stageName).ConfigureAwait(false);
-    Console.WriteLine(resume is null
-        ? "  no previous range run for this stage, starting from the beginning of the range"
-        : $"  last range run {resume.Status} over {resume.RecordedRange}, reached " +
-          Iso(resume.LastDateCovered) +
-          (resume.Position is null ? "" : $", position {resume.Position}") +
-          (resume.WasHalted
-              ? resume.CoversRange(from, to)
-                  ? ". Same range, so this resumes from there [D-68]."
-                  : ". DIFFERENT RANGE, so this refuses rather than resuming or restarting [item 22]."
-              : ". Not a halt, so this starts over; every write is idempotent on its own grain [D-68]."));
+    // Stated before the run rather than inferred from the result, because a sweep
+    // resuming and a sweep starting over look identical from a row count and the
+    // second spends the whole range again.
+    //
+    // **It reports and decides nothing** [0010]. Where the run picks up is the stage's
+    // attempt record, so this line cannot disagree with what then happens the way its
+    // predecessor did: that one branched on whether the last row was a halt, and went
+    // on saying "this starts over" after a failed row's position began resuming.
+    var last = await run.LastRangeRunAsync(stageName).ConfigureAwait(false);
+    Console.WriteLine(last is null
+        ? "  no previous range run for this stage recorded"
+        : $"  last range run {last.Status}, reached {Iso(last.LastDateCovered)}, run_log row " +
+          last.RunLogId.ToString(CultureInfo.InvariantCulture) +
+          ". Where this run picks up is its attempt record rather than that row [0010].");
 
     BackfillResult result;
     try

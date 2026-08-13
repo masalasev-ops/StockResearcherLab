@@ -79,50 +79,16 @@ public sealed class BackfillRun
         // the date being computed [D-43, D-93, INVARIANT 13].
         var config = new ConfigStore(_connectionString);
 
-        // Resumed only from a halt [3.6]. A completed execution has nothing left, and a
-        // failed one records no position because it cannot prove one: both start over,
-        // which is safe because every write is idempotent on its own grain [D-68].
-        var last = await _runLog.LastRangeRunAsync(stage.Name, ct).ConfigureAwait(false);
-
-        // **A resume point belongs to the range that produced it** [item 22]. The
-        // position is a ticker and the pool it indexes into is decided by the range, so
-        // a position taken from a narrower range resumes into a wider pool and skips
-        // every name the narrow one did not contain. Found as a test fixture's halt
-        // standing in front of a real sweep, which would have completed and reported a
-        // plausible count over a partial load.
+        // **Nothing is read out of the run log to decide where this run starts** [3.6,
+        // 0010]. A ticker-partitioned stage resumes on its own attempt record, written
+        // as the sweep goes and stamped with the range start, so a clean halt, a
+        // command timeout and a killed process all resume identically. The run log is
+        // where an operator reads what happened, and it decides nothing.
         //
-        // **A mismatch refuses rather than starting over**, which is the half that is
-        // not obvious. `to` defaults to today, so a sweep halted on day one and
-        // re-invoked on day two carries a different range: falling through to a fresh
-        // start is idempotent and therefore not corrupt, and it burns a day of
-        // allowance re-doing finished work and never reaches the end. Refusing makes
-        // both the fixture row and the midnight rollover loud, and the operator either
-        // passes the recorded range explicitly or clears the row deliberately.
-        // A failed row carries a position too since the frontier rule, so the test is
-        // "does this row hold a position" rather than "is this row a halt". Both mean
-        // the same thing to a resume and the same thing to a range mismatch.
-        if (last is { } row && row.Position is not null && !row.CoversRange(from, to))
-        {
-            throw new InvalidOperationException(
-                $"'{stage.Name}' has a {row.Status} range run recorded over {row.RecordedRange} and this run " +
-                $"asks for {Range(from, to)[6..]}. A resume point belongs to the range that produced it: " +
-                "the position is a ticker and which pool it indexes into is decided by the range, so " +
-                "resuming a wider sweep from a narrower one's position skips every name the narrow one " +
-                $"did not contain. run_log row {row.RunLogId.ToString(CultureInfo.InvariantCulture)}" +
-                (row.Position is null ? "" : $", halted at {row.Position}") +
-                ". Either pass the recorded range explicitly and resume it, or delete that row " +
-                "deliberately and start over. Starting over is not done for you, because `to` defaults " +
-                "to today and a sweep re-invoked the next day would silently restart and never finish.");
-        }
-
-        // **A failed row's position resumes too, since the frontier rule** [item 22's
-        // successor]. It was null before because a failure could not prove one, and it
-        // can: the minimum in-flight ticker is below everything that finished. A row
-        // holding no position still starts over, which is every date-partitioned stage
-        // and every failure before the first dispatch.
-        var resumeFrom = last?.Position;
-
-        var context = new BackfillContext(from, to, data, _clock, config, _allowance, resumeFrom);
+        // The refusal on a range mismatch went with the position it protected. A range
+        // start that differs is simply a different set of attempt rows, and a range end
+        // that differs no longer changes anything at all.
+        var context = new BackfillContext(from, to, data, _clock, config, _allowance);
 
         var startedAt = _clock.UtcNow;
         var stopwatch = Stopwatch.StartNew();
@@ -159,29 +125,16 @@ public sealed class BackfillRun
             //
             // The two errors are not symmetric. Resuming too early re-does work that
             // is idempotent per grain and costs time [D-68]; resuming too late leaves
-            // a hole no later stage can see. So the row states the position it can
-            // prove rather than the one it hoped for, and an unfiltered read is safe
-            // without anyone remembering a status filter.
-            // **A ticker-partitioned failure records where it got to.** The stage
-            // reports the lowest ticker still in flight, which everything below was
-            // dispatched past, so the next run re-dispatches that one and everything
-            // above rather than the whole pool. The run still failed and nothing was
-            // tolerated; what changes is that a transient fault costs at most
-            // `concurrency` tickers instead of a sweep.
+            // a hole no later stage can see. So the row states the date it can prove
+            // rather than the one it hoped for, and an unfiltered read is safe without
+            // anyone remembering a status filter.
             //
-            // **The line says the position came from a failure**, because a halt and a
-            // failure mean different things to whoever reads the log: a halt is the
-            // gate working and this is a fault that has not been explained.
-            var reached = (ex as RangeExecutionFailedException)?.Position;
-
-            var line = Range(from, to)
-                       + (reached is null ? "" : ", reached " + Iso(from) + " at " + reached)
-                       + (reached is null
-                           ? ". No position: the execution failed before it dispatched anything, so the " +
-                             "next run starts over."
-                           : ". FAILED rather than halted, and the position is the lowest ticker still in " +
-                             "flight rather than a clean stopping point.")
-                       + " " + ex.Message + Retries(data);
+            // **The line records no position, and a failure costs nothing extra for
+            // that** [0010]. What the sweep completed is in its attempt record, written
+            // as it went, so the next run re-dispatches the tickers with no attempt row
+            // for this range and nothing else. A failure and a kill are the same thing
+            // to it, which is what the position could never be made to be.
+            var line = Range(from, to) + " FAILED. " + ex.Message + Retries(data);
 
             await _runLog.RecordAsync(
                 from, stage.Name, "failed", startedAt,
@@ -192,21 +145,19 @@ public sealed class BackfillRun
     }
 
     /// <summary>
-    /// Where a stage's next range execution should pick up, or null where it has never
-    /// run one [3.6].
+    /// What a stage's last range execution did, or null where it has never run one
+    /// [3.6].
     ///
-    /// **The highest `run_date` among that stage's range rows, unfiltered by status.**
-    /// A halted row carries the date it reached and a failed row carries its range
-    /// start, so the maximum is the furthest point any execution can prove it got to.
-    /// Filtering on status would be a second rule the caller has to remember, and the
-    /// row already says what it can prove.
+    /// **For an operator to read, and nothing branches on it** [0010]. Resumption is
+    /// the stage's own attempt record; this is how someone sees whether last night
+    /// completed, halted on the gate or failed, before spending another day.
     ///
     /// **Range rows are identified by the line opening with `range `**, which is what
     /// <see cref="Describe"/> guarantees. `run_log.error` is the only free-text column
     /// that table has, so that prefix is the only marker available without a schema
     /// change, and it is one this class controls on both sides.
     /// </summary>
-    public async Task<ResumePoint?> ResumeFromAsync(string stageName, CancellationToken ct = default)
+    public async Task<RangeRunReport?> LastRangeRunAsync(string stageName, CancellationToken ct = default)
         => await _runLog.LastRangeRunAsync(stageName, ct).ConfigureAwait(false);
 
     /// <summary>
@@ -220,16 +171,11 @@ public sealed class BackfillRun
     {
         var text = Range(from, to) + ", reached " + Iso(result.LastDateCovered);
 
-        if (result.Position is not null)
-        {
-            text += " at " + result.Position;
-        }
-
         if (result.WasHalted)
         {
             text += ". HALTED on the allowance gate, which is the mechanism working rather than a " +
-                    "failure: everything written is kept and the next run resumes from here on D-68's " +
-                    "per-grain idempotence";
+                    "failure: everything written is kept and the next run picks up the tickers with no " +
+                    "attempt row for this range [0010]";
         }
 
         return result.Detail is null ? text + "." : text + ". " + result.Detail;

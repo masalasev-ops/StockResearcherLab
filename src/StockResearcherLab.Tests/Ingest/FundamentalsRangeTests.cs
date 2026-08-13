@@ -285,11 +285,17 @@ public sealed class FundamentalsRangeTests
             {
                 Interlocked.Increment(ref _symbolListCalls);
 
-                // The delisted list is empty, so the pool is the live half alone and
-                // every assertion reads one set rather than a union of two.
+                // **The delisted list carries one name and cannot be empty.**
+                // `SymbolList.AdmittedFromAsync` throws on a list with no `Common
+                // Stock`, treating it as a shape change rather than an empty exchange,
+                // which is the guard that stops a silently emptied universe. So the
+                // half is exercised with a name that is admitted and has no
+                // `price_daily` row, and `RangePoolAsync` adds only delisted names
+                // carrying a bar at or after the window start. The pool is therefore
+                // the six live members and every assertion reads one set.
                 if (url.Contains("delisted=1", StringComparison.Ordinal))
                 {
-                    return Json("[]");
+                    return Json("""[{"Code":"SRLFRGGONE","Name":"Gone Inc","Type":"Common Stock"}]""");
                 }
 
                 return Json("[" + string.Join(",", Pool.Select(t => t[..^3]).Select(c =>

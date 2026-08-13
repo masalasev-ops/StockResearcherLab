@@ -16,7 +16,7 @@ Correct them directly. Do not record intentions here.
 | 0 Rails | DONE | d9cb5df | Signed off 2026-08-06. Checkpoints 0.1 to 0.8, plus CI, the sign-off review, and pass O's corrections. 25 tests green. Step 1 was met by running every CI step locally, because no hosted runner has ever picked up a job on this account. Step 2 ran at `d4baeaf` and does not cover pass O's four corrected files. Both gaps are in the phase 0 block below |
 | 1 Ingest and universe | IN PROGRESS | 050d5c7 | Every checkpoint 1.1 to 1.14 landed, 136 tests. All twelve definition-of-done lines met live on 2026-08-09: the universe rebuilt to 2,840 names and `run-night` ran all seven stages end to end. Four findings are open and all four are authored questions, not build work: C01 never deactivates, the universe is 2,840 rather than roughly 2,000, C05 cannot fit any schedule, and CI cannot catch the timeout failure class. The CI runner gap is recorded below rather than at sign-off |
 | 2 Compute | IN PROGRESS | 68aafa4 | Every checkpoint 2.1 to 2.15 landed, 221 tests. Five components built: C08, C09, C10, C11 and C35. All eleven definition-of-done lines met on 2026-08-11, with `run-night` completing twelve stages on the blessed date 2026-08-07 and the compute layer digesting identically on re-run. Two components had never executed before this phase ran them and both were broken at the write, which is the phase's largest finding. `METRICS.md` is still the unauthored draft 2.1 produced and all nine of its PROPOSAL entries are now running code |
-| 3 Backfill | IN PROGRESS | ba88b0b | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b`, 314 with D-98's implementation, 324 with its two open items closed, 326 with the backfill driver, 332 with range-scoped resumption and 338 with the frontier position and the connection retry, `ci.ps1` green at each. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built, and 3.6 has been run once: it failed at 58 percent after 2h10m, leaving `price_daily` at 78 million rows and 12 GB. 3.7 to 3.10 are unrun and the phase's remaining sweeps spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them. The open findings are the table at the foot of this file rather than a second list here; **item 24 blocks 3.7 and every nightly run against the backfilled store** |
+| 3 Backfill | IN PROGRESS | 13215f6 | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b`, 314 with D-98's implementation, 324 with its two open items closed, 326 with the backfill driver, 332 with range-scoped resumption and 338 with the frontier position and the connection retry, `ci.ps1` green at each, then 336 at `5be4d33` when the frontier's four tests were replaced by two. **`ci.ps1` is red at `13215f6` on one test and item 29 is why**, a resolver-dependent assertion over a retry predicate that does not cover the fault it is named for. No source file has changed since `61385fc`. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built, and ~~3.6 has been run once: it failed at 58 percent after 2h10m, leaving `price_daily` at 78 million rows and 12 GB~~ **3.6 completed on 2026-08-13**, after three failed attempts, a vacuum, and its resumption rebuilt onto `price_fetch_attempt` [D-99, 0010]: 33,359,792 bars over 18,812 tickers in 108.4 minutes, the pool covered at 50,737 attempt rows, and `price_daily` at 109.6 million rows and 18.3 GB. 3.7 to 3.10 are unrun and the phase's remaining sweeps spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them. The open findings are the table at the foot of this file rather than a second list here; **item 24 blocks 3.7 and every nightly run against the backfilled store** |
 | 4 Screens and selection | NOT STARTED | | |
 | 5 Digest chain | NOT STARTED | | |
 | 6 Researcher | NOT STARTED | | |
@@ -81,7 +81,7 @@ them here rather than editing the architecture, and note the gap where it is lar
 | Screen overlap | 10-15% | | |
 | Cache hit rate | >90% | | |
 | Annual cost | ~$50 | | |
-| Database size after backfill | ~5 GB | | |
+| Database size after backfill | ~5 GB | 18.3 GB in `price_daily` alone, 3.6 complete and 3.7 to 3.10 unrun | 2026-08-13, phase 3 |
 | Full backfill rebuild time | minutes | | |
 | Technical columns per name | ~40 | 15 | 2026-08-11, phase 2 |
 | Compute layer, one date, whole universe | not estimated | 14.4 s over five stages | 2026-08-11, phase 2 |
@@ -3710,10 +3710,22 @@ with the prior wording in `CHANGELOG.md`.
 
 ### 3.6, C02 over `eod/{t}`, whole history
 
-**Built, not run.** The sweep spends 50,785 units and no sweep has been authorised, so
+~~**Built, not run.** The sweep spends 50,785 units and no sweep has been authorised, so
 what this checkpoint lands is the code and its tests against a provider double. The
 plan's own done-when lines for 3.6, a spot-checked ticker with bars across the window
-and `SPY.US` present, are checks against a loaded store and stay unmet until it runs.
+and `SPY.US` present, are checks against a loaded store and stay unmet until it runs.~~
+**Run and completed on 2026-08-13**, four attempts and a vacuum later, with resumption
+rebuilt onto `price_fetch_attempt` in between. The landing is recorded at the foot of
+this section.
+
+**Both store-side done-when lines are met and one of them is met weakly.** `OTCFF.US`
+carries 1,209 bars from 2021-11-01 to 2026-08-12, every one of them inside the window.
+**`SPY.US` is present with 265 bars and the sweep never touched it**: it is an ETF, so
+`SymbolList`'s `Common Stock` filter keeps it out of the pool, it carries no attempt
+row, and its depth is whatever the nightly bulk feed has left. The line is met by the
+nightly path rather than by the sweep, which is worth knowing before the ticker is read
+as evidence of coverage. Its latest bar is 2026-08-10 against the table's 2026-08-12,
+the nightly feed not having run for two sessions while the backfills did.
 
 **The pool is the union of two symbol-list calls**, live and delisted, both filtered to
 `Common Stock` by `SymbolList` [D-2, D-4]. The two lists are disjoint, measured at 3.1,
@@ -4644,7 +4656,10 @@ is bloat. The estimate predates 3.1's measurement of the pool at 50,785 admitted
 stocks against the roughly 30,000 the phase plan first carried, and depth is whatever
 `eod/{t}` returns rather than the five years the estimate assumed [D-94]. This is not
 restated in §16 here: item 17's carried obligation is to restate every size from
-measurement once 3.6 to 3.10 have loaded, and none of them has.
+measurement once 3.6 to 3.10 have loaded, and none of them has. **3.6 loaded later the
+same day** and the figure moved again, to 8,956 MB of table and 9,743 MB of indexes,
+18.3 GB in all against an estimate of 400 MB for this store and roughly 5 GB for every
+store together. The obligation is unchanged, four of the five checkpoints being unrun.
 
 #### What reads `0007`'s `(date, ticker)` index during a ticker-partitioned price sweep
 
@@ -4798,6 +4813,115 @@ further passages were read and left alone: §2's "records where it reached" name
 that `run_log.run_date` still carries, and 3.16's "resumable from where an interruption
 left it" is unchanged in meaning.
 
+#### 2026-08-13, the sweep landed
+
+`run_log` 1517, `ok`, 108.4 minutes, 14:34 to 16:23 UTC.
+
+> range 2021-01-04..2026-08-12, reached 2026-08-12. 33,359,792 bar(s) over 18,812 of
+> 50,737 admitted common stock(s), live and delisted. 31,925 carried an attempt for this
+> range already and were not dispatched [0010]. 0 connection open(s) retried.
+
+**The re-invocation dispatches nothing**, which is 3.6's last outstanding done-when and
+the first time it has been asserted against a real 50,737-row attempt record rather than
+a 22-ticker fixture. Run immediately afterwards over the same two dates it reported `0
+bar(s) over 0 of 50,737` and exited 0. **The counter moved by exactly two across it**,
+which is `PoolAsync`'s two symbol-list calls and nothing else.
+
+**The attempt record covers the pool exactly.** 50,737 rows, every one stamped
+2021-01-04, no null yield date and no zero count anywhere in the table.
+
+**No dispatched ticker returned an empty series.** Not one of the 18,812, so the 404
+tolerance path did not fire once and the delisted half of the pool answers `eod/{t}` as
+readily as the live half. This is not item 16's D, which counts in-window delisted names
+added to a pool and is 3.7's own question.
+
+**A non-empty series is not the same as an in-window one, and the spot check found the
+difference on its first pass.** `OSM1.US` returned 1,296 bars running 1997-12-31 to
+2003-02-27, so a unit was spent, the rows were written, and **not one of them falls
+inside 2021-01-04 to 2026-08-12**. Its attempt row still stamps `last_yield_date` with
+the range start, which is accurate about the fetch and says nothing about the window.
+Nothing depends on it: resumption is a set difference over `last_attempted_date` and
+`last_yield_date` is informational for C02 [D-99]. What it means is that "every ticker
+yielded" cannot be read as "every ticker has data the experiment will see", and the
+second figure is not measured here.
+
+**Depth, and the range does not bound it.**
+
+| | Bars |
+|---|---|
+| mean per dispatched ticker | 1,773 |
+| median | 976 |
+| deepest | 16,261 |
+| span written | 1962-01-02 to 2026-08-12 |
+| bars after the range end | **0** |
+
+The range holds about 1,411 sessions and the mean alone exceeds it. `LoadSeriesAsync`
+calls `eod/{t}` with `period=d` and nothing else, so `from` and `to` stamp the attempt
+record and name the run without narrowing the fetch. That is the checkpoint as
+specified, "C02 over `eod/{t}`, whole history" [`BUILD_PLAN.md` 3.6], and it costs one
+unit either way.
+
+**The vacuum is what absorbed the load, and the sizes say so.**
+
+| | Before, just vacuumed | After the sweep |
+|---|---|---|
+| heap | 8,851 MB | 8,956 MB |
+| indexes | 7,259 MB | 9,743 MB |
+| live tuples, estimated | about 77,000,000 | 109,599,423 |
+| dead tuples | 0 | 281,563 |
+
+**32.6 million new rows added 105 MB of heap.** The space the vacuum freed was reused,
+which is what plain `VACUUM` exists to make possible and the half of item 27 that was
+decided rather than deferred. The indexes took the growth instead, 2,484 MB of it, a new
+entry having no equivalent reuse. No upsert came near its 300-second command timeout,
+and the run covered 18,812 tickers in 108.4 minutes where the bloated table had taken
+128.6 to cover fewer.
+
+**It finished 2,347 units under the wall**, at 47,653 against a ceiling of 50,000, being
+`backfill.daily_unit_allowance` less `backfill.unit_reserve`.
+
+**The requests-per-ticker figure is the gate read rather than anything the provider
+did.** `/api/user` costs no units and does cost a request, and the allowance counts
+requests, so at `backfill.ticker_concurrency` 8 the sweep's floor is **1.125 requests a
+ticker** by construction: one `eod/{t}` each, one gate read per chunk of eight, and two
+for the pool. Measured across the run it is about 1.15, the remainder being this
+session's own monitoring reads. A lagging provider counter was the competing explanation
+and the verification run rules it out, two calls having moved the counter by two
+immediately.
+
+#### The gate, and it is red
+
+`ci.ps1` at 13215f6 fails at step 11 on one test,
+`StageDataGuardTests.AConnectionThatCannotBeEstablishedIsRetriedAndTheCountIsReported`.
+Steps 1 to 10 pass: guards ok over 105 files, build 0 warnings 0 errors, ten migrations
+from an empty server and the idempotence gate. It reproduced on a second full run and
+then alone under a filter, so it is not a one-off.
+
+**The test's verdict depends on how quickly the local resolver answers.** It points
+`StageData` at `srl-no-such-host.invalid` with `Timeout=1` and asserts a
+`TimeoutException` after two retries. Measured 2026-08-13, the resolver returns
+NXDOMAIN in 206 ms, so Npgsql throws `SocketException: No such host is known` out of
+`NpgsqlConnector.ConnectAsync` and the one-second timeout never runs. `Assert.Throws`
+matches the type exactly and fails there.
+
+**The assertion is the smaller half.** `OpenAsync`'s predicate is `ex is NpgsqlException
+and not PostgresException || ex is TimeoutException`, and a connect-phase
+`SocketException` is neither, so it is not retried at all. The test never reached its
+`ConnectionRetries == 2` line and would not have passed it. **A connect-phase socket
+failure is the commonest transient database fault there is**, and it is the same shape
+as the `SocketException 10054` that ended run 1515 one layer up at item 28.
+
+**It passed at 5be4d33 this morning and no source file has changed since 61385fc.** The
+test and the predicate both landed at 9f4d5e6. What differs is the network: with the
+sweep issuing a thousand requests a minute the `.invalid` lookup took longer than a
+second and the timeout branch fired, which is the branch the predicate does cover. So it
+passes on a congested machine and fails on a healthy one, which is the wrong way round.
+
+Not taken here, and the two halves want different decisions. Making the test
+resolver-independent is a test change, an unroutable address rather than an unresolvable
+name. Whether `StageData` retries a bare `SocketException` changes every stage's
+database access and belongs with item 28's question about where transport retries live.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
@@ -4823,11 +4947,12 @@ them are in `docs/archive/process-2026-08.md`.
 | 18 | **Three components still catch `HttpRequestException` whole at a per-ticker fetch**, where C02 was narrowed to a 404 at 3.6. `FundamentalsIngestor` at line 245, `FlowIngestor` at 338 and 475, and `UniverseBuilder` at its sector call at 294. Each swallows a 402 or a 429 as a missing ticker, so a sweep that hits the allowance wall in flight writes nothing for that name and nothing for any name after it, and returns having completed over a partial load. `EodhdClient` now carries the status code, so the fix is one `when` clause each. Not taken here: each belongs to the checkpoint that gives its component a range mode | 3.7 for C03 and C01, 3.9 for C05 |
 | 19 | ~~**C05 buys per ticker what C03 now receives for nothing.** `FlowIngestor.LoadHoldersAsync` calls `fundamentals/{ticker}` with `filter=Holders::Institutions`; C03 now calls the same endpoint unfiltered, so the filter is a projection of a document C03 already has. 10 units a ticker, 2,500 a night at `flow.max_tickers_per_run` 250, and 28,410 for a universe pass of that half alone. C03's rotation would make a ticker's holders about ten days stale, against a block whose report dates move quarterly [D-69], and C03's pool is broader than the universe, so both conditions hold. **The backfill is unaffected**, the block having no series; the saving is nightly, and 3.9's scope shrinks by not re-fetching a current snapshot 2,841 times. Moving the read changes two components' declared sets and section 3, which is authored~~ **Closed by D-98's implementation on 2026-08-12.** `institutional_holding`'s writer is `FundamentalsIngestor`, `LoadHoldersAsync` is gone, §3's two Writes cells and `SCHEMA.md`'s writer declaration moved with it, and 3.9's scope in the phase plan names form 4 alone. The parse is `InstitutionalHolders` and the regression test states which half of D-98's claim it covers. **Two findings came out of it and neither was taken**, being items 20 and 21 | Closed |
 | 20 | ~~**C05's §3 Reads cell still names the ownership endpoint** it stopped calling at D-98. `ReadDeclarationConformanceTests` cannot catch it and is not failing to: the cell parse intersects against `SCHEMA.md`'s table list and drops everything that is not a table, which is what makes it able to read `security` out of "for the universe it iterates" and how it drops `digest_provider` from C29's. So the Reads column carries the same class of drift the Writes column does, with the same absence of a check over the half of each cell that names endpoints rather than tables. One cell, one clause, and the file is human-edited only [`CLAUDE.md` §13]~~ **The cell is corrected**, human-directed on 2026-08-12, as a clean edit under D-73 with the prior wording in `CHANGELOG.md` and a one-line diff. **What stays open is the blind spot**, which is recorded beside the Writes-column finding rather than as its own item, so that whoever builds one test sees the other defect in the same read. Seven of thirty-five Reads cells name a provider endpoint and none of those names is checked in either direction | The Writes-column conformance test, with which it shares a section. Recorded beside item 15 rather than counted twice |
+| 29 | **`StageData.OpenAsync` does not retry a connect-phase `SocketException`, and the test written to prove the retry works passes only on a slow resolver.** The predicate at `StageData.cs:85` is `ex is NpgsqlException and not PostgresException \|\| ex is TimeoutException`. Npgsql throws a bare `SocketException` out of `NpgsqlConnector.ConnectAsync` when the host does not resolve or refuses the connection, so that shape falls through to the rethrow and increments nothing. `StageDataGuardTests.AConnectionThatCannotBeEstablishedIsRetriedAndTheCountIsReported` points at `srl-no-such-host.invalid` with `Timeout=1` and asserts a `TimeoutException`, which arrives only if resolution takes longer than a second: measured 2026-08-13 the resolver returns NXDOMAIN in 206 ms, so the test fails on the exception type before reaching its `ConnectionRetries == 2` assertion, and that assertion would not have held either. **It passed at 5be4d33 the same morning, with the sweep issuing a thousand requests a minute**, and fails on an idle machine, so `ci.ps1` is red at 13215f6 with no source file changed since 61385fc. **Two fixes and they are separable.** The test becomes resolver-independent by dialling an unroutable address rather than an unresolvable name, which preserves what it proves and drops the dependency. Whether the predicate widens to cover a transport-level socket fault is the question item 28 asks one layer up about `EodhdClient`, and answering both at once is what leaves one rule rather than two | `ci.ps1` is red now, so the test half is due before the next green gate. The predicate half with item 28 |
 | 28 | **`EodhdClient` retries nothing on a transport fault, and that is what ended the 128-minute run.** `SendAsync` at `EodhdClient.cs:168-196` calls `_http.GetAsync` once and throws on anything it raises. Run 1515 died on a `SocketException 10054` inside `HttpConnection.CheckUsabilityOnScavenge`, a pooled TLS connection the provider had closed, on the free `/api/user` gate read. One reset socket in roughly 50,000 requests ends a six-hour sweep. **The fix is bounded retry on transport-level exceptions only, never on an HTTP status**: a 402 or a 429 has to keep failing the stage, those being the allowance wall reached in flight, and retrying one would spend units against a wall that persists for the day [3.4]. Not taken here because it changes a client every ingestor shares and wants a count in the run log beside the connection retry's. **The exposure is bounded rather than closed** since 0010: a fault now costs the chunk in flight rather than the sweep | Before the next multi-hour sweep, which is 3.6's completion |
 | 27 | **A sweep that re-fetches ground it has covered bloats the table until the upsert crosses its command timeout.** Every write over an existing row is an `ON CONFLICT DO UPDATE`, so it leaves a dead tuple, and 2026-08-13 measured 5,185,019 of 64,587,917 updates as HOT: the other 59 million each wrote fresh entries into both indexes, which stand at 7,259 MB against a table of 8,851 MB. The three passes over the same rows are visible as throughput, 180 then 130 then 86 tickers a minute on the same binary at the same concurrency, and the third pass ended at `TimeoutException: Timeout during reading attempt` with `Command Timeout=300`. **This is the growth failure the connection string's own comment predicts**: it crossed 30 seconds at about 13 million rows and the value was raised to 300, and "it fails by growth, so a value that works today stops working later" is now true a second time at 77 million. **Autovacuum cannot hold the line during a sweep**: it triggers at roughly 15.6 million dead tuples on this table, then scans 16 GB while the sweep writes, and the run stamped 09:04 had not finished by 12:45. `RUNBOOK.md` now says to vacuum deliberately after a bulk load. **The vacuum answered the immediate half**: 27,033,794 dead tuples to zero in 293.2 seconds, and the upsert then measured at a median of 1.08 seconds a ticker against the 300-second timeout, so no reindex is indicated and the sweep can resume. What is not decided is the standing half: whether `Command Timeout` rises, whether `backfill.ticker_concurrency` falls so eight large upserts stop contending, whether a vacuum runs between sweep days as a matter of course, or whether the table is partitioned, which 0007 already names as the decision 3.15 would recommend. **The trigger fires again on the next sweep that re-covers ground**, which 0010 now makes rare rather than routine | Before the 3.6 sweep resumes, and again at 3.15 |
 | 26 | **The test suite deletes a real sweep's `run_log` rows, which is item 22 inverted.** `PriceBackfillTests` clears `run_log WHERE stage = 'PriceIngestor'` before each test and again in `DisposeAsync`, and `TestDatabase` resolves its connection string from `appsettings.Secrets.json`, so a local `dotnet test` runs against the developer database and deletes rows a real sweep wrote. It took row 1414, the first failed 3.6 sweep, whose text survives only because it was transcribed into this document first. `ci.ps1` is unaffected, dropping and recreating `stockresearcherlab_ci`. **Half of it is closed and the closed half is the dangerous one.** Resumption moved to `price_fetch_attempt` at 0010, so a deleted `run_log` row now loses an operator's account rather than a day of allowance, and the attempt rows this class writes are cleared by naming its own tickers rather than by date or by prefix, because a `DELETE ... WHERE last_attempted_date` against the wrong date would erase a real sweep's whole record. The fixture range also starts at 2019-06-03 rather than at `backfill.window_start`, so a fixture attempt cannot be read as a real one. **What stays open is that the suite writes to the developer database at all**, which is item 10 one table further on | A test database separate from the developer database, with item 10 |
 | 25 | **Three more components read `price_daily` with an unbounded shape, and C01's is the same defect item 24 just closed.** `UniverseBuilder.LiquidAsync` windows `row_number() OVER (PARTITION BY ticker ORDER BY date DESC)` over every row matching its date bound and then scans the table again for `count(*)`, which is what took 169.9s in C03 before the rewrite. It is not a copy-paste of that fix: it also returns `first_seen` and `last_seen`, which the pool query does not compute. `FreshnessGuard` runs `SELECT date, count(*) FROM price_daily GROUP BY date` with **no date bound at all**, every night, and keeps the newest rows. `IndicatorEngine` and `MarketContextEngine` carry the window shape but join `security WHERE is_active` first, so they partition about 2,800 tickers rather than 78,806 and are two orders of magnitude away from the case that stopped; they still grow with the backfill. `ValuationEngine` is bounded on both sides and is the one that does not have the shape. **Nothing here is measured**: the times are C03's, and what these cost has not been read | C01 before 3.11, which runs it per evaluation date, and before any weekly universe build against the backfilled store. C07 before the next nightly run |
 | 24 | ~~**`FundamentalsIngestor.BootstrapPoolAsync` does not complete against a backfilled `price_daily`**, measured 2026-08-12: the statement run alone on an idle server gave up at a 120-second timeout, with the table at 78,087,416 rows and 12 GB after a 3.6 sweep that reached 58 percent of its pool. It opens with `row_number() OVER (PARTITION BY ticker ORDER BY date DESC)` over every row matching `date <= asOf` and then scans the table again for the history count, so it sorts and spills where at 10 million rows it did neither. **It is on the nightly path**, `CandidatesAsync` calling it on every C03 run, and on 3.7's, `RangePoolAsync` calling it again, so the sweep that succeeded has made the component consuming its output unrunnable and 3.7 is next. The remaining 42 percent roughly doubles the table. **CI is unaffected**, its database being dropped and recreated per run, so the gate stays valid while the developer database does not. What it needs is the pool derived without a whole-table window, which is a rewrite of one statement rather than a change to what the pool means, and 0007's date-leading index may or may not be the half that helps ~~ **Closed on 2026-08-13 by deriving the pool without the window.** Distinct tickers off the primary key, a LATERAL taking each ticker's twenty most recent bars by index however far back they are, and the history depth asked last of the names that already cleared price and liquidity rather than of all 78,806. **Proved the same set rather than spot-checked**: 7,320 tickers both ways, 0 missing and 0 extra, the shipped statement extracted verbatim out of the source for the comparison. 169.9s to 11s. **The prescribed sixty-day slice was measured and rejected**, dropping 2,486 of 7,320 delisted names and no faster. **Both call paths are fixed by the one change**, `RangePoolAsync` calling `BootstrapPoolAsync`. What stays open is the same shape in C01, C07, C08 and C10, named in the narrative and not touched | Closed. C01's is the one that matters next |
-| 23 | **What broke the pooled connector at 29,500 tickers is not established.** The 3.6 sweep failed at a `TimeoutException` inside `AuthenticateSASL`, which only runs on a physical open, and pooling was then measured working: **7 opens over 402 tickers at a worker count of 8**, off `pg_stat_database.sessions`. So the open was the pool replacing a connector that had broken, and what broke it is the part with no evidence behind it. Two candidates and neither is confirmed: a `count(*)` over 59 million rows run against the sweep by this session, which the client abandoned after five minutes without stopping the server-side scan, and the sweep's own load at eight concurrent COPY streams with `Command Timeout=300`. **The exposure is now bounded rather than closed** — the open retries twice and a failure costs one chunk instead of a sweep — so this is a question about the database rather than a blocker. What would answer it is the retry count in the run log across a full sweep: regularly non-zero means the pool is being broken repeatedly and the cause is worth chasing; zero or one means it was the one-off it looks like. **Two partial re-runs on 2026-08-13 both reported `0 connection open(s) retried`**, one of them over 128.6 minutes and 13,529 tickers, so the pool was not being broken repeatedly across either. Neither completed a full sweep and the original failure is still unexplained, so this stays open on the same trigger. **What did break the second re-run is a different fault and is item 27**: the upsert crossing its 300-second command timeout on a bloated table, which is a statement failing on a connection that was already open and is deliberately not retried | The 3.6 re-run's run-log line, which reports the count. No extra measurement is needed |
+| 23 | ~~**What broke the pooled connector at 29,500 tickers is not established.** The 3.6 sweep failed at a `TimeoutException` inside `AuthenticateSASL`, which only runs on a physical open, and pooling was then measured working: **7 opens over 402 tickers at a worker count of 8**, off `pg_stat_database.sessions`. So the open was the pool replacing a connector that had broken, and what broke it is the part with no evidence behind it. Two candidates and neither is confirmed: a `count(*)` over 59 million rows run against the sweep by this session, which the client abandoned after five minutes without stopping the server-side scan, and the sweep's own load at eight concurrent COPY streams with `Command Timeout=300`. **The exposure is now bounded rather than closed** — the open retries twice and a failure costs one chunk instead of a sweep — so this is a question about the database rather than a blocker. What would answer it is the retry count in the run log across a full sweep: regularly non-zero means the pool is being broken repeatedly and the cause is worth chasing; zero or one means it was the one-off it looks like. **Two partial re-runs on 2026-08-13 both reported `0 connection open(s) retried`**, one of them over 128.6 minutes and 13,529 tickers, so the pool was not being broken repeatedly across either. Neither completed a full sweep and the original failure is still unexplained, so this stays open on the same trigger. **What did break the second re-run is a different fault and is item 27**: the upsert crossing its 300-second command timeout on a bloated table, which is a statement failing on a connection that was already open and is deliberately not retried~~ **Closed on 2026-08-13 by the count the item asked for.** Run 1517 completed the sweep, 18,812 tickers over 108.4 minutes at a worker count of 8, and reported **0 connection open(s) retried**. The item's own rule decides it: zero or one means the original failure was the one-off it looked like, and this is zero across a full pass rather than across a partial one. **What broke the connector at 29,500 tickers is still unexplained and is now unreproduced**, which is the difference between an open question and an open item. **One qualification on the zero**, found the same day at the gate: `OpenAsync` retries `NpgsqlException` and `TimeoutException` and not a bare `SocketException`, so the count is silent about connect-phase socket faults. It is not silent here, because such a fault is rethrown rather than swallowed and the run completed, so nothing of either kind occurred during 1517. The predicate itself is item 29 | Closed. The predicate gap it exposed is item 29 |
 | 22 | ~~**A test fixture's halted range row would be resumed from by the first real sweep.** `run_log` id 1311 on the developer database is `PriceIngestor`, `halted`, `run_date` 2021-01-08, `reached 2021-01-08 at L07.US`, left by `PriceBackfillTests`, which clears `run_log WHERE stage = 'PriceIngestor'` before each test rather than after and runs the real component under its real name. `BackfillRun` resumes from the newest range row when its status is `halted`, so 3.6 would have started at `L07.US`, skipped every admitted ticker below it, completed, and reported a plausible count over a partial load. **Two fixes and they are not equivalent**: a test that also clears afterwards still leaves a row when it crashes, where scoping a resume point to the range that produced it closes both, since `RunLog.LastRangeRunAsync` matches on stage name and the `range ` prefix and never on the range itself. The second is a question about D-68 and D-93 rather than a patch. **CI is not exposed**, `ci.ps1` dropping its database before every run; this is the developer database, which is also the test database [item 10]. **The row is data and no test can find it**; what found it is the driver printing its resume point before running~~ **Closed on 2026-08-12, human-directed, and both halves were taken.** A resume point now has to record the range being asked for, and a halted row over a different range throws naming both ranges and the row id rather than falling through to a fresh start, because `to` defaults to today and a silent restart on a multi-day sweep burns a day of allowance and never finishes. `PriceBackfillTests` clears afterwards as well, which stops the ordinary case arriving without closing the crash case. Row 1311 is gone and its text and consequence are recorded in the narrative above, since a row deleted without a record teaches nothing twice | Closed |
 | 21 | ~~**`institutional_holding` has no guard against two entries resolving to one key.** `BulkUpsertSql.Upsert` is `INSERT ... SELECT ... ON CONFLICT (ticker, report_date, holder_name) DO UPDATE`, so two entries in one payload sharing a holder name and a report date arrive in one statement and Postgres raises `ON CONFLICT DO UPDATE command cannot affect row a second time`. **This is D-96's failure one table over**, which the earnings capture met by deduplicating in the parse and reporting the collision count to the run log, and it predates D-98 rather than arriving with it. Nothing observed says it happens: the captured block carries no duplicate and 1.9 read none. What D-98 changed is the exposure, C05 having written 250 tickers a night where 3.7's sweep writes about 4,800 in one run, and a single collision there fails the stage mid-sweep after the units before it are spent. The fix is D-96's, three lines and a counter; whether the same tie-break applies to a holder is the part that is authored~~ **Closed on 2026-08-12, human-directed, before 3.7's sweep.** The parse deduplicates: the larger current share count wins, the first in document order wins on a tie, a known count beats an absent one whichever came first, and summing is rejected because adding two entries writes a number the provider did not send. The count is reported per run in both paths beside the holdings row count, and its zero is asserted as well as its non-zero. **The failure was run rather than quoted**: removing the guard reproduces `Npgsql.PostgresException 21000` through the stage, which is what makes the guard known to be load-bearing. **The rule was chosen against zero observations and the count is what audits it**, so a non-zero count from 3.7's sweep is a reason to inspect the rows before trusting it | Closed. Re-read at 3.7's sweep, where the count is the observation the rule was chosen without |

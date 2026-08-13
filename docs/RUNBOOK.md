@@ -113,6 +113,37 @@ resume it, or delete that `run_log` row deliberately and start over. It does not
 over on its own, because a silent restart on a multi-day sweep burns a day of allowance
 re-doing finished work and never reaches the end.
 
+**A failure records where it reached and costs one chunk, not the sweep.** A
+ticker-partitioned sweep dispatches in sorted order, so every ticker below the lowest
+one still in flight was dispatched and finished. That minimum is recorded as the
+position, the run still fails, and the next run re-dispatches that ticker and everything
+above it. The line says `FAILED rather than halted`, because a halt is the gate working
+and a failure is a fault nobody has explained yet.
+
+**Establishing a connection retries twice; nothing else retries.** The count is in every
+range run's line, including its zero. A count that is regularly non-zero is not the
+retry working, it is the database or the pool needing attention.
+
+### Why a per-ticker write failure is not tolerated
+
+Two per-ticker failures are tolerated and they are enumerated above in the failure
+table: a provider 404, and a D-71 short page. **There is deliberately no third, and a
+write failure is the one that keeps being proposed.**
+
+A 404 is a fact about the world. The provider does not carry that ticker, and recording
+zero rows is the true answer, so the sweep continues having lost nothing.
+
+A write failure is not a fact about the world. The data was fetched and the units were
+paid, and the write is what was lost, so continuing past it reports `Completed` over a
+partial load. That is the same shape as the swallowed 402 this phase already fixed
+once: a stage that returns success while the store is short is the failure mode nothing
+downstream can detect.
+
+It also fails worst exactly when it matters most. A database unavailable for ten minutes
+would burn hundreds of tickers as tolerated failures, spend their units, write nothing,
+and exit zero. The frontier position above is the answer instead: the run fails, loudly,
+having recorded a position that costs one chunk to re-do.
+
 ### The two-pass screen build
 
 Run in two passes. Pass one computes raw screen scores for every ticker on every

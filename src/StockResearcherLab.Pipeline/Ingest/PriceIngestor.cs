@@ -161,12 +161,56 @@ public sealed class PriceIngestor : IBackfillStage
                 // (ticker, date) [D-68, CLAUDE.md section 6].
                 var counts = new long[dispatch.Count];
 
-                await Parallel.ForEachAsync(
-                    Enumerable.Range(0, dispatch.Count),
-                    new ParallelOptions { MaxDegreeOfParallelism = concurrency, CancellationToken = ct },
-                    async (i, token) =>
-                        counts[i] = await LoadSeriesAsync(settings, dispatch[i], token).ConfigureAwait(false))
-                    .ConfigureAwait(false);
+                // **The frontier, so a failure can prove a position.** Tickers are
+                // dispatched in sorted order, so every ticker strictly below the lowest
+                // one still in flight was dispatched and finished. That makes the
+                // minimum of this set a position the execution can prove, where the
+                // completed set cannot be one: it is not a prefix, because workers
+                // finish out of order.
+                var inFlight = new SortedSet<string>(StringComparer.Ordinal);
+
+                try
+                {
+                    await Parallel.ForEachAsync(
+                        Enumerable.Range(0, dispatch.Count),
+                        new ParallelOptions { MaxDegreeOfParallelism = concurrency, CancellationToken = ct },
+                        async (i, token) =>
+                        {
+                            var ticker = dispatch[i];
+
+                            lock (inFlight)
+                            {
+                                inFlight.Add(ticker);
+                            }
+
+                            counts[i] = await LoadSeriesAsync(settings, ticker, token).ConfigureAwait(false);
+
+                            lock (inFlight)
+                            {
+                                inFlight.Remove(ticker);
+                            }
+                        })
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    // **The run still fails and nothing is tolerated.** What changes is
+                    // the blast radius: at most this chunk rather than the whole sweep.
+                    // A ticker that threw is still in flight by this reckoning, so the
+                    // position never sits above it and nothing is skipped.
+                    //
+                    // Tickers dispatched in an earlier chunk are not in this set and do
+                    // not need to be: the chunks are walked in order, so the lowest
+                    // in-flight ticker of the current chunk is below every ticker any
+                    // later chunk would hold.
+                    string? reached;
+                    lock (inFlight)
+                    {
+                        reached = inFlight.Count == 0 ? dispatch[0] : inFlight.Min;
+                    }
+
+                    throw new RangeExecutionFailedException(reached, ex);
+                }
 
                 written += counts.Sum();
                 loaded += dispatch.Count;

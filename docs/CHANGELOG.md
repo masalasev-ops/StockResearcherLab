@@ -1330,3 +1330,25 @@ how `BackfillRun` reads a `run_log` row it already read.
 **One `run_log` row was deleted from the developer database**, id 1311, and its text and
 consequence are in `PROGRESS.md` rather than here, because it was data rather than a
 document and the record has to sit where the finding does.
+
+---
+
+## 2026-08-12, the failed sweep, the frontier position and the connection retry
+
+`RUNBOOK.md` is a spec under D-73 and this is an addition, so nothing is removed. Its
+"Running an ingest sweep" subsection gains three paragraphs, on what a failure records,
+on the connection retry and its count, and on why a per-ticker write failure is not
+tolerated. The last of those sits beside the two exceptions the failure table already
+enumerates, so the absent third reads as deliberate rather than forgotten.
+
+**No other document changed.** No component, table, column or config key moved. The
+retry's attempt count and backoff are constants in the data layer rather than config
+keys, on the precedent the transport already sets: the rate limiter's 1,000 a minute
+and the HTTP handler's pooled-connection lifetime are constants too, and config in this
+system is for values the experiment turns on [`CLAUDE.md` §8].
+
+**A hypothesis was refuted rather than acted on, and the measurement is in
+`PROGRESS.md`.** The instruction to establish why a physical connection was being
+established per ticker rested on a sound reading of the stack. It is not what happens:
+7 physical opens over 402 tickers at a worker count of 8. Nothing was changed about
+pooling, because there was nothing wrong with it.

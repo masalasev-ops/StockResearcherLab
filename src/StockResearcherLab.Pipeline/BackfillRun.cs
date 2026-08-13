@@ -98,10 +98,13 @@ public sealed class BackfillRun
         // allowance re-doing finished work and never reaches the end. Refusing makes
         // both the fixture row and the midnight rollover loud, and the operator either
         // passes the recorded range explicitly or clears the row deliberately.
-        if (last is { } row && row.WasHalted && !row.CoversRange(from, to))
+        // A failed row carries a position too since the frontier rule, so the test is
+        // "does this row hold a position" rather than "is this row a halt". Both mean
+        // the same thing to a resume and the same thing to a range mismatch.
+        if (last is { } row && row.Position is not null && !row.CoversRange(from, to))
         {
             throw new InvalidOperationException(
-                $"'{stage.Name}' has a halted range run recorded over {row.RecordedRange} and this run " +
+                $"'{stage.Name}' has a {row.Status} range run recorded over {row.RecordedRange} and this run " +
                 $"asks for {Range(from, to)[6..]}. A resume point belongs to the range that produced it: " +
                 "the position is a ticker and which pool it indexes into is decided by the range, so " +
                 "resuming a wider sweep from a narrower one's position skips every name the narrow one " +
@@ -112,7 +115,12 @@ public sealed class BackfillRun
                 "to today and a sweep re-invoked the next day would silently restart and never finish.");
         }
 
-        var resumeFrom = last is { } point && point.WasHalted ? point.Position : null;
+        // **A failed row's position resumes too, since the frontier rule** [item 22's
+        // successor]. It was null before because a failure could not prove one, and it
+        // can: the minimum in-flight ticker is below everything that finished. A row
+        // holding no position still starts over, which is every date-partitioned stage
+        // and every failure before the first dispatch.
+        var resumeFrom = last?.Position;
 
         var context = new BackfillContext(from, to, data, _clock, config, _allowance, resumeFrom);
 
@@ -130,7 +138,7 @@ public sealed class BackfillRun
             await _runLog.RecordAsync(
                 result.LastDateCovered, stage.Name, result.Status, startedAt,
                 stopwatch.ElapsedMilliseconds, result.RowsWritten,
-                Describe(from, to, result), ct).ConfigureAwait(false);
+                Describe(from, to, result) + Retries(data), ct).ConfigureAwait(false);
 
             return result;
         }
@@ -154,10 +162,30 @@ public sealed class BackfillRun
             // a hole no later stage can see. So the row states the position it can
             // prove rather than the one it hoped for, and an unfiltered read is safe
             // without anyone remembering a status filter.
+            // **A ticker-partitioned failure records where it got to.** The stage
+            // reports the lowest ticker still in flight, which everything below was
+            // dispatched past, so the next run re-dispatches that one and everything
+            // above rather than the whole pool. The run still failed and nothing was
+            // tolerated; what changes is that a transient fault costs at most
+            // `concurrency` tickers instead of a sweep.
+            //
+            // **The line says the position came from a failure**, because a halt and a
+            // failure mean different things to whoever reads the log: a halt is the
+            // gate working and this is a fault that has not been explained.
+            var reached = (ex as RangeExecutionFailedException)?.Position;
+
+            var line = Range(from, to)
+                       + (reached is null ? "" : ", reached " + Iso(from) + " at " + reached)
+                       + (reached is null
+                           ? ". No position: the execution failed before it dispatched anything, so the " +
+                             "next run starts over."
+                           : ". FAILED rather than halted, and the position is the lowest ticker still in " +
+                             "flight rather than a clean stopping point.")
+                       + " " + ex.Message + Retries(data);
+
             await _runLog.RecordAsync(
                 from, stage.Name, "failed", startedAt,
-                stopwatch.ElapsedMilliseconds, null,
-                Range(from, to) + " " + ex.Message, ct).ConfigureAwait(false);
+                stopwatch.ElapsedMilliseconds, null, line, ct).ConfigureAwait(false);
 
             throw;
         }
@@ -206,6 +234,20 @@ public sealed class BackfillRun
 
         return result.Detail is null ? text + "." : text + ". " + result.Detail;
     }
+
+    /// <summary>
+    /// The connection retry count, always stated, including its zero [D-98's rule one
+    /// table over]. A retry firing constantly is a pooling problem still present, and a
+    /// count that appears only when it is non-zero is one nobody can baseline.
+    ///
+    /// Composed here rather than by each stage because this class owns the
+    /// <see cref="StageData"/> every stage was handed, so one place reports it for all
+    /// of them.
+    /// </summary>
+    private static string Retries(StageData data)
+        => string.Format(
+            CultureInfo.InvariantCulture,
+            " {0:N0} connection open(s) retried.", data.ConnectionRetries);
 
     private static string Range(DateOnly from, DateOnly to)
         => "range " + Iso(from) + ".." + Iso(to);

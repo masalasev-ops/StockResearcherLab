@@ -1705,6 +1705,57 @@ left nothing behind when they failed.
 
 ---
 
+**D-101 Every backfill ingest pool that can reach delisted names does, and they all mean
+the same thing.** `ACTIVE`
+Closes open item 16.
+
+**The pool is the live pool plus every admitted delisted common stock carrying at least
+one bar inside the window**, which is 16,862 names measured 2026-08-13. C03 was amended
+to it at 3.7; C04 and C06 take the same definition from here. C05 cannot and that is
+open item 12's finding rather than an exception carved here: `sec-filings` returns 404
+for delisted names against ticker strings the price and fundamentals endpoints answer
+for in the same run.
+
+**The sentiment half is not optional, because the absence is not a gap.** A delisted
+name in a reconstructed 2021 universe with no sentiment rows does not arrive as unknown.
+`article_count` zero-fills, so `article_count_z_own_90d` is computed against a baseline
+of zeros while `sentiment_score` stays null. That is a degenerate value that ranks, not
+an absence that abstains, and it ranks in the same direction for every name that later
+failed. Null means unknown is the rule [`CLAUDE.md` §6]; a zero that arrives by
+construction rather than by measurement defeats it silently.
+
+**Both of the two anti-megacap screens were on course to have survivor-only backfilled
+history, and that is what makes this urgent rather than tidy.** §20 names the sentiment
+and flow screens as "the two that structurally tilt small and the two doing the most to
+keep this system off megacaps". S4's bias is irreducible at open item 12. S3's is not,
+the endpoint answering for delisted names, so leaving it would have meant the tuner
+reading both anti-megacap screens off survivors alone at exactly the moment D-42's
+reasoning says a tuner cutting those two dismantles the design.
+
+**C06 widens whether or not its rows have a reader for delisted names.** Three ingest
+pools with two definitions is the shape that has produced every silent hole this phase
+has found, the fundamentals pool and the price pool being the other two. Consistency is
+what is bought here, and a pool rule that has to be looked up per component is one a
+later session gets wrong.
+
+**The earnings half was checked for being free and it is not in the phase at all.** The
+mechanism is as supposed: `calendar/earnings` is one global bulk call at weight 1 for
+any range, and the universe narrowing happens in `ParseEarnings` after the response
+arrives rather than in the request, so widening the set passed in would cost nothing.
+It does not apply, because 3.10 deliberately loads no earnings: the payload carries no
+date on which a schedule became public, so `announced_date` is null and loading it would
+put a lookahead of unknown size under C12 and C15 [phase 3 plan, 3.10]. There is
+therefore no free half to collect and none priced. **The blackout consequence is uniform
+rather than asymmetric**: C12's earnings blackout never fires on any backfilled date for
+any name, survivor or not, so this is not a survivorship defect and the widening does
+not address it. Whether `earnings_history`, which C03 now populates over the widened
+pool [D-96], can serve that gate is a separate question and phase 5's.
+
+**The marginal cost is 118,034 units**, being 84,310 for sentiment at 5 a ticker and
+33,724 for splits and dividends at 1 each. The phase total is repriced from the measured
+D in the phase plan's §2 and comes to ~647,376, inside the 376,685 to 702,795 bracket
+that section stated before D was known.
+
 ---
 
 ## Open

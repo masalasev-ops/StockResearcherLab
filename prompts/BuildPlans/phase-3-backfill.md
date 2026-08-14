@@ -89,41 +89,52 @@ spends 45,518 of them.
 | Source | Endpoint | Weight | Pass | Units |
 |---|---|---|---|---|
 | Prices | `eod/{t}` | 1 | every admitted common stock, live and delisted | **50,785**, counted at 3.1 |
-| Fundamentals | `fundamentals/{t}` | 10 | the ~4,800 candidate pool **plus every delisted common stock with a bar inside the window** | **48,000 + 10D**, D counted at 3.6 |
-| Sentiment | `sentiments` | 5 per ticker | 2,841 names, one wide range | ~14,200 |
-| Flow | `sec-filings/{t}/form4` | 10 per page | the universe, live names only [3.1] | ~258,000 |
-| Splits, dividends | `splits/{t}`, `div/{t}` | 1 | the universe | ~5,700 |
-| | | | **total** | **376,685 + 10D** |
+| Fundamentals | `fundamentals/{t}` | 10 | the candidate pool **plus every delisted common stock with a bar inside the window** | **200,670**, measured at 3.7 |
+| Sentiment | `sentiments` | 5 per ticker | the universe **plus the same delisted names** [D-101] | **98,515** |
+| Flow | `sec-filings/{t}/form4` | 10 per page | the universe, live names only [3.1, open item 12] | ~258,000 |
+| Splits, dividends | `splits/{t}`, `div/{t}` | 1 each | the universe **plus the same delisted names** [D-101] | **39,406** |
+| | | | **total** | **~647,376** |
 
 **The price line is measured rather than estimated.** 3.1 read 18,174 live common
 stocks and 32,611 delisted ones, disjoint, so the pool is 50,785 at one unit each
 against the ~30,000 this table first carried.
 
-**D is the count 3.6 produces and nothing here estimates it.** It is the number of
-delisted common stocks with at least one `price_daily` bar at or after
-`backfill.window_start`, which 3.6 is what makes computable: the symbol list carries no
-delisting date, so the last bar is the only date there is and the call is what reveals
-it. Names that stopped trading before the window start are excluded and cost nothing.
+**D is measured and is 16,862.** It is the number of delisted common stocks with at
+least one `price_daily` bar at or after `backfill.window_start`, counted 2026-08-13 once
+3.6 had loaded. 3.6 is what made it computable: the symbol list carries no delisting
+date, so the last bar is the only date there is and the call is what reveals it. Names
+that stopped trading before the window start are excluded and cost nothing, and 15,749
+of the 32,611 delisted names are in that class.
 
-**The bracket, stated so nobody is surprised by either end.** D is between 0 and
-32,611, so the phase total is between **376,685 and 702,795 units**, which is four days
-and seven. Three of 3.1's five sampled delisted names last traded before the window and
-two inside it, and five names is not a rate; no figure is claimed from it.
+**The bracket held and the phase landed inside it.** It was stated as 376,685 to 702,795
+units against a D between 0 and 32,611. The measured figure is **~647,376**, which is
+about six and a half days and sits at 92 percent of the upper bound. Nothing needs
+renegotiating, which is the outcome a bracket stated in advance exists to make checkable
+rather than arguable [`CLAUDE.md` §11].
 
-**Seven days is affordable and is stated rather than avoided.** The allowance gate at
-3.4 makes a multi-day sweep work by construction: it halts cleanly at the wall, records
-where it reached, and resumes on D-68's per-grain idempotence. What the upper bound
-costs is calendar time, not correctness, and the alternative is a reconstruction that is
-survivorship-clean on price and not on membership. If 3.6 returns a D that changes that
-reading, the number goes in `PROGRESS.md` and the pool is not narrowed to fit.
+**Three of the five lines moved and each moved for a stated reason.** Fundamentals
+measured 200,670 over a pool of 20,067, being 3,205 live and 16,862 delisted, against an
+estimate of 48,000 + 10D; the live half came in at 3,205 rather than ~4,800, so the
+measured line is 15,950 below what the estimate would have given at this D. Sentiment
+and distributions both moved because D-101 widened their pools to C03's, at 5 and 2
+units a ticker against fundamentals' 10. Flow did not move and cannot: `sec-filings`
+returns 404 for delisted names, which is open item 12 rather than an exception carved
+here.
 
-Roughly four to seven days of allowance, and the flow sweep is three of them. That
-figure is a fixed cost the design already accepted; deferring it does not reduce it, and
-deferring it would guarantee S4 has no backfilled history at exactly the moment D-69
-asks whether S4 survives, which is the deferral pre-deciding the question it claims to
-be waiting on.
+**Six and a half days is affordable and is stated rather than avoided.** The allowance
+gate at 3.4 makes a multi-day sweep work by construction: it halts cleanly at the wall,
+records where it reached, and resumes on D-68's per-grain idempotence. It has now done
+so four times across 3.6 and 3.7 in the ordinary course. What the figure costs is
+calendar time, not correctness, and the alternative is a reconstruction that is
+survivorship-clean on price and not on membership. The pool was not narrowed to fit at
+any point, which was the commitment this paragraph made before D was known.
 
-**Four days of allowance needs a day boundary, and the checkpoints carry it.** A bounded
+Six and a half days of allowance, and the flow sweep is three of them. That figure is a
+fixed cost the design already accepted; deferring it does not reduce it, and deferring it
+would guarantee S4 has no backfilled history at exactly the moment D-69 asks whether S4
+survives, which is the deferral pre-deciding the question it claims to be waiting on.
+
+**A multi-day sweep needs a day boundary, and the checkpoints carry it.** A bounded
 parallel loop over roughly 30,000 tickers hits the wall mid-sweep and learns by failing.
 D-68 makes resumption free, so an interrupted sweep costs nothing; what costs something is
 not knowing where it stopped. Every ingest sweep therefore reads the remaining allowance

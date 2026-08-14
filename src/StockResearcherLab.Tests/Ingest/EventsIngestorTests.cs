@@ -180,11 +180,23 @@ public sealed class EventsIngestorTests
     {
         var stage = new EventsIngestor(EodhdClientDouble());
 
-        var write = Assert.Single(stage.WriteSet);
-        Assert.Equal("events", write.Table);
+        // Two writes since 3.10, where this asserted one. `event_fetch_attempt` is what
+        // the distributions sweep resumes on [D-99, 0012], and it is named rather than
+        // counted: a count would pass on any second write and this test is about which
+        // ones there are.
+        var write = Assert.Single(stage.WriteSet, w => string.Equals(w.Table, "events", StringComparison.Ordinal));
         Assert.Equal(EventsIngestor.EventColumns, write.Columns);
         Assert.Contains("announced_date", write.Columns);
-        Assert.Equal(["security"], stage.ReadSet);
+
+        var attempt = Assert.Single(
+            stage.WriteSet, w => string.Equals(w.Table, "event_fetch_attempt", StringComparison.Ordinal));
+        Assert.Equal(EventsIngestor.AttemptColumns, attempt.Columns);
+
+        Assert.Equal(2, stage.WriteSet.Count);
+
+        // `price_daily` since 3.10, read by the range pass alone for the in-window
+        // delisted names [D-101]. The nightly path reads no prices.
+        Assert.Equal(["security", "price_daily"], stage.ReadSet);
     }
 
     private static StockResearcherLab.Data.Eodhd.EodhdClient EodhdClientDouble()

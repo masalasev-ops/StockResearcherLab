@@ -1623,3 +1623,21 @@ The prior wording, verbatim:
 The nightly stage reads no prices and still does not. The read belongs to
 `ExecuteRangeAsync` alone, which is why the appended clause says what it is for rather
 than naming the table on its own.
+
+---
+
+## 2026-08-14, C06's Reads cell names `price_daily` [3.10, D-101]
+
+The same edit as C04's above and for the same reason. D-101 widened C06's backfill pool
+to the live universe plus every admitted delisted common stock carrying a bar at or
+after `backfill.window_start`, and finding that set reads `price_daily`. The cell moves
+in the same commit as the code that declares the read, `ReadDeclarationConformanceTests`
+asserting both directions.
+
+The prior wording, verbatim:
+
+> Calendar, splits, dividends, `security` for the universe it iterates [D-74]
+
+The nightly stage reads no prices and still does not. The widening reaches which tickers
+are asked and not which event families: no earnings row is written by the range pass and
+that absence is unchanged.

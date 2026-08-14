@@ -144,8 +144,8 @@ absence from a grep over `src/` is what the entry states.
 | `backfill.weight_fundamentals` | 10 | 3.1, 3.3 | `FundamentalsIngestor` C03 | 3.7 |
 | `backfill.weight_sentiments_per_ticker` | 5 | 3.1, 3.3 | `SentimentIngestor` C04, `ExecuteRangeAsync` | 3.8 |
 | `backfill.weight_form4_page` | 10 | 3.1, 3.3 | `FlowIngestor` C05, `ExecuteRangeAsync` | 3.9 |
-| `backfill.weight_splits` | 1 | 3.1, 3.3 | NOT BOUND | 3.10 |
-| `backfill.weight_dividends` | 1 | 3.1, 3.3 | NOT BOUND | 3.10 |
+| `backfill.weight_splits` | 1 | 3.1, 3.3 | `EventsIngestor` C06, `ExecuteRangeAsync` | 3.10 |
+| `backfill.weight_dividends` | 1 | 3.1, 3.3 | `EventsIngestor` C06, `ExecuteRangeAsync` | 3.10 |
 
 **Every Consumer here reads `NOT BOUND` and that is the true state after 3.4.** The
 keys are seeded before anything resolves them, and 3.4 builds the gate they will be

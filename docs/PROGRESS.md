@@ -5345,6 +5345,55 @@ The row, in the form its three neighbours take:
     <tr><td class="mono"><b>sentiment_fetch_attempt</b> <span class="tag new">NEW</span></td>
     <td>one per ticker <span class="rmv">D-99, 0011</span></td><td class="mono">tiny</td></tr>
 
+#### 2026-08-14, checkpoint 3.10, and the second and third authorised cells
+
+**Built.** C06 gained `ExecuteRangeAsync`, splits and dividends over history per ticker
+from `splits/{t}` and `div/{t}` at one unit each. Not run.
+
+**No earnings row is written by the range pass and it is asserted rather than assumed.**
+The absence is 3.10's decision, `calendar/earnings` sending no date on which a schedule
+became public, and an omission and a decision look identical in an empty column. The
+test feeds the range parser a payload deliberately carrying `report_date` and asserts no
+earnings row comes back whichever event type is asked for. D-101's widening reaches
+which tickers are asked and not which event families, so it does not touch that
+paragraph.
+
+**The per-ticker feeds differ from the bulk ones in one way that matters: the ticker is
+not in the payload.** The bulk feeds send `code` and `exchange` separately, which 1.8's
+fixture exists for; these send neither, because the ticker is what was asked for. A
+parser reading `code` against them returns nothing while the stage reports success,
+which is 1.8's own defect in the mirror, so `ParsePerTicker` is a second parse rather
+than a parameter on the first.
+
+**Migration 0012 adds `event_fetch_attempt`**, on 0011's argument with a different
+cause. A name that has never split and never paid a dividend is ordinary rather than
+missing, so both endpoints return empty and it gains no row in `events` ever; 3.1
+measured that on `SPY.US` itself. The earnings rows already in that table make a
+presence predicate worse rather than better, being written by a different call, so a
+ticker with an earnings row and no distributions would read as covered while carrying
+nothing the sweep is for. The stamp is the range start, the nightly bulk feed and the
+per-ticker history differing in depth as completely as two calls can.
+
+**One attempt row per ticker for two calls**, because neither is dispatched without the
+other and a half-covered ticker is a state the sweep cannot produce.
+
+**C06's §3 Reads cell now names `price_daily`**, human-authorised, in this commit.
+Prior wording verbatim in `CHANGELOG.md`.
+
+**Two existing declared-set tests asserted a single write and now assert which two.**
+C06's here and C04's in its own commit, that one having been missed at 3.8 because the
+filtered run there did not include the file. Both are named rather than counted: a count
+passes on any second write, and what those tests are about is which ones there are.
+
+**The store matrix count now stands at 42** and two authored rows are owed, one per new
+table. Both take the form their four neighbours take:
+
+    <tr><td class="mono"><b>sentiment_fetch_attempt</b> <span class="tag new">NEW</span></td>
+    <td>one per ticker <span class="rmv">D-99, 0011</span></td><td class="mono">tiny</td></tr>
+
+    <tr><td class="mono"><b>event_fetch_attempt</b> <span class="tag new">NEW</span></td>
+    <td>one per ticker <span class="rmv">D-99, 0012</span></td><td class="mono">tiny</td></tr>
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 

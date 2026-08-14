@@ -414,6 +414,27 @@ Grain: ticker by event. **Writer: EventsIngestor.**
 
 `ticker`, `event_type`, `event_date`, `announced_date`.
 
+### event_fetch_attempt
+Grain: one row per ticker. **Writer: EventsIngestor.**
+
+`ticker`, `last_attempted_date`, `last_yield_date`, `rows_last_attempt`.
+
+**What the distributions sweep resumes on** [D-99, 0012]. Presence in `events` cannot
+serve: a name that has never split and never paid a dividend is ordinary rather than
+missing, so `splits/{t}` and `div/{t}` both return empty and it gains no row ever. 3.1
+measured the case on `SPY.US` itself, which is the benchmark rather than an obscure
+name. The earnings rows in that table make the predicate worse rather than better, being
+written by a different call, so a ticker with an earnings row and no distributions would
+read as covered while carrying nothing the sweep is for.
+
+**The stamp is the range start.** The nightly stage takes splits and dividends from the
+bulk feed for one date and the sweep takes whole history per ticker, so the two differ
+in depth as completely as two calls can.
+
+**One row per ticker for two calls.** Neither `splits/{t}` nor `div/{t}` is dispatched
+without the other, so a half-covered ticker is a state the sweep cannot produce and the
+record does not make representable.
+
 ---
 
 ## Computed

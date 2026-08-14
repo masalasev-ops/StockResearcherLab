@@ -41,14 +41,16 @@ public sealed class StoreMatrixConformanceTests
 
         // Thirty-nine at 3.7, which added earnings_history [D-96]. Forty at 3.6's
         // second pass, which added price_fetch_attempt [0010]. Forty-one at 3.8, which
-        // added sentiment_fetch_attempt [0011].
+        // added sentiment_fetch_attempt [0011]. Forty-two at 3.10, which added
+        // event_fetch_attempt [0012].
         //
-        // **This count moves before the row it counts, and deliberately.** §16 is in
-        // `ARCHITECTURE.html`, which is human-edited only [`CLAUDE.md` §13], and 3.8's
-        // authorisation covered the §3 Reads cell alone. Moving the count here leaves
-        // exactly one authored line between this branch and a green gate rather than
-        // two, so the row lands and everything passes at once.
-        Assert.Equal(41, stores.Count);
+        // **This count moves before the rows it counts, and deliberately.** §16 is in
+        // `ARCHITECTURE.html`, which is human-edited only [`CLAUDE.md` §13], and the
+        // authorisation 3.8 and 3.10 ran under covered the §3 Reads cells alone.
+        // Moving the count here leaves exactly two authored lines between this branch
+        // and a green gate rather than four, so the rows land and everything passes at
+        // once.
+        Assert.Equal(42, stores.Count);
 
         // Distinct, because a store named twice would satisfy a count and a set
         // comparison while saying two different things about one table.

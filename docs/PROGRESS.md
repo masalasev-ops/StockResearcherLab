@@ -5205,6 +5205,7 @@ measuring 3,205 rather than the ~4,800 assumed.
 
 **Built.** C05 gained `ExecuteRangeAsync`, which is one universe pass over `form4` at
 whole history per ticker. Not run: no sweep was issued and none is authorised.
+`ci.ps1` green at `6b6d53e`, 350 passing against 345 before the checkpoint.
 
 **The gate is asked per page rather than per ticker**, which the plan's own halt line
 requires and which the arithmetic forces: a ticker's walk is ten units a page over a

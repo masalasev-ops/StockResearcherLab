@@ -5324,6 +5324,27 @@ what holds the sweep at 98,515 units rather than the whole 32,611-name list. The
 end-to-end sweep is not asserted, for the reason item 33 gives, and C04 is now named in
 that item alongside C05.
 
+**The gate is red at this commit and one authored line closes it.** A new table in
+`SCHEMA.md` needs a row in §16's store matrix, which
+`StoreMatrixConformanceTests.EveryTableDeclaredInSchemaDocumentIsNamedInTheMatrix`
+asserts in both directions. §16 is in `ARCHITECTURE.html` and 3.8's authorisation
+covered the §3 Reads cell alone, so the row is not mine to add. **This was not foreseen
+by either side**: the authorisation enumerated the Reads cells because those were the
+blockers 3.9 had found, and the store matrix is a second place a table is named that
+only a table-adding checkpoint reaches. The three tables before this one each hit it and
+each was added by a checkpoint that had a human in the loop for it.
+
+The count assertion is moved to 41 here rather than left at 40, so exactly one authored
+line stands between this branch and a green gate rather than two, and the row landing
+turns everything green at once. Every other test passes: 29 ran green locally across the
+new fixture and the four conformance suites the change touches, `ReadDeclarationConformance`
+among them.
+
+The row, in the form its three neighbours take:
+
+    <tr><td class="mono"><b>sentiment_fetch_attempt</b> <span class="tag new">NEW</span></td>
+    <td>one per ticker <span class="rmv">D-99, 0011</span></td><td class="mono">tiny</td></tr>
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 

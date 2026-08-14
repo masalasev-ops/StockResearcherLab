@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data.Eodhd;
@@ -22,7 +23,7 @@ namespace StockResearcherLab.Pipeline.Ingest;
 /// by about three months and carries US Congress member trades, which are not Form 4
 /// insider filings.
 /// </summary>
-public sealed class FlowIngestor : IStage
+public sealed class FlowIngestor : IStage, IBackfillStage
 {
     public static readonly string[] InsiderColumns =
     [
@@ -125,6 +126,218 @@ public sealed class FlowIngestor : IStage
             DescribeShortfalls(shortfalls));
 
         return new StageResult(insiderRows, "ok", detail);
+    }
+
+    // ------------------------------------------------------- range mode [3.9] ---
+
+    /// <summary>
+    /// One universe pass over <c>form4</c>, whole history per ticker [D-93].
+    ///
+    /// **The pool is the live universe and it does not widen, which is the one place
+    /// D-101 does not reach.** Every other ingest pool in this phase gained the
+    /// in-window delisted names; this one cannot, because `sec-filings` answers 404
+    /// for a delisted ticker against the same string `eod/{t}` and `fundamentals/{t}`
+    /// return series for [open item 12]. The bias is therefore a fact about the
+    /// provider rather than a choice made here, and it is recorded against S4 rather
+    /// than worked around.
+    ///
+    /// **The attempt stamps the range end, which is C03's half of D-99's asymmetry.**
+    /// The nightly call and the sweep call are the same call: both walk `form4` to the
+    /// end and neither takes a depth parameter, so a ticker the rotation covered is as
+    /// complete as one this sweep covered and skipping it is correct. That is the
+    /// condition D-99 names, and C02's range-start stamp exists only because its two
+    /// calls differ in depth. The column carries the rotation's freshness ordering as
+    /// well, which is the same one-column-two-purposes D-99 flagged on C03 and did not
+    /// split.
+    ///
+    /// **This is the sweep the allowance gate exists for** [3.9]. About 258,000 units
+    /// across three days, so it halts twice in the ordinary course and a halt is the
+    /// mechanism working rather than a failure.
+    /// </summary>
+    public async Task<BackfillResult> ExecuteRangeAsync(BackfillContext context, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var settings = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
+
+        var pageSize = (int) await LongAsync(settings, "flow.form4_page_size", ct).ConfigureAwait(false);
+        var weight = await LongAsync(settings, "backfill.weight_form4_page", ct).ConfigureAwait(false);
+        var reserve = await LongAsync(settings, "backfill.unit_reserve", ct).ConfigureAwait(false);
+        var allowance = await LongAsync(settings, "backfill.daily_unit_allowance", ct).ConfigureAwait(false);
+
+        var pool = await RangePoolAsync(settings, ct).ConfigureAwait(false);
+        var already = await AttemptedOnAsync(settings, context.To, ct).ConfigureAwait(false);
+        var remaining = pool.Where(t => !already.Contains(t)).ToList();
+
+        long insiderRows = 0;
+        var walked = 0;
+        var shortfalls = new List<Shortfall>();
+        var attempts = new List<Attempt>(remaining.Count);
+
+        string? haltedOn = null;
+
+        // **Serial rather than parallel, and that is the paging.** C02 and C03 fan out
+        // because one ticker is one call; here one ticker is a walk whose length is
+        // discovered as it runs, so a bounded worker pool would have several walks
+        // asking the gate about the same remaining allowance and each answer would be
+        // stale by however many pages the others fetched meanwhile.
+        foreach (var ticker in remaining)
+        {
+            // **The gate is asked per page, not per ticker** [3.9]. A ticker's walk is
+            // ten units a page over an unknown page count, so a per-ticker projection
+            // would either overstate and stop early or understate and overshoot. The
+            // cost is a `/api/user` read per page, which spends no units.
+            var read = await WalkAsync(
+                ticker, pageSize,
+                async token => (await context.NextUnitAsync(weight, reserve, allowance, token)
+                    .ConfigureAwait(false)).Fits,
+                ct).ConfigureAwait(false);
+
+            if (read is null)
+            {
+                // 404, being a ticker the filings index does not carry. An ordinary
+                // fact rather than a fault, and it still takes an attempt row so the
+                // sweep does not offer it again.
+                attempts.Add(new Attempt(ticker, context.To, null, 0));
+                walked++;
+                continue;
+            }
+
+            var written = await WriteFilingsAsync(settings, ticker, read.Value.Rows, ct).ConfigureAwait(false);
+            insiderRows += written;
+
+            if (read.Value.StoppedByGate)
+            {
+                // **No attempt row, deliberately.** The rows collected are kept, every
+                // write being idempotent per grain [D-68], and the ticker stays in the
+                // remaining set so the next run walks it whole. Stamping it here would
+                // freeze a partial history behind a record saying it was covered, which
+                // is the one outcome the attempt record exists to prevent.
+                haltedOn = ticker;
+                break;
+            }
+
+            if (read.Value.Shortfall > 0)
+            {
+                shortfalls.Add(new Shortfall(ticker, read.Value.Shortfall, read.Value.Position));
+            }
+
+            attempts.Add(new Attempt(ticker, context.To, written > 0 ? context.To : null, written));
+            walked++;
+        }
+
+        await RecordAttemptsAsync(settings, attempts, ct).ConfigureAwait(false);
+
+        var detail = string.Format(
+            CultureInfo.InvariantCulture,
+            "{0:N0} insider transaction row(s) over {1:N0} of {2:N0} universe member(s). {3:N0} carried " +
+            "an attempt for this sweep already and were not walked [D-99]. The pool is live names only " +
+            "and cannot widen [open item 12]. {4}",
+            insiderRows, walked, pool.Count, pool.Count - remaining.Count,
+            DescribeShortfalls(shortfalls));
+
+        if (haltedOn is null)
+        {
+            return BackfillResult.Completed(insiderRows, context.To, detail);
+        }
+
+        return BackfillResult.Halted(insiderRows, context.To, detail + " " + DescribeGatedHalt(haltedOn));
+    }
+
+    /// <summary>
+    /// The gated halt's own sentence, kept out of the shortfall line [3.9].
+    ///
+    /// **A gated stop and a D-71 short page are two different observations and the run
+    /// log has to be readable as two.** One is this system declining to spend and the
+    /// other is the provider withholding rows it claimed to have; they are one absorbed
+    /// observation apart, and a sweep that rendered the first as the second would put a
+    /// spending decision into the record as a provider defect while leaving a short
+    /// history unremarked.
+    ///
+    /// Public so the distinction is asserted directly. C05's sweep pool is `security`,
+    /// which on a developer database is the live universe, so an end-to-end range test
+    /// would stamp an attempt row for every real ticker [open items 10 and 26].
+    /// </summary>
+    public static string DescribeGatedHalt(string ticker) => string.Format(
+        CultureInfo.InvariantCulture,
+        "HALTED on the allowance gate at {0}, mid-walk. That ticker carries no attempt row and is " +
+        "walked again from its first page by the next run, so no partial history is recorded as " +
+        "complete. This is not a D-71 shortfall and is not counted as one.",
+        ticker);
+
+    /// <summary>
+    /// The sweep's pool, which is the live universe in ticker order.
+    ///
+    /// No rotation and no cap: the sweep's job is one pass over everything, where the
+    /// nightly stage's job is to move a bounded number of names along [D-95].
+    /// </summary>
+    private static async Task<IReadOnlyList<string>> RangePoolAsync(
+        StageContext context, CancellationToken ct)
+    {
+        var rows = await context.Data.ReadAsync(
+            "security", "SELECT ticker FROM security WHERE is_active ORDER BY ticker;", ct)
+            .ConfigureAwait(false);
+
+        return rows.Select(r => (string) r[0]!).ToList();
+    }
+
+    /// <summary>
+    /// Tickers already carrying an attempt at this sweep's range end, which are the
+    /// ones it does not walk again [D-99].
+    /// </summary>
+    private static async Task<IReadOnlySet<string>> AttemptedOnAsync(
+        StageContext context, DateOnly asOf, CancellationToken ct)
+    {
+        var rows = await context.Data.ReadAsync(
+            "flow_fetch_attempt",
+            $"""
+             SELECT ticker
+             FROM flow_fetch_attempt
+             WHERE last_attempted_date = DATE '{asOf.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}'
+             ORDER BY ticker;
+             """,
+            ct).ConfigureAwait(false);
+
+        return rows.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// One ticker's <c>form4</c> walk, or null where the filings index does not carry
+    /// the ticker.
+    /// </summary>
+    private async Task<PagedRead?> WalkAsync(
+        string ticker, int pageSize, Func<CancellationToken, Task<bool>>? gate, CancellationToken ct)
+    {
+        try
+        {
+            return await _client.GetAllPagesAsync(
+                "sec-filings/" + ticker + "/form4", [], pageSize, ct, gate).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The parse and the write, shared by both entry points.</summary>
+    private static async Task<long> WriteFilingsAsync(
+        StageContext context, string ticker, IReadOnlyList<JsonElement> raw, CancellationToken ct)
+    {
+        var rows = ParseFilings(ticker, raw);
+        if (rows.Count == 0)
+        {
+            return 0;
+        }
+
+        return await context.Data.BulkUpsertAsync(
+            "insider_transaction", InsiderColumns, InsiderKey,
+            async (w, c) =>
+            {
+                foreach (var r in rows)
+                {
+                    await WriteInsiderRowAsync(w, r, c).ConfigureAwait(false);
+                }
+            }, ct).ConfigureAwait(false);
     }
 
     /// <param name="PoolSize">The whole active universe, which is the pool here.</param>
@@ -321,16 +534,16 @@ public sealed class FlowIngestor : IStage
         StageContext context, string ticker, int pageSize, List<Shortfall> shortfalls,
         CancellationToken ct)
     {
-        PagedRead read;
-        try
+        // **A 404 alone, narrowed at 3.9** [open item 18]. This caught
+        // `HttpRequestException` whole, so a 402 or a 429 reaching it was recorded as a
+        // ticker with no filings index: a night that hit the allowance wall in flight
+        // wrote nothing for that name and nothing for any name after it, and returned
+        // having completed over a partial load. The walk shares its catch with the
+        // sweep's, so there is one rule rather than two [D-100's reasoning, one layer
+        // up].
+        var read = await WalkAsync(ticker, pageSize, gate: null, ct).ConfigureAwait(false);
+        if (read is null)
         {
-            read = await _client.GetAllPagesAsync(
-                "sec-filings/" + ticker + "/form4", [], pageSize, ct).ConfigureAwait(false);
-        }
-        catch (HttpRequestException)
-        {
-            // A ticker with no filings index is the ordinary case for a recent
-            // listing. Not a reason to fail the night.
             return 0;
         }
 
@@ -338,41 +551,33 @@ public sealed class FlowIngestor : IStage
         // continued, because asking again cannot produce them and halting means a
         // universe pass never completes [D-71]. The client throws instead where the
         // loop stopped while a next link was still on offer.
-        if (read.Shortfall > 0)
+        if (read.Value.Shortfall > 0)
         {
-            shortfalls.Add(new Shortfall(ticker, read.Shortfall, read.Position));
+            shortfalls.Add(new Shortfall(ticker, read.Value.Shortfall, read.Value.Position));
         }
 
-        var rows = ParseFilings(ticker, read.Rows);
-        if (rows.Count == 0)
-        {
-            return 0;
-        }
+        return await WriteFilingsAsync(context, ticker, read.Value.Rows, ct).ConfigureAwait(false);
+    }
 
-        return await context.Data.BulkUpsertAsync(
-            "insider_transaction", InsiderColumns, InsiderKey,
-            async (w, c) =>
-            {
-                foreach (var r in rows)
-                {
-                    await w.StartRowAsync(c).ConfigureAwait(false);
-                    await w.WriteAsync(r.Ticker, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.Accession, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.Side, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.Ordinal, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.FiledAt, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.TransactionDate, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.OwnerCik, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.OwnerName, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.Code, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.SecurityTitle, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.Shares, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.Price, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.TotalValue, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.SharesOwnedAfter, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.AcquiredOrDisposed, c).ConfigureAwait(false);
-                }
-            }, ct).ConfigureAwait(false);
+    /// <summary>One insider row into an open COPY stream. Column order is <see cref="InsiderColumns"/>.</summary>
+    private static async Task WriteInsiderRowAsync(IBulkWriter w, InsiderRow r, CancellationToken c)
+    {
+        await w.StartRowAsync(c).ConfigureAwait(false);
+        await w.WriteAsync(r.Ticker, c).ConfigureAwait(false);
+        await w.WriteAsync(r.Accession, c).ConfigureAwait(false);
+        await w.WriteAsync(r.Side, c).ConfigureAwait(false);
+        await w.WriteAsync(r.Ordinal, c).ConfigureAwait(false);
+        await w.WriteAsync(r.FiledAt, c).ConfigureAwait(false);
+        await w.WriteAsync(r.TransactionDate, c).ConfigureAwait(false);
+        await w.WriteAsync(r.OwnerCik, c).ConfigureAwait(false);
+        await w.WriteAsync(r.OwnerName, c).ConfigureAwait(false);
+        await w.WriteAsync(r.Code, c).ConfigureAwait(false);
+        await w.WriteAsync(r.SecurityTitle, c).ConfigureAwait(false);
+        await w.WriteAsync(r.Shares, c).ConfigureAwait(false);
+        await w.WriteAsync(r.Price, c).ConfigureAwait(false);
+        await w.WriteAsync(r.TotalValue, c).ConfigureAwait(false);
+        await w.WriteAsync(r.SharesOwnedAfter, c).ConfigureAwait(false);
+        await w.WriteAsync(r.AcquiredOrDisposed, c).ConfigureAwait(false);
     }
 
     /// <param name="Ordinal">

@@ -95,8 +95,21 @@ public enum ShortfallPosition
 /// server ran out of pages first, because the other case throws [D-71].
 /// </param>
 /// <param name="Position">Where in the sequence the missing rows sat.</param>
+/// <param name="StoppedByGate">
+/// The caller's own gate refused the next page, so the walk stopped with pages still
+/// on offer [3.9].
+///
+/// **This is a third way to end short and it is not the other two.** A D-71 shortfall
+/// is the provider disagreeing with itself and a <see cref="PagedReadIncompleteException"/>
+/// is this client failing to ask; both are faults. A gated stop is the caller
+/// declining to spend, which is the allowance mechanism working. <see cref="Shortfall"/>
+/// is deliberately zero when this is set, because the rows that did not arrive were
+/// never asked for and counting them as withheld would put a spending decision into
+/// the record as a provider defect.
+/// </param>
 public readonly record struct PagedRead(
-    IReadOnlyList<JsonElement> Rows, int? ReportedTotal, int Shortfall, ShortfallPosition Position);
+    IReadOnlyList<JsonElement> Rows, int? ReportedTotal, int Shortfall, ShortfallPosition Position,
+    bool StoppedByGate = false);
 
 /// <summary>
 /// The typed client for the data provider. No maintained C# client exists, so a
@@ -308,10 +321,23 @@ public sealed class EodhdClient
     /// The distinction is which `break` ran, which is why it is structural rather
     /// than a judgement about how short is too short. No threshold appears here and
     /// none is to be added without evidence gathered after D-71 was written.
+    ///
+    /// **A third way to end exists and is the caller's rather than the endpoint's**
+    /// [3.9]. <paramref name="beforePage"/> is consulted before every page including
+    /// the first, and a refusal stops the walk with <see cref="PagedRead.StoppedByGate"/>
+    /// set and no shortfall recorded. A backfill sweep paging at ten units a page has
+    /// to be able to stop between pages rather than only between tickers, and the
+    /// result says which of the three endings happened rather than leaving the caller
+    /// to infer it from a row count.
     /// </summary>
+    /// <param name="beforePage">
+    /// Asked before each page is fetched. Returning false stops the walk cleanly.
+    /// Null means no gate, which is every nightly caller.
+    /// </param>
     public async Task<PagedRead> GetAllPagesAsync(
         string path, IEnumerable<(string Name, string Value)> query, int pageSize,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Func<CancellationToken, Task<bool>>? beforePage = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
 
@@ -329,6 +355,14 @@ public sealed class EodhdClient
 
         while (true)
         {
+            // Before the fetch rather than after it, so a refusal costs nothing. The
+            // first page is gated too: a sweep with no allowance left must not spend
+            // ten units discovering that.
+            if (beforePage is not null && !await beforePage(ct).ConfigureAwait(false))
+            {
+                return new PagedRead(all, total, 0, ShortfallPosition.None, StoppedByGate: true);
+            }
+
             var page = await GetPageAsync(path, materialised, offset, pageSize, ct).ConfigureAwait(false);
             total ??= page.Total;
             all.AddRange(page.Rows);

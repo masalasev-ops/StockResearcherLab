@@ -177,12 +177,24 @@ public sealed class SentimentIngestorTests
 
         Assert.Contains("SentimentIngestor", ArchitectureDocument.ComponentNames());
 
-        var write = Assert.Single(stage.WriteSet);
-        Assert.Equal("sentiment_daily", write.Table);
+        // Two writes since 3.8, where this asserted one. `sentiment_fetch_attempt` is
+        // what the sweep resumes on [D-99, 0011], and the two are named rather than
+        // counted: a count would pass on any second write and this test is about which
+        // ones there are.
+        var write = Assert.Single(
+            stage.WriteSet, w => string.Equals(w.Table, "sentiment_daily", StringComparison.Ordinal));
         Assert.Equal(SentimentIngestor.Columns, write.Columns);
 
-        // Reads the universe and nothing else. It must not read a score.
-        Assert.Equal(["security"], stage.ReadSet);
+        var attempt = Assert.Single(
+            stage.WriteSet, w => string.Equals(w.Table, "sentiment_fetch_attempt", StringComparison.Ordinal));
+        Assert.Equal(SentimentIngestor.AttemptColumns, attempt.Columns);
+
+        Assert.Equal(2, stage.WriteSet.Count);
+
+        // The universe, and `price_daily` since 3.8 for the in-window delisted names
+        // [D-101], read by the range pass alone. **It must still not read a score**,
+        // which is the property this line was written for.
+        Assert.Equal(["security", "price_daily"], stage.ReadSet);
     }
 
     // --------------------------------------------------------------- helpers ---

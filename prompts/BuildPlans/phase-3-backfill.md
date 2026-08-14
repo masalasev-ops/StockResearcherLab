@@ -508,8 +508,23 @@ what the attempt record was built for.
 3.1's answer about the flat weight. Closes 453 of 2,841 names carrying the three derived
 metrics.
 
-*Halts on:* 3.4's allowance gate, per batch. About 14,200 units if the flat weight holds
-over a wide range, and materially more if it does not, which is why 3.1 asks.
+**The pool is the live universe plus the in-window delisted names** [D-101]. Without the
+second half a delisted name in a reconstructed 2021 universe has no sentiment rows, so
+`article_count` zero-fills and its z-score is computed against a baseline of zeros while
+`sentiment_score` stays null: a degenerate value that ranks rather than an absence that
+abstains. S3 is one of the two screens §20 names as keeping this system off megacaps and
+S4's survivorship is irreducible [open item 12], so declining here leaves both of them
+measured over survivors alone.
+
+**Blocked on one authored edit, found at 3.9.** C04's §3 Reads cell names `security`
+alone and the widened pool reads `price_daily`, which
+`ReadDeclarationConformanceTests.EveryTableAStageDeclaresIsNamedInItsReadsCell` fails on
+the moment the code declares what the cell does not carry. One clause, and
+`ARCHITECTURE.html` is human-edited only [`CLAUDE.md` §13].
+
+*Halts on:* 3.4's allowance gate, per batch. **98,515 units**, being the universe plus
+16,862 delisted names at the flat five a ticker 3.1 confirmed, so it spans two days and
+halts once in the ordinary course.
 
 *Done when:* the median universe member has at least `sentiment.min_baseline_days` days
 with a row inside a 90-day baseline at a spot-checked mid-window date, which is what C35
@@ -548,8 +563,18 @@ blackout and C15's `days_to_next_earnings` across the whole window, and phase 5 
 longer separate it from the live rows. Recorded, with the observation that phase 5's
 question is sharper for the backfill existing rather than answered by it.
 
-*Halts on:* 3.4's allowance gate, per ticker at 1 unit each for two calls. About 5,700
-units, the cheapest sweep in the phase.
+**The pool is the live universe plus the in-window delisted names** [D-101], the same
+definition C03 and C04 take. C06 widens on consistency rather than on a named reader for
+delisted distributions: three ingest pools with two definitions is the shape behind every
+silent hole this phase has found, and a pool rule that has to be looked up per component
+is one a later session gets wrong. **The earnings half is unaffected**, nothing here
+loading earnings at all, so no part of the widening reaches the paragraph above.
+
+**Blocked on the same authored edit as 3.8.** C06's §3 Reads cell names `security` alone
+and the widened pool reads `price_daily`.
+
+*Halts on:* 3.4's allowance gate, per ticker at 1 unit each for two calls. **39,406
+units**, still the cheapest sweep in the phase.
 
 *Done when:* a spot-checked split inside the window is present with its ex-date; a dividend
 carries its ex-date and its declaration date and discards the other two [1.8's fixture];

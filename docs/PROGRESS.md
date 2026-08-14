@@ -5262,7 +5262,20 @@ session may make** [`CLAUDE.md` §13].
 **3.8's and 3.10's blocker is the conformance test working rather than obstructing.** The
 cell and the declaration are two statements of one fact and the test holds them
 together; what it cannot do is decide which one is right, and under D-101 the code is.
-The edit is one clause in each of two cells.
+The edit is one clause in each of two cells. Both unrun checkpoints in the phase plan
+were corrected to carry D-101's pool and its repriced figures, which is what `CLAUDE.md`
+§14 asks when a decision changes a prompt that has not run.
+
+**`dotnet test` against the developer database is no longer a usable local loop, and
+that is item 32 arriving somewhere new.** The run was abandoned after more than forty
+minutes without reaching a result: `FundamentalsRangeTests` seeds six tickers and
+`BootstrapPoolAsync` still builds its pool against the whole 109.6 million row
+`price_daily`, three times, at the cold cost item 32 measured at 531.1s. It is not a new
+defect and it changes nothing about correctness. What it changes is which command a
+session can use: `ci.ps1` drops and recreates its own database, so the gate is unaffected
+and stays the per-checkpoint verification [1.12], while the developer-database run is now
+effectively unavailable. Recorded here rather than as an item, item 32 already owning the
+cause and items 10 and 26 the isolation.
 
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.

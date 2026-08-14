@@ -142,7 +142,7 @@ absence from a grep over `src/` is what the entry states.
 | `backfill.unit_reserve` | 50000 | 3.3 | `PriceIngestor` C02, `FundamentalsIngestor` C03 | 3.6 |
 | `backfill.weight_eod` | 1 | 3.1, 3.3 | `PriceIngestor` C02 | 3.6 |
 | `backfill.weight_fundamentals` | 10 | 3.1, 3.3 | `FundamentalsIngestor` C03 | 3.7 |
-| `backfill.weight_sentiments_per_ticker` | 5 | 3.1, 3.3 | NOT BOUND | 3.8 |
+| `backfill.weight_sentiments_per_ticker` | 5 | 3.1, 3.3 | `SentimentIngestor` C04, `ExecuteRangeAsync` | 3.8 |
 | `backfill.weight_form4_page` | 10 | 3.1, 3.3 | `FlowIngestor` C05, `ExecuteRangeAsync` | 3.9 |
 | `backfill.weight_splits` | 1 | 3.1, 3.3 | NOT BOUND | 3.10 |
 | `backfill.weight_dividends` | 1 | 3.1, 3.3 | NOT BOUND | 3.10 |

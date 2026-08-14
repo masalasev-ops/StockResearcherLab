@@ -288,6 +288,29 @@ carrying a non-zero count identical to days carrying a row on all seven names, s
 empty rows are written. That is what lets `article_count` be read as zero across an
 absent day and it is the reason the derived table below can exist at all.
 
+### sentiment_fetch_attempt
+Grain: one row per ticker. **Writer: SentimentIngestor.**
+
+`ticker`, `last_attempted_date`, `last_yield_date`, `rows_last_attempt`.
+
+**The fourth of these, and the one where `last_yield_date` null is the common case**
+[D-99, 0011]. A sparse series is the ordinary state above rather than a fault, so a
+ticker nobody wrote about across the whole window is fetched, yields nothing, and would
+never gain a row in `sentiment_daily`. Resuming a sweep on presence in that table would
+therefore re-fetch it every run for ever, and the names it would loop on are exactly the
+thinly covered ones the sentiment screen exists to find.
+
+**The stamp is the range start, which is C02's half of D-99's asymmetry.** The nightly
+call asks from `context.Date - sentiment.lookback_days` and the sweep asks from
+`backfill.window_start`, so the two differ in depth and the sweep's marker has to be one
+no nightly run can produce. `fundamental_fetch_attempt` and `flow_fetch_attempt` stamp
+the range end because for those two the nightly call and the sweep call are the same
+call.
+
+**One row per ticker though the call is batched.** The endpoint takes a comma-separated
+symbol list, so the unit of work is a batch; the unit of billing is a ticker, flat at
+five [1.6, 3.1]. Resumption keys on what was paid for.
+
 ### sentiment_derived_daily
 Grain: ticker by day [D-78]. **Writers: SentimentEngine, a compute stage and not the
 ingest, inserts; PercentileEngine updates the percentile columns** [D-77].

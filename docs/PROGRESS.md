@@ -5277,12 +5277,59 @@ and stays the per-checkpoint verification [1.12], while the developer-database r
 effectively unavailable. Recorded here rather than as an item, item 32 already owning the
 cause and items 10 and 26 the isolation.
 
+#### 2026-08-14, checkpoint 3.8, and the first of the three authorised cells
+
+**Built.** C04 gained `ExecuteRangeAsync`, one pass at window width with `from` at the
+window start, over the pool D-101 widened. Not run: no sweep was issued and none is
+authorised.
+
+**Migration 0011 adds `sentiment_fetch_attempt`**, which is the fourth of these and the
+one where `last_yield_date` null is the common case rather than the exception. A sparse
+series is the ordinary state here [D-12], so a ticker nobody wrote about across the
+whole window is fetched, yields nothing, and would never gain a row in
+`sentiment_daily`. Resuming on presence in that table would re-fetch it on every run for
+the life of the sweep, and the names it would loop on are exactly the thinly covered
+ones the sentiment screen exists to find. The table is added under D-99 rather than
+under a new decision, that decision stating the rule generally and three tables already
+implementing it.
+
+**The stamp is the range start, which is C02's half of D-99's asymmetry.** The nightly
+call asks from `context.Date - sentiment.lookback_days` and the sweep asks from the
+window start, so the two differ in depth and a ticker the nightly run touched is not as
+complete as one the sweep touched. C03 and C05 stamp the range end because for them the
+two calls are the same call. That is now three components and two stamps, and the rule
+that decides which is one sentence in D-99.
+
+**The gate is asked per batch and priced per ticker.** The endpoint takes a
+comma-separated symbol list, so the unit of work is a batch; it meters flat at five a
+ticker whatever the batching [1.6, 3.1], so the projection is the batch's own size times
+the per-ticker weight.
+
+**`BackfillPool.DelistedWithBarsInWindowAsync` states D-101's shared half once.** C04
+uses it here and C06 will at 3.10. C03 still carries its own copy inside `RangePoolAsync`
+and is deliberately not touched in this commit: moving it is churn against a component
+whose sweep is mid-flight, and it belongs in its own commit rather than folded into a
+checkpoint [`CLAUDE.md` §10].
+
+**C04's §3 Reads cell now names `price_daily`**, human-authorised, landing in this
+commit rather than ahead of it. `ReadDeclarationConformanceTests` asserts both
+directions, so a cell naming a table the stage does not yet declare fails exactly as a
+stage declaring a table the cell does not name; editing it earlier turns one red build
+into two. Prior wording verbatim in `CHANGELOG.md`, and the diff against
+`ARCHITECTURE.html` is one line.
+
+**What is asserted is the pool's two edges**, a delisted name trading inside the window
+being in and one whose bars stop before the window start being out, the second being
+what holds the sweep at 98,515 units rather than the whole 32,611-name list. The
+end-to-end sweep is not asserted, for the reason item 33 gives, and C04 is now named in
+that item alongside C05.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
-| 33 | **C05's range mode has no end-to-end resumption test, and the reason is that its pool is a real table.** C02's and C03's range tests isolate because both take their pool from a symbol list the test's own handler serves; C05's is `SELECT ticker FROM security WHERE is_active`, and the suite resolves its connection string from `appsettings.Secrets.json` [open items 10 and 26], so a range execution in a test walks the live universe and stamps `flow_fetch_attempt` for every real ticker at the fixture's range end. That is item 26's harm one table further on, and it would be caused by the test rather than merely risked by it. **What is asserted instead is the two layers where the property can be lost**, the walk's ending and the run log line's composition, at five tests; what is not asserted is that a halted sweep resumes over exactly the complement, which is the property a three-day sweep is run on and the one C03's fixture exists to prove. **The sweep is not blocked**: resumption is the same set difference C03's is, over the same attempt-record shape, and D-99's mechanism is unchanged. What is missing is the proof, not the mechanism | A test database separate from the developer database, with items 10 and 26. Before 3.9's sweep is run unattended |
+| 33 | **C04's and C05's range modes have no end-to-end resumption test, and the reason is that their pools are real tables.** C04 joined this at 3.8 on the same argument: its live half is the same `security` read, so a range execution in a test walks the live universe and stamps `sentiment_fetch_attempt` for every real ticker. Its pool's delisted half **is** asserted, that being derived from a handler-served symbol list intersected with `price_daily` and therefore bounded by the fixture on either database. C02's and C03's range tests isolate because both take their pool from a symbol list the test's own handler serves; C05's is `SELECT ticker FROM security WHERE is_active`, and the suite resolves its connection string from `appsettings.Secrets.json` [open items 10 and 26], so a range execution in a test walks the live universe and stamps `flow_fetch_attempt` for every real ticker at the fixture's range end. That is item 26's harm one table further on, and it would be caused by the test rather than merely risked by it. **What is asserted instead is the two layers where the property can be lost**, the walk's ending and the run log line's composition, at five tests; what is not asserted is that a halted sweep resumes over exactly the complement, which is the property a three-day sweep is run on and the one C03's fixture exists to prove. **The sweep is not blocked**: resumption is the same set difference C03's is, over the same attempt-record shape, and D-99's mechanism is unchanged. What is missing is the proof, not the mechanism | A test database separate from the developer database, with items 10 and 26. Before 3.9's sweep is run unattended |
 | 1 | `equity` is a read target with no store. `ARCHITECTURE.html` §3 lists C18 reading it and `SCHEMA.md` declares no such table | Phase 7, which builds the risk layer |
 | 2 | `FIXTURES.md`'s filing-date entry says "before the filing date" where D-62 makes it the effective filing date | Phase 1, checkpoint 1.10 |
 | 3 | `CLAUDE.md` §9 carries the same wording | The next authored amendment to §9 |

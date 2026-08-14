@@ -1605,3 +1605,21 @@ The prior wording, verbatim:
 "Around 2,000 names live" is unchanged and is deliberately left alone. Phase 1 measured
 2,840 and that gap is an open authored question recorded in `PROGRESS.md`, so correcting
 it here would answer it in passing.
+
+---
+
+## 2026-08-14, C04's Reads cell names `price_daily` [3.8, D-101]
+
+D-101 widened C04's backfill pool to the live universe plus every admitted delisted
+common stock carrying a bar at or after `backfill.window_start`, and finding that set
+reads `price_daily`. `ReadDeclarationConformanceTests` asserts the cell and the declared
+read set against each other in both directions, so the cell moves in the same commit as
+the code that declares the read: editing it earlier fails the build from the other side.
+
+The prior wording, verbatim:
+
+> Sentiment endpoint, `security` for the universe it iterates [D-74]
+
+The nightly stage reads no prices and still does not. The read belongs to
+`ExecuteRangeAsync` alone, which is why the appended clause says what it is for rather
+than naming the table on its own.

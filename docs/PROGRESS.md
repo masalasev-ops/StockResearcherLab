@@ -5435,6 +5435,95 @@ what it must not do is replace the cell wholesale, which would take the D-101 cl
 with it. This is the exact staleness the check was asked for and the answer is that it
 is confined to one component and one added clause.
 
+#### 2026-08-14, both pool statements measured per node, against item 32 and item 25
+
+`EXPLAIN (ANALYZE, BUFFERS)` on both, statements extracted from the shipped source with
+their interpolations resolved rather than transcribed. `price_daily` at **109,787,541
+rows and 18 GB**. **`shared_buffers` is 128MB**, the Postgres default, never configured.
+
+**C03 `BootstrapPoolAsync`, 343.2s, 7,989,278 shared pages.** The rewrite item 24
+landed, measured now at 109.6M rows against the 78M it was proved at.
+
+| Node | shared hit + read | share | reads | time |
+|---|---|---|---|---|
+| `SubPlan 2`, the `EXISTS ... OFFSET 249` history test | 5,248,719 + 150,543 = **5,399,262** | **68%** | 150,543 | 58,581 loops |
+| the LATERAL taking 20 recent bars per ticker | 1,265,475 + 178,234 = **1,443,709** | 18% | 178,234 | 88,341 loops |
+| `DISTINCT ticker`, a parallel seq scan of the whole heap | 15,870 + 1,130,429 = **1,146,299** | 14% | **1,130,429** | 6.1s |
+
+**The dominating node is `SubPlan 2` on the rule stated in advance**, hit plus read. It
+is not the dominating node by disk reads, where the whole-heap `DISTINCT` scan is
+1,130,429 of 1,459,214, **77% of every page that had to come off disk**. Both are
+reported because the disagreement is the finding: `SubPlan 2` touches the most pages and
+almost all of them are already cached, being the same per-ticker index ranges walked
+repeatedly, while the `DISTINCT` scan reads 9.2 GB of heap once to produce 88,341
+values.
+
+**`SubPlan 2` reports `Heap Fetches: 6,328,244` on an `Index Only Scan`**, which is that
+scan not being index-only. The visibility map is stale, so 6.3 million index entries
+fell back to the heap to check visibility. That is maintenance rather than structure and
+`RUNBOOK.md` already says to vacuum deliberately after a bulk load, which 3.7's two days
+were.
+
+**C01 `LiquidAsync`, 871.1s, 2,292,676 shared pages and 2,369,378 temp pages written.**
+About **19 GB of temporary I/O** for a statement that returns 8,610 rows.
+
+| Node | shared hit + read | temp read / written | time |
+|---|---|---|---|
+| CTE `bars`: window over every row, `Sort` spilling `external merge Disk: 1,509,536kB` per worker | 12,359 + 1,134,018 = **1,146,377** | 1,691,612 / 1,693,579 | **619.0s** |
+| `CTE Scan on bars` for `latest`, `Storage: Disk Maximum Storage: 5,359,729kB` | 4,319 + 379,345 = 383,664 | 1,047,718 / 580,607 | 370.9s |
+| `GroupAggregate` for the median, re-reading the same 5.4 GB spill | 0 | 192,446 / 660,887 | 284.7s |
+| `span`: a **second** parallel seq scan of the whole heap for `count`, `min`, `max` | 12,569 + 1,133,730 = **1,146,299** | 1,028 / 1,031 | 213.9s |
+
+**The dominating node is the `bars` CTE.** It materialises all 109,787,541 rows to a 5.4
+GB on-disk CTE and sorts them externally at about 4.5 GB across three workers, and every
+node above it re-reads that spill. `Rows Removed by Filter: 109,698,080` on the node
+that follows: the statement builds a hundred and nine million rows in order to keep
+fifty-eight thousand. **The whole table is scanned twice**, once for `bars` and once for
+`span`.
+
+**This is one defect in two components and the numbers say so**, which is what item 25
+predicted when it recorded C01's shape as the same as the one item 24 had just fixed.
+Recorded against item 32, with item 25 pointing here.
+
+**The visibility map was 72.3 percent and is now 100.** `relallvisible` stood at 818,328
+of 1,132,553 pages, so 28 percent of the table was not marked all-visible and C03's
+history test was doing 6,328,244 heap fetches inside a scan the plan calls index-only.
+`VACUUM (ANALYZE)` in **799.7s** took dead tuples from 222,926 to zero and
+`relallvisible` to 1,146,283 of 1,146,283.
+
+**It is maintenance that was owed rather than a new idea, and it is neither of the two
+options refuted in advance.** `RUNBOOK.md` already says to vacuum deliberately after a
+bulk load and 3.7's two days were one. What it is not is a fix: autovacuum will fall
+behind again on the next sweep exactly as it did on this one, so the standing question of
+when a vacuum runs is still open under item 27.
+
+**C03 re-measured against a fully visible table: 3,095,989 shared pages against
+7,989,278, a 61 percent cut, and `Heap Fetches: 0`.**
+
+| Node | before | after | change |
+|---|---|---|---|
+| `SubPlan 2`, the history test | 5,399,262 | **510,352** | **-90.6%** |
+| the LATERAL, 20 bars per ticker | 1,443,709 | 1,439,330 | flat |
+| `DISTINCT ticker`, whole-heap scan | 1,146,299 | 1,146,299 | flat |
+| total | 7,989,278 | **3,095,989** | -61% |
+
+**The wall clock went the other way, 343.2s to 474.7s, and that is a cache artefact
+rather than a regression.** The vacuum streamed 25 GB through the OS page cache between
+the two runs, so the second executed colder: shared hits fell 6,530,064 to 1,701,227
+while reads barely moved, 1,459,214 to 1,394,762. This is exactly why the measurement
+rule was stated as hit plus read in advance. **Two wall clocks taken either side of a
+cache-flushing operation are not comparable and are reported here only so nobody
+compares them later.**
+
+**The dominating node moved, and where it moved to decides the option.** With the
+visibility artefact gone the remaining cost is two things and neither is index-fixable:
+the LATERAL at 1,439,330 pages, 46 percent, which is 88,341 deliberate index seeks; and
+the `DISTINCT ticker` scan at 1,146,299 pages, 37 percent of touches and **1,133,219 of
+1,394,762 disk reads, 81 percent**. A `DISTINCT` over 109.8 million rows producing 88,341
+values is a full pass by construction, and no index makes it selective because there is
+no selective predicate to index. **The pages are spread, which is the branch that says
+neither statement should read 109.6 million rows to produce twenty thousand.**
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 

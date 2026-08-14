@@ -883,6 +883,8 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 <tr><td class="mono"><b>researcher_memory</b></td><td>per revision</td><td class="mono">small</td></tr>
 <tr><td class="mono"><b>alert</b> <span class="tag new">NEW</span></td><td>per alert</td><td class="mono">small</td></tr>
 <tr><td class="mono"><b>cost_ledger / run_log</b></td><td>per call / per stage</td><td class="mono">small</td></tr>
+<tr><td class="mono"><b>sentiment_fetch_attempt</b> <span class="tag new">NEW</span></td><td>one per ticker <span class="rmv">D-99, 0011</span></td><td class="mono">tiny</td></tr>
+<tr><td class="mono"><b>event_fetch_attempt</b> <span class="tag new">NEW</span></td><td>one per ticker <span class="rmv">D-99, 0012</span></td><td class="mono">tiny</td></tr>
 </tbody>
 <tfoot><tr><td>Total</td><td>Roughly 5 GB after a five-year backfill at five registered screens, growing about 700 MB a year. Each further registered screen adds roughly 280 MB to the backfill and 56 MB a year <span class="rmv">D-84</span></td><td class="mono">~5 GB</td></tr></tfoot>
 </table>

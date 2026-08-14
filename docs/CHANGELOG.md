@@ -1641,3 +1641,30 @@ The prior wording, verbatim:
 The nightly stage reads no prices and still does not. The widening reaches which tickers
 are asked and not which event families: no earnings row is written by the range pass and
 that absence is unchanged.
+
+---
+
+## 2026-08-14, §16 gains `sentiment_fetch_attempt` [3.8, 0011]
+
+An addition, superseding nothing, so there is no prior wording. It is recorded here
+anyway because a reader looking for when a store entered the matrix should find the
+answer in the same place every other change to these documents is recorded, and an entry
+a reader cannot find is the same as no entry.
+
+Appended in migration order with `event_fetch_attempt` below it. The grain wording and
+the size match `price_fetch_attempt`, `fundamental_fetch_attempt` and
+`flow_fetch_attempt`, which is the convention for a per-ticker record.
+
+The row closed `StoreMatrixConformanceTests.EveryTableDeclaredInSchemaDocumentIsNamedInTheMatrix`,
+which had been failing since the table entered `SCHEMA.md` at 3.8.
+
+---
+
+## 2026-08-14, §16 gains `event_fetch_attempt` [3.10, 0012]
+
+An addition, superseding nothing, so there is no prior wording, and recorded for the
+same reason as the row above.
+
+Appended after `sentiment_fetch_attempt`, which is the order the migrations added them.
+Same grain wording and same size, for the same reason: it is the fifth per-ticker
+attempt record and the convention is what makes the five readable as one kind of thing.

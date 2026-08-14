@@ -5394,6 +5394,41 @@ table. Both take the form their four neighbours take:
     <tr><td class="mono"><b>event_fetch_attempt</b> <span class="tag new">NEW</span></td>
     <td>one per ticker <span class="rmv">D-99, 0012</span></td><td class="mono">tiny</td></tr>
 
+#### 2026-08-14, 3.12's five cells checked against the code, and not applied
+
+Asked for before applying, because five cells drafted at planning time against code
+written later is where a drafted edit goes stale. **Nothing is edited here.** 3.12's
+code is not built, its own precondition being 3.11, so under the one-commit rule there
+is no commit for these cells to land in yet.
+
+| id | Component | The `security` clause in its §3 Reads cell today | Declared `ReadSet` today | After 3.12 |
+|---|---|---|---|---|
+| C04 | SentimentIngestor | `security` for the universe it iterates [D-74] | `security`, `price_daily` | `security_daily`, `price_daily` |
+| C08 | IndicatorEngine | `security`, bare | `price_daily`, `security` | `price_daily`, `security_daily` |
+| C10 | MarketContextEngine | `security` for the members it aggregates [D-74] | `price_daily`, `security`, `indicator_daily` | `price_daily`, `security_daily`, `indicator_daily` |
+| C11 | PercentileEngine | `security` for the size bucket and sector that define a cell [D-74] | the four metric stores, `security` | the four metric stores, `security_daily` |
+| C35 | SentimentEngine | `security` for the universe it iterates [D-74] | `sentiment_daily`, `security` | `sentiment_daily`, `security_daily` |
+
+**All five correspond in both directions.** Every cell names `security` and every read
+set declares it, so the change is a one-for-one substitution in two places per
+component. None of the five needs both tables: each reads `security` for membership,
+sector or bucket, which is what D-92 moves, and none reads it for identity or lifespan,
+which is what D-92 leaves behind.
+
+**Two things the check turned up, neither a mismatch.**
+
+**C08's clause is bare where the other four carry one.** Its cell reads `price_daily`,
+`security` and says nothing about what `security` is for, so its edit is a bare
+substitution while the others keep a clause that has to move with the name. 3.12's scope
+says C08 reads it for sector, which is a fact about the code rather than about the cell.
+
+**C04's cell moved tonight and the draft predates that.** D-101 appended
+`price_daily` for the in-window delisted names at 3.8, so C04's post-3.12 cell carries
+two clauses where the draft anticipated one. The drafted substitution is still correct;
+what it must not do is replace the cell wholesale, which would take the D-101 clause
+with it. This is the exact staleness the check was asked for and the answer is that it
+is confined to one component and one added clause.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 

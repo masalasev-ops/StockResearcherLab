@@ -5111,6 +5111,54 @@ that, being 4,884 calls at ten and two symbol lists. The remaining 222 is anothe
 on the same token, which the operator has confirmed and which the gate nets off correctly
 because it subtracts the provider's own counter rather than a tally of its own.
 
+#### 2026-08-14, 3.7's second day, and resumption holds against the real store
+
+Halted cleanly, exit 2, on an allowance the operator asked to be spent to 50,000 exactly.
+
+> 168,787 row(s) over 4,923 of 20,067 pool member(s), the rotation cap lifted. 0 earnings
+> entr(ies) dropped as duplicates [D-96]. 24,782 institutional holding row(s) off the same
+> payloads and 0 holder entr(ies) dropped as duplicates [D-98]. 4,884 carried an attempt
+> for this sweep already and were not dispatched [0010]. The next unit projects at 10
+> units and 1 are left above the reserve of 50000, from 49999 of 100000 spent on
+> 2026-08-14. 0 connection open(s) retried.
+
+| | |
+|---|---|
+| dispatched today | 4,923, of which 4,216 yielded and 707 returned nothing |
+| the sweep now stands at | 9,807 of 20,067, 8,221 yielded and 1,586 empty |
+| `fundamental_snapshot` | 632,310 rows |
+| `institutional_holding` | 51,031 rows |
+| remaining | 10,260, so 102,600 units and about two more days |
+
+**Resumption was proved in production rather than only in the fixture.** `4,884 carried an
+attempt for this sweep already and were not dispatched` is the claim
+`FundamentalsRangeTests` makes over six synthetic tickers, holding over 4,884 real ones
+against a store two passes deep. Nothing was re-fetched and no unit was spent proving it.
+The range end was repeated verbatim as `2026-08-13` on a day the calendar called
+2026-08-14, which is what made the attempt rows findable; passing today's date would have
+matched nothing and re-dispatched all 20,067.
+
+**The reserve was the instrument and needed no change.** It stood at 50,000 from
+yesterday's restore, so the gate computed `100,000 - used - 50,000` and stopped itself
+with one unit of headroom. The operator's request and the configuration already in force
+were the same number by coincidence, which is worth stating because the next day's
+request may not be, and the reserve is where that is expressed.
+
+**The counter moved 0 to 49,999.** The sweep accounts for 49,230 of it, being 4,923 calls
+at ten. Of the remaining 769, seven are this session's own probes, being the roll check's
+one billable nudge and the free `/api/user` reads that each cost a request; the rest is
+the gate's per-chunk read and the symbol lists.
+
+**Item 32's stopgap was load-bearing again.** The pool build had not dispatched a ticker
+at seven minutes in and 1,020 had landed by seventeen, so the build ran somewhere around
+ten minutes against a `Command Timeout` that was 300 seconds until yesterday. That is a
+bound rather than a measurement, taken from two attempt-count reads rather than from the
+statement, but it is on the same side of the timeout as the 531.1s reading. Nothing about
+the item changed; it took a second run to reach dispatch on the stopgap alone.
+
+**D-98's saving repeated**, 24,782 institutional holding rows off payloads bought for the
+fundamentals, at no additional unit.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 

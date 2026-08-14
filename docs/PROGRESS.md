@@ -5385,14 +5385,20 @@ C06's here and C04's in its own commit, that one having been missed at 3.8 becau
 filtered run there did not include the file. Both are named rather than counted: a count
 passes on any second write, and what those tests are about is which ones there are.
 
-**The store matrix count now stands at 42** and two authored rows are owed, one per new
-table. Both take the form their four neighbours take:
+**The store matrix count moved to 42 ahead of the rows it counts**, so that two authored
+lines rather than four stood between the branch and a green gate. **Both rows landed the
+same night**, human-authorised and appended in migration order, and the three failing
+assertions went green together. `ci.ps1` green at `ec22142`, **359 passing** against 345
+before 3.9.
 
-    <tr><td class="mono"><b>sentiment_fetch_attempt</b> <span class="tag new">NEW</span></td>
-    <td>one per ticker <span class="rmv">D-99, 0011</span></td><td class="mono">tiny</td></tr>
-
-    <tr><td class="mono"><b>event_fetch_attempt</b> <span class="tag new">NEW</span></td>
-    <td>one per ticker <span class="rmv">D-99, 0012</span></td><td class="mono">tiny</td></tr>
+**The blocker was a second place a table is named, and only a table-adding checkpoint
+reaches it.** The authorisation that unblocked 3.8 and 3.10 enumerated the §3 Reads
+cells, because those were the blockers 3.9 had found by reading the code; §16's store
+matrix was found by running the gate. The three tables before these each passed through
+it with a human in the loop, so nothing had drifted and nothing was wrong. What it shows
+is that "the cells are authorised" was a narrower unblock than either side took it for,
+and the way that surfaced was a red gate rather than a wrong number, which is the cheap
+direction.
 
 #### 2026-08-14, 3.12's five cells checked against the code, and not applied
 

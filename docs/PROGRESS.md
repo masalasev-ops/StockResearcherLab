@@ -5524,6 +5524,57 @@ values is a full pass by construction, and no index makes it selective because t
 no selective predicate to index. **The pages are spread, which is the branch that says
 neither statement should read 109.6 million rows to produce twenty thousand.**
 
+#### 2026-08-15, D-102, and a form adopted on a measurement that did not decide it
+
+**The loose index scan was chosen and then rejected, and the reversal is the record worth
+keeping.** Measured alone against the plain `DISTINCT`, it took 436,340 buffers against
+1,146,298, reporting `Index Searches: 88341` and `Heap Fetches: 0`: one descent per
+distinct ticker, no heap access, identical set. On that number it was adopted and D-102
+was written to take it. Measured **inside `LiquidAsync` it took 18,557.6s against the old
+statement's 1,063.9s in the same session, a regression of about seventeen times**, again
+returning the identical set. A recursive CTE reports a fixed estimate of 100 rows whatever
+the data, so every node above it is costed for a hundred tickers when 88,341 arrive.
+
+**The isolated figure was real and was not the figure that decides.** That is the whole
+finding. It was reverted from both statements, C03's going back to byte-identical with
+what was committed, and D-102 rewritten to narrow items 32 and 25 rather than close them.
+
+**What survives is `LiquidAsync`'s own rewrite**, proved set-identical at 8,610 tickers
+with 0 missing and 0 extra, one table pass instead of two, and the 19 GB of temporary
+I/O gone.
+
+**Three sweep launches failed and together they cost two units.**
+
+| | what failed | cost |
+|---|---|---|
+| first | `RangePoolAsync`'s second `price_daily` read still on the global, which had just been lowered 1800 to 300 | two symbol lists |
+| second | never started: `Select-Object -First` ends a pipeline early, so the `if ($?)` guard read a successful build as a failure | nothing |
+| third | `BootstrapPoolAsync` exceeded the 900s bound | nothing |
+
+**Two of the three are one mistake made twice**: changing one of a pair and not looking
+for the other. The `price_daily` reads in `RangePoolAsync` are two statements and only one
+was bounded. Every read in both components was then checked rather than only the one that
+threw; three touch `price_daily` and all three now carry the bound.
+
+**The bound was set from a measurement taken on a quieter machine.** 900 was chosen
+against 474.7s cold and 46.4s warm. The pool build then exceeded 900 on a machine that
+had just run a vacuum, several whole-table scans and a five-hour query. The spread is the
+OS page cache and not the statement, `shared_buffers` being 128MB against 18 GB, so the
+seeded value is 1800 and what the key buys is a scoped bound rather than a smaller one:
+the global returns to 300 and only the two slow statements carry the large value.
+
+**A cause was asserted before it was read.** The 900s failure was attributed to a
+statistic pinned by hand during measurement and left in place. It was then checked:
+`n_distinct` read 21,016, a fresh sample estimate, so the pin had not been in effect and
+was not the cause. It has been reset regardless, an uncontrolled hand-applied change to a
+planner input having no business outliving the measurement it was made for.
+
+**A config value cannot be tuned for a sweep whose range end is in the past**
+[INVARIANT 13]. Any row inserted today is stamped later than `2026-08-13` and is invisible
+to a run dated then. `ConfigSeeder` stamps at the seed instant rather than at wall clock,
+which is why the key resolves at all, and which is why correcting its value is a change to
+the seeded default rather than an appended version.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 

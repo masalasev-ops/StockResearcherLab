@@ -11,9 +11,23 @@ namespace StockResearcherLab.Core.Stages;
 /// </summary>
 public interface IStageData
 {
-    /// <summary>Reads from <paramref name="table"/>. Throws <see cref="UndeclaredTableAccessException"/> if it is not declared.</summary>
+    /// <summary>
+    /// Reads from <paramref name="table"/>. Throws <see cref="UndeclaredTableAccessException"/>
+    /// if it is not declared.
+    /// </summary>
+    /// <param name="commandTimeoutSeconds">
+    /// Bounds this statement alone, where null takes the connection string's
+    /// <c>Command Timeout</c>.
+    ///
+    /// **It exists because the global value is the wrong instrument for one slow
+    /// statement** [D-102]. Raising `Command Timeout` to unblock a pool build also
+    /// removed the bound the upsert path ran under, and that bound is what caught the
+    /// bloat failure at 300 seconds rather than letting it grind. A statement that is
+    /// known to be the expensive one carries its own bound, so the global stays the
+    /// value every other statement is judged against.
+    /// </param>
     Task<IReadOnlyList<IReadOnlyList<object?>>> ReadAsync(
-        string table, string sql, CancellationToken ct = default);
+        string table, string sql, CancellationToken ct = default, int? commandTimeoutSeconds = null);
 
     /// <summary>Writes to <paramref name="table"/>. Throws <see cref="UndeclaredTableAccessException"/> if that operation on it is not declared.</summary>
     Task<long> WriteAsync(

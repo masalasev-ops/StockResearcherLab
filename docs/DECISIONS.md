@@ -1758,6 +1758,109 @@ that section stated before D was known.
 
 ---
 
+**D-102 The whole-table pass under both pool statements is not removable by an access
+path, and every form that looked like it was has been measured and rejected.** `ACTIVE`
+Narrows open item 32 and open item 25 rather than closing them. What is still owed is at
+the foot of this entry.
+
+C03's `BootstrapPoolAsync` and C01's `LiquidAsync` derive a candidate set from
+`price_daily`, now 109,787,541 rows and 18 GB. Both open by asking for every distinct
+ticker, which the planner answers with a parallel sequential scan of the whole heap:
+1,146,298 buffers and 9.2 GB read to produce 88,341 values. **That pass stands.** Four
+forms were tried against it and all four are rejected on measurement.
+
+**What changed instead is `LiquidAsync`'s shape, which is a separate defect in the same
+statement.** It windowed every row of the table, materialised 109,787,541 rows into a
+5.4 GB on-disk CTE, sorted them externally at about 4.5 GB across three workers, and
+scanned the table a second time for `count`, `min` and `max`: 2,292,676 shared pages and
+2,369,378 temp pages written, roughly 19 GB of temporary I/O to return 8,610 rows. It
+now takes each ticker's twenty most recent bars through a LATERAL bounded by `LIMIT`,
+and asks the history question last of the few thousand names that already cleared price
+and liquidity. **Proved set-identical at 8,610 tickers, 0 missing and 0 extra**, against
+the shipped statement extracted from source rather than transcribed. C03's statement is
+unchanged by this decision, having had that fix at item 24.
+
+**Rejected, each with the measurement that rejected it.**
+
+**A recursive loose index scan.** The form that looked best and the one this decision
+was first written to adopt. Measured alone it is decisively cheaper: **436,340 buffers
+against the plain form's 1,146,298**, `Index Searches: 88341` and `Heap Fetches: 0`,
+which is exactly one descent per distinct ticker and no heap access at all. Measured
+**inside `LiquidAsync` it took 18,557.6 seconds against the plain form's 1,063.9s, a
+regression of about seventeen times**, returning the identical set both ways. **A
+recursive CTE reports a fixed estimate of 100 rows whatever the data**, so every node
+above it is costed for a hundred tickers when 88,341 arrive, and the planner picks joins
+that are right for a hundred rows and catastrophic for eighty-eight thousand. **A form
+measured in isolation and adopted on that measurement is the failure this entry exists
+to record**: the isolated number was real, it was simply not the number that decides.
+
+**The index path, forced.** Available and more expensive: 1,783,610 buffers against
+1,146,298, and `Index Searches: 1`, one full pass over all 109,787,541 index entries.
+**Postgres does not do a loose index scan for `DISTINCT`**, which is measured here rather
+than assumed, so the planner was picking the cheaper of the two paths it had rather than
+mis-costing a third.
+
+**A larger `shared_buffers`.** The warming fix restated. It dies on a restart, the
+sweep's own writes evict it, and a 610-second warming pass immediately before a run
+failed to hold it. Measured incidentally at the 128MB default, which is a fact about
+this server rather than an argument.
+
+**Partitioning.** Both statements need the newest bars per ticker and a bounded walk of
+each ticker's whole history. A date-leading key scatters every per-ticker seek across
+every partition; a ticker-leading one needs tens of thousands of partitions. Any key
+helps one half and hurts the other.
+
+**Pinning `n_distinct`.** Tried first because it was the cheapest form available: a
+per-column attribute option, persistent, no new table and nothing asked of C02.
+`pg_stats` gave 20,800 against a true 88,341, an underestimate of 4.2x, **which is the
+opposite direction from the one that would explain the plan**: the planner already
+believed a per-value descent cheaper than it is and took the sequential scan anyway.
+Pinned to the true value and re-measured: **the plan did not change**, the same parallel
+sequential scan over the same 1,145,742 pages, cost moving 1,832,512 to 1,832,094. The
+34x wall-clock improvement across that pair is the OS page cache and not the pin, which
+the identical buffer counts settle. Rejected as an access-path fix and not carried.
+
+**A per-ticker summary table.** Not tried, and it is what remains. It is the only option
+that removes the whole-table pass rather than re-routing it, and its boundary is why it
+is not taken here in one step: it serves as-of-now for the nightly path and a fixed range
+for a backfill pool, and it does not serve a per-date historical universe. **C03's two
+call sites are both inside that boundary. C01's is not**, `LiquidAsync` running per
+weekly evaluation date at 3.11, so a summary of current state cannot answer for a 2021
+date and applying it there would stamp today's universe on history, which is the
+survivorship failure `security_daily` exists to prevent.
+
+**The 3.1-second precedent is a different statement and nothing regressed with growth.**
+Item 32 records `SELECT DISTINCT ticker FROM price_daily WHERE date >= '2021-01-04'` at
+3.1s off 0007's `(date, ticker)` index. That is a bounded range on that index's leading
+column. The pool asks `date <= asOf`, which matches every row and gives the same index
+nothing to narrow, so the two were never the same plan.
+
+**`count(*)` reads every row and `EXISTS ... OFFSET` stops, and that is worth recording
+because a later session will reach for the first.** "Has at least 250 bars" written as
+`count(*) >= 250` inside a LATERAL reads every bar a ticker has; written as
+`EXISTS (... OFFSET 249 LIMIT 1)` it stops at the 250th index entry. The first
+`LiquidAsync` rewrite used `count(*)` and measured 948.7s against C03's 474.7s, which is
+the same shape and the same data differing only in that one clause. `min(date)` and
+`max(date)` are the exception and stay as aggregates, Postgres answering each as a
+one-row seek on the same index.
+
+**The visibility map is a precondition and not a fix.** `relallvisible` stood at 818,328
+of 1,132,553 pages, so C03's history test reported `Heap Fetches: 6,328,244` inside a
+scan the plan calls index-only. `VACUUM (ANALYZE)` took it to 100 percent and that node
+from 5,399,262 buffers to 510,352, a 90.6 percent cut, with `Heap Fetches: 0`. Autovacuum
+fell behind during this sweep exactly as item 27 measured it falling behind during the
+last, so the same 28 percent returns on the next one. When a vacuum runs is item 27's
+question and stays open.
+
+**What is still owed, so this entry is not read as closing more than it does.** Both
+statements still make one whole-heap pass each time they run, C03's pool build measuring
+between 46s warm and 531s cold across this phase. The per-ticker summary is the remaining
+option for C03 and is not built. `LiquidAsync` is improved and proved and is still not
+fast, and what 3.11 needs from it is recorded in `PROGRESS.md` as a finding about that
+checkpoint's shape rather than folded in here.
+
+---
+
 ## Open
 
 **D-53 Whether the local digest model stays local once measured.** `OPEN`

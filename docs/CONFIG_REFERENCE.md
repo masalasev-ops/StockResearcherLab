@@ -26,6 +26,7 @@ Verified column values: `unverified`, `verified <date>`, or `NOT BOUND`.
 | `universe.min_price` | 5 | D-4 | UniverseBuilder, FundamentalsIngestor | verified 2026-08-09 |
 | `universe.min_adv_20d` | 2000000 | D-4 | UniverseBuilder, FundamentalsIngestor | verified 2026-08-09 |
 | `universe.min_history_days` | 250 | D-4 | UniverseBuilder, FundamentalsIngestor | verified 2026-08-09 |
+| `universe.pool_statement_timeout_seconds` | 1800 | D-102 | `UniverseBuilder` C01 `LiquidAsync`, `FundamentalsIngestor` C03 `BootstrapPoolAsync` and `RangePoolAsync` | verified 2026-08-15 |
 | `universe.bucket_large_floor` | 10000000000 | D-4 | UniverseBuilder | verified 2026-08-09 |
 | `universe.bucket_mid_floor` | 2000000000 | D-4 | UniverseBuilder | verified 2026-08-09 |
 

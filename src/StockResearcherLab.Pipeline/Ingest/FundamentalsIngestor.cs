@@ -207,11 +207,22 @@ public sealed class FundamentalsIngestor : IBackfillStage
     /// The second half is what stops the reconstructed universe being survivorship
     /// filtered. Names that stopped trading before the window are excluded and cost
     /// nothing.
+    ///
+    /// **Both statements here carry the pool bound, not one of them** [D-102]. This one
+    /// was left on the connection string's `Command Timeout` when the other was given
+    /// its own, and restoring that global from 1800 to 300 then failed the sweep here
+    /// rather than at the statement the bound was written for. Item 32 measured this
+    /// read at 3.1s against a 78 million row store; it is a whole-index pass over a
+    /// date range that now matches most of 109.8 million, so it belongs under the same
+    /// bound as its neighbour and never belonged under the default.
     /// </summary>
     public async Task<IReadOnlyList<string>> RangePoolAsync(
         StageContext context, decimal minPrice, decimal minAdv, int minHistory,
         DateOnly windowStart, CancellationToken ct = default)
     {
+        var statementTimeout =
+            (int) await LongAsync(context, "universe.pool_statement_timeout_seconds", ct).ConfigureAwait(false);
+
         var live = await BootstrapPoolAsync(context, minPrice, minAdv, minHistory, ct).ConfigureAwait(false);
 
         var delisted = await SymbolList.AdmittedDelistedAsync(_client, ct).ConfigureAwait(false);
@@ -225,7 +236,7 @@ public sealed class FundamentalsIngestor : IBackfillStage
              WHERE date >= DATE '{from}'
              ORDER BY ticker;
              """,
-            ct).ConfigureAwait(false);
+            ct, statementTimeout).ConfigureAwait(false);
 
         var inWindow = traded.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
 
@@ -874,7 +885,11 @@ public sealed class FundamentalsIngestor : IBackfillStage
             ORDER BY q.ticker;
             """;
 
-        var rows = await context.Data.ReadAsync("price_daily", sql, ct).ConfigureAwait(false);
+        var statementTimeout =
+            (int) await LongAsync(context, "universe.pool_statement_timeout_seconds", ct).ConfigureAwait(false);
+
+        var rows = await context.Data
+            .ReadAsync("price_daily", sql, ct, statementTimeout).ConfigureAwait(false);
 
         // Restricted to the instruments D-4 admits before a single per-ticker call
         // is spent. Without it the pool is 39,711 names at the price floor, almost

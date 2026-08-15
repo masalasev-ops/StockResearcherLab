@@ -50,9 +50,10 @@ public sealed class UniverseBuilder : IStage
         var largeFloor = await DecimalAsync(context, "universe.bucket_large_floor", ct).ConfigureAwait(false);
         var midFloor = await DecimalAsync(context, "universe.bucket_mid_floor", ct).ConfigureAwait(false);
         var minCleanGaps = (int) await LongAsync(context, "fundamentals.min_clean_gaps_for_substitution", ct).ConfigureAwait(false);
+        var statementTimeout = (int) await LongAsync(context, "universe.pool_statement_timeout_seconds", ct).ConfigureAwait(false);
 
         var admitted = await SymbolList.AdmittedAsync(_client, ct).ConfigureAwait(false);
-        var liquid = await LiquidAsync(context, minPrice, minAdv, minHistory, ct).ConfigureAwait(false);
+        var liquid = await LiquidAsync(context, minPrice, minAdv, minHistory, statementTimeout, ct).ConfigureAwait(false);
         var fundamentals = await FundamentalsAsync(context, ct).ConfigureAwait(false);
 
         // Every rejection counted, because "the universe builds to roughly 2,000
@@ -167,8 +168,7 @@ public sealed class UniverseBuilder : IStage
     private readonly record struct Fund(int CleanGaps, decimal? SharesOutstanding);
 
     /// <summary>
-    /// Price, liquidity and history, in one set-based statement over the whole
-    /// table rather than a query per ticker.
+    /// Price, liquidity and history, as of the date being built.
     ///
     /// **The 20-day median dollar volume is computed here from `price_daily`, never
     /// taken from a provider average** [1.5]. The probe's own sample selection used
@@ -176,43 +176,95 @@ public sealed class UniverseBuilder : IStage
     /// the window, because average volume is unadjusted while adjusted close is
     /// adjusted. A median rather than a mean, and computed from the same bars every
     /// other stage reads.
+    ///
+    /// **Rewritten at D-102 and D-4's criteria are unchanged.** The set is the same;
+    /// what changed is how it is derived. Measured against the 109,787,541 row store:
+    /// the old statement took 871.1s and this one is proved to return the identical
+    /// ticker set, compared set against set rather than by count [`PROGRESS.md`].
+    ///
+    /// **The old shape built a hundred and nine million rows to keep fifty-eight
+    /// thousand.** `row_number() OVER (PARTITION BY ticker ORDER BY date DESC)` across
+    /// every row matching the date bound materialised a 5.4 GB on-disk CTE and sorted
+    /// it externally at about 4.5 GB across three workers, and every node above it
+    /// re-read that spill: 19 GB of temporary I/O for 8,610 rows. The whole table was
+    /// then scanned a second time for `span`.
+    ///
+    /// **What replaces it is a seek per ticker rather than a scan**, which is the same
+    /// change item 24 made to C03's pool and is why D-102 covers both. The distinct
+    /// tickers come off the `(ticker, date)` primary key, a LATERAL takes each ticker's
+    /// twenty most recent bars by index however far back they are, which is exactly
+    /// what `rn <= 20` meant, and the history test is asked last of the few thousand
+    /// names that already cleared price and liquidity rather than of all 88,341.
+    ///
+    /// **The history test is an `EXISTS ... OFFSET` and not a `count(*)`, and that is
+    /// worth 2.2x on its own.** A first attempt used `count(*) >= 250` inside a LATERAL,
+    /// which reads every bar a ticker has, and measured 948.7s against the old shape's
+    /// 2,090.8s. `EXISTS ... OFFSET 249 LIMIT 1` stops at the 250th index entry, which
+    /// is the same question asked in a way that can stop early, and is exactly what C03
+    /// already does. `first_seen` and `last_seen` come from `min` and `max` on the same
+    /// index, each of which Postgres answers as a one-row seek rather than an aggregate.
+    ///
+    /// `count(*) >= min_history_days` is preserved as an offset rather than replaced by
+    /// a calendar test: "has at least N bars" and "has a bar N days ago" are different
+    /// questions and the second admits a ticker with ten bars spread over a year.
+    ///
+    /// **It stays date-parametric and that is load-bearing for 3.11**, which runs this
+    /// per weekly evaluation date across the window. Every bound is `<= asOf`, so the
+    /// statement answers for a historical date exactly as it answers for today, which
+    /// is the property a summary of current state could not have given it [D-102].
     /// </summary>
     private static async Task<IReadOnlyList<Liquid>> LiquidAsync(
-        StageContext context, decimal minPrice, decimal minAdv, int minHistory, CancellationToken ct)
+        StageContext context, decimal minPrice, decimal minAdv, int minHistory,
+        int statementTimeout, CancellationToken ct)
     {
         var asOf = context.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
         var sql = $"""
-            WITH bars AS (
-                SELECT ticker, date, close, volume,
-                       row_number() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
-                FROM price_daily
-                WHERE date <= DATE '{asOf}'
+            WITH tickers AS (
+                SELECT DISTINCT ticker FROM price_daily WHERE date <= DATE '{asOf}'
             ),
-            latest AS (SELECT ticker, close FROM bars WHERE rn = 1),
+            recent AS (
+                SELECT t.ticker, b.close, b.volume, b.rn
+                FROM tickers t
+                CROSS JOIN LATERAL (
+                    SELECT close, volume, row_number() OVER (ORDER BY date DESC) AS rn
+                    FROM price_daily p
+                    WHERE p.ticker = t.ticker AND p.date <= DATE '{asOf}'
+                    ORDER BY p.date DESC
+                    LIMIT {DollarVolume.WindowBars.ToString(CultureInfo.InvariantCulture)}
+                ) b
+            ),
+            latest AS (SELECT ticker, close FROM recent WHERE rn = 1),
             mdv AS (
                 SELECT ticker,
                        {DollarVolume.MedianExpression} AS median_dollar_volume
-                FROM bars
-                WHERE rn <= {DollarVolume.WindowBars.ToString(CultureInfo.InvariantCulture)}
-                  AND {DollarVolume.RowFilter}
+                FROM recent
+                WHERE {DollarVolume.RowFilter}
                 GROUP BY ticker
             ),
-            span AS (
-                SELECT ticker, count(*) AS days, min(date) AS first_seen, max(date) AS last_seen
-                FROM price_daily WHERE date <= DATE '{asOf}' GROUP BY ticker
+            liquid AS (
+                SELECT l.ticker, l.close
+                FROM latest l
+                JOIN mdv m ON m.ticker = l.ticker
+                WHERE l.close >= {minPrice.ToString(CultureInfo.InvariantCulture)}
+                  AND m.median_dollar_volume >= {minAdv.ToString(CultureInfo.InvariantCulture)}
             )
-            SELECT l.ticker, l.close, s.first_seen, s.last_seen
-            FROM latest l
-            JOIN mdv m ON m.ticker = l.ticker
-            JOIN span s ON s.ticker = l.ticker
-            WHERE l.close >= {minPrice.ToString(CultureInfo.InvariantCulture)}
-              AND m.median_dollar_volume >= {minAdv.ToString(CultureInfo.InvariantCulture)}
-              AND s.days >= {minHistory.ToString(CultureInfo.InvariantCulture)}
-            ORDER BY l.ticker;
+            SELECT q.ticker, q.close,
+                   (SELECT min(f.date) FROM price_daily f
+                     WHERE f.ticker = q.ticker AND f.date <= DATE '{asOf}') AS first_seen,
+                   (SELECT max(g.date) FROM price_daily g
+                     WHERE g.ticker = q.ticker AND g.date <= DATE '{asOf}') AS last_seen
+            FROM liquid q
+            WHERE EXISTS (
+                SELECT 1 FROM price_daily h
+                WHERE h.ticker = q.ticker AND h.date <= DATE '{asOf}'
+                OFFSET {(minHistory - 1).ToString(CultureInfo.InvariantCulture)} LIMIT 1
+            )
+            ORDER BY q.ticker;
             """;
 
-        var rows = await context.Data.ReadAsync("price_daily", sql, ct).ConfigureAwait(false);
+        var rows = await context.Data
+            .ReadAsync("price_daily", sql, ct, statementTimeout).ConfigureAwait(false);
 
         return rows.Select(r => new Liquid(
             (string) r[0]!,

@@ -310,7 +310,11 @@ public sealed class ConfigResolutionTests
         // Forty-two at 3.3: the backfill window start, the ticker concurrency, the
         // daily allowance and its reserve, and one weight for each of the six
         // endpoints a sweep calls.
-        Assert.Equal(42, ConfigSeeder.Keys.Count);
+        //
+        // Forty-three at D-102, which gives the two pool statements a bound of their
+        // own so the connection string's stays the value every other statement is
+        // judged against.
+        Assert.Equal(43, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)

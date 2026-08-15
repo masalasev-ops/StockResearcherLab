@@ -137,6 +137,30 @@ public sealed class ConfigSeeder
         ("universe.bucket_large_floor", "10000000000"),
         ("universe.bucket_mid_floor", "2000000000"),
 
+        // The bound the two pool statements run under, which is not the connection
+        // string's [D-102]. Both derive a candidate set from `price_daily` on D-4's
+        // price-side criteria, both make one whole-heap pass, and both are on a nightly
+        // path. Raising `Command Timeout` to 1800 to unblock a pool build also removed
+        // the bound the upsert path ran under, and that bound is what caught item 27's
+        // bloat failure at 300 seconds rather than letting it grind. The expensive
+        // statement carries its own limit so the global can go back to being the value
+        // every other statement is judged against.
+        //
+        // 1800 is where the global stood before this key existed, and the reason it is
+        // not lower is measured rather than assumed. The pool build has been observed
+        // at 46.4s warm, 474.7s cold on a quiet machine, and **over 900s on a machine
+        // that had just run a vacuum, several whole-table scans and a five-hour
+        // query**. A bound set from the quiet reading failed the sweep twice. The
+        // spread is the OS page cache, this server having `shared_buffers` at the
+        // 128MB default against an 18 GB table, so the statement's cost is a property
+        // of what else has run rather than of the statement.
+        //
+        // **What this buys is not a smaller number, it is a scoped one.** The global
+        // goes back to 300, which is the bound the upsert path runs under and the one
+        // that caught item 27's bloat failure rather than letting it grind. Only the
+        // two statements known to be slow carry 1800.
+        ("universe.pool_statement_timeout_seconds", "1800"),
+
         // Fundamentals. The substitution floor is D-62; the two alerts are D-57
         // and D-62 and both emit through the run log, never to alert [A3].
         ("fundamentals.min_clean_gaps_for_substitution", "4"),

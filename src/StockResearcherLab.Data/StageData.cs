@@ -128,12 +128,20 @@ public sealed class StageData : IStageData
         };
 
     public async Task<IReadOnlyList<IReadOnlyList<object?>>> ReadAsync(
-        string table, string sql, CancellationToken ct = default)
+        string table, string sql, CancellationToken ct = default, int? commandTimeoutSeconds = null)
     {
         _access.EnsureCanRead(table);
 
         await using var conn = await OpenAsync(ct).ConfigureAwait(false);
         await using var cmd = new NpgsqlCommand(sql, conn);
+
+        // Null leaves the connection string's value in force, which is what every
+        // statement but the two pool builds uses [D-102].
+        if (commandTimeoutSeconds is { } seconds)
+        {
+            cmd.CommandTimeout = seconds;
+        }
+
         await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
 
         var rows = new List<IReadOnlyList<object?>>();

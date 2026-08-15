@@ -86,6 +86,17 @@ The provider meters weighted units rather than requests, at 100,000 a day
 [`PROGRESS.md`, endpoint weights, measured 2026-08-09]. A steady-state night already
 spends 45,518 of them.
 
+**The 100,000 is the key's allowance and the key is shared, so every day count in this
+section is a floor rather than an estimate.** The EODHD token is shared with a sibling
+project, whose own record has it taking 50,199 of 100,000 on a Friday. 3.7's third day
+found 4,663 units spent that the sweep could not account for, and an earlier reading of
+1,737 in 37 minutes with nothing of this project running is the same observation rather
+than a second anomaly. **The mechanism is unaffected**: the allowance gate subtracts the
+provider's own counter rather than a tally of its own, so it halts correctly whoever spent
+the units. What is affected is the arithmetic here, which divides by 100,000 as though the
+day were this project's. On a day the sibling takes half, the sweep gets half as far and
+the calendar stretches to match.
+
 | Source | Endpoint | Weight | Pass | Units |
 |---|---|---|---|---|
 | Prices | `eod/{t}` | 1 | every admitted common stock, live and delisted | **50,785**, counted at 3.1 |

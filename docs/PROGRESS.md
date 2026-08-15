@@ -5716,12 +5716,127 @@ date and is unmeasured, so every figure above is a floor on one statement rather
 estimate of the checkpoint. **Recorded against item 25**, whose trigger already reads
 "C01 before 3.11, which runs it per evaluation date".
 
+#### The unaccounted units have a named candidate, and what it invalidates is arithmetic
+
+**The EODHD key is shared with a sibling project**, operator-reported, whose own record has
+it taking 50,199 of 100,000 on a Friday. That names the 4,663 units 3.7's third day could
+not account for, and it also names the earlier reading of **1,737 units in 37 minutes with
+nothing of this project running**. Those were two anomalies while they were unexplained and
+they are one observation seen twice.
+
+**The two failed runs stay ruled out.** Both died on the pool statement, and
+`RangePoolAsync` runs that statement before either symbol-list call, so a run failing there
+spends nothing. The candidate is not that they spent quietly; it is that a second consumer
+exists.
+
+**Nothing in the mechanism is affected and that is the part worth being precise about.**
+The allowance gate reads `/api/user` and subtracts the provider's own counter rather than a
+tally of its own, so it computes what is genuinely left on the key and halts correctly
+whoever spent it. Three sweep days have stopped within 7, 1 and 7 units of a 50,000 reserve
+against a counter another project was moving underneath them, which is the design working
+rather than luck.
+
+**What is wrong is the planning arithmetic.** The phase plan's §2 divides by 100,000 as
+though the day were this project's, and every day count in it inherits that. §2 now says
+so: the allowance is the key's, the key is shared, and every figure there is a floor. On a
+day the sibling takes half, the sweep gets half as far and the calendar stretches to match,
+which is why 3.7 is landing in five days against a four-day projection.
+
+**Nothing is built against it** [directed]. Naming it is enough until it costs a run, and
+the gate already makes the failure mode a slower sweep rather than a wrong one.
+
+#### Item 35's snapshot, drafted for authoring and not authored
+
+Draft only, for the batched pass. **The verdict first**: the shape works for the three
+backfill pools, it must not be applied to the fourth, and it needs a writer of its own that
+none of the four can be.
+
+**What the defect actually costs is a definition of "complete".** The pool is refetched per
+run, so a sweep is finished when every name in *today's* pool has an attempt row. A name
+that left the provider's list between day three and day four is then counted done without
+ever having been fetched, and nothing in the record distinguishes it from a name that was
+fetched and returned nothing. That is the harm; the resumption arithmetic itself is sound.
+
+**Which of the four need it.**
+
+| Component | List taken | Needs the snapshot |
+|---|---|---|
+| `PriceIngestor.PoolAsync` (C02) | live and delisted | **Yes.** A multi-day resumable sweep, 3.6 |
+| `FundamentalsIngestor.RangePoolAsync` (C03) | live via `BootstrapPoolAsync`, plus delisted | **Yes.** The sweep this was measured on, 3.7 |
+| `BackfillPool.DelistedWithBarsInWindowAsync` (C04, C06) | delisted | **Yes**, and it is one fix for both, 3.8 and 3.10 |
+| `UniverseBuilder` (C01) | live only | **No, and it must not take one** |
+
+**No component re-fetches mid-run**, so none depends on the list being current mid-run.
+All four fetch once while constructing the pool and use that answer for the whole
+execution. The exposure is entirely across runs, which is why it appears on resumable
+sweeps and not on nightly stages.
+
+**C01 is the exception and for the opposite reason.** It runs once a night with no
+resumption, so within a run its list is already fixed; what it needs is the list to be
+*current on each night*, a name newly listed entering the universe the night it qualifies.
+Pinning it to a sweep's snapshot would freeze the universe definition, which is D-4 and
+INVARIANT 1 rather than an ingest detail.
+
+**C01 has a different problem that the snapshot does not solve, and 3.11 is where it
+lands.** `ExecuteAsync` takes `SymbolList.AdmittedAsync`, the live list alone, and rejects
+any liquid name absent from it as `rejectedType`. Run per historical evaluation date, that
+rejects every name that has delisted since, because a 2023 delisting is not in today's live
+list. A snapshot taken today does not help: the name is missing from today's list however
+carefully today's list is stored. What that case needs is the union C02 and C03 already
+take, or as-of membership in `security_daily`. **3.11's own done-when already requires it**,
+reading "a name delisted in 2023 is active before its `delisted_date` and absent after", so
+this is noted as the mechanism that line will need rather than as a new obligation.
+
+**The snapshot needs its own writer, which is the part that is not a detail.** Four pools
+inserting into one table is four components claiming one table and one operation, and
+`StageRegistryTests` fails it [INVARIANT 10]. So the store is written by one small
+component and read by the pools, and the draft below says so rather than leaving whoever
+builds it to discover the registry test.
+
+The clauses, in the plan's own style:
+
+```
+**B.n The symbol list is snapshotted per sweep rather than refetched per run.**
+A new `symbol_list_snapshot` table, grain one row per range end per ticker, carrying
+`range_end`, `ticker`, `listing_name` and `is_delisted`. **`SymbolListSnapshot` is its
+sole writer** and the pools only read it, because four pools inserting into one table is
+one table claimed by four components and the registry test rejects it [INVARIANT 10].
+The key is the range end rather than a snapshot id, matching the resumption key D-99
+already stamps, so a resumed sweep finds its own snapshot without carrying new state.
+A sweep whose range end has no snapshot takes one; a sweep whose range end has one reads
+it and makes no call. A later sweep over a later range end therefore takes a fresh
+snapshot, so nothing about reaching newly delisted names changes.
+
+*Done when:* a stub client serving list A on the first call and list B on the second
+gives a resumed sweep the identical pool both times; the second run makes no
+`exchange-symbol-list` call at all, asserted on the handler rather than inferred from the
+pool; and `symbol_list_snapshot` carries one row per ticker per range end with the
+registry naming one writer.
+
+**B.n+1 The three backfill pools read the snapshot; C01 does not.**
+`PriceIngestor.PoolAsync`, `FundamentalsIngestor.RangePoolAsync` and
+`BackfillPool.DelistedWithBarsInWindowAsync` take their lists from the snapshot for the
+range being swept. `UniverseBuilder` keeps its live fetch, because it runs once a night
+with no resumption and needs a newly listed name to enter the universe on the night it
+qualifies, which is the universe definition rather than an ingest detail [D-4,
+INVARIANT 1]. The exclusion is stated at the call site, not left as an omission.
+
+*Done when:* the three read the snapshot and C01 still calls the provider, asserted;
+`ReadDeclarationConformanceTests` passes against the amended §3 Reads cells, which gain
+`symbol_list_snapshot` for three components and not for C01.
+```
+
+**What is not drafted here is whether "complete" should be restated as well.** If a sweep
+is finished when the snapshot is covered rather than when today's pool is, that is a change
+to what the run log reports and it is authored. The clauses above fix the pool; they do not
+decide the report.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
-| 35 | **Every ingest pool is refetched from the provider on each run, so fixing the range does not fix the pool.** Measured across three sweep days over the identical `2021-01-04..2026-08-13`: 20,067 members, 20,067, then 20,065 on 2026-08-15, against a `price_daily` no fundamentals sweep writes to. Neither half comes from the store. `FundamentalsIngestor.RangePoolAsync` takes its live half through `BootstrapPoolAsync`, which intersects the price and liquidity survivors with `SymbolList.AdmittedAsync`, and its delisted half from `SymbolList.AdmittedDelistedAsync`; both are `exchange-symbol-list/US` fetched at run time and the provider's lists move with the calendar. **It is four components and not one**: `UniverseBuilder` takes the live list as one of D-4's absolute criteria, `PriceIngestor` takes both, `BackfillPool` takes the delisted list for C04 and C06 under D-101, and C03 takes both. **No sweep is harmed**: each walk is the complement of its attempt record within the pool, so a name that leaves is never dispatched and a name that arrives is, and neither double-spends nor skips paid ground. **What it touches is D-99's reproducibility argument**, which reasons attempts read strictly before the run date to "a re-run of one date therefore sees the state the first run saw and selects the same names" [`CLAUDE.md` §6]. That is an argument about the ordering and it is silent about the set being ordered. **It is not obviously a defect**: the store cannot know which names are delisted until the provider says so, and D-101 requires the sweep to reach them, so pinning the pool means storing the symbol list as data with an as-of date rather than removing the fetch. Which of those, and whether the cost is worth it, is authored | An authored decision. Before a replay of a past night is used as evidence, and before D-99's purity claim is cited as covering the pool rather than the rotation over it |
+| 35 | **Every ingest pool is refetched from the provider on each run, so fixing the range does not fix the pool.** Measured across three sweep days over the identical `2021-01-04..2026-08-13`: 20,067 members, 20,067, then 20,065 on 2026-08-15, against a `price_daily` no fundamentals sweep writes to. Neither half comes from the store. `FundamentalsIngestor.RangePoolAsync` takes its live half through `BootstrapPoolAsync`, which intersects the price and liquidity survivors with `SymbolList.AdmittedAsync`, and its delisted half from `SymbolList.AdmittedDelistedAsync`; both are `exchange-symbol-list/US` fetched at run time and the provider's lists move with the calendar. **It is four components and not one**: `UniverseBuilder` takes the live list as one of D-4's absolute criteria, `PriceIngestor` takes both, `BackfillPool` takes the delisted list for C04 and C06 under D-101, and C03 takes both. **No sweep is harmed**: each walk is the complement of its attempt record within the pool, so a name that leaves is never dispatched and a name that arrives is, and neither double-spends nor skips paid ground. **What it touches is D-99's reproducibility argument**, which reasons attempts read strictly before the run date to "a re-run of one date therefore sees the state the first run saw and selects the same names" [`CLAUDE.md` §6]. That is an argument about the ordering and it is silent about the set being ordered. **It is not obviously a defect**: the store cannot know which names are delisted until the provider says so, and D-101 requires the sweep to reach them, so pinning the pool means storing the symbol list as data with an as-of date rather than removing the fetch. Which of those, and whether the cost is worth it, is authored. **What the defect costs is a definition of "complete"**: a sweep finishes when every name in today's pool has an attempt row, so a name that left the list mid-sweep is counted done without ever having been fetched and is indistinguishable in the record from one fetched that returned nothing. **A snapshot shape is drafted in the narrative above and is not authored**, naming the three backfill pools that would take it, C01 as the one that must not, and the separate writer INVARIANT 10 forces | An authored decision. Before a replay of a past night is used as evidence, and before D-99's purity claim is cited as covering the pool rather than the rotation over it. The draft is for the batched pass and nothing waits on it |
 | 34 | **Whether an operational config key should resolve as of now rather than as of the run date.** As-of resolution exists so a replayed night resolves the configuration that was in force [INVARIANT 13, D-43]: screen floors, slot counts, universe criteria, the values that decide what a run computes. **A command timeout decides none of that.** It changes whether a run finishes, not what it produces, and two runs of one stage over one date and config version still produce byte-identical output under any value of it. **Tonight is the case that raised it.** A machine whose page cache is cold today cannot be given more time for a run dated 2026-08-13, because a row stamped today is invisible to that date; the only reason `universe.pool_statement_timeout_seconds` could be raised at all is that `ConfigSeeder` stamps at the seed instant, so version 2 could carry version 1's own `set_at`. That works and is not a rule, and the next operational key added by an ordinary insert will not have it. **The distinction already exists in the code**, `PriceIngestor`'s range mode recording that its keys are operational rather than parametric and that resolving them as of the range end is therefore not the case D-93 governs. What is not established is whether the resolver should know that, and the cost of getting it wrong runs both ways: an operational key frozen to a past date cannot be tuned when it needs to be, and a parametric key resolved as of now silently reinterprets history. **Undecided here and the resolver is unchanged** | An authored decision. Before any operational key is added that `ConfigSeeder` does not seed |
 | 33 | **C04's and C05's range modes have no end-to-end resumption test, and the reason is that their pools are real tables.** C04 joined this at 3.8 on the same argument: its live half is the same `security` read, so a range execution in a test walks the live universe and stamps `sentiment_fetch_attempt` for every real ticker. Its pool's delisted half **is** asserted, that being derived from a handler-served symbol list intersected with `price_daily` and therefore bounded by the fixture on either database. C02's and C03's range tests isolate because both take their pool from a symbol list the test's own handler serves; C05's is `SELECT ticker FROM security WHERE is_active`, and the suite resolves its connection string from `appsettings.Secrets.json` [open items 10 and 26], so a range execution in a test walks the live universe and stamps `flow_fetch_attempt` for every real ticker at the fixture's range end. That is item 26's harm one table further on, and it would be caused by the test rather than merely risked by it. **What is asserted instead is the two layers where the property can be lost**, the walk's ending and the run log line's composition, at five tests; what is not asserted is that a halted sweep resumes over exactly the complement, which is the property a three-day sweep is run on and the one C03's fixture exists to prove. **The sweep is not blocked**: resumption is the same set difference C03's is, over the same attempt-record shape, and D-99's mechanism is unchanged. What is missing is the proof, not the mechanism | A test database separate from the developer database, with items 10 and 26. Before 3.9's sweep is run unattended |
 | 1 | `equity` is a read target with no store. `ARCHITECTURE.html` §3 lists C18 reading it and `SCHEMA.md` declares no such table | Phase 7, which builds the risk layer |

@@ -464,6 +464,11 @@ public sealed class FundamentalsRotationTests
             "universe.min_adv_20d" => "2000000",
             "universe.min_history_days" => "250",
 
+            // D-102. The pool statement carries its own bound rather than the
+            // connection string's, so the stage resolves it wherever that statement
+            // runs and this stub has to answer for it.
+            "universe.pool_statement_timeout_seconds" => "1800",
+
             // 3.7. The rotation now reads `events` for the names that reported inside
             // this window and ranks them above staleness [D-74].
             "events.earnings_backward_days" => "7",

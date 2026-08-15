@@ -5572,14 +5572,32 @@ planner input having no business outliving the measurement it was made for.
 **A config value cannot be tuned for a sweep whose range end is in the past**
 [INVARIANT 13]. Any row inserted today is stamped later than `2026-08-13` and is invisible
 to a run dated then. `ConfigSeeder` stamps at the seed instant rather than at wall clock,
-which is why the key resolves at all, and which is why correcting its value is a change to
-the seeded default rather than an appended version.
+which is why the key resolves at all, and which is what makes an append work: **version 2
+carries version 1's own `set_at` rather than a fresh one**, so it is visible to exactly
+the runs version 1 was, and nothing is deleted. `config_rows` resolves 1800 as of
+2026-08-13, printed before the relaunch rather than assumed.
+
+**Where 900 came from, so 1800 reads as a stopgap and not as a measurement.** It was set
+from the 474.7s reading, which is **one of the two wall clocks this document had already
+recorded as straddling a cache-flushing operation and explicitly not comparable**. Taking
+a fixed bound from the better half of a pair declared incomparable is the finding rather
+than the number. For a statement whose cost moves more than twofold with cache state
+there are only two honest positions: the bound comes from the worst observed, or the
+statement stops costing 475 seconds. **1800 is the first**, and it is a stopgap. The
+second is what D-102's remaining option is for, and D-102 records that it is not built.
+
+**The insert ran twice and left a redundant v3 at the same value**, which is the second
+time in this session after `backfill.unit_reserve`'s v2 and v3 at 1,000. It resolves
+correctly on `MAX(version)` and it is churn in an append-only store. Not deleted: a
+redundant row is honest churn and a deleted one is a hole in the store whose purpose is
+being a record. The cause is an insert written without an idempotence guard.
 
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
+| 34 | **Whether an operational config key should resolve as of now rather than as of the run date.** As-of resolution exists so a replayed night resolves the configuration that was in force [INVARIANT 13, D-43]: screen floors, slot counts, universe criteria, the values that decide what a run computes. **A command timeout decides none of that.** It changes whether a run finishes, not what it produces, and two runs of one stage over one date and config version still produce byte-identical output under any value of it. **Tonight is the case that raised it.** A machine whose page cache is cold today cannot be given more time for a run dated 2026-08-13, because a row stamped today is invisible to that date; the only reason `universe.pool_statement_timeout_seconds` could be raised at all is that `ConfigSeeder` stamps at the seed instant, so version 2 could carry version 1's own `set_at`. That works and is not a rule, and the next operational key added by an ordinary insert will not have it. **The distinction already exists in the code**, `PriceIngestor`'s range mode recording that its keys are operational rather than parametric and that resolving them as of the range end is therefore not the case D-93 governs. What is not established is whether the resolver should know that, and the cost of getting it wrong runs both ways: an operational key frozen to a past date cannot be tuned when it needs to be, and a parametric key resolved as of now silently reinterprets history. **Undecided here and the resolver is unchanged** | An authored decision. Before any operational key is added that `ConfigSeeder` does not seed |
 | 33 | **C04's and C05's range modes have no end-to-end resumption test, and the reason is that their pools are real tables.** C04 joined this at 3.8 on the same argument: its live half is the same `security` read, so a range execution in a test walks the live universe and stamps `sentiment_fetch_attempt` for every real ticker. Its pool's delisted half **is** asserted, that being derived from a handler-served symbol list intersected with `price_daily` and therefore bounded by the fixture on either database. C02's and C03's range tests isolate because both take their pool from a symbol list the test's own handler serves; C05's is `SELECT ticker FROM security WHERE is_active`, and the suite resolves its connection string from `appsettings.Secrets.json` [open items 10 and 26], so a range execution in a test walks the live universe and stamps `flow_fetch_attempt` for every real ticker at the fixture's range end. That is item 26's harm one table further on, and it would be caused by the test rather than merely risked by it. **What is asserted instead is the two layers where the property can be lost**, the walk's ending and the run log line's composition, at five tests; what is not asserted is that a halted sweep resumes over exactly the complement, which is the property a three-day sweep is run on and the one C03's fixture exists to prove. **The sweep is not blocked**: resumption is the same set difference C03's is, over the same attempt-record shape, and D-99's mechanism is unchanged. What is missing is the proof, not the mechanism | A test database separate from the developer database, with items 10 and 26. Before 3.9's sweep is run unattended |
 | 1 | `equity` is a read target with no store. `ARCHITECTURE.html` §3 lists C18 reading it and `SCHEMA.md` declares no such table | Phase 7, which builds the risk layer |
 | 2 | `FIXTURES.md`'s filing-date entry says "before the filing date" where D-62 makes it the effective filing date | Phase 1, checkpoint 1.10 |

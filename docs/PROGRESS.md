@@ -5831,6 +5831,54 @@ is finished when the snapshot is covered rather than when today's pool is, that 
 to what the run log reports and it is authored. The clauses above fix the pool; they do not
 decide the report.
 
+#### 2026-08-15, day four dispatched on a day already spent, and the gate caught it
+
+**The run halted with nothing dispatched and the error is mine.**
+
+> 0 row(s) over 0 of 20,065 pool member(s), the rotation cap lifted. 14,337 carried an
+> attempt for this sweep already and were not dispatched [0010]. The next unit projects at
+> 10 units and -1683 are left above the reserve of 50000, from 51683 of 100000 spent on
+> 2026-08-15.
+
+**The allowance resets on the UTC boundary and day three had already spent this one.** Day
+three ran at 01:17 Eastern on 2026-08-15, which is 05:17 UTC the same provider day, and
+took 49,993 of it. Day four was dispatched at about 14:30 UTC **on that same provider
+day**, so there was never 50,000 available and the reserve was breached before the first
+projection. The gate computed `100,000 - 51,683 - 50,000` and stopped at -1,683.
+
+**What was checked was the resume key and what was missing was the allowance.** The
+pre-dispatch check printed 5,725 remaining against 20,065 and held, which is the guard that
+was asked for and it did its job. It is not the guard that decides whether a day can be
+spent. Day three's own output states `from 49993 of 100000 spent on 2026-08-15` in the line
+recorded an hour earlier, so the reading that would have stopped this was already on the
+page.
+
+**It cost two symbol lists and no rows.** Nothing was written, the attempt record stands
+unmoved at 14,340, and the `run_log` row is an honest empty halt. What it did cost is the
+pool build's wall clock, which ran in full before the gate was consulted.
+
+**That ordering is a finding rather than a defect.** `RangePoolAsync` builds the pool, at
+upwards of ten minutes against a 109.8 million row table, and only then does the gate read
+an allowance that a single free `/api/user` call answers. A sweep driven unattended across
+days will meet this every time a day is already spent, and it will pay the pool build to
+learn it. Fixing it is a cheap reordering, a gate read before the pool build rather than
+after, and it is not taken here. Recorded against item 32, which already owns what the
+pool build costs.
+
+**The shared key is corroborated inside a single day.** The counter moved 49,993 to 51,683
+between day three's halt and day four's start, so **1,690 units were spent while this
+project ran nothing but two symbol lists**. That was inferred from a Friday's record an
+hour before this run; it is now measured between two of this project's own readings.
+
+**The pool did not move this time**, reading 20,065 against day three's 20,065. Four
+readings over the identical range now stand at 20,067, 20,067, 20,065, 20,065, so the
+membership moved once across four runs rather than on every one. Item 35 is unchanged by
+that: a pool that moves sometimes is a pool that is not fixed, and the sweep cannot tell
+which kind of run it is having.
+
+**Day four is not run.** 5,725 members remain and the provider day rolls at 00:00 UTC on
+2026-08-16, which is 20:00 Eastern on 2026-08-15.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 

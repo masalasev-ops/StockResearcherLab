@@ -5592,11 +5592,136 @@ correctly on `MAX(version)` and it is churn in an append-only store. Not deleted
 redundant row is honest churn and a deleted one is a hole in the store whose purpose is
 being a record. The cause is an insert written without an idempotence guard.
 
+#### 2026-08-15, 3.7's third day, and the pool moved under a range that did not
+
+Halted cleanly on the reserve. **Exit 2 is the halt code and not a failure**: `backfill`
+returns 0 completed, 2 halted on the allowance gate and 1 threw, deliberately, because a
+halt and a failure are different observations and a caller reading one number is where
+they would collapse. The task harness that launched it reports any non-zero as failed,
+which is the harness and not the run.
+
+> 153,698 row(s) over 4,533 of 20,065 pool member(s), the rotation cap lifted. 0 earnings
+> entr(ies) dropped as duplicates [D-96]. 22,799 institutional holding row(s) off the same
+> payloads and 0 holder entr(ies) dropped as duplicates [D-98]. 9,804 carried an attempt
+> for this sweep already and were not dispatched [0010]. The next unit projects at 10
+> units and 7 are left above the reserve of 50000, from 49993 of 100000 spent on
+> 2026-08-15. Halted cleanly; D-68's per-grain idempotence is what makes the next run
+> resume rather than restart. 0 connection open(s) retried.
+
+| | |
+|---|---|
+| dispatched today | 4,533, of which 3,693 yielded and 840 returned nothing |
+| the sweep now stands at | 14,340 of 20,065, 11,914 yielded and 2,426 empty |
+| `fundamental_snapshot` | 719,872 rows |
+| `earnings_history` | 455,329 rows |
+| `institutional_holding` | 73,818 rows |
+| remaining | 5,728, so 57,280 units, a fourth day and about an hour of a fifth |
+
+**The split reconciles exactly against the store rather than being read off the console.**
+Day two stood at 8,221 yielded and 1,586 empty; the attempt table now holds 11,914 and
+2,426, and the differences are 3,693 and 840, which sum to the 4,533 dispatched.
+
+**The pool moved under a range that did not, and that is the finding of the day.** Two
+sweep days reported 20,067 pool members and this one reported 20,065, over the identical
+`2021-01-04..2026-08-13`, against a `price_daily` that no fundamentals sweep writes to.
+**Neither half of the pool comes from the store.** `RangePoolAsync` takes its live half
+through `BootstrapPoolAsync`, which intersects the price and liquidity survivors with
+`SymbolList.AdmittedAsync`, and its delisted half from `SymbolList.AdmittedDelistedAsync`.
+Both are `exchange-symbol-list/US` fetched at run time, so the pool is a function of the
+simulated date **and of the provider's answer as of now**, and the provider's answer moves
+with the calendar rather than with the range.
+
+**The arithmetic says where the difference sits.** 9,807 attempt rows carry the range end
+and the run counted 9,804 of them as pool members, so three tickers hold an attempt and
+are no longer in the pool; 9,807 plus 4,533 dispatched is the 14,340 the table holds. The
+pool shrank by two while three attempted names left it, so at least one name also entered.
+**Which names is not established and was not chased**: naming them means running the pool
+statement, which is the one D-102 is about and which costs upwards of eight minutes cold,
+and nothing here needs them.
+
+**The sweep is not harmed by it.** The walk is the complement of the attempt record within
+the pool, so a name that leaves is never dispatched and a name that arrives is. Neither
+double-spends nor skips ground already paid for, which is the property the three-day
+resumption rests on and it is untouched.
+
+**What it touches is a reproducibility claim D-99 makes.** That decision reasons the
+rotation to a pure function of its date and config version, attempts being read strictly
+before the run date so that "a re-run of one date therefore sees the state the first run
+saw and selects the same names" [`CLAUDE.md` §6]. That is an argument about the ordering
+and it is silent about the set being ordered, which is refetched every run. It is item 35,
+and it is an authored question rather than a defect to patch: the store cannot know which
+names are delisted until the provider says so, and D-101 requires the sweep to reach them.
+
+**Two failed runs preceded it, both statement timeouts, both stamped at the range start.**
+`run_log` carries them at 1,200,290 ms and 900,124 ms on 2026-08-15 with `run_date`
+2021-01-04, a stage that threw having proved it reached its first date and nothing more
+[3.6]. Both read `Exception while reading from stream`, as the 300,121 ms failure of
+2026-08-13 does, so all three are one fault at three bounds. **The 1,200,290 is a
+reconstruction and is stated as one**: 900 plus 300 within 290 ms is what the two
+`price_daily` reads in `RangePoolAsync` give if the first carries the new bound and the
+second still carries the global, which is the defect then found by auditing both reads.
+The row does not name the statement, so that arithmetic is the whole of the evidence.
+
+**1800 held where 900 did not, and the margin is unmeasured.** The run reached dispatch
+and finished, which 900 failed to do twice, so the pool build is above 900 seconds cold
+and below 1800. The run's 3,251,567 ms total does not separate the build from the 4,533
+dispatches and is not evidence of the margin. **It is not compared with day two's
+2,488,149 ms**: the two ran on different cache states, which is the comparison this
+document has already drawn wrongly three times.
+
+**The counter read 49,993 of 100,000 and the sweep accounts for 45,330**, being 4,533
+calls at ten. **The remaining 4,663 is not accounted for here.** The two failed runs are
+not the candidate they look like: both died on the pool statement, and `RangePoolAsync`
+runs that statement before either symbol-list call, so a run failing there spends nothing.
+Day one recorded another project on the same token, operator-confirmed, and that is where
+this plausibly sits, but plausibly is the word and it is not established. **The gate is
+correct either way**, subtracting the provider's own counter rather than a tally of its
+own, which is how it stopped with 7 units above a 50,000 reserve rather than overrunning.
+
+#### 3.11's projected wall clock, owed since item 25 and stated as the bracket it is
+
+3.11 runs C01 per weekly evaluation date across the window. **2021-01-04 to 2026-08-13 is
+2,047 days, so 293 evaluation dates**, and `LiquidAsync` runs once per date.
+
+**There are two readings for the statement and they are not comparable to each other.**
+871.1s was the shape before its rewrite, carrying 19 GB of temporary I/O; 1,063.9s is the
+rewritten form measured in the D-102 session with that temporary I/O gone. The later
+number being the larger is a cache artefact of the same kind this document has already
+recorded twice, not the rewrite costing more, and the two are reported together only so
+nobody subtracts them.
+
+| per-date cost taken as | 293 dates come to |
+|---|---|
+| 871.1s, the lower of the two cold readings | 255,232s, **70.9 hours** |
+| 1,063.9s, the higher | 311,723s, **86.6 hours** |
+| 46.4s, C03's warm reading for the same shape | 13,595s, **3.8 hours** |
+
+**The bracket spans a factor of twenty-three and the thing that decides it is not
+measured.** Cold, 3.11 is a three-day run for one checkpoint and is not viable. Warm, it
+is an afternoon. Which one it is turns on whether the working set survives between
+evaluation dates *inside one process*, and what is on record cuts against assuming it
+does: item 32 established that it does not survive **between** processes, `shared_buffers`
+being 128 MB against 18 GB, and the 46.4s reading was the OS page cache holding briefly
+rather than a property to rely on. 293 iterations in one process is a different case from
+either, and no reading covers it.
+
+**What would settle it is one measurement and this session does not take it**
+[`CLAUDE.md` §3]: C01 run over three consecutive evaluation dates in a single process,
+reading the second and the third rather than the first. That is a task for whoever builds
+3.11, and it should be the first thing that checkpoint does rather than something
+discovered after 70 hours have been committed to.
+
+**The projection does not include the rest of C01.** `FundamentalsAsync` also runs per
+date and is unmeasured, so every figure above is a floor on one statement rather than an
+estimate of the checkpoint. **Recorded against item 25**, whose trigger already reads
+"C01 before 3.11, which runs it per evaluation date".
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
+| 35 | **Every ingest pool is refetched from the provider on each run, so fixing the range does not fix the pool.** Measured across three sweep days over the identical `2021-01-04..2026-08-13`: 20,067 members, 20,067, then 20,065 on 2026-08-15, against a `price_daily` no fundamentals sweep writes to. Neither half comes from the store. `FundamentalsIngestor.RangePoolAsync` takes its live half through `BootstrapPoolAsync`, which intersects the price and liquidity survivors with `SymbolList.AdmittedAsync`, and its delisted half from `SymbolList.AdmittedDelistedAsync`; both are `exchange-symbol-list/US` fetched at run time and the provider's lists move with the calendar. **It is four components and not one**: `UniverseBuilder` takes the live list as one of D-4's absolute criteria, `PriceIngestor` takes both, `BackfillPool` takes the delisted list for C04 and C06 under D-101, and C03 takes both. **No sweep is harmed**: each walk is the complement of its attempt record within the pool, so a name that leaves is never dispatched and a name that arrives is, and neither double-spends nor skips paid ground. **What it touches is D-99's reproducibility argument**, which reasons attempts read strictly before the run date to "a re-run of one date therefore sees the state the first run saw and selects the same names" [`CLAUDE.md` §6]. That is an argument about the ordering and it is silent about the set being ordered. **It is not obviously a defect**: the store cannot know which names are delisted until the provider says so, and D-101 requires the sweep to reach them, so pinning the pool means storing the symbol list as data with an as-of date rather than removing the fetch. Which of those, and whether the cost is worth it, is authored | An authored decision. Before a replay of a past night is used as evidence, and before D-99's purity claim is cited as covering the pool rather than the rotation over it |
 | 34 | **Whether an operational config key should resolve as of now rather than as of the run date.** As-of resolution exists so a replayed night resolves the configuration that was in force [INVARIANT 13, D-43]: screen floors, slot counts, universe criteria, the values that decide what a run computes. **A command timeout decides none of that.** It changes whether a run finishes, not what it produces, and two runs of one stage over one date and config version still produce byte-identical output under any value of it. **Tonight is the case that raised it.** A machine whose page cache is cold today cannot be given more time for a run dated 2026-08-13, because a row stamped today is invisible to that date; the only reason `universe.pool_statement_timeout_seconds` could be raised at all is that `ConfigSeeder` stamps at the seed instant, so version 2 could carry version 1's own `set_at`. That works and is not a rule, and the next operational key added by an ordinary insert will not have it. **The distinction already exists in the code**, `PriceIngestor`'s range mode recording that its keys are operational rather than parametric and that resolving them as of the range end is therefore not the case D-93 governs. What is not established is whether the resolver should know that, and the cost of getting it wrong runs both ways: an operational key frozen to a past date cannot be tuned when it needs to be, and a parametric key resolved as of now silently reinterprets history. **Undecided here and the resolver is unchanged** | An authored decision. Before any operational key is added that `ConfigSeeder` does not seed |
 | 33 | **C04's and C05's range modes have no end-to-end resumption test, and the reason is that their pools are real tables.** C04 joined this at 3.8 on the same argument: its live half is the same `security` read, so a range execution in a test walks the live universe and stamps `sentiment_fetch_attempt` for every real ticker. Its pool's delisted half **is** asserted, that being derived from a handler-served symbol list intersected with `price_daily` and therefore bounded by the fixture on either database. C02's and C03's range tests isolate because both take their pool from a symbol list the test's own handler serves; C05's is `SELECT ticker FROM security WHERE is_active`, and the suite resolves its connection string from `appsettings.Secrets.json` [open items 10 and 26], so a range execution in a test walks the live universe and stamps `flow_fetch_attempt` for every real ticker at the fixture's range end. That is item 26's harm one table further on, and it would be caused by the test rather than merely risked by it. **What is asserted instead is the two layers where the property can be lost**, the walk's ending and the run log line's composition, at five tests; what is not asserted is that a halted sweep resumes over exactly the complement, which is the property a three-day sweep is run on and the one C03's fixture exists to prove. **The sweep is not blocked**: resumption is the same set difference C03's is, over the same attempt-record shape, and D-99's mechanism is unchanged. What is missing is the proof, not the mechanism | A test database separate from the developer database, with items 10 and 26. Before 3.9's sweep is run unattended |
 | 1 | `equity` is a read target with no store. `ARCHITECTURE.html` §3 lists C18 reading it and `SCHEMA.md` declares no such table | Phase 7, which builds the risk layer |
@@ -5619,7 +5744,7 @@ them are in `docs/archive/process-2026-08.md`.
 | 18 | ~~**Three components still catch `HttpRequestException` whole at a per-ticker fetch**, where C02 was narrowed to a 404 at 3.6. `FundamentalsIngestor` at line 245, `FlowIngestor` at 338 and 475, and `UniverseBuilder` at its sector call at 294. Each swallows a 402 or a 429 as a missing ticker, so a sweep that hits the allowance wall in flight writes nothing for that name and nothing for any name after it, and returns having completed over a partial load. `EodhdClient` now carries the status code, so the fix is one `when` clause each. Not taken here: each belongs to the checkpoint that gives its component a range mode~~ **Closed at 3.9, and the fourth was closed by removal rather than by a clause.** C02 was narrowed at 3.6, C03 at 3.7 and C05 here, each to `ex.StatusCode == HttpStatusCode.NotFound`. C01's was the sector call, which moved to C03 at 3.7 under the same checkpoint that made a per-date C01 affordable, so there was no catch left to narrow and the item's own count was one ahead of the code by the time it was read. **Verified by grep in both directions rather than by reading three call sites**: `catch \(HttpRequestException\)` finds nothing across `src/`, and `catch \(HttpRequestException ex\) when` finds exactly three, all testing `NotFound`. The exposure it named is gone: a 402 or a 429 at a per-ticker fetch now fails the stage instead of being written into the record as a ticker the provider does not carry | Closed |
 | 19 | ~~**C05 buys per ticker what C03 now receives for nothing.** `FlowIngestor.LoadHoldersAsync` calls `fundamentals/{ticker}` with `filter=Holders::Institutions`; C03 now calls the same endpoint unfiltered, so the filter is a projection of a document C03 already has. 10 units a ticker, 2,500 a night at `flow.max_tickers_per_run` 250, and 28,410 for a universe pass of that half alone. C03's rotation would make a ticker's holders about ten days stale, against a block whose report dates move quarterly [D-69], and C03's pool is broader than the universe, so both conditions hold. **The backfill is unaffected**, the block having no series; the saving is nightly, and 3.9's scope shrinks by not re-fetching a current snapshot 2,841 times. Moving the read changes two components' declared sets and section 3, which is authored~~ **Closed by D-98's implementation on 2026-08-12.** `institutional_holding`'s writer is `FundamentalsIngestor`, `LoadHoldersAsync` is gone, §3's two Writes cells and `SCHEMA.md`'s writer declaration moved with it, and 3.9's scope in the phase plan names form 4 alone. The parse is `InstitutionalHolders` and the regression test states which half of D-98's claim it covers. **Two findings came out of it and neither was taken**, being items 20 and 21 | Closed |
 | 20 | ~~**C05's §3 Reads cell still names the ownership endpoint** it stopped calling at D-98. `ReadDeclarationConformanceTests` cannot catch it and is not failing to: the cell parse intersects against `SCHEMA.md`'s table list and drops everything that is not a table, which is what makes it able to read `security` out of "for the universe it iterates" and how it drops `digest_provider` from C29's. So the Reads column carries the same class of drift the Writes column does, with the same absence of a check over the half of each cell that names endpoints rather than tables. One cell, one clause, and the file is human-edited only [`CLAUDE.md` §13]~~ **The cell is corrected**, human-directed on 2026-08-12, as a clean edit under D-73 with the prior wording in `CHANGELOG.md` and a one-line diff. **What stays open is the blind spot**, which is recorded beside the Writes-column finding rather than as its own item, so that whoever builds one test sees the other defect in the same read. Seven of thirty-five Reads cells name a provider endpoint and none of those names is checked in either direction | The Writes-column conformance test, with which it shares a section. Recorded beside item 15 rather than counted twice |
-| 32 | **Item 24's rewritten pool statement fits inside its command timeout warm and not cold, and it is on the nightly path.** Measured 2026-08-13 against the store 3.6 left: **531.1s cold, 46.4s warm**, against `Command Timeout=300`. The closure measured 9.7s at 78,087,416 rows and the table is now 109.6 million rows and 18.3 GB, so the warm figure tracks the growth and the cold one does not. `CandidatesAsync` runs it on every C03 night at 17:45 and `RangePoolAsync` runs it again at the head of 3.7's sweep. **The failure is cheap and loud rather than silent**: the pool is built before a ticker is dispatched, so a cold failure costs a run and no units and the retry is warm. What is not established is which part goes cold, the `DISTINCT ticker` over the primary key or the 78,800 LATERAL seeks behind it, and that decides whether the answer is a warm-up read, a larger buffer cache, an index or the partitioning 0007 already names. **`RangePoolAsync`'s other statement is not implicated**, measuring 3.1s cold over 72,590 tickers off 0007's date index **Escalated 2026-08-13 by three failures and a refuted fix.** The runs failed at 300.1s, 300.2s and 300.3s, and the third was preceded immediately by a read-only pass over the same statement taking 610s, after which the sweep still timed out. **So there is no warm state to arrange**: the working set does not survive between processes and the 46.4s reading was the OS page cache holding briefly rather than a property to rely on. Unblocked for the sweep by raising `Command Timeout` to 1800 in the untracked Worker secrets, which is a stopgap and is still in place because restoring it fails the next run at the same place | Before 3.7's sweep resumes unattended, and before the next unattended nightly run. The stopgap is live, so what is owed is the choice among a larger buffer cache, an index, 0007's partitioning or a further rewrite |
+| 32 | **Item 24's rewritten pool statement fits inside its command timeout warm and not cold, and it is on the nightly path.** Measured 2026-08-13 against the store 3.6 left: **531.1s cold, 46.4s warm**, against `Command Timeout=300`. The closure measured 9.7s at 78,087,416 rows and the table is now 109.6 million rows and 18.3 GB, so the warm figure tracks the growth and the cold one does not. `CandidatesAsync` runs it on every C03 night at 17:45 and `RangePoolAsync` runs it again at the head of 3.7's sweep. **The failure is cheap and loud rather than silent**: the pool is built before a ticker is dispatched, so a cold failure costs a run and no units and the retry is warm. What is not established is which part goes cold, the `DISTINCT ticker` over the primary key or the 78,800 LATERAL seeks behind it, and that decides whether the answer is a warm-up read, a larger buffer cache, an index or the partitioning 0007 already names. **`RangePoolAsync`'s other statement is not implicated**, measuring 3.1s cold over 72,590 tickers off 0007's date index **Escalated 2026-08-13 by three failures and a refuted fix.** The runs failed at 300.1s, 300.2s and 300.3s, and the third was preceded immediately by a read-only pass over the same statement taking 610s, after which the sweep still timed out. **So there is no warm state to arrange**: the working set does not survive between processes and the 46.4s reading was the OS page cache holding briefly rather than a property to rely on. ~~Unblocked for the sweep by raising `Command Timeout` to 1800 in the untracked Worker secrets, which is a stopgap and is still in place because restoring it fails the next run at the same place~~ **The stopgap is now scoped rather than global, and it is still a stopgap.** `Command Timeout` reads 300 again in both secrets files, and the bound lives in `universe.pool_statement_timeout_seconds` at 1800, carried per statement to the two slow reads alone so nothing else inherits it. **1800 is not a measurement**: 900 was tried first, taken from the 474.7s reading that this document had already recorded as not comparable, and it failed twice. What is established is only that the build is above 900 cold and below 1800. D-102 records that the whole-heap pass is not removable by an access path, so the remaining options are unchanged | Before 3.7's sweep resumes unattended, and before the next unattended nightly run. The stopgap is live, so what is owed is the choice among a larger buffer cache, an index, 0007's partitioning or a further rewrite |
 | 31 | **No test reads any figure in `ARCHITECTURE.html`, and a component reached the catalogue and Figure 1 while missing from Figure 2.** C35 SentimentEngine was in §3 and in Figure 1's layer 2 list and absent from the nightly flow, so the figure showed four compute components where the system has five, and it went unnoticed until read by eye on 2026-08-13. **This is the shape of items 15 and 20 a third time**: a fact stated in three places with a conformance test over two of them. The figures state component membership, layer, clock time and ordering, and every one of those is checkable against the registry and the §3 catalogue that the existing parses already read. What makes it harder than the Writes column is that a figure is markup rather than a table, so the parse has to key on `class="node"` and the `id` span rather than on a row. **It is not urgent and it is not nothing**: a figure is what a reader uses to learn the system, and a component missing from one is invisible to everyone who reads the picture rather than the table | The next conformance test written, with items 15 and 20, which share the parse |
 | 30 | **`market_context_daily.vix` is written null while the provider carries a series for it.** D-80 reads "VIX is null and contributes nothing", `SCHEMA.md` says the bulk end-of-day feed carries equities and not the index, and both are true of the bulk feed. **The per-ticker endpoint is a different endpoint**: measured 2026-08-13, `eod/VIX.INDX` returns a daily series in the same shape as any equity at one unit a call, `real-time/VIX.INDX` answers, and `eod/GSPC.INDX` answers too. `BUILD_PLAN.md`'s carried obligation row 2 says 3.1 asks whether any source carries it; nothing records the question being asked, and the answer is that one does. **Three components read the regime label** and D-80's design has the label derived from breadth and the benchmark alone, so adding VIX is not a null-fill but a change to what the label means, which splits history at the boundary [`CLAUDE.md` §12]. **`eod/GSPC.INDX` raises the same question about the benchmark**, C10 currently taking it from `price_daily`. Both are authored. What is not authored is that the column's stated reason for being null is narrower than the sentence that states it | An authored decision, before phase 4 reads the regime label for anything. D-80 is where it lands |
 | 29 | ~~**`StageData.OpenAsync` does not retry a connect-phase `SocketException`, and the test written to prove the retry works passes only on a slow resolver.** The predicate at `StageData.cs:85` is `ex is NpgsqlException and not PostgresException \|\| ex is TimeoutException`. Npgsql throws a bare `SocketException` out of `NpgsqlConnector.ConnectAsync` when the host does not resolve or refuses the connection, so that shape falls through to the rethrow and increments nothing. `StageDataGuardTests.AConnectionThatCannotBeEstablishedIsRetriedAndTheCountIsReported` points at `srl-no-such-host.invalid` with `Timeout=1` and asserts a `TimeoutException`, which arrives only if resolution takes longer than a second: measured 2026-08-13 the resolver returns NXDOMAIN in 206 ms, so the test fails on the exception type before reaching its `ConnectionRetries == 2` assertion, and that assertion would not have held either. **It is intermittent**: three failures at 13215f6, two full `ci.ps1` runs and one filtered, then a pass at 3fcdd57 with no source file changed since 61385fc. Whether it passes turns on whether resolution takes more or less than a second, which is not a property of this system. **The predicate half does not depend on the flake**, being read from `StageData.cs:85` rather than inferred from an outcome, so a green run does not retire it. **Two fixes and they are separable.** The test becomes resolver-independent by dialling an unroutable address rather than an unresolvable name, which preserves what it proves and drops the dependency. Whether the predicate widens to cover a transport-level socket fault is the question item 28 asks one layer up about `EodhdClient`, and answering both at once is what leaves one rule rather than two~~ **Closed by D-100 on 2026-08-13, human-directed, together with item 28.** The predicate reads `TransientFault.ClassifySocket` first and falls back to the type test only where there is no socket error to read, so `HostNotFound` fails on the first attempt and a bare `ConnectionReset` is retried. **The test is replaced by two rather than repaired.** `203.0.113.1` is TEST-NET-3 and is not routed, so the connect is dropped and the one-second timeout ends it: two retries, count asserted, exception type deliberately not asserted. The mirror dials the unresolvable name with a fifteen-second timeout so resolution always finishes first, and asserts `Permanent` with zero retries, which pins the half the predecessor exercised by accident | Closed |

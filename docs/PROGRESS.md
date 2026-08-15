@@ -5590,7 +5590,9 @@ second is what D-102's remaining option is for, and D-102 records that it is not
 time in this session after `backfill.unit_reserve`'s v2 and v3 at 1,000. It resolves
 correctly on `MAX(version)` and it is churn in an append-only store. Not deleted: a
 redundant row is honest churn and a deleted one is a hole in the store whose purpose is
-being a record. The cause is an insert written without an idempotence guard.
+being a record. ~~The cause is an insert written without an idempotence guard.~~
+**Corrected 2026-08-15 by reproducing it: the cause is that the invocation runs twice, and
+the missing guard is why that showed.** See the day four record below.
 
 #### 2026-08-15, 3.7's third day, and the pool moved under a range that did not
 
@@ -5858,8 +5860,9 @@ unmoved at 14,340, and the `run_log` row is an honest empty halt. What it did co
 pool build's wall clock, which ran in full before the gate was consulted.
 
 **That ordering is a finding rather than a defect.** `RangePoolAsync` builds the pool, at
-upwards of ten minutes against a 109.8 million row table, and only then does the gate read
-an allowance that a single free `/api/user` call answers. A sweep driven unattended across
+~~upwards of ten minutes~~ **2,244,214 ms, 37.4 minutes, read off the `run_log` row rather
+than estimated**, against a 109.8 million row table, and only then does the gate read an
+allowance that a single free `/api/user` call answers. A sweep driven unattended across
 days will meet this every time a day is already spent, and it will pay the pool build to
 learn it. Fixing it is a cheap reordering, a gate read before the pool build rather than
 after, and it is not taken here. Recorded against item 32, which already owns what the
@@ -5878,6 +5881,61 @@ which kind of run it is having.
 
 **Day four is not run.** 5,725 members remain and the provider day rolls at 00:00 UTC on
 2026-08-16, which is 20:00 Eastern on 2026-08-15.
+
+#### 2026-08-15, day four run against the same day's remainder, and the reserve is the lever
+
+Directed: spend the 48,317 left rather than wait for the roll. **The allowance was never
+the blocker and the reserve was.** The gate computes `limit - used - reserve`, so at 51,683
+used a reserve of 50,000 leaves nothing however much is genuinely left. Lowered to 1,000,
+which is what the operator set on day one for exactly this case, then restored.
+
+> 162,508 row(s) over 4,701 of 20,065 pool member(s), the rotation cap lifted. 0 earnings
+> entr(ies) dropped as duplicates [D-96]. 23,909 institutional holding row(s) off the same
+> payloads and 0 holder entr(ies) dropped as duplicates [D-98]. 14,337 carried an attempt
+> for this sweep already and were not dispatched [0010]. The next unit projects at 10 units
+> and 5 are left above the reserve of 1000, from 98995 of 100000 spent on 2026-08-15.
+
+| | |
+|---|---|
+| dispatched today | 4,701, of which 3,914 yielded and 787 returned nothing |
+| the sweep now stands at | 19,041 of 20,065, 15,828 yielded and 3,213 empty |
+| `fundamental_snapshot` | 814,610 rows |
+| `earnings_history` | 605,830 rows |
+| `institutional_holding` | 97,727 rows |
+| remaining | **1,027**, so 10,270 units and a short fifth day |
+
+**The split reconciles again**: 15,828 less day three's 11,914 is 3,914, and 3,213 less
+2,426 is 787, summing to the 4,701 dispatched.
+
+**Two config versions, both guarded, and the guard earned itself immediately.** v5 lowered
+the reserve to 1,000 and v6 restored it to 50,000, each **carrying v4's own `set_at`** so a
+run dated 2026-08-13 resolves them [INVARIANT 13]. Restoring rather than leaving it low is
+day one's rule kept: the next sweep lowers it deliberately rather than inheriting it.
+
+**The double insert is reproduced and its cause is not what was recorded.** Both appends
+printed the new version **inside their own "before" listing**, stamped with that
+invocation's own `set_by`, so the insert had already run once before the read. `dotnet run`
+was then tested directly, with and without a package directive: one execution each time.
+**So the invocation runs twice and the program does not**, and the earlier note that the
+cause was "an insert written without an idempotence guard" is corrected above. The guard is
+still the right fix and it is why v5 and v6 are single rows where v2 and v3 are a duplicate
+pair, but it is the thing that made the doubling visible rather than the thing that caused
+it. **What matters beyond config**: a doubled invocation would double any unguarded write
+run this way, so a hand-run script against this store is guarded or it is not run twice
+safely.
+
+**The accounting is much tighter than day three's.** The counter moved 51,683 to 98,995,
+which is 47,312, and the sweep accounts for 47,010 as 4,701 calls at ten. **The gap is 302
+against day three's 4,663**, consistent with the sibling project being quiet across this
+window rather than with anything about the sweep changing. That is the shared key visible
+from the other side: the unattributed spend is not a rate, it is another consumer's
+activity, and it varies with their day rather than with ours.
+
+**The pool read 20,065 for a third consecutive time.** Five readings over the identical
+range now stand at 20,067, 20,067, 20,065, 20,065, 20,065.
+
+**A short fifth day finishes it.** 1,027 members at ten units is 10,270, well inside a
+single day's spendable at the restored reserve, so nothing needs lowering again for it.
 
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.

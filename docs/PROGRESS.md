@@ -5991,6 +5991,68 @@ splits-and-dividends are built and unswept, roughly 396,000 units and about eigh
 against a shared key. **None of the remaining checkpoints needs a unit**: 3.11 through 3.18
 compute over what is already stored.
 
+#### 2026-08-16, 3.8's first day, armed to an exact figure and landing on it
+
+Directed: 80,000 units. **The reserve is the lever and it was set to an odd number on
+purpose**, 9,727 being whatever makes `limit - used - reserve` come to 80,000 against a
+reading of 10,273 used. Restored to 50,000 afterwards.
+
+> 1,327,162 ticker-day(s) over 15,950 of 19,706 pool member(s), of which 8,471 returned at
+> least one day and 7,479 returned none, which is a name nobody wrote about rather than
+> zero attention [D-12]. 0 carried an attempt for this range already and were not
+> dispatched [D-99]. The pool is the universe plus the in-window delisted names [D-101].
+> The next unit projects at 250 units and 249 are left above the reserve of 9727, from
+> 90024 of 100000 spent on 2026-08-16.
+
+| | |
+|---|---|
+| dispatched | 15,950 of 19,706, in 319 batches of 50 |
+| yielded / returned nothing | 8,471 / 7,479 |
+| `sentiment_daily` | 1,333,597 rows over 9,030 tickers, 2021-01-04 to 2026-08-15 |
+| nulls | **0 `sentiment_score`, 0 `article_count`** |
+| wall clock | 442,715 ms, **7.4 minutes** |
+| remaining | 3,756, so 18,780 units and a short second day |
+
+**The arithmetic landed on the boundary rather than near it.** The counter moved 10,273 to
+90,024, which is **79,751**: 15,950 tickers at five is 79,750, plus one unit for the
+delisted symbol list. The projection was 320 batches and it ran 319, because the symbol
+list spends its unit before the first batch and leaves 79,999 where 320 batches need
+80,000. The halt then reported 249 left against a 250 projection, which is that same unit
+showing up on the other end. **Predicted to land in [79,750, 80,000] and it landed at
+79,751.**
+
+**Seven minutes against 3.7's fifty for a comparable spend, and the reason is batching.**
+`sentiments` takes 50 tickers a call while metering flat at five a ticker, so 80,000 units
+is 319 requests where fundamentals' 47,000 was 4,701. Units and calls are different
+numbers on this endpoint and only one of them is the constraint.
+
+**46.9 percent of the pool returned nothing**, 7,479 of 15,950, against fundamentals'
+16.8. That is D-12's distinction doing work rather than a failure: the attempt row records
+the ask so the name is never re-asked, and an absent sentiment stays absent instead of
+becoming a zero that ranks. **It is also the number S3 will be read against**, and the
+delisted half is the obvious place for it to concentrate, which is not yet checked.
+
+**The coverage is sparser than the row count suggests.** Across yielding tickers the mean
+is 148 days and **the median is 24**, against a window of about 2,050 sessions, with a
+maximum of 2,039. So a handful of names are covered daily and half of those with any
+coverage have under a month of it in five and a half years. **This is not 3.8's done-when
+and must not be read as it**: that line asks whether the median *universe* member clears
+`sentiment.min_baseline_days` inside a **90-day** baseline at a mid-window date, which is a
+different and stricter question over a different population, and the sweep is 81 percent
+done. Recorded now because it is the first coverage figure the phase has for sentiment.
+
+**Nothing null in 1,333,597 rows**, neither score nor count, which is worth stating because
+the widening argument at item 16 turned on `article_count` zero-filling where a row is
+absent. It does not zero-fill where a row is present.
+
+**`BackfillPool`'s `price_daily` read completed under the global bound**, so the
+inconsistency noted before dispatch is an inconsistency and not a defect: C03 gives
+`DISTINCT ticker FROM price_daily WHERE date >= window_start` the 1800 bound and
+`BackfillPool` runs the identical statement under `Command Timeout`, which is 300. It is
+the fast one, measured at 3.1s off 0007's date index, and the whole run was 7.4 minutes.
+**It is still one of a pair changed without the other**, the third instance of that shape
+this phase and the first across files, and C06 inherits it. For the batched pass.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 

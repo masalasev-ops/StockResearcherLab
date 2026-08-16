@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using StockResearcherLab.Core;
 using StockResearcherLab.Pipeline.Ingest;
 using Xunit;
@@ -196,7 +196,7 @@ public sealed class EventsIngestorTests
 
         // `price_daily` since 3.10, read by the range pass alone for the in-window
         // delisted names [D-101]. The nightly path reads no prices.
-        Assert.Equal(["security", "price_daily"], stage.ReadSet);
+        Assert.Equal(["security_daily", "price_daily"], stage.ReadSet);
     }
 
     private static StockResearcherLab.Data.Eodhd.EodhdClient EodhdClientDouble()

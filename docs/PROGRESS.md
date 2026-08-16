@@ -5937,6 +5937,60 @@ range now stand at 20,067, 20,067, 20,065, 20,065, 20,065.
 **A short fifth day finishes it.** 1,027 members at ten units is 10,270, well inside a
 single day's spendable at the restored reserve, so nothing needs lowering again for it.
 
+#### 2026-08-16, 3.7's sweep is complete, and it ended `ok` rather than on the gate
+
+**The first ending that is not a halt.** Five days, six runs, and the last one ran out of
+pool rather than out of allowance.
+
+> 36,097 row(s) over 1,027 of 20,065 pool member(s), the rotation cap lifted. 0 earnings
+> entr(ies) dropped as duplicates [D-96]. 5,557 institutional holding row(s) off the same
+> payloads and 0 holder entr(ies) dropped as duplicates [D-98]. 19,038 carried an attempt
+> for this sweep already and were not dispatched [0010].
+
+| | |
+|---|---|
+| dispatched on the fifth day | 1,027, of which 869 yielded and 158 returned nothing |
+| **the sweep, complete** | **20,068 attempt rows over a 20,065 pool**, 16,697 yielded and 3,371 empty |
+| `fundamental_snapshot` | **834,917 rows** |
+| `earnings_history` | **638,828 rows** |
+| `institutional_holding` | **103,284 rows** |
+| the fifth day's wall clock | 1,625,058 ms, 27.1 minutes |
+
+**The five days dispatched 4,884, 4,923, 4,533, 4,701 and 1,027**, summing to 20,068 at ten
+units, so **200,680 units against §2's measured 200,670**. Ten units apart, which is one
+ticker, and the difference is the three attempt rows whose ticker is no longer a pool
+member [item 35]. A figure measured from the store before the sweep and the sweep's own
+total agreeing to one ticker is what §2 being priced from the store rather than estimated
+was for.
+
+**16.8 percent of the pool returned nothing**, 3,371 of 20,068, and that is a fact about
+the provider's fundamentals coverage of delisted names rather than a failure: an empty
+answer is stamped as an attempt and never re-fetched, which is what D-99's attempt record
+is for.
+
+**Item 21's owed observation is in, and it is zero.** The item closed on a dedup rule
+"chosen against zero observations", with the count named as what would audit it and a
+non-zero result named as a reason to inspect the rows. Across all five days and 20,068
+tickers the counters read **0 earnings entries and 0 holder entries dropped**, every run.
+The guard never fired on this pool. That is the audit answered rather than the rule
+vindicated: it says the collision D-96 and D-98 guard against does not occur at this
+grain in this data, not that it cannot.
+
+**D-98's saving, totalled:** 103,284 institutional holding rows off payloads bought for
+the fundamentals, at no additional unit. Against C05's per-ticker cost that is the whole
+of what D-98 was for.
+
+**Two of the six runs spent nothing and both were mine.** The empty halt of the morning
+dispatched onto a provider day already spent, and the fifth day would have done the same
+on a stale reading had the counter not been nudged first. Both are the gate working; both
+were avoidable by reading the allowance before dispatching, which the pre-dispatch check
+now does across three guards rather than one.
+
+**What 3.7 leaves for the phase.** Prices and fundamentals are loaded. Sentiment, flow and
+splits-and-dividends are built and unswept, roughly 396,000 units and about eight days
+against a shared key. **None of the remaining checkpoints needs a unit**: 3.11 through 3.18
+compute over what is already stored.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 

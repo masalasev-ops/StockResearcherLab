@@ -88,9 +88,11 @@ public sealed class ReadDeclarationConformanceTests
         // endpoint name does not become a table.
         Assert.Empty(catalogue["PriceIngestor"]);
 
-        // C03 says "for rotation order" and does not mean the `order` table.
+        // C03 says "for rotation order" and does not mean the `order` table. The clause
+        // it qualifies became `security_daily` at 3.12 and the qualifier is unchanged,
+        // which is the point of substituting rather than replacing the cell.
         Assert.DoesNotContain("order", catalogue["FundamentalsIngestor"]);
-        Assert.Contains("security", catalogue["FundamentalsIngestor"]);
+        Assert.Contains("security_daily", catalogue["FundamentalsIngestor"]);
         Assert.Contains("price_daily", catalogue["FundamentalsIngestor"]);
 
         // `digest_provider` is configuration rather than a declared table, so the

@@ -1861,6 +1861,62 @@ checkpoint's shape rather than folded in here.
 
 ---
 
+**D-103 A failure-mode test triggers the failure through the system, not through the
+environment.** `ACTIVE`
+Closes open item 29, which D-100 closed as an instance and this closes as a class.
+
+Two tests pinned a connection failure by arranging a condition the environment happened
+to provide rather than one the system guarantees.
+
+`ARefusedLoginIsNotRetried` set a wrong password and asserted the refusal. CI's Postgres
+runs `POSTGRES_HOST_AUTH_METHOD: trust`, so no login is refusable there, the read
+succeeded and the assertion failed. It passed on every developer machine, which asks for
+a password, and was red on every CI run from the moment it was written: 23 consecutive
+runs from 2026-08-13T02:07Z to 2026-08-16T05:27Z, checked one at a time rather than
+sampled, one line at the end of 372 green ones.
+
+The earlier instance dialled an unresolvable host with a one-second timeout and asserted
+a timeout. The resolver returned `NXDOMAIN` in 206 milliseconds, so the timeout never
+ran. It passed only while the network was saturated enough for the lookup to take longer
+than a second.
+
+**The two were red together and only one was seen.** The first two of those 23 runs fail
+on both names at once, which is the register's evidence that this is one defect with two
+instances rather than two tests that each went wrong. D-100 read the pair as one question
+asked twice at the layer of the retry predicate, and fixed the predicate for both; the
+trigger it repaired in one instance it left standing in the other.
+
+**The rule.** A test that pins a failure mode triggers it through a condition the system
+guarantees. An unroutable address always fails to connect. A database that cannot exist
+always raises `invalid_catalog_name` during startup, whatever the authentication method.
+Neither depends on how a machine is configured.
+
+**The check.** Would this test behave identically on a machine configured differently
+from the one it was written on? If the answer needs a fact about DNS, about an auth
+method, about network speed or about what else is running, the trigger is wrong even when
+the assertion is right.
+
+**This matters immediately rather than in principle.** D-100 names six socket error codes
+as transient, being `TimedOut`, `ConnectionReset`, `ConnectionRefused`, `HostUnreachable`,
+`NetworkUnreachable` and `TryAgain`, so six more tests of this shape are due, and each has
+an environment-dependent trigger available alongside a guaranteed one.
+
+**Name what the test pins.** Both of these were named for the environmental trigger rather
+than the property. A test called after its trigger drifts when the trigger changes; one
+called after the property does not.
+
+**The `ci.ps1` gap goes alongside and is not closed here.** `ci.ps1` mirrors `ci.yml`'s
+steps and asserts that it does. It does not mirror the environment those steps run in, so
+its green is evidence about this machine's database. **Do not replicate CI's environment
+locally.** Trust authentication is precisely the property this test needed absent, and
+copying it would destroy on the developer machine what it just fixed in CI. What is
+recorded instead is that `ci.ps1` reads `ci.yml`'s `services` and `env` blocks and reports
+what differs, so its green carries its own scope, which is the same discipline as stating
+an expected count before a sweep. That is open item 37 and it is not built while the
+backfill is running.
+
+---
+
 ## Open
 
 **D-53 Whether the local digest model stays local once measured.** `OPEN`

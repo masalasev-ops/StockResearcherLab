@@ -184,19 +184,22 @@ public sealed class StageDataGuardTests
     [Fact]
     public async Task AConnectionTheServerRefusesIsNotRetried()
     {
-        // **A database that cannot exist, not a password that is wrong.**
+        // **A database that cannot exist, not a password that is wrong** [D-103].
         //
         // The predecessor set `Password = "srl-not-the-password"` and asserted the
         // refusal. That is a property of the server's authentication method rather than
         // of this system: `ci.yml` runs Postgres with `POSTGRES_HOST_AUTH_METHOD: trust`,
         // which accepts any credential without checking, so no login is refusable there
         // and the read simply succeeded. It passed on every developer machine, where
-        // Postgres asks for a password, and failed on every CI run from 2026-08-14.
+        // Postgres asks for a password, and it never once passed on CI: 23 consecutive
+        // red runs from the commit that wrote it.
         //
         // **This is open item 29's shape a second time**, fixed the way D-100 fixed it:
         // replace a trigger that depends on the environment with one that does not.
         // `invalid_catalog_name` is raised during connection startup whatever the auth
         // method, so the property under test is unchanged and now holds everywhere.
+        // D-103 is the rule the two instances share, and the check it states is whether
+        // this test would behave identically on a machine configured differently.
         var refused = new NpgsqlConnectionStringBuilder(TestDatabase.ConnectionString)
         {
             Database = "srl_no_such_database",

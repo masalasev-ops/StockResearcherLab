@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Text.Json;
 using Npgsql;
@@ -194,7 +194,7 @@ public sealed class SentimentIngestorTests
         // The universe, and `price_daily` since 3.8 for the in-window delisted names
         // [D-101], read by the range pass alone. **It must still not read a score**,
         // which is the property this line was written for.
-        Assert.Equal(["security", "price_daily"], stage.ReadSet);
+        Assert.Equal(["security_daily", "price_daily"], stage.ReadSet);
     }
 
     // --------------------------------------------------------------- helpers ---
@@ -210,7 +210,7 @@ public sealed class SentimentIngestorTests
     {
         await using var conn = new NpgsqlConnection(TestDatabase.ConnectionString);
         await conn.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = new NpgsqlCommand("SELECT count(*) FROM security WHERE is_active;", conn);
+        await using var cmd = new NpgsqlCommand("SELECT count(DISTINCT ticker) FROM security_daily WHERE is_active;", conn);
         return (int)(long)(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false))!;
     }
 
@@ -222,7 +222,13 @@ public sealed class SentimentIngestorTests
         foreach (var t in tickers)
         {
             await using var cmd = new NpgsqlCommand(
-                "INSERT INTO security (ticker, is_active) VALUES (@t, true) ON CONFLICT (ticker) DO NOTHING;", conn);
+                // `security_daily` from 3.12, dated before any fixture date because the
+                // read takes the most recent row at or before it [D-92].
+                """
+                INSERT INTO security_daily (ticker, date, is_active)
+                VALUES (@t, DATE '2000-01-01', true)
+                ON CONFLICT (ticker, date) DO NOTHING;
+                """, conn);
             cmd.Parameters.AddWithValue("t", t);
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         }
@@ -236,7 +242,7 @@ public sealed class SentimentIngestorTests
         foreach (var sql in new[]
                  {
                      "DELETE FROM sentiment_daily WHERE ticker LIKE @p;",
-                     "DELETE FROM security WHERE ticker LIKE @p;",
+                     "DELETE FROM security_daily WHERE ticker LIKE @p;",
                  })
         {
             await using var cmd = new NpgsqlCommand(sql, conn);

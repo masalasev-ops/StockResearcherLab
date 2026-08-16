@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data.Eodhd;
@@ -54,7 +54,7 @@ public sealed class SentimentIngestor : IStage, IBackfillStage
     // `price_daily` is read by the sweep alone, for the in-window delisted names D-101
     // widened the pool to. `sentiment_fetch_attempt` is in neither list twice: a stage
     // may read what it writes, which is what `DeclaredAccess.CanRead` says.
-    public IReadOnlyList<string> ReadSet { get; } = ["security", "price_daily"];
+    public IReadOnlyList<string> ReadSet { get; } = ["security_daily", "price_daily"];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
     [
@@ -299,7 +299,7 @@ public sealed class SentimentIngestor : IStage, IBackfillStage
     private static async Task<IReadOnlyList<string>> UniverseAsync(StageContext context, CancellationToken ct)
     {
         var rows = await context.Data.ReadAsync(
-            "security", "SELECT ticker FROM security WHERE is_active ORDER BY ticker;", ct)
+            "security_daily", Universe.MembersAsOf(context.Date), ct)
             .ConfigureAwait(false);
 
         return rows.Select(r => (string) r[0]!).ToList();

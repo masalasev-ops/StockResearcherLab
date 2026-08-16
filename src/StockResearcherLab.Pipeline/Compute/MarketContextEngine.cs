@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using StockResearcherLab.Core.Stages;
@@ -43,7 +43,7 @@ public sealed class MarketContextEngine : IStage
 
     public string Name => "MarketContextEngine";
 
-    public IReadOnlyList<string> ReadSet { get; } = ["price_daily", "security", "indicator_daily"];
+    public IReadOnlyList<string> ReadSet { get; } = ["price_daily", "security_daily", "indicator_daily"];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
         [new TableWrite("market_context_daily", WriteOperation.Insert, Columns)];
@@ -192,7 +192,8 @@ public sealed class MarketContextEngine : IStage
     {
         var sql = $"""
             WITH universe AS (
-                SELECT ticker, sector FROM security WHERE is_active AND sector IS NOT NULL
+                SELECT m.ticker, m.sector FROM {Universe.AsOf(context.Date)} m
+                 WHERE m.is_active AND m.sector IS NOT NULL
             ),
             windowed AS (
                 SELECT u.sector, p.ticker, p.date, p.adj_close,

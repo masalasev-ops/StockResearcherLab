@@ -6129,6 +6129,22 @@ against 109.8 million real rows per date. Seven tests cover the layer where the 
 be lost, which is where D-92's argument lives; the criteria themselves are unchanged and
 keep the tests they had.
 
+#### `ci.ps1` validates the last commit, never the working tree
+
+**It checks out HEAD into a temporary worktree**, which is correct for a CI simulator and
+is what makes its result mean what CI would say. The consequence is that **it cannot
+report on uncommitted work**: a run made before committing validates the previous commit
+while appearing to validate what is on disk.
+
+**The correct sequence is commit, run, amend if red.** Not "green before committing",
+which is not a thing this script can report.
+
+**Green claims made earlier in this phase referred to the prior commit.** Found at 3.11,
+where a run reporting `Passed 359` was checked out at `311d43b` while 3.11 sat unstaged.
+The record is not swept for which claims are affected: naming the property is what lets a
+reader discount them, and re-deriving each one would be a larger edit than the fact
+warrants.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 

@@ -103,7 +103,7 @@ public sealed class PercentileEngine : IStage
     public IReadOnlyList<string> ReadSet { get; } =
     [
         "indicator_daily", "valuation_daily", "flow_daily", "sentiment_derived_daily",
-        "security",
+        "security_daily",
     ];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
@@ -247,7 +247,7 @@ public sealed class PercentileEngine : IStage
             SELECT m.ticker, s.size_bucket, s.sector,
                        {terms}
                     FROM {source.Table} m
-                    LEFT JOIN security s ON s.ticker = m.ticker AND s.is_active
+                    LEFT JOIN {Universe.AsOf(dateLiteral)} s ON s.ticker = m.ticker AND s.is_active
                     WHERE m.date = {dateLiteral}
             """;
     }

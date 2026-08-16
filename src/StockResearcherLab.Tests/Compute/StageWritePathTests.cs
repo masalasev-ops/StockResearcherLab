@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Npgsql;
 using StockResearcherLab.Core;
 using StockResearcherLab.Core.Config;
@@ -289,9 +289,11 @@ public sealed class StageWritePathTests
     {
         await ExecuteAsync(
             """
-            INSERT INTO security (ticker, sector, size_bucket, market_cap, is_active)
-            VALUES (@t, 'SRLTEST-WP', 'SRLTEST-WP', 1000000000, true)
-            ON CONFLICT (ticker) DO UPDATE SET is_active = true;
+            -- `security_daily` from 3.12. Dated before any fixture date because the
+            -- membership read takes the most recent row at or before it [D-92].
+            INSERT INTO security_daily (ticker, date, sector, size_bucket, market_cap, is_active)
+            VALUES (@t, DATE '2000-01-01', 'SRLTEST-WP', 'SRLTEST-WP', 1000000000, true)
+            ON CONFLICT (ticker, date) DO UPDATE SET is_active = true;
             """,
             c => c.Parameters.AddWithValue("t", SentimentTicker), ct).ConfigureAwait(false);
 
@@ -344,7 +346,7 @@ public sealed class StageWritePathTests
                  {
                      "DELETE FROM sentiment_derived_daily WHERE ticker = @t;",
                      "DELETE FROM sentiment_daily WHERE ticker = @t;",
-                     "DELETE FROM security WHERE ticker = @t;",
+                     "DELETE FROM security_daily WHERE ticker = @t;",
                  })
         {
             await ExecuteAsync(sql, c => c.Parameters.AddWithValue("t", SentimentTicker), ct)

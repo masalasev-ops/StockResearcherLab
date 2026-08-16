@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using StockResearcherLab.Core.Stages;
 
 namespace StockResearcherLab.Pipeline.Compute;
@@ -84,7 +84,7 @@ public sealed class IndicatorEngine : IStage
 
     public string Name => "IndicatorEngine";
 
-    public IReadOnlyList<string> ReadSet { get; } = ["price_daily", "security"];
+    public IReadOnlyList<string> ReadSet { get; } = ["price_daily", "security_daily"];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
         [new TableWrite("indicator_daily", WriteOperation.Insert, Columns)];
@@ -605,7 +605,7 @@ public sealed class IndicatorEngine : IStage
     {
         var sql = $"""
             WITH universe AS (
-                SELECT ticker FROM security WHERE is_active
+                SELECT m.ticker FROM {Universe.AsOf(context.Date)} m WHERE m.is_active
             ),
             windowed AS (
                 SELECT p.ticker, p.date, p.high, p.low, p.close, p.adj_close, p.volume,
@@ -660,7 +660,7 @@ public sealed class IndicatorEngine : IStage
     {
         var sql = $"""
             WITH universe AS (
-                SELECT ticker FROM security WHERE is_active
+                SELECT m.ticker FROM {Universe.AsOf(context.Date)} m WHERE m.is_active
             ),
             bars AS (
                 SELECT p.ticker, p.close, p.volume,
@@ -733,7 +733,9 @@ public sealed class IndicatorEngine : IStage
         StageContext context, CancellationToken ct)
     {
         var rows = await context.Data.ReadAsync(
-            "security", "SELECT ticker, sector FROM security WHERE is_active ORDER BY ticker;", ct)
+            "security_daily",
+            $"SELECT m.ticker, m.sector FROM {Universe.AsOf(context.Date)} m WHERE m.is_active ORDER BY m.ticker;",
+            ct)
             .ConfigureAwait(false);
 
         var map = new Dictionary<string, string?>(StringComparer.Ordinal);
@@ -768,7 +770,8 @@ public sealed class IndicatorEngine : IStage
     {
         var sql = $"""
             WITH universe AS (
-                SELECT ticker, sector FROM security WHERE is_active AND sector IS NOT NULL
+                SELECT m.ticker, m.sector FROM {Universe.AsOf(context.Date)} m
+                 WHERE m.is_active AND m.sector IS NOT NULL
             ),
             windowed AS (
                 SELECT u.sector, p.ticker, p.date, p.adj_close,

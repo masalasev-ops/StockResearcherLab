@@ -1668,3 +1668,47 @@ same reason as the row above.
 Appended after `sentiment_fetch_attempt`, which is the order the migrations added them.
 Same grain wording and same size, for the same reason: it is the fifth per-ticker
 attempt record and the convention is what makes the five readable as one kind of thing.
+
+---
+
+## 2026-08-16, five Reads cells move to `security_daily`, and C01 gains it [3.12, D-92]
+
+Human-authorised as a shape: each cell's `security` reference becomes `security_daily`
+and every other clause is preserved. Wholesale replacement was explicitly not
+authorised, so the prior wordings are recorded here in full.
+
+`ARCHITECTURE.html` §3 is a spec and takes clean edits [D-73], which is why the prior
+wording lives here rather than as a strike in the document.
+
+**C04 SentimentIngestor.** Two clauses since D-101 appended `price_daily`; only the
+first changed.
+
+> Sentiment endpoint, `security` for the universe it iterates [D-74], `price_daily` for
+> the in-window delisted names [D-101]
+
+**C08 IndicatorEngine.** Bare where the other four are qualified, and left bare. An
+unexplained read is a separate finding and inventing an explanation for uniformity would
+be worse than leaving it.
+
+> `price_daily`, `security`
+
+**C10 MarketContextEngine.**
+
+> `price_daily` for the benchmark and the sector composites, `security` for the members
+> it aggregates [D-74], `indicator_daily` for breadth
+
+**C11 PercentileEngine.**
+
+> `indicator_daily`, `valuation_daily`, `flow_daily`, `sentiment_derived_daily`,
+> `security` for the size bucket and sector that define a cell [D-74]
+
+**C35 SentimentEngine.**
+
+> `sentiment_daily`, `security` for the universe it iterates [D-74]
+
+**C01 UniverseBuilder is an addition rather than a substitution**, and is reported
+separately for that reason. It gained `security_daily` so the nightly path can measure a
+departure against the membership in force before it, which is the `is_active` gap 3.11
+opened and this checkpoint closes. Nothing was removed.
+
+> Symbol list, `price_daily`, `fundamental_snapshot`

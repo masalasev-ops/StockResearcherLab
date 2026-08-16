@@ -60,7 +60,8 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
 
     public string Name => "UniverseBuilder";
 
-    public IReadOnlyList<string> ReadSet { get; } = ["price_daily", "fundamental_snapshot"];
+    public IReadOnlyList<string> ReadSet { get; } =
+        ["price_daily", "fundamental_snapshot", "security_daily"];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
     [
@@ -77,18 +78,17 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
 
         var written = await WriteIdentityAsync(context, day.Members, listing, ct).ConfigureAwait(false);
 
-        // **No departure rows on the nightly path, and that is a gap rather than a
-        // decision.** The range path knows the previous evaluation date's membership
-        // because it just computed it; this one would have to read `security_daily`,
-        // which is not in this component's declared read set and whose §3 Reads cell
-        // names only the symbol list, `price_daily` and `fundamental_snapshot`.
-        // `ReadDeclarationConformanceTests` fails the moment the code declares what the
-        // cell does not carry, and `ARCHITECTURE.html` is human-edited only
-        // [`CLAUDE.md` §13]. Reported at 3.11 and owed to 3.12, which is where every
-        // reader of the universe moves and where the cell is being amended anyway.
+        // **The nightly path writes departures too, from 3.12.** It reads the membership
+        // in force before this run rather than carrying it in memory, which is the one
+        // thing the range path can do and this cannot. Without it a name that left the
+        // universe keeps its last `true` row and is inherited into every later cell,
+        // because readers take the most recent row at or before the date [D-92]. Opened
+        // as a gap at 3.11, when `security_daily` was not yet in this component's read
+        // set, and closed here with the §3 Reads cell.
+        var previous = await PreviousMembersAsync(context, context.Date, ct).ConfigureAwait(false);
+
         written += await WriteDailyAsync(
-            context, context.Date, day.Members,
-            new HashSet<string>(StringComparer.Ordinal), ct).ConfigureAwait(false);
+            context, context.Date, day.Members, previous, ct).ConfigureAwait(false);
 
         return new StageResult(written, "ok", day.Detail);
     }
@@ -153,7 +153,15 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
         // statement computed, so a second pass over `price_daily` would ask a question
         // already answered.
         var everMember = new SortedDictionary<string, Identity>(StringComparer.Ordinal);
-        var previous = new HashSet<string>(StringComparer.Ordinal);
+
+        // Seeded from the store rather than empty, so the first evaluated date measures
+        // departures against whatever was in force before it. An empty seed would make a
+        // resumed range silently unable to retire anything on its first date [3.12].
+        var previous = new HashSet<string>(
+            await PreviousMembersAsync(
+                await context.ForDateAsync(dates[0], ct).ConfigureAwait(false), dates[0], ct)
+                .ConfigureAwait(false),
+            StringComparer.Ordinal);
         var counts = new List<int>(dates.Count);
         var elapsed = new List<long>(dates.Count);
         var lastCovered = context.From;
@@ -454,8 +462,7 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
         StageContext context, DateOnly date, List<Member> members,
         IReadOnlySet<string> previous, CancellationToken ct)
     {
-        var current = members.Select(static m => m.Ticker).ToHashSet(StringComparer.Ordinal);
-        var departed = previous.Where(t => !current.Contains(t)).OrderBy(static t => t, StringComparer.Ordinal).ToList();
+        var departed = Departures(previous, members.Select(static m => m.Ticker));
 
         return await context.Data.BulkUpsertAsync(
             "security_daily", DailyColumns, DailyConflictTarget,
@@ -483,6 +490,45 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
                     await w.WriteAsync(false, c).ConfigureAwait(false);
                 }
             }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Who was a member before and is not one now, ordered [3.12].
+    ///
+    /// **One rule, and both paths call it.** The nightly path takes
+    /// <paramref name="previous"/> from <see cref="PreviousMembersAsync"/> and the range
+    /// path from the date it evaluated last, and that is the only difference between
+    /// them. Public so the property can be asserted against the rule rather than against
+    /// a copy of it: a component whose two entry points retire members by two pieces of
+    /// similar-looking code is one where they diverge and nothing fails.
+    /// </summary>
+    public static IReadOnlyList<string> Departures(IReadOnlySet<string> previous, IEnumerable<string> current)
+    {
+        var held = current.ToHashSet(StringComparer.Ordinal);
+
+        return previous
+            .Where(t => !held.Contains(t))
+            .OrderBy(static t => t, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Who was a member immediately before <paramref name="date"/>, which is the set a
+    /// departure is measured against [3.12].
+    ///
+    /// **Strictly before, not at or before.** A re-run of the same date would otherwise
+    /// read the rows it is about to replace and find every member of that date already
+    /// present, so nothing would ever depart. Bounded to the previous date, the answer is
+    /// the same on a first run and a re-run, which is what D-68's per-grain idempotence
+    /// requires of a stage that can be run twice.
+    /// </summary>
+    private static async Task<IReadOnlySet<string>> PreviousMembersAsync(
+        StageContext context, DateOnly date, CancellationToken ct)
+    {
+        var rows = await context.Data.ReadAsync(
+            "security_daily", Universe.MembersAsOf(date.AddDays(-1)), ct).ConfigureAwait(false);
+
+        return rows.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
     }
 
     private static Task<long> WriteIdentityAsync(

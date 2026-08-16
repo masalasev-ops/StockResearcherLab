@@ -74,8 +74,10 @@ public sealed class ReadDeclarationConformanceTests
         // Discrimination, not just a non-empty answer. A parse that returned every
         // component with an empty set would satisfy a count and prove nothing, and a
         // parse that returned every word in the cell would name `order` for C03.
+        // `security_daily` joined this cell at 3.12, which is what lets the nightly path
+        // measure a departure against the membership in force before it.
         Assert.Equal(
-            ["fundamental_snapshot", "price_daily"],
+            ["fundamental_snapshot", "price_daily", "security_daily"],
             catalogue["UniverseBuilder"].OrderBy(t => t, StringComparer.Ordinal));
 
         Assert.Equal(

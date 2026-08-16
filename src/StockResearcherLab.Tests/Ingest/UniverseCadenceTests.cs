@@ -110,3 +110,64 @@ public sealed class UniverseCadenceTests
         Assert.Equal(UniverseBuilder.EvaluationDates(from, to), UniverseBuilder.EvaluationDates(from, to));
     }
 }
+
+/// <summary>
+/// The departure rule both of C01's entry points retire members by [3.12].
+///
+/// **Why the rule rather than the write.** A name present on one date and absent on the
+/// next needs an `is_active = false` row, because readers take the most recent
+/// `security_daily` row at or before the date [D-92]: without it a name that left in 2023
+/// keeps its last `true` row and is inherited into every later cell. The nightly path and
+/// the range path differ only in where the previous membership comes from, one reading it
+/// and one carrying it, so the rule is asserted once and both call it. Asserting it twice
+/// against two copies is what lets two copies drift.
+/// </summary>
+public sealed class UniverseDepartureTests
+{
+    [Fact]
+    public void ANameOnTheEarlierDateAndNotTheLaterOneDeparts()
+    {
+        var previous = new HashSet<string>(["AAA.US", "BBB.US", "CCC.US"], StringComparer.Ordinal);
+
+        Assert.Equal(["BBB.US"], UniverseBuilder.Departures(previous, ["AAA.US", "CCC.US"]));
+    }
+
+    [Fact]
+    public void ANameThatArrivesIsNotADeparture()
+    {
+        var previous = new HashSet<string>(["AAA.US"], StringComparer.Ordinal);
+
+        Assert.Empty(UniverseBuilder.Departures(previous, ["AAA.US", "NEW.US"]));
+    }
+
+    [Fact]
+    public void AnUnchangedMembershipRetiresNobody()
+    {
+        var previous = new HashSet<string>(["AAA.US", "BBB.US"], StringComparer.Ordinal);
+
+        Assert.Empty(UniverseBuilder.Departures(previous, ["AAA.US", "BBB.US"]));
+    }
+
+    /// <summary>
+    /// The first evaluated date of a fresh store has nothing before it, so nothing
+    /// departs. The seed being empty is a fact about the store rather than a special case
+    /// in the rule.
+    /// </summary>
+    [Fact]
+    public void AnEmptyPreviousMembershipRetiresNobody()
+    {
+        Assert.Empty(UniverseBuilder.Departures(
+            new HashSet<string>(StringComparer.Ordinal), ["AAA.US", "BBB.US"]));
+    }
+
+    /// <summary>Ordinal and ordered, so two runs write the same rows in the same order.</summary>
+    [Fact]
+    public void DeparturesAreOrderedOrdinally()
+    {
+        var previous = new HashSet<string>(["ZZZ.US", "AAA.US", "MMM.US"], StringComparer.Ordinal);
+
+        Assert.Equal(
+            ["AAA.US", "MMM.US", "ZZZ.US"],
+            UniverseBuilder.Departures(previous, []));
+    }
+}

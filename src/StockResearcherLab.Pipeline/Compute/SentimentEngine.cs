@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using StockResearcherLab.Core.Stages;
 
 namespace StockResearcherLab.Pipeline.Compute;
@@ -63,7 +63,7 @@ public sealed class SentimentEngine : IStage
 
     public string Name => "SentimentEngine";
 
-    public IReadOnlyList<string> ReadSet { get; } = ["sentiment_daily", "security"];
+    public IReadOnlyList<string> ReadSet { get; } = ["sentiment_daily", "security_daily"];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
         [new TableWrite("sentiment_derived_daily", WriteOperation.Insert, Columns)];
@@ -270,7 +270,7 @@ public sealed class SentimentEngine : IStage
         StageContext context, CancellationToken ct)
     {
         var rows = await context.Data.ReadAsync(
-            "security", "SELECT ticker FROM security WHERE is_active ORDER BY ticker;", ct)
+            "security_daily", Universe.MembersAsOf(context.Date), ct)
             .ConfigureAwait(false);
 
         return rows.Select(r => (string) r[0]!).ToList();
@@ -289,7 +289,7 @@ public sealed class SentimentEngine : IStage
     {
         var sql = $"""
             WITH universe AS (
-                SELECT ticker FROM security WHERE is_active
+                SELECT m.ticker FROM {Universe.AsOf(context.Date)} m WHERE m.is_active
             )
             SELECT s.ticker, s.date, s.article_count, s.sentiment_score
             FROM sentiment_daily s

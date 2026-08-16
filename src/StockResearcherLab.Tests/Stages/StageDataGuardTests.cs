@@ -77,12 +77,18 @@ public sealed class StageDataGuardTests
     // is the same request rather than a second attempt at a side effect.
 
     /// <summary>
-    /// **A blackholed address is retried, because a connect that times out is the
+    /// **A transient connect failure is retried, and a connect that times out is the
     /// transient case** [D-100].
     ///
-    /// `203.0.113.1` is TEST-NET-3, reserved for documentation and not routed, so the
-    /// connect attempt is dropped rather than refused and the one-second timeout is
-    /// what ends it. **An address rather than a name deliberately**: the predecessor
+    /// **The trigger is a blackholed address, and it is guaranteed rather than
+    /// convenient** [D-103]. `203.0.113.1` is TEST-NET-3, reserved by RFC 5737 for
+    /// documentation and allocated to nobody, so nothing answers for it anywhere and the
+    /// connect attempt is dropped rather than refused: the one-second timeout is the only
+    /// thing that can end it. That is a property of the address registry rather than of
+    /// this machine's resolver, network speed or auth method, which is what D-103's check
+    /// asks of a trigger.
+    ///
+    /// **An address rather than a name deliberately**: the predecessor
     /// dialled `srl-no-such-host.invalid`, and a name that does not resolve fails in
     /// the resolver before any connect is attempted, which is the permanent case one
     /// test down. That test passed only while the local resolver happened to take
@@ -99,7 +105,7 @@ public sealed class StageDataGuardTests
     /// type is what pinned the predecessor to the shape of one observation.
     /// </summary>
     [Fact]
-    public async Task ABlackholedAddressIsRetriedAndTheCountIsReported()
+    public async Task ATransientConnectFailureIsRetriedAndTheCountIsReported()
     {
         var unroutable = new NpgsqlConnectionStringBuilder(TestDatabase.ConnectionString)
         {
@@ -125,8 +131,14 @@ public sealed class StageDataGuardTests
     }
 
     /// <summary>
-    /// **A host that does not resolve is not retried, and this is the half the
+    /// **A permanent connect failure is not retried, and this is the half the
     /// predecessor exercised while claiming to test the other** [D-100].
+    ///
+    /// **The trigger is a `.invalid` name, and it is guaranteed rather than
+    /// convenient** [D-103]. RFC 2606 reserves `invalid` and RFC 6761 specifies that
+    /// resolvers answer names under it negatively; it is not delegated in the root zone,
+    /// so there is no address for one to return. The fault is therefore `HostNotFound`
+    /// on any machine, rather than depending on how this one is configured.
     ///
     /// `HostNotFound` is a connection string that is wrong. It answers identically
     /// three times, so the attempts and the backoff are spent on something that cannot
@@ -136,10 +148,10 @@ public sealed class StageDataGuardTests
     /// test say the same thing every time.** With a one-second timeout the verdict
     /// turns on whether the resolver answers inside it: fast, and the fault is
     /// `HostNotFound`; slow, and the fault is a timeout and this asserts the opposite
-    /// of what it is named for. Fifteen seconds means resolution always finishes first.
+    /// of what it pins. Fifteen seconds means resolution always finishes first.
     /// </summary>
     [Fact]
-    public async Task AHostThatDoesNotResolveFailsImmediatelyAndIsNotRetried()
+    public async Task APermanentConnectFailureIsNotRetried()
     {
         var unresolvable = new NpgsqlConnectionStringBuilder(TestDatabase.ConnectionString)
         {

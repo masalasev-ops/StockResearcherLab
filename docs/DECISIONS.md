@@ -1903,7 +1903,13 @@ an environment-dependent trigger available alongside a guaranteed one.
 
 **Name what the test pins.** Both of these were named for the environmental trigger rather
 than the property. A test called after its trigger drifts when the trigger changes; one
-called after the property does not.
+called after the property does not. **The two D-100 tests were renamed on this clause
+although their triggers were sound**, because D-100 classifies six socket error codes as
+transient, so six more tests of this shape are due, and naming them after the
+classification makes them a set that references the rule rather than six names referencing
+six mechanisms. The trigger moves into a doc comment on each, with the line that says why
+it is guaranteed rather than convenient: the name says what is pinned and the body says
+how it is reached.
 
 **The `ci.ps1` gap goes alongside and is not closed here.** `ci.ps1` mirrors `ci.yml`'s
 steps and asserts that it does. It does not mirror the environment those steps run in, so

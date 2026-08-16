@@ -129,7 +129,7 @@ public sealed class MarketContextEngine : IStage
             SELECT count(*) FILTER (WHERE i.dist_200dma > 0) AS above,
                    count(*) FILTER (WHERE i.dist_200dma IS NOT NULL) AS measurable
             FROM indicator_daily i
-            JOIN security s ON s.ticker = i.ticker AND s.is_active
+            JOIN {Universe.AsOf(context.Date)} s ON s.ticker = i.ticker AND s.is_active
             WHERE i.date = {Literal(context.Date)};
             """;
 

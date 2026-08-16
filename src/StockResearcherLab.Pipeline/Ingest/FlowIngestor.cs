@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using StockResearcherLab.Core.Stages;
@@ -56,7 +56,7 @@ public sealed class FlowIngestor : IStage, IBackfillStage
     // `flow_fetch_attempt` is not here and belongs in neither list twice. A stage may
     // read what it writes, which is what `DeclaredAccess.CanRead` says: the rotation
     // reads it back to decide what to fetch next [0008].
-    public IReadOnlyList<string> ReadSet { get; } = ["security"];
+    public IReadOnlyList<string> ReadSet { get; } = ["security_daily"];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
     [
@@ -275,7 +275,7 @@ public sealed class FlowIngestor : IStage, IBackfillStage
         StageContext context, CancellationToken ct)
     {
         var rows = await context.Data.ReadAsync(
-            "security", "SELECT ticker FROM security WHERE is_active ORDER BY ticker;", ct)
+            "security_daily", Universe.MembersAsOf(context.Date), ct)
             .ConfigureAwait(false);
 
         return rows.Select(r => (string) r[0]!).ToList();
@@ -463,7 +463,7 @@ public sealed class FlowIngestor : IStage, IBackfillStage
         StageContext context, int maxPerRun, CancellationToken ct)
     {
         var rows = await context.Data.ReadAsync(
-            "security", "SELECT ticker FROM security WHERE is_active ORDER BY ticker;", ct)
+            "security_daily", Universe.MembersAsOf(context.Date), ct)
             .ConfigureAwait(false);
 
         var pool = rows.Select(r => (string) r[0]!).ToList();

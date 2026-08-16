@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Npgsql;
 using StockResearcherLab.Core;
 using StockResearcherLab.Core.Config;
@@ -28,7 +28,7 @@ namespace StockResearcherLab.Tests.Ingest;
 /// delisted list.
 ///
 /// **The end-to-end sweep is not exercised here and open item 33 says why.** C04's live
-/// half is `SELECT ticker FROM security WHERE is_active`, and the suite resolves its
+/// half is the universe as of its date, read from `security_daily` [3.12], and the suite resolves its
 /// connection string from `appsettings.Secrets.json` [open items 10 and 26], so a range
 /// execution in a test walks the live universe and stamps `sentiment_fetch_attempt` for
 /// every real ticker. The pool half below is safe on either database, the delisted list

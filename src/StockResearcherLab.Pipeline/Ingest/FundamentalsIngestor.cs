@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using StockResearcherLab.Core.Config;
@@ -318,7 +318,7 @@ public sealed class FundamentalsIngestor : IBackfillStage
     // stage may read what it writes, which is what `DeclaredAccess.CanRead` says and
     // what `fundamental_snapshot` has always relied on: the rotation reads both back
     // to decide what to fetch next.
-    public IReadOnlyList<string> ReadSet { get; } = ["price_daily", "security", "events"];
+    public IReadOnlyList<string> ReadSet { get; } = ["price_daily", "security_daily", "events"];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
     [
@@ -752,7 +752,7 @@ public sealed class FundamentalsIngestor : IBackfillStage
         }
 
         var fromSecurity = await context.Data.ReadAsync(
-            "security", "SELECT ticker FROM security WHERE is_active ORDER BY ticker;", ct)
+            "security_daily", Universe.MembersAsOf(context.Date), ct)
             .ConfigureAwait(false);
 
         var inUniverse = fromSecurity.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);

@@ -1712,3 +1712,30 @@ departure against the membership in force before it, which is the `is_active` ga
 opened and this checkpoint closes. Nothing was removed.
 
 > Symbol list, `price_daily`, `fundamental_snapshot`
+
+---
+
+## 2026-08-16, C03, C05 and C06 move to `security_daily` [3.12, D-92]
+
+Human-authorised on the same shape as the five: the `security` clause becomes
+`security_daily`, every other clause and citation preserved. These three were outside the
+originally named five and were found by counting the readers rather than reading the
+plan, which said "every reader" and then enumerated five of eight.
+
+Anchored on the component row rather than the cell text, because C06's cell was
+byte-identical to C04's.
+
+**C03 FundamentalsIngestor.**
+
+> Fundamentals endpoint, `events`, `price_daily` for the candidate pool, `security` for
+> rotation order [D-74]
+
+**C05 FlowIngestor.**
+
+> Insider [D-58, D-98], `security` for the universe it iterates [D-74]
+
+**C06 EventsIngestor.** Two clauses since 3.10 appended `price_daily`; only the first
+changed.
+
+> Calendar, splits, dividends, `security` for the universe it iterates [D-74],
+> `price_daily` for the in-window delisted names [D-101]

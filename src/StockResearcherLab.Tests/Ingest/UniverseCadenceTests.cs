@@ -1,4 +1,7 @@
+﻿using Npgsql;
+using StockResearcherLab.Pipeline;
 using StockResearcherLab.Pipeline.Ingest;
+using StockResearcherLab.Tests.Corpus;
 using Xunit;
 
 namespace StockResearcherLab.Tests.Ingest;
@@ -169,5 +172,120 @@ public sealed class UniverseDepartureTests
         Assert.Equal(
             ["AAA.US", "MMM.US", "ZZZ.US"],
             UniverseBuilder.Departures(previous, []));
+    }
+}
+
+/// <summary>
+/// The statement every universe reader now takes, asserted against the store rather than
+/// reasoned about [3.12].
+///
+/// **Why against the store.** `security.is_active` had no writer from 3.11 and C03, C05
+/// and C06 still filtered on it, so their universe was frozen at whatever C01 last wrote
+/// while nothing errored. That is the shape that froze the fundamentals rotation and the
+/// `fcf_yield` ratio, and the property that catches it is not "the read compiles" but "a
+/// name that departed is gone the next night". All eight readers call
+/// <see cref="Universe.MembersAsOf"/>, so asserting the statement once covers what eight
+/// copies of it would each have to be asserted for separately.
+/// </summary>
+[Collection("database")]
+public sealed class UniverseAsOfTests
+{
+    private const string Marker = "SRLASOF";
+
+    private static readonly DateOnly Joined = new(2001, 3, 4);
+    private static readonly DateOnly Left = new(2001, 3, 11);
+
+    /// <summary>
+    /// A member on one date, departed on the next, and absent from the universe every
+    /// night after. The `false` row is what makes the second half true: readers take the
+    /// most recent row at or before the date, so without it the `true` row is inherited
+    /// for ever [D-92].
+    /// </summary>
+    [Fact]
+    public async Task ADepartedNameIsAbsentFromTheUniverseOnEveryLaterNight()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ClearAsync(ct).ConfigureAwait(true);
+
+        await SeedAsync($"{Marker}STAY.US", Joined, active: true, ct).ConfigureAwait(true);
+        await SeedAsync($"{Marker}GONE.US", Joined, active: true, ct).ConfigureAwait(true);
+        await SeedAsync($"{Marker}GONE.US", Left, active: false, ct).ConfigureAwait(true);
+
+        // On the joining date both are members.
+        var onJoin = await MembersAsync(Joined, ct).ConfigureAwait(true);
+        Assert.Contains($"{Marker}STAY.US", onJoin);
+        Assert.Contains($"{Marker}GONE.US", onJoin);
+
+        // On the departure date and every night after, one of them is gone and the other
+        // is not. Both halves matter: a read that dropped everybody would pass the first.
+        foreach (var date in new[] { Left, Left.AddDays(1), Left.AddDays(400) })
+        {
+            var members = await MembersAsync(date, ct).ConfigureAwait(true);
+
+            Assert.Contains($"{Marker}STAY.US", members);
+            Assert.DoesNotContain($"{Marker}GONE.US", members);
+        }
+
+        await ClearAsync(ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// The day before it joined, a member is not yet one. The bound is `date <=`, so a
+    /// backfilled night reads the membership of its own date rather than the newest.
+    /// </summary>
+    [Fact]
+    public async Task ANameIsNotAMemberBeforeItsFirstRow()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ClearAsync(ct).ConfigureAwait(true);
+
+        await SeedAsync($"{Marker}STAY.US", Joined, active: true, ct).ConfigureAwait(true);
+
+        Assert.DoesNotContain(
+            $"{Marker}STAY.US",
+            await MembersAsync(Joined.AddDays(-1), ct).ConfigureAwait(true));
+
+        await ClearAsync(ct).ConfigureAwait(true);
+    }
+
+    private static async Task<IReadOnlyList<string>> MembersAsync(DateOnly asOf, CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
+        await using var cmd = new NpgsqlCommand(Universe.MembersAsOf(asOf), conn);
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+
+        var members = new List<string>();
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            members.Add(reader.GetString(0));
+        }
+
+        return members;
+    }
+
+    private static async Task SeedAsync(string ticker, DateOnly date, bool active, CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
+        await using var cmd = new NpgsqlCommand(
+            """
+            INSERT INTO security_daily (ticker, date, sector, size_bucket, market_cap, is_active)
+            VALUES (@t, @d, 'SRLASOF-S', 'SRLASOF-B', 1000000000, @a)
+            ON CONFLICT (ticker, date) DO UPDATE SET is_active = EXCLUDED.is_active;
+            """, conn);
+
+        cmd.Parameters.AddWithValue("t", ticker);
+        cmd.Parameters.AddWithValue("d", date);
+        cmd.Parameters.AddWithValue("a", active);
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    private static async Task ClearAsync(CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
+        await using var cmd = new NpgsqlCommand(
+            "DELETE FROM security_daily WHERE ticker LIKE @p;", conn);
+
+        cmd.Parameters.AddWithValue("p", Marker + "%");
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 }

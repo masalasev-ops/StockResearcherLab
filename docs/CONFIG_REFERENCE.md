@@ -137,7 +137,7 @@ absence from a grep over `src/` is what the entry states.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `backfill.window_start` | "2021-01-04" | D-94, 3.3 | `FundamentalsIngestor` C03, `Worker` backfill driver | 3.16 |
+| `backfill.window_start` | "2021-01-04" | D-94, 3.3 | `FundamentalsIngestor` C03, `UniverseBuilder` C01 [3.11], `Worker` backfill driver | 3.16 |
 | `backfill.ticker_concurrency` | 8 | 3.3 | `PriceIngestor` C02 | 3.6 |
 | `backfill.daily_unit_allowance` | 100000 | 3.1, 3.3 | `PriceIngestor` C02, `FundamentalsIngestor` C03 | 3.6 |
 | `backfill.unit_reserve` | 50000 | 3.3 | `PriceIngestor` C02, `FundamentalsIngestor` C03 | 3.6 |

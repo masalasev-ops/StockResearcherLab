@@ -5682,8 +5682,10 @@ own, which is how it stopped with 7 units above a 50,000 reserve rather than ove
 
 #### 3.11's projected wall clock, owed since item 25 and stated as the bracket it is
 
-3.11 runs C01 per weekly evaluation date across the window. **2021-01-04 to 2026-08-13 is
-2,047 days, so 293 evaluation dates**, and `LiquidAsync` runs once per date.
+3.11 runs C01 per weekly evaluation date across the window. ~~2021-01-04 to 2026-08-13 is
+2,047 days, so 293 evaluation dates~~ **292**, corrected at 3.11 and pinned by a test: 293
+is 2,047 days divided by seven and rounded up, where the cadence gives Sundays from
+2021-01-10 to 2026-08-09. `LiquidAsync` runs once per date.
 
 **There are two readings for the statement and they are not comparable to each other.**
 871.1s was the shape before its rewrite, carrying 19 GB of temporary I/O; 1,063.9s is the
@@ -6052,6 +6054,80 @@ inconsistency noted before dispatch is an inconsistency and not a defect: C03 gi
 the fast one, measured at 3.1s off 0007's date index, and the whole run was 7.4 minutes.
 **It is still one of a pair changed without the other**, the third instance of that shape
 this phase and the first across files, and C06 inherits it. For the batched pass.
+
+#### 2026-08-16, checkpoint 3.11, and its scope is narrower than its own done-when
+
+Built. C01 gains a range mode and writes `security_daily` per weekly evaluation date. What
+follows is what the build found rather than what it produced.
+
+**Everything authored was already in place**, which is the first checkpoint this phase
+where that is true: D-92 is `ACTIVE`, `security_daily` is in 0007, §3's C01 Writes cell
+already reads `security, security_daily`, §16 carries the store row, and `SCHEMA.md` names
+the writer. Nothing was blocked on an authored edit and none was made.
+
+**The scope sentence and the done-when disagree, and the done-when is what was built to.**
+3.11 says what changes is "where the row lands, that it runs per weekly evaluation date
+across the window, and that sector comes from `fundamental_snapshot`". Two of those three
+were already done: `SectorsAsync` has read sector from `fundamental_snapshot` as-of
+`filing_date_effective` since it was written. **What the scope sentence omits is the whole
+of the difficulty.** Its own done-when requires "a name delisted in 2023 is active before
+its `delisted_date` and absent after", and the phase's done-when line 2 requires a
+`delisted_date` on `security` besides. Neither is possible under the component as it
+stood: C01 took `SymbolList.AdmittedAsync`, the **live list alone**, and rejected anything
+absent from it as `rejectedType`. Evaluated at a 2022 date that rejects every name
+delisted since, so the reconstructed universe would have held survivors only. **That is
+the bias this system exists to measure, arriving through the universe definition**, and
+nothing in the checkpoint's stated scope names it. Reported rather than closed
+[`CLAUDE.md` §13].
+
+**What was built for it.** C01 now takes both symbol lists, and `delisted_date` is the
+ticker's last bar, which §2 already establishes is the only delisting date there is
+because the symbol list carries none. Membership on a date requires the date to be at or
+before that last bar, so a name is a member up to its final session and not after, and the
+rejection is counted separately from the type rejection because one moves with the date
+and the other does not.
+
+**Departure rows, and the one thing that is a real gap.** Readers take the most recent
+`security_daily` row at or before the date [D-92], so a name that leaves the universe
+needs an `is_active = false` row or it stays a member of every later cell by inheritance.
+The range path writes them: it knows the previous evaluation date's membership because it
+just computed it. **The nightly path cannot**, because it would have to read
+`security_daily`, which is not in C01's declared read set and whose §3 Reads cell names
+only the symbol list, `price_daily` and `fundamental_snapshot`.
+`ReadDeclarationConformanceTests` fails the moment the code declares what the cell does
+not carry, and `ARCHITECTURE.html` is human-edited only. **This is 3.8's and 3.10's
+blocker a third time and it is owed to 3.12**, which moves every reader onto
+`security_daily` and amends those cells anyway. It is stated at the call site rather than
+left as an absence.
+
+**Config resolves per evaluation date, and this is the first sweep where D-93's rule
+actually bites.** C03's and C04's range modes resolve once for the range and say in as
+many words that this is not the case D-93 governs, because they are ticker-partitioned and
+no configured value reaches a row they write. C01 computes a date, and
+`universe.min_market_cap` and the two bucket floors decide what a row says, so a 2021 date
+resolving today's floors would build the backfilled universe to today's criteria
+[INVARIANT 13, D-43]. `ForDateAsync` per date is the only route, and settings are cached
+on the resolved version so a range whose config never moved reads the keys once rather
+than 292 times.
+
+**The cadence is 292 dates and not the 293 recorded above.** That figure came from
+dividing 2,047 days by seven and rounding up; the cadence gives Sundays from 2021-01-10 to
+2026-08-09, which is 292. **Corrected here and pinned by a test**, because the cost
+projection multiplies by it.
+
+**The run is built to answer its own cost question.** `PROGRESS.md` has this checkpoint's
+cost as a bracket spanning twenty-three times, cold against warm, with nothing on record
+covering the case that decides it: many dates inside one process. The range detail reports
+first, median, last and total per-date wall clock, so the first execution measures the
+thing rather than a separate exercise being added to a build session's scope
+[`CLAUDE.md` §3].
+
+**What is not tested is a range execution end to end**, and it is open item 33 one table
+further on. C01's pool is `price_daily`, and the suite resolves its connection string
+against the developer database [items 10, 26], so a range test would run `LiquidAsync`
+against 109.8 million real rows per date. Seven tests cover the layer where the cadence can
+be lost, which is where D-92's argument lives; the criteria themselves are unchanged and
+keep the tests they had.
 
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.

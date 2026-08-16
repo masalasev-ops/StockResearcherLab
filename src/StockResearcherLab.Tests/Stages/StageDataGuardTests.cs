@@ -182,14 +182,27 @@ public sealed class StageDataGuardTests
     /// thing three times while the backoff is spent for nothing.
     /// </summary>
     [Fact]
-    public async Task ARefusedLoginIsNotRetried()
+    public async Task AConnectionTheServerRefusesIsNotRetried()
     {
-        var wrong = new NpgsqlConnectionStringBuilder(TestDatabase.ConnectionString)
+        // **A database that cannot exist, not a password that is wrong.**
+        //
+        // The predecessor set `Password = "srl-not-the-password"` and asserted the
+        // refusal. That is a property of the server's authentication method rather than
+        // of this system: `ci.yml` runs Postgres with `POSTGRES_HOST_AUTH_METHOD: trust`,
+        // which accepts any credential without checking, so no login is refusable there
+        // and the read simply succeeded. It passed on every developer machine, where
+        // Postgres asks for a password, and failed on every CI run from 2026-08-14.
+        //
+        // **This is open item 29's shape a second time**, fixed the way D-100 fixed it:
+        // replace a trigger that depends on the environment with one that does not.
+        // `invalid_catalog_name` is raised during connection startup whatever the auth
+        // method, so the property under test is unchanged and now holds everywhere.
+        var refused = new NpgsqlConnectionStringBuilder(TestDatabase.ConnectionString)
         {
-            Password = "srl-not-the-password",
+            Database = "srl_no_such_database",
         }.ConnectionString;
 
-        var data = new StageData(wrong, new DeclaredAccess("GuardedStage", ["run_log"], []));
+        var data = new StageData(refused, new DeclaredAccess("GuardedStage", ["run_log"], []));
 
         await Assert.ThrowsAsync<PostgresException>(
             () => data.ReadAsync("run_log", "SELECT 1;", TestContext.Current.CancellationToken))

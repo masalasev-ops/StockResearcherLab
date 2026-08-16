@@ -6139,6 +6139,25 @@ while appearing to validate what is on disk.
 **The correct sequence is commit, run, amend if red.** Not "green before committing",
 which is not a thing this script can report.
 
+**It also does not simulate the CI database, and that is sharper than the worktree
+point.** Found 2026-08-16: **CI had been red on every run since 2026-08-14** while
+`ci.ps1` reported green at each of them, on one test and always the same one.
+`StageDataGuardTests.ARefusedLoginIsNotRetried` set a wrong password and asserted the
+refusal, which is a property of the server's authentication method rather than of this
+system. `ci.yml` runs Postgres with `POSTGRES_HOST_AUTH_METHOD: trust`, so **any
+credential is accepted and no login is refusable**; the read succeeded and the assertion
+failed. Every developer machine asks for a password, so it passed everywhere it was run
+locally, `ci.ps1` included, because `ci.ps1` points at the local server.
+
+**This is open item 29's shape a second time** and was fixed the way D-100 fixed that one:
+the trigger becomes a database that cannot exist, whose `invalid_catalog_name` is raised
+during connection startup whatever the auth method. The property under test is unchanged
+and now holds in both places. **The lesson is not about the test.** `ci.ps1` mirrors
+`ci.yml`'s steps and asserts that it does; it does not mirror the environment those steps
+run in, so a green result is evidence about this machine's Postgres and not about CI's.
+**372 of 373 passed on CI throughout**, which is why the failure survived a week of
+attention: a single red test at the end of a long green list reads like noise.
+
 **Green claims made earlier in this phase referred to the prior commit.** Found at 3.11,
 where a run reporting `Passed 359` was checked out at `311d43b` while 3.11 sat unstaged.
 The record is not swept for which claims are affected: naming the property is what lets a

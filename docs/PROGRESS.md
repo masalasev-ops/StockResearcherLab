@@ -6602,6 +6602,19 @@ that is itself a month end would carry its own close inside its own five-year hi
 **409 tests, 20 seconds.** Item 33 closes. 3.9's sweep is no longer blocked on the
 resumption proof.
 
+**3.13 claims its done-when.** The phase's line is "re-running any compute stage over a
+date, against a store whose ingest has not moved, reproduces what the backfill wrote byte
+for byte", tested at 3.13 as range mode against nightly, and both C08 and C09 now carry
+it. **What stays owed is C09's range detail line**, which reports dates, pool and row
+counts and no null counts where C08's reports eight, so the two report lines cannot be
+read against each other. That was recorded when C09's range mode landed and is unchanged
+here.
+
+**One process note, stated rather than left to be inferred.** `ci.ps1` was run after this
+commit and after the test-database commit, and not after the three sweeps at `c949b89`;
+the full suite was. The gate at `77d391e` covers that code and more, so nothing is
+unchecked, but the per-commit rule was not followed for that one commit.
+
 #### `ci.ps1` validates the last commit, never the working tree
 
 **It checks out HEAD into a temporary worktree**, which is correct for a CI simulator and

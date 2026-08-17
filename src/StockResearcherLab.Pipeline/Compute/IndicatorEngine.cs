@@ -35,7 +35,7 @@ namespace StockResearcherLab.Pipeline.Compute;
 ///
 /// Formulas, windows, warm-ups and null rules for every column are in `METRICS.md`.
 /// </summary>
-public sealed class IndicatorEngine : IStage
+public sealed class IndicatorEngine : IStage, IBackfillStage
 {
     /// <summary>
     /// The columns this stage writes, declared so the staged write is checked against
@@ -122,7 +122,22 @@ public sealed class IndicatorEngine : IStage
         // output is byte-identical [CLAUDE.md section 6].
         rows.Sort(static (a, b) => string.CompareOrdinal(a.Ticker, b.Ticker));
 
-        var written = await context.Data.BulkUpsertAsync(
+        var written = await WriteAsync(context, rows, ct).ConfigureAwait(false);
+
+        return new StageResult(written, "ok", Detail(rows));
+    }
+
+    /// <summary>
+    /// The write, shared by the nightly path and the range path.
+    ///
+    /// **Extracted rather than copied at 3.13.** Two loops writing seventeen columns in a
+    /// fixed order is the shape that drifts silently: a column added to one and not the
+    /// other is caught by `TableWrite.Columns` only if the declared set moves too, and a
+    /// column reordered in one is caught by nothing at all. The order lives once.
+    /// </summary>
+    private static Task<long> WriteAsync(
+        StageContext context, IReadOnlyList<Row> rows, CancellationToken ct)
+        => context.Data.BulkUpsertAsync(
             "indicator_daily", Columns, ConflictTarget,
             async (w, c) =>
             {
@@ -147,10 +162,7 @@ public sealed class IndicatorEngine : IStage
                     await w.WriteAsync(r.Rs20DSlope, c).ConfigureAwait(false);
                     await w.WriteAsync(r.RsChangeVsSector, c).ConfigureAwait(false);
                 }
-            }, ct).ConfigureAwait(false);
-
-        return new StageResult(written, "ok", Detail(rows));
-    }
+            }, ct);
 
     /// <summary>
     /// What the run log says about the columns that carry null, read off the rows
@@ -174,6 +186,199 @@ public sealed class IndicatorEngine : IStage
             rows.Count(r => r.MedianDollarVolume20D is null));
 
     // ------------------------------------------------- range mode [3.13] ---
+
+    /// <summary>
+    /// The same work as <see cref="ExecuteAsync"/> over a range, partitioned by ticker.
+    ///
+    /// **One read of a ticker's whole series, then the existing public
+    /// <see cref="Compute"/> per date, one write per chunk** [3.13]. The arithmetic is not
+    /// reimplemented, which is what keeps the 2.5 to 2.7 reference fixtures covering the
+    /// backfill rather than half of it [D-93].
+    ///
+    /// **What is precomputed and what is not.** The benchmark is one series and is read
+    /// once. The sector composites are per membership epoch rather than per date, which is
+    /// the saving `MembershipEpochsAsync` explains. Everything else is a function of one
+    /// ticker's own bars, which is why this partitions by ticker at all
+    /// [`CLAUDE.md` §5].
+    ///
+    /// **It throws rather than halting when `security_daily` does not cover the range**,
+    /// for the reason the ingest pools throw: a missing precondition needs another
+    /// checkpoint to run and re-invoking tomorrow changes nothing
+    /// [`BackfillPool.RequireUniverseCoverageAsync`]. Without it this stage would write a
+    /// row of nulls per name per date and report success, which is 3.8's second day
+    /// arriving in the compute layer.
+    /// </summary>
+    public async Task<BackfillResult> ExecuteRangeAsync(
+        BackfillContext context, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var atEnd = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
+
+        var dates = await TradingDatesAsync(atEnd, context.From, context.To, ct).ConfigureAwait(false);
+
+        if (dates.Count == 0)
+        {
+            return BackfillResult.Completed(
+                0, context.To, "no trading date in the range carries a price_daily bar, so nothing is computed");
+        }
+
+        var epochs = await MembershipEpochsAsync(atEnd, context.From, context.To, ct).ConfigureAwait(false);
+        var epochOf = EpochOf(dates, epochs);
+
+        if (epochOf.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"security_daily covers no trading date in {Iso(context.From)}..{Iso(context.To)}, so every " +
+                "date would compute against an empty universe and write nothing while reporting success. " +
+                "UniverseBuilder's range mode is what fills it [checkpoint 3.11]. This throws rather than " +
+                "halting: a halt is resolved by tomorrow's allowance and this is not.");
+        }
+
+        // Keyed on the resolved version rather than on the date, so a range whose config
+        // never moved reads the keys once and one that moved reads them again at the
+        // boundary [3.11].
+        var byVersion = new Dictionary<int, Settings>();
+        var settingsOf = new Dictionary<DateOnly, Settings>();
+
+        foreach (var date in dates)
+        {
+            var stage = await context.ForDateAsync(date, ct).ConfigureAwait(false);
+
+            if (!byVersion.TryGetValue(stage.ConfigVersion, out var s))
+            {
+                s = await SettingsAsync(stage, ct).ConfigureAwait(false);
+                byVersion[stage.ConfigVersion] = s;
+            }
+
+            settingsOf[date] = s;
+        }
+
+        var maxBars = settingsOf.Values.Max(s => s.Bars);
+        var padStart = dates[0].AddDays(-CompositePadDays);
+
+        var benchmark = await RangeBenchmarkAsync(atEnd, padStart, context.To, ct).ConfigureAwait(false);
+
+        // Per epoch: that epoch's members and that epoch's composites. Held for the whole
+        // run because the loop below is ticker-outer, which is what stops a series being
+        // re-read once per epoch.
+        var members = new Dictionary<DateOnly, IReadOnlyDictionary<string, string?>>();
+        var composites =
+            new Dictionary<DateOnly, IReadOnlyDictionary<string, IReadOnlyDictionary<DateOnly, double>>>();
+
+        foreach (var epoch in epochOf.Values.Distinct().OrderBy(static d => d))
+        {
+            var span = epochOf.Where(kv => kv.Value == epoch).Select(kv => kv.Key).ToList();
+
+            members[epoch] = await EpochMembersAsync(atEnd, epoch, ct).ConfigureAwait(false);
+
+            composites[epoch] = await EpochCompositesAsync(
+                atEnd, epoch, span.Min().AddDays(-CompositePadDays), span.Max(),
+                settingsOf[span.Max()].MinSectorMembers, ct).ConfigureAwait(false);
+        }
+
+        var everMember = members.Values
+            .SelectMany(m => m.Keys)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static t => t, StringComparer.Ordinal)
+            .ToList();
+
+        long written = 0;
+        var depth = maxBars + dates.Count;
+
+        foreach (var chunk in Chunks(everMember, TickerChunk))
+        {
+            var series = await ChunkSeriesAsync(atEnd, chunk, depth, context.To, ct).ConfigureAwait(false);
+            var medians = await ChunkMediansAsync(atEnd, chunk, dates, ct).ConfigureAwait(false);
+
+            var rows = new List<Row>();
+
+            foreach (var (ticker, history) in series)
+            {
+                foreach (var date in dates)
+                {
+                    if (!epochOf.TryGetValue(date, out var epoch) ||
+                        !members[epoch].TryGetValue(ticker, out var sector))
+                    {
+                        // Not a member on that date. No row, which is what keeps a
+                        // reconstructed universe from carrying names it did not hold.
+                        continue;
+                    }
+
+                    var settings = settingsOf[date];
+
+                    // The trailing window ending at this date, taken by position so it is
+                    // the same set of bars the nightly read would have returned.
+                    var end = UpperBound(history, date);
+
+                    if (end == 0)
+                    {
+                        continue;
+                    }
+
+                    var start = Math.Max(0, end - settings.Bars);
+                    var window = new List<Bar>(history.Skip(start).Take(end - start));
+
+                    composites[epoch].TryGetValue(sector ?? string.Empty, out var composite);
+
+                    rows.Add(Compute(
+                        ticker, date, window, settings.Warmup, settings.BaseLookback,
+                        settings.BaseMaxRange, medians.GetValueOrDefault((ticker, date)),
+                        benchmark, sector is null ? null : composite));
+                }
+            }
+
+            rows.Sort(static (a, b) =>
+            {
+                var byTicker = string.CompareOrdinal(a.Ticker, b.Ticker);
+                return byTicker != 0 ? byTicker : a.Date.CompareTo(b.Date);
+            });
+
+            written += await WriteAsync(atEnd, rows, ct).ConfigureAwait(false);
+        }
+
+        return BackfillResult.Completed(
+            written, context.To,
+            string.Format(
+                CultureInfo.InvariantCulture,
+                "{0:N0} trading date(s) over {1:N0} membership epoch(s), {2:N0} ticker(s) a member on at " +
+                "least one, in {3:N0} chunk(s) of {4}. The composite is rebuilt per epoch rather than per " +
+                "date, which is exact because it enters the output only as a ratio.",
+                dates.Count, composites.Count, everMember.Count,
+                (everMember.Count + TickerChunk - 1) / TickerChunk, TickerChunk));
+    }
+
+    /// <summary>
+    /// The count of bars at or before <paramref name="date"/>, over a history already
+    /// ordered by date. Linear rather than binary, because the caller walks dates forward
+    /// and the scan is amortised across them.
+    /// </summary>
+    private static int UpperBound(IReadOnlyList<Bar> history, DateOnly date)
+    {
+        var n = 0;
+
+        foreach (var b in history)
+        {
+            if (b.Date > date)
+            {
+                break;
+            }
+
+            n++;
+        }
+
+        return n;
+    }
+
+    private static IEnumerable<IReadOnlyList<string>> Chunks(IReadOnlyList<string> items, int size)
+    {
+        for (var i = 0; i < items.Count; i += size)
+        {
+            yield return items.Skip(i).Take(size).ToList();
+        }
+    }
+
+    private static string Iso(DateOnly d) => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     /// <summary>
     /// The evaluation dates of a range, which are the trading dates <c>price_daily</c>
@@ -271,6 +476,278 @@ public sealed class IndicatorEngine : IStage
             {
                 map[d] = epoch;
             }
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// Tickers taken per pass. One read of a whole series is the unit of work [3.13], so
+    /// the chunk trades memory against round trips and neither bound is tight.
+    /// </summary>
+    private const int TickerChunk = 200;
+
+    /// <summary>
+    /// One chunk's whole series, deep enough that every date in the range sees the same
+    /// bars the nightly path would have handed it.
+    ///
+    /// **The depth is the trailing window plus the range's own dates, and that is exact
+    /// rather than padded.** The nightly read takes the `bars` most recent rows at or
+    /// before its date with no lower bound, so a name that stopped trading in 2019 still
+    /// gets its last 272 bars. A calendar-padded read would hand that name fewer and
+    /// produce a different row while erroring on nothing. Counting rows instead means the
+    /// earliest date in the range still has `bars` bars beneath it however far back they
+    /// reach.
+    /// </summary>
+    private static async Task<IReadOnlyList<(string Ticker, IReadOnlyList<Bar> History)>>
+        ChunkSeriesAsync(
+            StageContext context, IReadOnlyList<string> tickers, int depth, DateOnly to,
+            CancellationToken ct)
+    {
+        var sql = $"""
+            WITH chunk(ticker) AS (VALUES {Values(tickers)}),
+            windowed AS (
+                SELECT p.ticker, p.date, p.high, p.low, p.close, p.adj_close, p.volume,
+                       row_number() OVER (PARTITION BY p.ticker ORDER BY p.date DESC) AS rn
+                FROM price_daily p
+                JOIN chunk c ON c.ticker = p.ticker
+                WHERE p.date <= {Literal(to)}
+            )
+            SELECT ticker, date, high, low, close, adj_close, volume
+            FROM windowed
+            WHERE rn <= {depth.ToString(CultureInfo.InvariantCulture)}
+            ORDER BY ticker, date;
+            """;
+
+        var rows = await context.Data.ReadAsync("price_daily", sql, ct).ConfigureAwait(false);
+
+        var series = new List<(string, IReadOnlyList<Bar>)>();
+        var current = new List<Bar>();
+        string? ticker = null;
+
+        foreach (var r in rows)
+        {
+            var t = (string) r[0]!;
+
+            if (ticker is not null && !string.Equals(t, ticker, StringComparison.Ordinal))
+            {
+                series.Add((ticker, current));
+                current = [];
+            }
+
+            ticker = t;
+
+            current.Add(new Bar(
+                DateOnly.FromDateTime((DateTime) r[1]!),
+                (decimal?) r[2], (decimal?) r[3], (decimal?) r[4], (decimal?) r[5], (long?) r[6]));
+        }
+
+        if (ticker is not null)
+        {
+            series.Add((ticker, current));
+        }
+
+        return series;
+    }
+
+    /// <summary>
+    /// The 20-day median dollar volume for every (ticker, date) pair of a chunk, through
+    /// a LATERAL rather than a window function.
+    ///
+    /// **`percentile_cont` is an ordered-set aggregate and Postgres has no window form of
+    /// it**, so a trailing median cannot be expressed as `OVER (... ROWS 19 PRECEDING)`.
+    /// The choice is therefore a per-pair LATERAL reusing
+    /// <see cref="DollarVolume.MedianExpression"/> verbatim, or a C# reimplementation.
+    /// That helper exists to stop the second: it interpolates the mean of the tenth and
+    /// eleventh bars, C01 admits names on this exact number, and a reimplementation that
+    /// rounds differently moves the universe without erroring.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<(string, DateOnly), decimal?>> ChunkMediansAsync(
+        StageContext context, IReadOnlyList<string> tickers, IReadOnlyList<DateOnly> dates,
+        CancellationToken ct)
+    {
+        var sql = $"""
+            WITH chunk(ticker) AS (VALUES {Values(tickers)}),
+            d(date) AS (VALUES {Values(dates.Select(Literal).ToList(), quoted: false)})
+            SELECT c.ticker, d.date, m.median_dollar_volume
+            FROM chunk c
+            CROSS JOIN d
+            CROSS JOIN LATERAL (
+                SELECT {DollarVolume.MedianExpression} AS median_dollar_volume
+                FROM (
+                    SELECT p.close, p.volume
+                    FROM price_daily p
+                    WHERE p.ticker = c.ticker AND p.date <= d.date AND {DollarVolume.RowFilter}
+                    ORDER BY p.date DESC
+                    LIMIT {DollarVolume.WindowBars.ToString(CultureInfo.InvariantCulture)}
+                ) w
+            ) m;
+            """;
+
+        var rows = await context.Data.ReadAsync("price_daily", sql, ct).ConfigureAwait(false);
+        var map = new Dictionary<(string, DateOnly), decimal?>();
+
+        foreach (var r in rows)
+        {
+            map[((string) r[0]!, DateOnly.FromDateTime((DateTime) r[1]!))] = (decimal?) r[2];
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// A `VALUES` list. Ticker strings reach here from the store rather than from input,
+    /// and the quoting is doubled rather than trusted.
+    /// </summary>
+    private static string Values(IReadOnlyList<string> items, bool quoted = true)
+        => string.Join(", ", items.Select(i => quoted ? $"('{i.Replace("'", "''", StringComparison.Ordinal)}')" : $"({i})"));
+
+    /// <summary>
+    /// The config this stage reads, resolved once per config version rather than once per
+    /// date. A range whose config never moved reads the keys once [3.11's precedent].
+    /// </summary>
+    private readonly record struct Settings(
+        int Warmup, int BaseLookback, double BaseMaxRange, int MinSectorMembers)
+    {
+        /// <summary>One extra bar, because the first true range needs a previous close.</summary>
+        public int Bars => Math.Max(RequiredBars, Warmup + 1);
+    }
+
+    private static async Task<Settings> SettingsAsync(StageContext context, CancellationToken ct)
+        => new(
+            (int) await LongAsync(context, "indicator.wilder_warmup_bars", ct).ConfigureAwait(false),
+            (int) await LongAsync(context, "indicator.base_lookback_days", ct).ConfigureAwait(false),
+            (double) await DecimalAsync(context, "indicator.base_max_range_pct", ct).ConfigureAwait(false),
+            (int) await LongAsync(context, "market.sector_composite_min_members", ct).ConfigureAwait(false));
+
+    /// <summary>
+    /// Calendar days read before a range so the composite covers what the output reads.
+    ///
+    /// **63 trading days is the requirement, not 272.** `Relative` fills a ratio for
+    /// every bar of the history, and `Change(rsSector, 63)` then reads exactly two of
+    /// them, the date itself and 63 bars back. So the composite has to exist at those two
+    /// dates and nowhere else, which is about 95 calendar days. 400 is that with room for
+    /// a halt, and reading more would cost without buying anything.
+    /// </summary>
+    private const int CompositePadDays = 400;
+
+    /// <summary>
+    /// The active members of one epoch and their sectors, which is the same read the
+    /// nightly path makes with that epoch's date substituted.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<string, string?>> EpochMembersAsync(
+        StageContext context, DateOnly epoch, CancellationToken ct)
+    {
+        var rows = await context.Data.ReadAsync(
+            "security_daily",
+            $"SELECT m.ticker, m.sector FROM {Universe.AsOf(epoch)} m WHERE m.is_active ORDER BY m.ticker;",
+            ct).ConfigureAwait(false);
+
+        var map = new Dictionary<string, string?>(StringComparer.Ordinal);
+
+        foreach (var r in rows)
+        {
+            map[(string) r[0]!] = r[1] as string;
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// One epoch's sector composites over a span, which is the nightly statement with its
+    /// trailing-bar window replaced by an explicit one.
+    ///
+    /// **The chain's base differs from the nightly run's and that is why the output still
+    /// matches byte for byte.** Chained returns rebase multiplicatively, so every level
+    /// moves by one constant per sector, and the only thing read off the series is
+    /// `comp[t-63] / comp[t]`. The constant cancels. `HAVING` drops the same dates either
+    /// way, because how many members carry a return on a date is a fact about that date
+    /// and not about where the window opened.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyDictionary<DateOnly, double>>>
+        EpochCompositesAsync(
+            StageContext context, DateOnly epoch, DateOnly spanStart, DateOnly spanEnd,
+            int minMembers, CancellationToken ct)
+    {
+        var sql = $"""
+            WITH universe AS (
+                SELECT m.ticker, m.sector FROM {Universe.AsOf(epoch)} m
+                 WHERE m.is_active AND m.sector IS NOT NULL
+            ),
+            kept AS (
+                SELECT u.sector, p.ticker, p.date, p.adj_close
+                FROM price_daily p
+                JOIN universe u ON u.ticker = p.ticker
+                WHERE p.date BETWEEN {Literal(spanStart)} AND {Literal(spanEnd)}
+                  AND p.adj_close IS NOT NULL AND p.adj_close > 0
+            ),
+            rets AS (
+                SELECT sector, date,
+                       (adj_close / lag(adj_close) OVER (PARTITION BY ticker ORDER BY date)) - 1 AS r
+                FROM kept
+            )
+            SELECT sector, date, avg(r) AS mean_return
+            FROM rets
+            WHERE r IS NOT NULL
+            GROUP BY sector, date
+            HAVING count(*) >= {minMembers.ToString(CultureInfo.InvariantCulture)}
+            ORDER BY sector, date;
+            """;
+
+        var rows = await context.Data.ReadAsync("price_daily", sql, ct).ConfigureAwait(false);
+
+        var composites = new Dictionary<string, IReadOnlyDictionary<DateOnly, double>>(StringComparer.Ordinal);
+        var current = new Dictionary<DateOnly, double>();
+        string? sector = null;
+        var level = 1.0;
+
+        foreach (var r in rows)
+        {
+            var s = (string) r[0]!;
+
+            if (sector is not null && !string.Equals(s, sector, StringComparison.Ordinal))
+            {
+                composites[sector] = current;
+                current = [];
+                level = 1.0;
+            }
+
+            sector = s;
+            level *= 1 + (double) (decimal) r[2]!;
+            current[DateOnly.FromDateTime((DateTime) r[1]!)] = level;
+        }
+
+        if (sector is not null)
+        {
+            composites[sector] = current;
+        }
+
+        return composites;
+    }
+
+    /// <summary>
+    /// The benchmark over the whole range in one read, padded the same way and for the
+    /// same reason as the composites.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<DateOnly, double>> RangeBenchmarkAsync(
+        StageContext context, DateOnly spanStart, DateOnly spanEnd, CancellationToken ct)
+    {
+        var rows = await context.Data.ReadAsync(
+            "price_daily",
+            $"""
+             SELECT date, adj_close FROM price_daily
+             WHERE ticker = '{Benchmark}'
+               AND date BETWEEN {Literal(spanStart)} AND {Literal(spanEnd)}
+               AND adj_close IS NOT NULL
+             ORDER BY date;
+             """,
+            ct).ConfigureAwait(false);
+
+        var map = new Dictionary<DateOnly, double>();
+
+        foreach (var r in rows)
+        {
+            map[DateOnly.FromDateTime((DateTime) r[0]!)] = (double) (decimal) r[1]!;
         }
 
         return map;

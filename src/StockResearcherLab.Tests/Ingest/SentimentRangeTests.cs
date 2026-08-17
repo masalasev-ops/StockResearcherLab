@@ -96,7 +96,117 @@ public sealed class SentimentRangeTests
         Assert.DoesNotContain(NoBars, pool);
     }
 
+    // ------------------------------------ the precondition [item 38] ---
+    //
+    // **Against a stub `IStageData` and deliberately not against a database** [D-103].
+    // The condition is a pure function of one count, and the case it exists for is
+    // `security_daily` holding no row over the range. Producing that on a real server
+    // means emptying the table, and the only server this suite can reach is the developer
+    // one [open items 10, 26, 33], where the table is the universe 3.11 spends an hour
+    // filling. A test whose setup destroys a checkpoint's output is worse than the defect.
+    //
+    // It is also the environment-independent trigger: a stub returning zero returns zero
+    // on every machine, where an emptied table depends on what else is running.
+
+    /// <summary>
+    /// **The case that fired.** `security_daily` empty over the range, so a range pool
+    /// takes an empty live half and sweeps the delisted names alone while reporting
+    /// Completed, which is what 3.8's second day did.
+    ///
+    /// The message is asserted rather than only the throw, because an operator reading it
+    /// has to know which checkpoint to run, and re-invoking the sweep is the one action
+    /// that cannot help.
+    /// </summary>
+    [Fact]
+    public async Task ARangePoolOverAWindowSecurityDailyDoesNotCoverThrows()
+    {
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => BackfillPool.RequireUniverseCoverageAsync(
+                Context(new CountingData(0, "-", "-")), WindowStart, RunDate,
+                TestContext.Current.CancellationToken))
+            .ConfigureAwait(true);
+
+        Assert.Contains("security_daily", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("3.11", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("2021-01-04", ex.Message, StringComparison.Ordinal);
+
+        // The distinction the exit codes carry. A halt is resolved by waiting and this
+        // is not, so the message has to deny the reading an operator will reach for.
+        Assert.Contains("throws rather than halting", ex.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A row at or before the range end is the whole condition, and the fixture's row is
+    /// dated before the window opens because that is the shape 3.11 actually produces:
+    /// its first evaluation date is 2021-01-10 against a window opening 2021-01-04. A
+    /// check written as "a row at or before the range start" would refuse the data this
+    /// exists to accept.
+    /// </summary>
+    [Fact]
+    public async Task ARangePoolOverACoveredWindowProceeds()
+    {
+        await BackfillPool.RequireUniverseCoverageAsync(
+            Context(new CountingData(1, "2021-01-10", "2026-08-09")), WindowStart, RunDate,
+            TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// The edge between the two: rows exist and every one is after the range ends. That is
+    /// a table filled for a different window rather than an unfilled one, and it fails for
+    /// the same reason, the live half being empty either way.
+    ///
+    /// The stub answers the bounded count and the whole-table span separately, which is
+    /// what lets the message tell those two states apart.
+    /// </summary>
+    [Fact]
+    public async Task AUniverseFilledOnlyAfterTheRangeEndsIsNotCoverage()
+    {
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => BackfillPool.RequireUniverseCoverageAsync(
+                Context(new CountingData(0, "2026-09-06", "2026-12-27")), WindowStart, RunDate,
+                TestContext.Current.CancellationToken))
+            .ConfigureAwait(true);
+
+        Assert.Contains("2026-09-06..2026-12-27", ex.Message, StringComparison.Ordinal);
+    }
+
     // ----------------------------------------------------------- harness ---
+
+    private static StageContext Context(IStageData data)
+        => new(RunDate, 1, data, new FixedClock(RunDate), new NoConfig());
+
+    /// <summary>
+    /// Serves the two shapes the precondition asks for and refuses everything else. The
+    /// bounded count is what the first read returns; the unbounded one carries the span.
+    /// </summary>
+    private sealed class CountingData(long covered, string min, string max) : IStageData
+    {
+        public Task<IReadOnlyList<IReadOnlyList<object?>>> ReadAsync(
+            string table, string sql, CancellationToken ct = default, int? commandTimeoutSeconds = null)
+        {
+            Assert.Equal("security_daily", table);
+
+            // The bounded read carries a WHERE and the span read does not, which is the
+            // only thing separating them and is asserted here rather than assumed.
+            var bounded = sql.Contains("WHERE", StringComparison.Ordinal);
+
+            IReadOnlyList<IReadOnlyList<object?>> rows =
+                [[bounded ? covered : covered + (min == "-" ? 0 : 1), min, max]];
+
+            return Task.FromResult(rows);
+        }
+
+        public Task<long> WriteAsync(
+            string table, WriteOperation operation, string sql,
+            IReadOnlyDictionary<string, object?>? parameters = null, CancellationToken ct = default)
+            => throw new NotSupportedException("The precondition writes nothing.");
+
+        public Task<long> BulkUpsertAsync(
+            string table, IReadOnlyList<string> columns, IReadOnlyList<string> conflictTarget,
+            Func<IBulkWriter, CancellationToken, Task> write, CancellationToken ct = default)
+            => throw new NotSupportedException("The precondition writes nothing.");
+    }
 
     private static async Task<IReadOnlySet<string>> DelistedAsync(CancellationToken ct)
     {

@@ -6129,6 +6129,106 @@ against 109.8 million real rows per date. Seven tests cover the layer where the 
 be lost, which is where D-92's argument lives; the criteria themselves are unchanged and
 keep the tests they had.
 
+#### 2026-08-17, 3.8 finished over the live remainder, and the precondition that stops it recurring
+
+**Predicted 594 and dispatched 594.** The pre-dispatch line is the point of the entry as much
+as the result is: 594 against a pool of at most 19,725 is **3.0 percent**, so the resume key
+held and the run did not re-sweep the 19,131 tickers already paid for.
+
+| | |
+|---|---|
+| dispatched | **594** of 19,725, against a pre-dispatch prediction of 594 |
+| yielded / returned nothing | **594 / 0** |
+| already attempted, not dispatched | 19,131 [D-99] |
+| units | 36,888 to 39,859, being **2,971** = 594 x 5 + 1 for the symbol list |
+| wall clock | 981,455 ms, 16.4 minutes |
+| status | `ok`, run_log 1711 |
+
+**Every one of the 594 returned days, against day one's 46.9 percent returning none.** These
+are live universe members rather than the delisted tail, and 274,463 ticker-days over 594
+names is a mean of 462 days each against day one's median of 24. That is the coverage
+difference between the universe and the names D-101 widened the pool to reach, and it is the
+first figure the phase has separating them.
+
+**3.8 is now complete on its own definition and the definition is checked rather than
+asserted**: re-running the pre-dispatch query afterwards gives an expected dispatch of
+**0**, with 19,726 attempt rows against a live half of 2,864 and a delisted half of 16,861.
+`sentiment_daily` stands at **1,668,173 rows over 10,528 tickers**, 0 null scores and 0 null
+counts.
+
+**The precondition, so the silent version cannot happen again.**
+`BackfillPool.RequireUniverseCoverageAsync` asserts `security_daily` carries a row at or
+before the range end and **throws** if it does not, naming the table, the range, the span the
+table does hold, and 3.11 as the checkpoint that fills it. C04 and C06 call it first thing in
+their range pools, before the live half is read and before the delisted symbol list is
+fetched, so an unfilled universe costs no provider call.
+
+**It throws rather than halting, and the exit codes already carry the difference.** A halt is
+2 and means the allowance ran out, which tomorrow resolves; this is 1 and means another
+checkpoint has to run, which tomorrow does not. The message denies the reading an operator
+would otherwise reach for, and that sentence is asserted.
+
+**The condition is a row at or before the range end and deliberately no stronger.** A check
+written as "a row at or before the range start" would refuse the data this exists to accept:
+3.11's first evaluation date is 2021-01-10 against a window opening 2021-01-04. Anything
+between the two would be a cadence tolerance invented here.
+
+**Asserted against a stub `IStageData` rather than a database** [D-103]. The case it exists
+for is `security_daily` holding no row, and producing that on the only server this suite can
+reach means emptying the table 3.11 spends 71 minutes filling. A test whose setup destroys a
+checkpoint's output is worse than the defect. Three cases: uncovered throws, covered proceeds,
+and filled-only-after-the-range-ends throws while reporting the span that distinguishes it
+from unfilled.
+
+**C03 is not given the precondition and that is not an omission.** Its range pool takes the
+candidate set from `price_daily` through `BootstrapPoolAsync` and reads `security_daily` only
+in `CandidatesAsync`, which is the nightly path. The nightly exposure is the next section.
+
+#### The nightly guard cannot tell an empty universe from an unfilled one
+
+**Stated as asked and not fixed here.** C04's nightly path reads the universe, and on
+`Count == 0` returns `ok` with zero rows and "security is empty, so there is no universe to
+pull sentiment for".
+
+**Under the old read that message had one meaning and now it has two.** `security.is_active`
+empty meant no members today, which is legitimate and rare. `Universe.MembersAsOf` returning
+nothing means either that, or **no row at or before the date at all**, which is the table
+unfilled for that date and is not legitimate. The guard sees one integer and cannot separate
+them, so a night that should stop reports the same `ok` as a night that genuinely has no
+members. The message also still names `security`, which has not been the table read since
+3.12.
+
+**It is separable and the separation is one query**, `count(*) FROM security_daily WHERE date
+<= X` being zero for unfilled and non-zero for empty-membership, which is what the range
+precondition already asks. **Not fixed in this commit**, as directed, and recorded against
+item 38 as the same defect on the path that runs every night.
+
+#### Every extracted helper checked for a lost bound
+
+**Twelve static helpers in `Pipeline`, three of them emitting SQL that reaches a read, one
+found.** Counts stated because the first three instances of this shape were each found one at
+a time after they fired.
+
+- **Checked: 12.** `DollarVolume`, `BackfillPool`, `EarningsHistory`, `FilingDateReason`,
+  `FilingDateRule`, `FreshnessRule`, `InstitutionalHolders`, `RotationSelection`, `Statements`,
+  `SymbolList`, `Universe`, `PipelineComposition`. Nine of them matched a SQL grep only inside
+  doc comments and were read individually rather than counted out by the grep.
+- **Emitting SQL that reaches `ReadAsync`: 3.** `BackfillPool`, `Universe`, `DollarVolume`.
+- **Found with a bound its original call site sets: 1**, which is `BackfillPool` and is the one
+  that fired.
+- **`DollarVolume` is clean.** Its `MedianExpression`, `RowFilter` and `WindowBars` splice into
+  `IndicatorEngine` unbounded and into `UniverseBuilder`'s `LiquidAsync` bounded, and the bound
+  sits on the statement at the call site where it belongs. Nothing was lost in the extraction.
+- **`Universe` has no lost bound and one thing worth writing down.** Its `AsOf` and
+  `MembersAsOf` reach 15 call sites and none carries a bound; their originals read
+  `security WHERE is_active`, a 2,949 row table nobody ever bounded, so no bound went missing.
+  What changed under them is the statement: it is now a `DISTINCT ON` over `security_daily`,
+  which 3.11 has just taken from 0 rows to 771,145. That is a new shape with no bound rather
+  than an extraction that dropped one, so it is not a fourth instance and it is not fixed here.
+- **Four bounded statements exist in the whole pipeline**, all resolving
+  `universe.pool_statement_timeout_seconds`: `BackfillPool` at the fix, `FundamentalsIngestor`
+  twice, and `UniverseBuilder`'s `LiquidAsync`.
+
 #### 2026-08-17, 3.11 run over the full window, and item 32 answered
 
 **The working set survives between consecutive dates inside one process, decisively.**
@@ -6290,7 +6390,7 @@ them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
-| 38 | **Every universe reader currently resolves an empty universe, and 3.8's range path swept over one without saying so.** `security_daily` holds **0 rows**, measured 2026-08-17. C01 stopped writing `security.is_active` at 3.11 [D-92] and 3.12 moved eight components onto `security_daily`; 3.11 is the checkpoint that fills it and is held pending D-102's remaining measurement. So the window between those two has every reader on an empty table. **It is not symmetric across the two paths.** C04's nightly path guards it and returns `ok` with zero rows and a sentence naming the cause; its range path has no such guard, so 3.8's second day built a pool of 16,861 where day one read 19,706, swept it, and reported Completed. Nothing errored. **The measured cost so far is 678 active names with no attempt row**, being `security`'s 2,949 less the 2,271 of them day one reached. **Three separate authored questions and none is a tidy-up**: what a range pool's live half is while `security_daily` is empty; whether a range path that finds no live universe should halt the way `CLAUDE.md` §6 says a stage does rather than sweep half a pool; and whether the 678 are fetched at all, given the only table that still lists them is the column with no writer at item 36. **What is not in doubt is the delisted half**, complete at 16,861 of 16,861 | Authored, and before 3.9 or 3.10 sweeps anything. 3.11 running fills the table but does not answer the guard question |
+| 38 | ~~**Every universe reader currently resolves an empty universe, and 3.8's range path swept over one without saying so.**~~ **The sweep half is closed and the nightly half is not** [2026-08-17]. 3.11 filled `security_daily` to 771,145 rows over 2021-01-10..2026-08-09, and 3.8 re-run dispatched the live remainder. **The 678 self-healed and cost less than the estimate**: measured against the filled table the remainder was **594 names, not 678**, because the live half as of the range end is `security_daily`'s 2,864 rather than the frozen column's 2,949, and it cost **2,971 units** against a rough 3,400. No name was re-fetched and nothing was reconstructed: the names carried no attempt row, so D-99's resume set dispatched exactly them. **The precondition is built**, `BackfillPool.RequireUniverseCoverageAsync` throwing rather than halting on an uncovered range and called by C04 and C06 before either half of the pool is built. **What stays open is the nightly path**, where C04 returns `ok` with zero rows on an empty universe and cannot tell "no members today", which is legitimate, from "the table is unfilled for this date", which is not. One integer reaches the guard and both states produce it. It is separable by the same count the range precondition asks, and it was left unfixed deliberately. The original text follows. ~~`security_daily` holds **0 rows**, measured 2026-08-17. C01 stopped writing `security.is_active` at 3.11 [D-92] and 3.12 moved eight components onto `security_daily`; 3.11 is the checkpoint that fills it and is held pending D-102's remaining measurement. So the window between those two has every reader on an empty table. **It is not symmetric across the two paths.** C04's nightly path guards it and returns `ok` with zero rows and a sentence naming the cause; its range path has no such guard, so 3.8's second day built a pool of 16,861 where day one read 19,706, swept it, and reported Completed. Nothing errored. **The measured cost so far is 678 active names with no attempt row**, being `security`'s 2,949 less the 2,271 of them day one reached. **Three separate authored questions and none is a tidy-up**: what a range pool's live half is while `security_daily` is empty; whether a range path that finds no live universe should halt the way `CLAUDE.md` §6 says a stage does rather than sweep half a pool; and whether the 678 are fetched at all, given the only table that still lists them is the column with no writer at item 36. **What is not in doubt is the delisted half**, complete at 16,861 of 16,861~~ | **The nightly guard alone.** The range half is closed by the precondition and by 3.11 having run |
 | 37 | **`ci.ps1` mirrors `ci.yml`'s steps and asserts that it does; it mirrors none of the environment those steps run in, and its green does not say so.** Step 1 is `Assert-MirrorsWorkflow`, placed first on the reasoning that a divergence in the step list makes every result below it an answer about the wrong question. The same reasoning applies one level down and is not applied: the `env:` block is mirrored by construction, `ConnectionStrings__Postgres`, `DOTNET_NOLOGO` and `DOTNET_CLI_TELEMETRY_OPTOUT` set together at `ci.ps1:421-423` to the three keys `ci.yml` sets; the `services:` block is mirrored by nothing. CI stands up `postgres:18` with `POSTGRES_HOST_AUTH_METHOD: trust`; `ci.ps1` resolves the developer's own connection string and swaps the database name, so the server version, the auth method and every server setting are whatever this machine has. **That is what let 23 consecutive red CI runs sit under 23 green local ones** [D-103]. **The shape, and it is not to replicate CI's environment**: trust authentication is precisely the property the failing test needed absent, and copying it locally would destroy on this machine what it just fixed in CI. What is wanted is that `ci.ps1` reads `ci.yml`'s `services` and `env` blocks and reports what differs, so its green carries its own scope, which is the same discipline as stating an expected count before a sweep. **Cheap and not free**: the parse is a third `ci.yml` reader after `Assert-MirrorsWorkflow` and `guards.ps1`, and what a difference means is a judgement per key rather than a diff, since `Database` differing is the design and `POSTGRES_HOST_AUTH_METHOD` differing is the defect | Not while a backfill is running. The next session that touches `ci.ps1` or `ci.yml`, or the batched pass |
 | 36 | **`security.is_active` now has no writer and no reader, and the column is still there.** C01 stopped writing it at 3.11 when identity and membership split [D-92]; the last eight readers moved to `security_daily` at 3.12. **The count, swept 2026-08-16**: one definition, `0001_snapshot.sql` declaring `is_active boolean NOT NULL DEFAULT true`; **zero** live readers in `src`; two test doc comments describing the old read, corrected in the same commit rather than left to describe something untrue; and the historical references in this document, which are the record and keep what they said. **Nothing is dropped.** A column with no writer is a schema change and an authored decision, and this sweep is the input that decision needs. It joins open item 14, which named the same four columns and predicted exactly this window: "nothing writes them after 3.11 and nothing reads them after 3.12". **What the sweep also answered is how many readers there were**, which is the part worth keeping: the plan said "every reader of the universe" and enumerated five, and there were eight. C03, C05 and C06 were still filtering on the frozen column, which is a regression on the nightly path rather than a tidy-up: their universe had stopped moving while nothing errored. **A ninth was found by the sweep itself**, C10 having two `security` reads where only one had been converted, which is the one-of-a-pair shape a fourth time this phase and the first caught by a sweep rather than by a failure. **Outside those, nothing reads `security` as a universe at all**: two guard tests issue `SELECT count(*) FROM security` to exercise the read path, which is about `IStageData` and not about membership | An authored decision, with item 14. Dropping the four columns moves `ExpectedMonetary` and `SchemaParityTests`'s count from 19 to 18 |
 | 35 | **Every ingest pool is refetched from the provider on each run, so fixing the range does not fix the pool.** Measured across three sweep days over the identical `2021-01-04..2026-08-13`: 20,067 members, 20,067, then 20,065 on 2026-08-15, against a `price_daily` no fundamentals sweep writes to. Neither half comes from the store. `FundamentalsIngestor.RangePoolAsync` takes its live half through `BootstrapPoolAsync`, which intersects the price and liquidity survivors with `SymbolList.AdmittedAsync`, and its delisted half from `SymbolList.AdmittedDelistedAsync`; both are `exchange-symbol-list/US` fetched at run time and the provider's lists move with the calendar. **It is four components and not one**: `UniverseBuilder` takes the live list as one of D-4's absolute criteria, `PriceIngestor` takes both, `BackfillPool` takes the delisted list for C04 and C06 under D-101, and C03 takes both. **No sweep is harmed**: each walk is the complement of its attempt record within the pool, so a name that leaves is never dispatched and a name that arrives is, and neither double-spends nor skips paid ground. **What it touches is D-99's reproducibility argument**, which reasons attempts read strictly before the run date to "a re-run of one date therefore sees the state the first run saw and selects the same names" [`CLAUDE.md` §6]. That is an argument about the ordering and it is silent about the set being ordered. **It is not obviously a defect**: the store cannot know which names are delisted until the provider says so, and D-101 requires the sweep to reach them, so pinning the pool means storing the symbol list as data with an as-of date rather than removing the fetch. Which of those, and whether the cost is worth it, is authored. **What the defect costs is a definition of "complete"**: a sweep finishes when every name in today's pool has an attempt row, so a name that left the list mid-sweep is counted done without ever having been fetched and is indistinguishable in the record from one fetched that returned nothing. **A snapshot shape is drafted in the narrative above and is not authored**, naming the three backfill pools that would take it, C01 as the one that must not, and the separate writer INVARIANT 10 forces | An authored decision. Before a replay of a past night is used as evidence, and before D-99's purity claim is cited as covering the pool rather than the rotation over it. The draft is for the batched pass and nothing waits on it |

@@ -204,6 +204,12 @@ public sealed class SentimentIngestor : IStage, IBackfillStage
     private async Task<IReadOnlyList<string>> RangePoolAsync(
         StageContext context, DateOnly windowStart, CancellationToken ct)
     {
+        // Before the live half is read rather than after it comes back empty, and before
+        // the delisted half is fetched, so an unfilled universe costs no provider call
+        // [BackfillPool.RequireUniverseCoverageAsync].
+        await BackfillPool.RequireUniverseCoverageAsync(context, windowStart, context.Date, ct)
+            .ConfigureAwait(false);
+
         var live = await UniverseAsync(context, ct).ConfigureAwait(false);
 
         var delisted = await BackfillPool.DelistedWithBarsInWindowAsync(

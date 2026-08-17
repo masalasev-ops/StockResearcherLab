@@ -240,6 +240,12 @@ public sealed class EventsIngestor : IStage, IBackfillStage
     private async Task<IReadOnlyList<string>> RangePoolAsync(
         StageContext context, DateOnly windowStart, CancellationToken ct)
     {
+        // The same precondition C04 carries, from the same helper, because C06's live half
+        // is the same read and 3.10 has not been run yet: this is the one range pool that
+        // can still meet the condition before it fires.
+        await BackfillPool.RequireUniverseCoverageAsync(context, windowStart, context.Date, ct)
+            .ConfigureAwait(false);
+
         var live = await UniverseAsync(context, ct).ConfigureAwait(false);
 
         var delisted = await BackfillPool.DelistedWithBarsInWindowAsync(

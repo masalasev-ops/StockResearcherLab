@@ -6129,6 +6129,50 @@ against 109.8 million real rows per date. Seven tests cover the layer where the 
 be lost, which is where D-92's argument lives; the criteria themselves are unchanged and
 keep the tests they had.
 
+#### 2026-08-17, 3.10's second pass, armed to 25,000 and landing on it
+
+Directed: another 25,000 units. **The reserve is the lever and was set to an odd number on
+purpose**, 24,956 being whatever makes `limit - used - reserve` come to 25,000 against a
+reading of 50,044 used. Restored to 50,000 afterwards, so the next sweep lowers it
+deliberately rather than inheriting it.
+
+| | |
+|---|---|
+| dispatched | **12,498**, against a projection of 12,500 |
+| carried at least one / none | 7,056 / 5,442 |
+| already attempted, not dispatched | 4,597 [D-99] |
+| `events` written by this pass | 327,607 |
+| units | 50,044 to 75,043, being **24,999** against the 25,000 armed for |
+| wall clock | 5,689,234 ms, **94.8 minutes** |
+| status | **halted**, run_log 1713, exit 2, 1 unit above the reserve |
+
+**Landed on the boundary again**, the second time in one day and the fourth this phase.
+12,498 tickers at 2 units is 24,996 and the symbol lists take the rest; the gate stopped
+with 1 unit spendable, which is the same shape 3.7's and 3.8's armed passes produced.
+
+**3.10 now stands at 17,095 of 19,726, which is 86.7 percent.** The remainder is **2,631
+tickers at 5,262 units**, comfortably inside a fresh day against a 50,000 reserve.
+
+| `events` after two passes | |
+|---|---|
+| rows | **454,775** |
+| by type | dividend_ex 437,790, split 14,744, earnings 2,241 |
+| distinct tickers | 10,400 |
+| attempt rows carrying a yield | 9,597 of 17,095, **56.1 percent** |
+
+**The 2,241 earnings rows have not moved across either pass** and are still the nightly
+runs of 2026-08-11. That number staying fixed while dividends went from 121,001 to 437,790
+is the observable form of 3.10 writing no earnings, rather than a claim in a detail line.
+
+**43.9 percent of dispatched tickers carry no distribution at all**, 7,499 of 17,095. That
+is the ordinary state for this endpoint rather than a gap: 3.1 measured `SPY.US` itself at
+zero splits, and a name that has never paid a dividend or split is a fact rather than a
+missing fetch. The attempt row is what keeps the two distinguishable [D-12].
+
+**94.8 minutes for 24,999 units against day one's 33.8 for 9,277**, which is the same rate
+within a few percent and says the cost is the provider's rate limit rather than anything
+local.
+
 #### 2026-08-17, 3.10's first day, halted on the gate as designed
 
 **A first day, so the whole pool is the expected dispatch and that is not the resume-key

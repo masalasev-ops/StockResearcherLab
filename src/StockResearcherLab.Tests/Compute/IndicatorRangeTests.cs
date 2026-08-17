@@ -107,3 +107,133 @@ public sealed class IndicatorEpochTests
         Assert.Empty(map);
     }
 }
+
+/// <summary>
+/// **The one argument 3.13's cost rests on, asserted rather than reasoned.**
+///
+/// The range path rebuilds a sector composite once per membership epoch and reuses it
+/// across that epoch's dates, where the nightly path rebuilds it per date from its own
+/// trailing window. The two chains therefore start at different bars and differ by a
+/// constant factor per sector. That is only safe because the composite reaches the output
+/// through `Change`, which divides two of its levels.
+///
+/// **If that were wrong every backfilled row would be subtly wrong and nothing would
+/// error**, which is the failure mode `CLAUDE.md` §1 describes. So it is a test and not a
+/// comment: two composites differing by a constant must produce the identical column.
+/// </summary>
+public sealed class SectorCompositeRebasingTests
+{
+    private const int Bars = 300;
+
+    private static readonly DateOnly Start = new(2021, 1, 4);
+
+    /// <summary>
+    /// A series with movement in it. A flat series would satisfy any rebasing claim
+    /// trivially, including a wrong one.
+    /// </summary>
+    private static IReadOnlyList<IndicatorEngine.Bar> History()
+    {
+        var bars = new List<IndicatorEngine.Bar>(Bars);
+
+        for (var i = 0; i < Bars; i++)
+        {
+            var close = 100m + (decimal) (Math.Sin(i / 9.0) * 14) + (i * 0.11m);
+
+            bars.Add(new IndicatorEngine.Bar(
+                Start.AddDays(i), close + 1.5m, close - 1.5m, close, close, 250_000 + (i * 37)));
+        }
+
+        return bars;
+    }
+
+    private static IReadOnlyDictionary<DateOnly, double> Composite(double scale)
+    {
+        var map = new Dictionary<DateOnly, double>();
+        var level = scale;
+
+        for (var i = 0; i < Bars; i++)
+        {
+            level *= 1 + (Math.Cos(i / 7.0) * 0.004) + 0.0003;
+            map[Start.AddDays(i)] = level;
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// Two chains of the same returns from different bases give the identical
+    /// `rs_change_vs_sector`, which is what lets one epoch's composite serve every date in
+    /// that epoch.
+    ///
+    /// The scale is deliberately not a round number: a factor of 2 could hide an error
+    /// that happens to be even, and 1.0 would test nothing at all.
+    /// </summary>
+    [Fact]
+    public void ARebasedCompositeGivesTheIdenticalSectorColumn()
+    {
+        var history = History();
+        var at = history[^1].Date;
+
+        var fromOne = IndicatorEngine.Compute(
+            "SRLREB.US", at, history, 14, 60, 0.35, 1_000_000m, null, Composite(1.0));
+
+        var fromElsewhere = IndicatorEngine.Compute(
+            "SRLREB.US", at, history, 14, 60, 0.35, 1_000_000m, null, Composite(7.3125));
+
+        Assert.NotNull(fromOne.RsChangeVsSector);
+        Assert.Equal(fromOne.RsChangeVsSector, fromElsewhere.RsChangeVsSector);
+    }
+
+    /// <summary>
+    /// The guard on the test above: the column is sensitive to the composite's *shape*,
+    /// so the equality it asserts is rebasing invariance and not the column being
+    /// constant. A composite with different returns must move it.
+    ///
+    /// Without this, an implementation returning null or a fixed value would satisfy the
+    /// invariance test perfectly.
+    /// </summary>
+    [Fact]
+    public void ACompositeWithDifferentReturnsMovesTheSectorColumn()
+    {
+        var history = History();
+        var at = history[^1].Date;
+
+        var other = new Dictionary<DateOnly, double>();
+        var level = 1.0;
+
+        for (var i = 0; i < Bars; i++)
+        {
+            level *= 1 + (Math.Sin(i / 5.0) * 0.010) - 0.0007;
+            other[Start.AddDays(i)] = level;
+        }
+
+        var baseline = IndicatorEngine.Compute(
+            "SRLREB.US", at, history, 14, 60, 0.35, 1_000_000m, null, Composite(1.0));
+
+        var moved = IndicatorEngine.Compute(
+            "SRLREB.US", at, history, 14, 60, 0.35, 1_000_000m, null, other);
+
+        Assert.NotEqual(baseline.RsChangeVsSector, moved.RsChangeVsSector);
+    }
+
+    /// <summary>
+    /// A sector whose composite has a gap on the date 63 bars back yields null rather than
+    /// reaching for the nearest level it has. `HAVING count(*) >= min_members` puts those
+    /// gaps there deliberately, so a ratio spanning one is not computed against a day one
+    /// name's noise, and the range path inherits the gaps rather than filling them.
+    /// </summary>
+    [Fact]
+    public void AGapAtTheFarEndOfTheWindowIsNullRatherThanTheNearestLevel()
+    {
+        var history = History();
+        var at = history[^1].Date;
+
+        var gapped = new Dictionary<DateOnly, double>(Composite(1.0));
+        gapped.Remove(history[^64].Date);
+
+        var row = IndicatorEngine.Compute(
+            "SRLREB.US", at, history, 14, 60, 0.35, 1_000_000m, null, gapped);
+
+        Assert.Null(row.RsChangeVsSector);
+    }
+}

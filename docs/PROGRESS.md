@@ -6129,6 +6129,45 @@ against 109.8 million real rows per date. Seven tests cover the layer where the 
 be lost, which is where D-92's argument lives; the criteria themselves are unchanged and
 keep the tests they had.
 
+#### 2026-08-17, 3.11 run over the full window, and item 32 answered
+
+**The working set survives between consecutive dates inside one process, decisively.**
+
+| | |
+|---|---|
+| evaluation dates | 292, 2021-01-10 to 2026-08-09, as the cadence test pins |
+| `security_daily` | **771,145 rows**, and `security` gains 4,290 identity rows, 775,435 written |
+| membership | 2,433 to 2,864 per date, **4,290 distinct tickers** a member on at least one |
+| per date, first | **220,021 ms** |
+| per date, median | **13,332 ms** |
+| per date, last | **13,279 ms** |
+| total | 4,285,160 ms, **71.4 minutes**, exit 0 |
+
+**The first against the median is the whole answer, and the last against the median is the
+half that could still have gone wrong.** A cache that warms on date one and is evicted by
+date 200 would show a median near the first; a table growing under its own writes could
+show the last climbing away from the median. Neither happened: last is 13,279 against a
+median of 13,332, which is 0.4 percent *faster*, so 292 dates cost what the second one did.
+
+**Against the bracket this checkpoint was held for.** `PROGRESS.md` carried 3.11's cost as a
+23-fold bracket whose top was **70.9 hours**, on the reasoning that `LiquidAsync` runs per
+evaluation date and D-102 measured it between 46s warm and 531s cold with nothing on record
+for many dates in one process. The measured figure is **71.4 minutes**, which is under the
+bottom of that bracket rather than inside it, because the bracket was built from single-shot
+readings and the thing that decides is the second date onward. **The bracket was not wrong
+about its inputs.** It was answering a question nobody had measured, which is what the range
+detail was built to report [3.11].
+
+**Read live as it ran, at a coarser resolution, and recorded because it is what the decision
+to continue was made on**: the first four dates timed by polling `security_daily` for new
+dates every 5 seconds gave 195.4s, then 15.0s, 15.0s, 15.0s. That is the same answer at 5s
+granularity and it is not the measurement; the stage's own figures above are.
+
+**D-102's remaining aggregate pass did not block this and is untouched.** What 3.11 needed
+from `LiquidAsync` was the second date onward being cheap, which is a different property from
+the whole-heap pass being removable. The per-ticker summary table is still the open option
+and is still not built.
+
 #### 2026-08-17, 3.8's second day, which completed over a pool missing its live half
 
 **The sweep ran and 3.8 is not done.** Both halves of that sentence are measured below and

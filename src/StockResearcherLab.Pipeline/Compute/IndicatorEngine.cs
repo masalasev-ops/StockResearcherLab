@@ -308,17 +308,12 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
 
                     var settings = settingsOf[date];
 
-                    // The trailing window ending at this date, taken by position so it is
-                    // the same set of bars the nightly read would have returned.
-                    var end = UpperBound(history, date);
+                    var window = Window(history, date, settings.Bars);
 
-                    if (end == 0)
+                    if (window.Count == 0)
                     {
                         continue;
                     }
-
-                    var start = Math.Max(0, end - settings.Bars);
-                    var window = new List<Bar>(history.Skip(start).Take(end - start));
 
                     composites[epoch].TryGetValue(sector ?? string.Empty, out var composite);
 
@@ -347,6 +342,36 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
                 "date, which is exact because it enters the output only as a ratio.",
                 dates.Count, composites.Count, everMember.Count,
                 (everMember.Count + TickerChunk - 1) / TickerChunk, TickerChunk));
+    }
+
+    /// <summary>
+    /// The trailing window a date is computed over: the last <paramref name="bars"/> bars
+    /// at or before <paramref name="date"/>, in order, out of a history already sorted.
+    ///
+    /// **This is the seam between the two paths and it is public because of that** [3.13,
+    /// item 33]. The nightly path asks the store for a ticker's last N bars at or before
+    /// its date; the range path reads one deeper series per ticker and slices it here.
+    /// The two produce identical output only if the slice is the same set of rows the
+    /// statement would have returned, and nothing about a wrong slice errors: a window one
+    /// bar short nulls the columns that need 272 and a window reaching one bar past the
+    /// date computes a metric out of a price nobody could have seen.
+    ///
+    /// Empty when the history carries no bar at or before the date, which is a ticker with
+    /// no history yet rather than an error, and the caller writes no row for it.
+    /// </summary>
+    public static IReadOnlyList<Bar> Window(IReadOnlyList<Bar> history, DateOnly date, int bars)
+    {
+        ArgumentNullException.ThrowIfNull(history);
+
+        var end = UpperBound(history, date);
+
+        if (end == 0)
+        {
+            return [];
+        }
+
+        var start = Math.Max(0, end - bars);
+        return new List<Bar>(history.Skip(start).Take(end - start));
     }
 
     /// <summary>

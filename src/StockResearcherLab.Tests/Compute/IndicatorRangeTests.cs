@@ -109,6 +109,99 @@ public sealed class IndicatorEpochTests
 }
 
 /// <summary>
+/// The slice the range path hands `Compute`, asserted as a set of bars rather than
+/// through its output [item 33, 3.13].
+///
+/// **The end-to-end seam test compares two outputs and this states the input.** Two paths
+/// slicing the same wrong window produce equal rows, so an equality test over them reads
+/// exactly like a passing one. What is stated here is the rule the nightly statement
+/// implements, `rn <= bars` over `date <= D` ordered descending: the window ends on the
+/// date, never after it, and is that many bars deep or everything there is.
+/// </summary>
+public sealed class IndicatorWindowTests
+{
+    private static readonly DateOnly Start = new(2021, 1, 4);
+
+    private static IReadOnlyList<IndicatorEngine.Bar> History(int n)
+        => [.. Enumerable.Range(0, n).Select(i =>
+            new IndicatorEngine.Bar(Start.AddDays(i), 11, 9, 10, 10, 1000))];
+
+    /// <summary>
+    /// The last bar is the date itself, and the depth is exact. Both ends are asserted,
+    /// because an off-by-one at either is a different defect and neither errors.
+    /// </summary>
+    [Fact]
+    public void TheWindowEndsOnTheDateAndIsExactlyAsDeepAsAsked()
+    {
+        var history = History(100);
+        var window = IndicatorEngine.Window(history, Start.AddDays(60), 20);
+
+        Assert.Equal(20, window.Count);
+        Assert.Equal(Start.AddDays(60), window[^1].Date);
+        Assert.Equal(Start.AddDays(41), window[0].Date);
+    }
+
+    /// <summary>
+    /// **No bar after the date, ever.** This is the mistake that costs the most and says
+    /// least: a metric computed from a price nobody could have seen makes a backfilled
+    /// screen look prescient, and the row it lands in is indistinguishable from a real one.
+    /// </summary>
+    [Fact]
+    public void NoBarAfterTheDateEntersTheWindow()
+    {
+        var at = Start.AddDays(30);
+        var window = IndicatorEngine.Window(History(100), at, 50);
+
+        Assert.All(window, b => Assert.True(b.Date <= at, $"{b.Date:yyyy-MM-dd} is after {at:yyyy-MM-dd}."));
+    }
+
+    /// <summary>
+    /// A history shallower than the window asked for gives everything it has rather than
+    /// failing. `Compute` is what decides which columns a short window nulls, and that
+    /// rule lives in one place [METRICS.md].
+    /// </summary>
+    [Fact]
+    public void AHistoryShallowerThanTheWindowGivesEverythingItHas()
+    {
+        var window = IndicatorEngine.Window(History(12), Start.AddDays(11), 40);
+
+        Assert.Equal(12, window.Count);
+        Assert.Equal(Start, window[0].Date);
+    }
+
+    /// <summary>
+    /// A date before the first bar gives nothing, and the caller writes no row for it.
+    /// Empty rather than a row of nulls, which is what keeps a reconstructed universe from
+    /// carrying a name on a date it had no history on.
+    /// </summary>
+    [Fact]
+    public void ADateBeforeTheFirstBarGivesNothing()
+        => Assert.Empty(IndicatorEngine.Window(History(10), Start.AddDays(-1), 20));
+
+    /// <summary>
+    /// A date the store has no bar for takes the last bar before it, which is what the
+    /// nightly statement's `date &lt;= D` does on a holiday. The range path never asks for
+    /// one, its dates coming from `price_daily` itself, and the rule is asserted anyway
+    /// because the two would diverge silently if it changed.
+    /// </summary>
+    [Fact]
+    public void ADateWithNoBarTakesTheLastOneBeforeIt()
+    {
+        IReadOnlyList<IndicatorEngine.Bar> history =
+        [
+            new(Start, 11, 9, 10, 10, 1000),
+            new(Start.AddDays(1), 11, 9, 10, 10, 1000),
+            new(Start.AddDays(5), 11, 9, 10, 10, 1000),
+        ];
+
+        var window = IndicatorEngine.Window(history, Start.AddDays(3), 10);
+
+        Assert.Equal(2, window.Count);
+        Assert.Equal(Start.AddDays(1), window[^1].Date);
+    }
+}
+
+/// <summary>
 /// **The one argument 3.13's cost rests on, asserted rather than reasoned.**
 ///
 /// The range path rebuilds a sector composite once per membership epoch and reuses it

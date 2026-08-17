@@ -215,7 +215,8 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
 
         var atEnd = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
 
-        var dates = await TradingDatesAsync(atEnd, context.From, context.To, ct).ConfigureAwait(false);
+        var dates = await TradingCalendar.SessionsAsync(atEnd, context.From, context.To, ct)
+            .ConfigureAwait(false);
 
         if (dates.Count == 0)
         {
@@ -379,29 +380,6 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
     }
 
     private static string Iso(DateOnly d) => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-
-    /// <summary>
-    /// The evaluation dates of a range, which are the trading dates <c>price_daily</c>
-    /// actually holds rather than a calendar walk.
-    ///
-    /// **Derived from the store rather than from a calendar**, because a date the
-    /// exchange did not trade has no bars and would produce a row of nulls that looks
-    /// identical to a name with no history [`CLAUDE.md` §6].
-    /// </summary>
-    public static async Task<IReadOnlyList<DateOnly>> TradingDatesAsync(
-        StageContext context, DateOnly from, DateOnly to, CancellationToken ct = default)
-    {
-        var rows = await context.Data.ReadAsync(
-            "price_daily",
-            $"""
-             SELECT DISTINCT date FROM price_daily
-             WHERE date BETWEEN {Literal(from)} AND {Literal(to)}
-             ORDER BY date;
-             """,
-            ct).ConfigureAwait(false);
-
-        return rows.Select(r => DateOnly.FromDateTime((DateTime) r[0]!)).ToList();
-    }
 
     /// <summary>
     /// The membership epochs a range spans: the distinct <c>security_daily</c> dates at

@@ -28,10 +28,13 @@ namespace StockResearcherLab.Tests.Ingest;
 /// delisted list.
 ///
 /// **The end-to-end sweep is not exercised here and open item 33 says why.** C04's live
-/// half is the universe as of its date, read from `security_daily` [3.12], and the suite resolves its
-/// connection string from `appsettings.Secrets.json` [open items 10 and 26], so a range
-/// execution in a test walks the live universe and stamps `sentiment_fetch_attempt` for
-/// every real ticker. The pool half below is safe on either database, the delisted list
+/// half is the universe as of its date, read from `security_daily` [3.12], and when this
+/// was written the suite resolved its connection string from `appsettings.Secrets.json`
+/// and ran against the developer database, so a range execution in a test walked the live
+/// universe and stamped `sentiment_fetch_attempt` for every real ticker. **The database
+/// half is closed** [item 26, 3.13]: the suite derives and prepares its own store, so the
+/// universe such an execution walks is the fixture's. The test is still owed.
+/// The pool half below is safe on either database, the delisted list
 /// being served by this fixture's own handler, so the intersection is bounded by the
 /// fixture whatever `price_daily` holds.
 /// </summary>

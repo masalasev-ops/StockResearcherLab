@@ -20,12 +20,12 @@ namespace StockResearcherLab.Tests.Ingest;
 ///
 /// **The distinction is asserted at the two layers where it can be lost**, which is
 /// where the walk ends and where the line is composed, rather than through a sweep.
-/// C05's pool is the universe as of its date, read from `security_daily` [3.12], and the suite runs
-/// against the developer database [open items 10 and 26], so a range execution here
-/// would walk the live universe and stamp `flow_fetch_attempt` for every real ticker at
-/// this fixture's range end. That is item 26's harm exactly, and the resumption half is
-/// therefore recorded as owed rather than proved by a test that damages the store it
-/// runs against.
+/// C05's pool is the universe as of its date, read from `security_daily` [3.12], and when
+/// this was written the suite ran against the developer database, so a range execution
+/// here would walk the live universe and stamp `flow_fetch_attempt` for every real ticker
+/// at this fixture's range end. That was item 26's harm exactly. **The database half is
+/// closed** [item 26, 3.13] and the resumption half is still recorded as owed rather than
+/// proved.
 /// </summary>
 public sealed class FlowRangeTests
 {

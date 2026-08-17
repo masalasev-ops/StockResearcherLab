@@ -17,10 +17,11 @@ namespace StockResearcherLab.Tests.Ingest;
 /// this is the test that the backfill agrees.
 ///
 /// **What is not asserted here is a range execution end to end**, and the reason is open
-/// item 33's one table further on: C01's pool is `price_daily`, a real table on the
-/// developer database that the suite resolves its connection string against [open items
-/// 10 and 26]. A range execution in a test would run `LiquidAsync` against 109.8 million
-/// real rows per evaluation date. So what is covered is the layer where the cadence can
+/// item 33's one table further on: C01's pool is `price_daily`, which when this was
+/// written was a real table on the developer database the suite resolved its connection
+/// string against, so a range execution in a test would run `LiquidAsync` against 109.8
+/// million real rows per evaluation date. **The database half is closed** [item 26,
+/// 3.13] and the volume argument goes with it. So what is covered is the layer where the cadence can
 /// be lost, and the membership rules are covered by the criteria tests that already
 /// exist.
 /// </summary>

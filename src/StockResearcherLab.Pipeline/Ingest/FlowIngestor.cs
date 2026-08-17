@@ -254,9 +254,11 @@ public sealed class FlowIngestor : IStage, IBackfillStage
     /// spending decision into the record as a provider defect while leaving a short
     /// history unremarked.
     ///
-    /// Public so the distinction is asserted directly. C05's sweep pool is `security`,
-    /// which on a developer database is the live universe, so an end-to-end range test
-    /// would stamp an attempt row for every real ticker [open items 10 and 26].
+    /// Public so the distinction is asserted directly. C05's sweep pool is the universe,
+    /// which on the developer database the suite used to run against was the live one, so
+    /// an end-to-end range test would stamp an attempt row for every real ticker. The
+    /// suite now prepares its own store [item 26, 3.13] and the end-to-end test is owed
+    /// rather than refused, but the distinction stays asserted here as well as there.
     /// </summary>
     public static string DescribeGatedHalt(string ticker) => string.Format(
         CultureInfo.InvariantCulture,

@@ -6129,6 +6129,63 @@ against 109.8 million real rows per date. Seven tests cover the layer where the 
 be lost, which is where D-92's argument lives; the criteria themselves are unchanged and
 keep the tests they had.
 
+#### 2026-08-17, 3.10 complete in three passes on one provider day
+
+**Complete, and the completion is checked rather than read off the exit code.** A run
+reporting Completed over a pool with names left looks identical from a status, which is
+exactly what 3.8's second day did. So the check is the query: **the live half with no
+attempt row is 0**, and `event_fetch_attempt` carries **19,726 rows at the range start**
+against a pool of 19,726.
+
+| pass | dispatched | units | wall clock | status |
+|---|---|---|---|---|
+| 1712 | 4,597 | 9,277 | 33.8 min | halted, exit 2 |
+| 1713 | 12,498 | 24,999 | 94.8 min | halted, exit 2 |
+| 1714 | **2,631** | 5,263 | 19.3 min | **ok, exit 0** |
+| total | **19,726 of 19,726** | **39,539** | 148 min | |
+
+**The final pass was deliberately not armed to an exact spend**, which is the difference
+between it and the two before it. The remainder needed 5,261 units and it was armed to
+10,000, because the key is shared and `used` can rise between arming and dispatching: armed
+to exactly the need, a few units taken elsewhere would halt the sweep short of complete and
+cost another day for nothing. The gate was not what ended this run and that was the point.
+It landed at 5,263 against a 5,261 projection, the two extra being the symbol lists.
+
+**39,539 against the 39,451 projected before the first pass**, which is 88 apart over
+19,726 tickers, or one part in 450. The projection was made from the config weights rather
+than from D-101's figure, and D-101's 33,724 is still the marginal delisted half rather
+than a total.
+
+| `events`, final | |
+|---|---|
+| rows | **517,383** over **11,750** tickers |
+| by type | dividend_ex 497,921, split 17,221, earnings 2,241 |
+| inside the window | 78,359 |
+| date span | 1962-10-31 .. 2027-04-08 |
+| `announced_date` present | 199,156, **all of them dividends** |
+| attempt rows carrying a yield | 11,176 of 19,726, 56.7 percent |
+
+**`announced_date` is present on dividends and on nothing else, which is the parse doing
+what 3.10 said it would.** A dividend keeps its declaration date; a split carries no
+announcement, null meaning unknown rather than simultaneous; earnings have none because
+`calendar/earnings` sends none, and that null is what D-90's fork turns on.
+
+**The earnings count has not moved across all three passes.** 2,241 before the first and
+2,241 after the last, while dividends went 121,001 to 497,921. That is 3.10 writing no
+earnings as an observable rather than as a sentence in a detail line, and it is the
+strongest evidence in the phase that the `announced_date` lookahead decision holds in code
+rather than only in prose.
+
+**Only 15 percent of the rows fall inside the window**, 78,359 of 517,383. `div/{t}` and
+`splits/{t}` return a ticker's whole history whatever range is asked for, so the table is
+much wider than the five years the phase covers. Not a lookahead in either direction: rows
+before 2021 are inert and a 2027 ex-date cannot be read by a backfilled 2021 date. Recorded
+because the row count is six times what a window-shaped table would hold and the next
+reader will ask.
+
+**The reserve is restored to 50,000** after all three passes, so the next sweep lowers it
+deliberately rather than inheriting an armed value.
+
 #### 2026-08-17, 3.10's second pass, armed to 25,000 and landing on it
 
 Directed: another 25,000 units. **The reserve is the lever and was set to an odd number on

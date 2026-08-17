@@ -6129,6 +6129,53 @@ against 109.8 million real rows per date. Seven tests cover the layer where the 
 be lost, which is where D-92's argument lives; the criteria themselves are unchanged and
 keep the tests they had.
 
+#### 2026-08-17, 3.10's first day, halted on the gate as designed
+
+**A first day, so the whole pool is the expected dispatch and that is not the resume-key
+red flag it would be on a resumption.** `event_fetch_attempt` was empty before this ran,
+which is what makes 100 percent the right answer rather than a symptom, and the
+pre-dispatch line said so rather than leaving a reader to infer it.
+
+| | |
+|---|---|
+| dispatched | **4,597 of 19,726**, 23.3 percent |
+| carried at least one / none | 2,541 / 2,056 |
+| `events` written by this pass | 124,922 |
+| units | 40,722 to 49,999, halting with **1 unit above the 50,000 reserve** |
+| wall clock | 2,028,164 ms, 33.8 minutes |
+| status | **halted**, run_log 1712, **exit 2** |
+
+**The cost was quoted wrong before it ran and the corrected figure is what it is being
+measured against.** D-101's **33,724** is the *marginal* cost of widening to the delisted
+half, being 16,862 names at 2 units. The whole sweep is the whole pool at 2 units, which
+is **39,451**. The error was quoting a marginal figure as a total; nothing was spent on
+it, because the pre-dispatch line recomputed from the config weights rather than
+repeating the decision's number.
+
+**It could not have been one day and the reserve is why.** 40,722 units were already gone
+when it started, so `limit - used - reserve` left 9,278 spendable, which is 4,639 tickers.
+It landed at 4,597 and halted with 1 unit left above the reserve, which is the gate
+landing on its boundary rather than near it. **The remainder is 15,129 tickers at 30,259
+units**, and a fresh day's 50,000 spendable covers that in one pass.
+
+**The halt is exit 2 and that is the distinction the precondition was written against.**
+This one *is* resolved by tomorrow's allowance, which is why it halts rather than throws.
+
+**Two observations on the table it wrote, neither acted on.**
+
+**`events` spans 1962-10-31 to 2027-03-30**, which is wider than the window in both
+directions. `div/{t}` and `splits/{t}` return a ticker's whole history whatever range is
+asked for, and the forward end is declared-but-unpaid ex-dates. Neither is a lookahead: a
+row dated 2027 cannot be read by a backfilled 2021 date, and rows before the window are
+inert. It is recorded because the row count is larger than a five-year window would
+suggest and the next reader will ask why.
+
+**The 2,241 earnings rows in `events` are not from this pass.** They are from the nightly
+runs of 2026-08-11, run_log 798 and 826. 3.10 writes no earnings deliberately, the payload
+carrying no date on which a schedule became public, and the pass's own detail line says so.
+Stated here because a reader checking `events` by type would otherwise read those 2,241 as
+this checkpoint quietly having loaded them.
+
 #### 2026-08-17, 3.8 finished over the live remainder, and the precondition that stops it recurring
 
 **Predicted 594 and dispatched 594.** The pre-dispatch line is the point of the entry as much

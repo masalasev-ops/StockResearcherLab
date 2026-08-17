@@ -6544,12 +6544,32 @@ to a connection string, one over `ConfigurationBuilder`, `AddJsonFile` and
 `GetConnectionString` and one over every `new NpgsqlConnection(`. Both scan patterns are
 whitespace-tolerant and both are quoted in their own failure message.
 
-**What is given up, stated rather than discovered later.** Under `ci.ps1` the suite no
+~~**What is given up, stated rather than discovered later.** Under `ci.ps1` the suite no
 longer runs against a database dropped moments earlier: `stockresearcherlab_ci` is still
 dropped and migrated and still proves migration from empty, but the tests now run on
 `stockresearcherlab_ci_tests`, which persists between runs. So "the suite passes on a
 clean schema" stops being proved incidentally by every local gate run. It is provable on
-demand by dropping that database, and it is not asserted.
+demand by dropping that database, and it is not asserted.~~ **Given back the same day,
+human-directed, by dropping both.** `ci.ps1` already drops a database before it starts and
+now drops the derived one beside it, so the property returns with no new mechanism and the
+note above is superseded rather than merely outdated.
+
+**The hazard was run before the fix and after it, on the same dirty database.** Two things
+were left in `stockresearcherlab_ci_tests` deliberately, one of each kind the header now
+names: a `security_daily` row nothing cleans, and `0001_snapshot.sql`'s recorded hash set
+to `deadbeef`, which is what a migration edited after it was applied looks like from the
+ledger. **The gate went red, and it went red on**
+`ConfigResolutionTests.EveryPhaseThreeKeyResolvesForASimulatedDateAndReadsBackAsItsType`,
+a config test whose name says nothing about migrations: `TestDatabase`'s preparation runs
+the migrator, the migrator refuses a file whose hash moved, and every database-backed test
+fails behind that one message. With both drops in place the identical database gave
+**Passed 409, Failed 0**, and the row and the hash were both read back afterwards as gone
+and correct.
+
+**One fact now sits in two places**, the `_tests` suffix in `TestDatabase` and in `ci.ps1`,
+and the header says so rather than leaving it to be found. It is not derivable from the
+script's side: the script hands over a connection string and the suite decides what to
+call the database it makes.
 
 **Three doc comments and one production comment were corrected in the same commit**
 rather than left describing something untrue, being the passages in `SentimentRangeTests`,

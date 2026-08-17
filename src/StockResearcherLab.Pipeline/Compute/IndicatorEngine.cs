@@ -173,6 +173,109 @@ public sealed class IndicatorEngine : IStage
             rows.Count(r => r.VolumeVs50DAvg is null),
             rows.Count(r => r.MedianDollarVolume20D is null));
 
+    // ------------------------------------------------- range mode [3.13] ---
+
+    /// <summary>
+    /// The evaluation dates of a range, which are the trading dates <c>price_daily</c>
+    /// actually holds rather than a calendar walk.
+    ///
+    /// **Derived from the store rather than from a calendar**, because a date the
+    /// exchange did not trade has no bars and would produce a row of nulls that looks
+    /// identical to a name with no history [`CLAUDE.md` §6].
+    /// </summary>
+    public static async Task<IReadOnlyList<DateOnly>> TradingDatesAsync(
+        StageContext context, DateOnly from, DateOnly to, CancellationToken ct = default)
+    {
+        var rows = await context.Data.ReadAsync(
+            "price_daily",
+            $"""
+             SELECT DISTINCT date FROM price_daily
+             WHERE date BETWEEN {Literal(from)} AND {Literal(to)}
+             ORDER BY date;
+             """,
+            ct).ConfigureAwait(false);
+
+        return rows.Select(r => DateOnly.FromDateTime((DateTime) r[0]!)).ToList();
+    }
+
+    /// <summary>
+    /// The membership epochs a range spans: the distinct <c>security_daily</c> dates at
+    /// or before each trading date, which is the set of dates on which membership can
+    /// have changed.
+    ///
+    /// **This is what makes a range affordable, and it is exact rather than an
+    /// approximation.** `Universe.AsOf(D)` takes each ticker's most recent row at or
+    /// before D, and C01 writes weekly [3.11], so every trading date inside one week
+    /// resolves the same member set. The sector composite is therefore computed once per
+    /// epoch and not once per date: 292 times over this phase's window rather than about
+    /// 1,260.
+    ///
+    /// **The composite may be reused across the dates of an epoch because it enters the
+    /// output only as a ratio.** `Relative` divides the adjusted close by the composite
+    /// and `Change` divides two of those, so `RsChangeVsSector` carries the composite as
+    /// `comp[t-63] / comp[t]`. Chaining from a different base rescales every level by one
+    /// constant and cancels. That holds because the composite feeds `Change` alone; it
+    /// would not hold for a slope, and the day this stage takes a slope of the sector
+    /// series this reasoning has to be revisited rather than inherited.
+    /// </summary>
+    public static async Task<IReadOnlyList<DateOnly>> MembershipEpochsAsync(
+        StageContext context, DateOnly from, DateOnly to, CancellationToken ct = default)
+    {
+        var rows = await context.Data.ReadAsync(
+            "security_daily",
+            $"""
+             SELECT DISTINCT date FROM security_daily
+             WHERE date <= {Literal(to)}
+               AND date >= COALESCE(
+                   (SELECT max(date) FROM security_daily WHERE date <= {Literal(from)}),
+                   {Literal(from)})
+             ORDER BY date;
+             """,
+            ct).ConfigureAwait(false);
+
+        return rows.Select(r => DateOnly.FromDateTime((DateTime) r[0]!)).ToList();
+    }
+
+    /// <summary>
+    /// The epoch each trading date resolves its membership through, which is the latest
+    /// <c>security_daily</c> date at or before it.
+    ///
+    /// A trading date earlier than every epoch has none, and that is not an error: it is
+    /// a date C01 never evaluated, so it has no membership and no rows are written for
+    /// it. Returning it as absent rather than as the first epoch is what keeps that
+    /// distinction, since taking the earliest would stamp a later universe on a date the
+    /// universe did not cover [INVARIANT 13].
+    /// </summary>
+    public static IReadOnlyDictionary<DateOnly, DateOnly> EpochOf(
+        IEnumerable<DateOnly> tradingDates, IReadOnlyList<DateOnly> epochs)
+    {
+        var map = new Dictionary<DateOnly, DateOnly>();
+
+        foreach (var d in tradingDates)
+        {
+            DateOnly? found = null;
+
+            foreach (var e in epochs)
+            {
+                if (e <= d)
+                {
+                    found = e;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (found is { } epoch)
+            {
+                map[d] = epoch;
+            }
+        }
+
+        return map;
+    }
+
     /// <summary>
     /// Every column for one ticker. Public so the reference test computes through the
     /// same path the stage does rather than through a copy of it.

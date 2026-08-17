@@ -32,11 +32,22 @@ public static class BackfillPool
     ///
     /// **The caller declares `price_daily`**, which is what puts the read in its §3
     /// Reads cell rather than hiding it behind a helper [D-101].
+    ///
+    /// **The statement carries the pool bound, and it did not when this helper was
+    /// extracted** [D-102]. C03 gives the identical statement
+    /// `universe.pool_statement_timeout_seconds` and records at its own call site that
+    /// leaving it on the connection string's `Command Timeout` had already failed a sweep
+    /// once. Extracting the shared half brought the SQL across and left the bound behind,
+    /// so the two diverged again: 3.8's first day ran it warm at 3.1s and passed, and its
+    /// second day timed out at 300 on a cold cache before a ticker was dispatched. One
+    /// statement, one bound, resolved from the one key.
     /// </summary>
     public static async Task<IReadOnlySet<string>> DelistedWithBarsInWindowAsync(
         EodhdClient client, StageContext context, DateOnly windowStart, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(context);
+
+        var statementTimeout = await StatementTimeoutAsync(context, ct).ConfigureAwait(false);
 
         var delisted = await SymbolList.AdmittedDelistedAsync(client, ct).ConfigureAwait(false);
 
@@ -49,10 +60,25 @@ public static class BackfillPool
              WHERE date >= DATE '{from}'
              ORDER BY ticker;
              """,
-            ct).ConfigureAwait(false);
+            ct, statementTimeout).ConfigureAwait(false);
 
         var inWindow = traded.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
 
         return delisted.Keys.Where(inWindow.Contains).ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolved as of the context's date rather than as of now, which is what every other
+    /// reader of this key does [INVARIANT 13].
+    /// </summary>
+    private static async Task<int> StatementTimeoutAsync(StageContext context, CancellationToken ct)
+    {
+        const string Key = "universe.pool_statement_timeout_seconds";
+
+        var row = await context.Config.RequireAsync(Key, context.Date, ct).ConfigureAwait(false);
+
+        return int.TryParse(row.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v)
+            ? v
+            : throw new InvalidOperationException($"{Key} resolved to '{row.Value}', which is not a whole number.");
     }
 }

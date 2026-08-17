@@ -160,18 +160,34 @@ public sealed class SentimentRangeTests
     }
 
     /// <summary>
-    /// Refuses every key, which is an assertion rather than a shortcut: the delisted
-    /// half is derived from the symbol list and `price_daily` alone, and a resolution
-    /// reaching this stub would mean a configured value had entered the pool
-    /// definition where D-101 states it as a rule.
+    /// Refuses every key that could change the set, which is an assertion rather than a
+    /// shortcut: the delisted half is derived from the symbol list and `price_daily`
+    /// alone, and a resolution reaching this stub would mean a configured value had
+    /// entered the pool definition where D-101 states it as a rule.
+    ///
+    /// **`universe.pool_statement_timeout_seconds` is served rather than refused, and
+    /// that narrows what this fixture proves** [D-102]. It was refused with the rest
+    /// until 3.8's second day, when the pool read timed out at the connection string's
+    /// 300 while C03 gave the identical statement 1800. The bound belongs on the
+    /// statement, and it cannot change the answer: the same tickers come back under any
+    /// value of it, or none do and the run fails. So the assertion here is now the
+    /// narrower one, that no key entering the *definition* resolves, and it is narrower
+    /// on the distinction open item 34 has not settled: an operational key changes
+    /// whether a run finishes, a parametric one changes what it produces.
     /// </summary>
     private sealed class NoConfig : IConfigStore
     {
+        private const string OperationalBound = "universe.pool_statement_timeout_seconds";
+
         public Task<ConfigRow?> ResolveAsync(string key, DateOnly asOf, CancellationToken ct = default)
-            => throw new NotSupportedException($"The pool read '{key}'. Its definition takes no configuration.");
+            => key == OperationalBound
+                ? Task.FromResult<ConfigRow?>(new ConfigRow(key, 1, "1800", asOf))
+                : throw new NotSupportedException($"The pool read '{key}'. Its definition takes no configuration.");
 
         public Task<ConfigRow> RequireAsync(string key, DateOnly asOf, CancellationToken ct = default)
-            => throw new NotSupportedException($"The pool read '{key}'. Its definition takes no configuration.");
+            => key == OperationalBound
+                ? Task.FromResult(new ConfigRow(key, 1, "1800", asOf))
+                : throw new NotSupportedException($"The pool read '{key}'. Its definition takes no configuration.");
 
         public Task<int?> ResolveVersionAsync(DateOnly asOf, CancellationToken ct = default)
             => throw new NotSupportedException("A stage does not resolve the store-wide config version.");

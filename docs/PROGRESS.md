@@ -7495,11 +7495,57 @@ take.
 **Three of six compute stages: 69.21 minutes.** C08 21.45, C09 32.36, C10 15.40. The same
 three were 7.64 hours.
 
+#### 2026-08-18, C35 over the window: 2.64 minutes, and the sentiment floor bites
+
+`run_log` for `SentimentEngine`, 2021-01-04 to 2026-08-13, **ok, 4,146,137 rows, 158,377
+ms, 2.64 minutes**. First run of this stage over a range.
+
+1,585 trading dates over 292 membership epochs, 4,290 tickers a member on at least one, in
+22 chunks of 200. **Per chunk of 200 tickers: first 7,602 ms, median 6,437 ms, last 2,984
+ms, total 142,587 ms over 22 units.** Outside the work loop: calendar 55 ms, epochs 82 ms,
+settings 545 ms, members 15,042 ms, **15,724 ms in all**. The two accounts sum to 158,311
+against a stage duration of 158,377, so **66 ms are unaccounted for**.
+
+**The row count is C08's exactly**, 4,146,137, both being one row per member per date over
+the same epochs, which is the arithmetic agreeing rather than a coincidence worth noting
+twice.
+
+**2,286,729 rows, 55.2 percent, are null on all three metrics**, the stage's own line
+saying they carry fewer than `sentiment.min_baseline_days` days inside the baseline window.
+**That was checked rather than accepted, because a large null block is what item 45 looked
+like.** It is not that shape. The raw store carries rows in every year, 343,524 in 2021
+through 251,847 in 2026 so far, and the derived coverage moves with it year by year:
+
+| year | rows | with `sentiment_7d_level` | coverage |
+|---|---|---|---|
+| 2021 | 689,532 | 238,974 | 34.7% |
+| 2022 | 669,550 | 282,499 | 42.2% |
+| 2023 | 658,445 | 217,220 | 33.0% |
+| 2024 | 673,454 | 160,182 | **23.8%** |
+| 2025 | 833,475 | 425,937 | 51.1% |
+| 2026 | 621,726 | 401,748 | **64.6%** |
+
+2024 is the thinnest derived year and 2024 is also the thinnest raw year, at 168,119 rows
+over 3,629 tickers against 2021's 343,524 over 8,019. **A hole that tracks its own input is
+the floor working; item 45's did not track anything.** So this is `sentiment.min_baseline_days`
+at 20 applied to genuinely thin per-name coverage, and it is a fact about the provider
+rather than a defect.
+
+**It is still a finding, and it is opened as item 46.** S3's inputs are absent on more than
+half the ticker-dates in the window and the coverage varies by a factor of 2.7 across
+years, so the sentiment screen's effective population is not stationary over the backfill.
+That is a segmentation question for `VALIDITY.md` rather than a bug, and it is recorded
+before phase 4 reads the column rather than after.
+
+**Four of six compute stages: 71.85 minutes.** C08 21.45, C09 32.36, C10 15.40, C35 2.64.
+C34 and C11 are not run: C11 waits for the flow sweep and C34 is that sweep's engine.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
+| 46 | **S3's inputs are absent on more than half the ticker-dates in the backfill window, and the coverage varies by a factor of 2.7 across years.** Measured 2026-08-18 from C35's first range run: **2,286,729 of 4,146,137 `sentiment_derived_daily` rows, 55.2 percent, are null on all three metrics**, carrying fewer than `sentiment.min_baseline_days` days inside the baseline window. Coverage of `sentiment_7d_level` by year: 2021 34.7 percent, 2022 42.2, 2023 33.0, **2024 23.8**, 2025 51.1, **2026 64.6**. **This is not item 45's shape and that was checked rather than assumed**: the raw `sentiment_daily` store carries rows in every year and the derived coverage tracks its density, 2024 being the thinnest in both at 168,119 raw rows over 3,629 tickers against 2021's 343,524 over 8,019. So the floor is working on genuinely thin per-name coverage and the input is the provider's. **What makes it a finding rather than a fact** is that the sentiment screen's effective population is therefore not stationary over the window, so a backfilled distribution for S3 is drawn from a population that changes size by 2.7 times across it | A segmentation decision in `VALIDITY.md`, before phase 4 tunes on S3 or D-86 counts a backfilled observation toward a shadow's distribution |
 | 45 | ~~**The benchmark's history was never loaded, and two compute components are empty or degenerate for four of the five and a half years because of it.**~~ **CLOSED 2026-08-18 by D-104 and the re-runs.** Measured 2026-08-18: **`SPY.US` held 265 bars in `price_daily`, first 2025-07-22, and zero rows in `price_fetch_attempt`.** The 3.6 sweep never asked for it, its pool being every admitted common stock and the benchmark being an ETF that D-4 excludes from the universe. **C10**: 1,497 of 1,584 dates `mixed` and 0 `risk_off`, against 192 dates at or below the breadth floor. **C08**: 2,690,981 of 4,143,273 `indicator_daily` rows with null `rs_change_21d`, `rs_change_63d` and `rs_20d_slope`. **Nothing errored at any point.** Closed by D-104, which makes a reference series a fetched series admitted to nothing, and by `ReferenceSeries.All` being what C02's pool is unioned with. `SPY.US` now holds 8,444 bars from 1993-01-29 with zero rows in `security` or `security_daily`. **After the re-runs: 1,486 null of 4,146,182 on `rs_change_21d`, and 925 `risk_on`, 177 `risk_off`, 483 `mixed` with every `risk_off` date at or below the floor and every `risk_on` at or above the ceiling.** 2022 carries 142 `risk_off` dates where it carried none. Evidence at `docs/evidence/phase-3/benchmark-history-and-dependents-20260818.txt` | Closed |
 | 44 | **A nightly run and a range sweep of the same component write one another's attempt rows with different dates, and each undoes the other's work.** Read out of the source 2026-08-18 while deciding whether the night pauses for 3.9's sweep. `flow_fetch_attempt` holds one row per ticker, upserted on ticker by both paths. **C05's nightly stamps `context.Date`**, the run date; **its sweep stamps `context.To`**, the range end, and computes its remaining set as the pool minus the tickers carrying that exact date [D-99]. With a sweep over `..2026-08-13` running on 2026-08-18 the two dates differ, so: a ticker the night touches has its sweep stamp overwritten, falls back into the remaining set and is walked again at ten units a page; and a ticker the sweep has just fetched whole carries 2026-08-13, which `RotationSelection` orders **ahead of** the night's own 2026-08-18 under `ThenBy(attempted date)` ascending, so the rotation prefers precisely the names the sweep just covered. Each direction is a re-fetch of work already paid for. **C03 has the same shape**, its sweep also stamping the range end. **This is not what `backfill.unit_reserve` addresses**: the phase 3 plan gives that key's purpose as "holding back what a night costs so a sweep cannot starve the nightly run", which guarantees the night can run and says nothing about the two paths sharing a column. **Bounded now and not later**: nothing in this repository schedules a nightly run, there is no cron, Task Scheduler entry, `BackgroundService` or `IHostedService` anywhere in it, so today this is an operator choice; once the system is live and the night is not optional, it stops being one | An authored decision, before go-live and before any sweep is run against a store a scheduled night is also writing. For 3.9 the answer taken was to pause the night for the sweep's days, which is free while nothing schedules it |
 | 43 | **Every compute range mode times its work loop and none of them times what precedes it, so the per-unit figures describe less than half a stage.** Measured 2026-08-18 on the first one to run: C08 at `run_log` 1716 reported 950,200 ms across 22 chunks against a stage duration of **2,043,579 ms**, leaving **1,093,379 ms, 53.5 percent**, in an unbroken setup span before the loop starts. For C08 that span is the calendar read, the epoch map, one membership read and one composite build per epoch across 292 epochs, and the benchmark series. **The shape is the same in all six**: `RangeTiming` was wired into each loop at 3.17 and nothing above the loop is instrumented, which was invisible until a stage ran over a real range. **Two consequences.** The phase's timing line cannot be assembled from the per-unit figures, because they cover 46.5 percent of the one stage measured and an unknown fraction of the others; and item 41's calendar read is bounded above by that span rather than measured inside it, so its only isolated figure remains a warm probe. **What is not wrong is the loop figures themselves**, which are exact for what they cover, and the total is in `run_log.duration_ms` throughout. The gap is between them. **Built 2026-08-18, human-directed, before the remaining five ran**: `PhaseTimer` names each span outside the work loop and every range mode reports one, C08 marking calendar, epochs, settings, benchmark and members-and-composites, C10 marking its trailing batched write, and C09, C35, C34 and C11 marking what each has. `Skip` drops the loop's own span rather than folding it into the phase after it, which is C10's case and would otherwise double-count the loop. **C08 is deliberately not re-run for it.** Its total is measured, 2,043,579 ms at `run_log` 1716, and its breakdown is not; the missing figure is which of the five phases the 1,093,379 ms sits in, and the phase's timing line is assembled from totals rather than from breakdowns, which C08 has. **So nothing this item exists to protect is lost by leaving it**, and the one question the breakdown would have answered for C08 alone, item 41's calendar read in place, stays bounded rather than isolated **The C08 breakdown arrived after all, because D-104 forced a second run for a different reason.** At `run_log` 1716 the mystery span was 1,093,379 ms; the re-run names it as calendar 48 ms, epochs 1,378, settings 607, benchmark 7 and members-and-composites 379,551, being 381,591 ms in all against a loop of 905,188 and a stage duration of 1,286,834. **55 ms are unaccounted for.** So the span was the per-epoch composite build almost entirely, and it fell from about 1.09 million ms to 381,591 because `Universe.AsOf` is inside it | Closed. The breakdown is measured, not bounded |

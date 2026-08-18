@@ -96,12 +96,17 @@ past date, which is lookahead bias arriving through the back door.
 
 `Worker backfill <stage> [from] [to]`, one stage at a time.
 
-**Pass `from`, and pass `to` as well if the range end matters.** A sweep's attempt rows
-are stamped with `from`, so that is the argument one sweep has to keep constant across
-the days it spans. `from` defaults to `backfill.window_start`, which is a stored date
-and does not move, so the defaults are safe for the standard window; a sweep over
-anything else states its start every time. `to` defaults to today and moves at midnight,
-and nothing resumes on it.
+**Pass both dates, and keep both constant across the days a sweep spans.** A sweep's
+attempt rows are stamped with one end of its range and which end it is differs by
+component [D-99]. C02, C04 and C06 stamp the range start. **C03 and C05 stamp the range
+end**, because that column is also what the nightly rotation orders on, so an attempt
+stamped with a 2021 window start would put every swept ticker back at the head of the
+rotation. `from` defaults to `backfill.window_start`, which is a stored date and does not
+move, so that end is safe on the standard window; a sweep over anything else states its
+start every time. **`to` defaults to today and today moves at midnight**, so those two
+re-invoked the next morning on a defaulted `to` see an empty attempt set and fetch their
+whole pool again. For a sweep that spans days that is the ordinary case rather than an
+edge, and it is why the sources-in-order form refuses to run without both dates [3.16].
 
 **A halt is the mechanism working.** The allowance gate stops the sweep when the next
 unit will not fit above `backfill.unit_reserve`, keeps everything written, and exits 2.
@@ -111,7 +116,9 @@ range and exit 1 is a failure.
 **Every exit resumes the same way, including a killed process** [D-99]. What a sweep has
 done is in its attempt record, written as it goes, so a clean halt, a command timeout and
 a `kill -9` are the same thing to the next run: it dispatches the pool members carrying
-no attempt row for this range start. A re-invocation of a finished sweep fetches nothing.
+no attempt row at this sweep's stamped date, which is the range start for three of the
+five and the range end for the other two [D-99]. A re-invocation of a finished sweep
+fetches nothing.
 A failure costs at most the chunk in flight, whose rows were never recorded.
 
 **The provider's day rolls lazily, on the first billable call.** After the UTC boundary

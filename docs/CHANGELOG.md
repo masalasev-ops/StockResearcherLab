@@ -1739,3 +1739,38 @@ changed.
 
 > Calendar, splits, dividends, `security` for the universe it iterates [D-74],
 > `price_daily` for the in-window delisted names [D-101]
+
+---
+
+## 2026-08-18, `RUNBOOK.md`'s attempt stamp is corrected to D-99's asymmetry [3.17, D-99]
+
+The backfill section stated that a sweep's attempt rows are stamped with `from`. That is
+true of C02, C04 and C06 and false of C03 and C05, which stamp the range end, and D-99
+is the decision that records the asymmetry and gives its reason: `last_attempted_date`
+is also what the nightly rotation orders on, so an attempt stamped with a 2021 window
+start would put every swept ticker back at the head of the rotation.
+
+A spec contradicting a decision, so it is a clean edit [D-73] and the prior wordings are
+here. Two passages carried the rule rather than one, which is why the document was swept
+for the stamp instead of the single sentence being corrected: the second is the sentence
+an operator reads to know what a resumed run will dispatch.
+
+**Cost of believing the old wording.** A sweep re-invoked the next morning on a defaulted
+`to` presents C03 and C05 with an empty attempt set and re-fetches both pools whole. The
+paragraph's own opening clause, "pass `to` as well if the range end matters", kept the
+advice right while the reason stated under it was wrong, which is why the error survived
+being read.
+
+**The first passage.** Its opening sentence and its closing clause both went; the
+`backfill.window_start` clause in the middle is unchanged and is not repeated here.
+
+> **Pass `from`, and pass `to` as well if the range end matters.** A sweep's attempt rows
+> are stamped with `from`, so that is the argument one sweep has to keep constant across
+> the days it spans.
+
+> `to` defaults to today and moves at midnight, and nothing resumes on it.
+
+**The second passage**, inside "Every exit resumes the same way, including a killed
+process".
+
+> it dispatches the pool members carrying no attempt row for this range start.

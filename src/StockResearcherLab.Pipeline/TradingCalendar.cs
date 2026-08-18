@@ -23,15 +23,21 @@ public static class TradingCalendar
     /// <summary>
     /// Every session between the two dates inclusive, ascending.
     ///
-    /// The caller declares <c>price_daily</c>, which is what keeps the read in its §3
-    /// Reads cell rather than hiding it behind a helper [D-101's precedent].
+    /// **Takes the data accessor rather than a stage context, and that is what lets the
+    /// driver resolve it** [3.14]. The read is guarded either way: whoever passes an
+    /// accessor has declared <c>price_daily</c>, whether that is a stage through its §3
+    /// Reads cell or `BackfillRun` through the scope it declares for itself. C34 and C35
+    /// declare neither `price_daily` nor anything else carrying a session list, and
+    /// widening a Reads cell is an authored `ARCHITECTURE.html` edit rather than a build
+    /// session's [`CLAUDE.md` §13], so the calendar moved up to the driver instead of the
+    /// contract moving out to fit it.
     /// </summary>
     public static async Task<IReadOnlyList<DateOnly>> SessionsAsync(
-        StageContext context, DateOnly from, DateOnly to, CancellationToken ct = default)
+        IStageData data, DateOnly from, DateOnly to, CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(data);
 
-        var rows = await context.Data.ReadAsync(
+        var rows = await data.ReadAsync(
             "price_daily",
             $"""
              SELECT DISTINCT date FROM price_daily

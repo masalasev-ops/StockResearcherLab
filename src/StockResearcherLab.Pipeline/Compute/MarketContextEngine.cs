@@ -24,7 +24,7 @@ namespace StockResearcherLab.Pipeline.Compute;
 /// realised-volatility substitute would carry the column's name without its meaning,
 /// which is worse than an absence a reader can see.
 /// </summary>
-public sealed class MarketContextEngine : IStage
+public sealed class MarketContextEngine : IStage, IBackfillStage
 {
     public static readonly string[] Columns =
         ["date", "breadth", "vix", "regime_label", "sector_relative_strength"];
@@ -61,26 +61,8 @@ public sealed class MarketContextEngine : IStage
 
         var label = Regime(breadth, benchmarkAbove, high, low);
 
-        var written = await context.Data.BulkUpsertAsync(
-            "market_context_daily", Columns, ConflictTarget,
-            async (w, c) =>
-            {
-                await w.StartRowAsync(c).ConfigureAwait(false);
-                await w.WriteAsync(context.Date, c).ConfigureAwait(false);
-                await w.WriteAsync(breadth is null ? null : (float?) breadth.Value, c).ConfigureAwait(false);
-
-                // No series in this feed. Null rather than a substitute wearing the
-                // column's name [METRICS.md section 5].
-                await w.WriteAsync<float?>(null, c).ConfigureAwait(false);
-
-                await w.WriteAsync(label, c).ConfigureAwait(false);
-
-                // jsonb rather than text, named rather than inferred. Binary COPY
-                // carries no type name, and the two formats differ by one leading
-                // version byte that the driver cannot know to write from a string
-                // [2.9, found at 2.12].
-                await w.WriteJsonAsync(sectors, c).ConfigureAwait(false);
-            }, ct).ConfigureAwait(false);
+        var written = await WriteAsync(
+            context, [new Row(context.Date, breadth, label, sectors)], ct).ConfigureAwait(false);
 
         var detail = string.Format(
             CultureInfo.InvariantCulture,
@@ -93,6 +75,137 @@ public sealed class MarketContextEngine : IStage
 
         return new StageResult(written, "ok", detail);
     }
+
+    /// <summary>One date's context row, so the write is shared by the nightly and range paths.</summary>
+    private readonly record struct Row(DateOnly Date, double? Breadth, string Label, string Sectors);
+
+    /// <summary>
+    /// The write, shared by both paths.
+    ///
+    /// **Extracted rather than copied at 3.14** for the reason C08's and C35's were: a
+    /// five-column write stated twice drifts, and the `jsonb` column is the one where the
+    /// drift would be silent rather than loud. Binary COPY carries no type name and the
+    /// two formats differ by one leading version byte, which is why the json goes through
+    /// `WriteJsonAsync` and not through a string [2.9, found at 2.12].
+    /// </summary>
+    private static Task<long> WriteAsync(
+        StageContext context, IReadOnlyList<Row> rows, CancellationToken ct)
+        => context.Data.BulkUpsertAsync(
+            "market_context_daily", Columns, ConflictTarget,
+            async (w, c) =>
+            {
+                foreach (var r in rows)
+                {
+                    await w.StartRowAsync(c).ConfigureAwait(false);
+                    await w.WriteAsync(r.Date, c).ConfigureAwait(false);
+                    await w.WriteAsync(r.Breadth is null ? null : (float?) r.Breadth.Value, c).ConfigureAwait(false);
+
+                    // No series in this feed. Null rather than a substitute wearing the
+                    // column's name [METRICS.md section 5].
+                    await w.WriteAsync<float?>(null, c).ConfigureAwait(false);
+
+                    await w.WriteAsync(r.Label, c).ConfigureAwait(false);
+                    await w.WriteJsonAsync(r.Sectors, c).ConfigureAwait(false);
+                }
+            }, ct);
+
+    // ------------------------------------------------- range mode [3.14] ---
+
+    /// <summary>
+    /// The same work as <see cref="ExecuteAsync"/> over a range, one date at a time and
+    /// one write at the end.
+    ///
+    /// **Date-partitioned, so there is no ticker loop to hoist.** Each date's breadth is a
+    /// count over that date's universe, each benchmark test is a moving average ending on
+    /// it, and each sector block is a ratio of that date's members. Nothing carries across
+    /// a date except the config version, so the range is the nightly work repeated with
+    /// its bounds moved and the write batched.
+    ///
+    /// **The three reads are reissued per date rather than generalised across the range.**
+    /// Widening them means cross joining each against a date set, which is a rewrite of
+    /// what they compute rather than of what they are bounded by, and this phase does not
+    /// reimplement arithmetic for the backfill [D-93]. The checkpoint asks for the two
+    /// shapes measured over one month and the faster taken; that measurement reads
+    /// `indicator_daily`, which no backfill has yet written, so it is recorded as owed
+    /// rather than answered from a guess.
+    ///
+    /// **What is batched is the write and not the reads**, which is where the saving
+    /// actually is: 1,260 single-row upserts become one COPY per range.
+    /// </summary>
+    public async Task<BackfillResult> ExecuteRangeAsync(
+        BackfillContext context, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var atEnd = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
+
+        var dates = await context.SessionsAsync(ct).ConfigureAwait(false);
+
+        if (dates.Count == 0)
+        {
+            return BackfillResult.Completed(
+                0, context.To, "no trading date in the range carries a price_daily bar, so nothing is computed");
+        }
+
+        var byVersion = new Dictionary<int, Settings>();
+        var rows = new List<Row>(dates.Count);
+
+        var unknownBreadth = 0;
+
+        foreach (var date in dates)
+        {
+            var stage = await context.ForDateAsync(date, ct).ConfigureAwait(false);
+
+            if (!byVersion.TryGetValue(stage.ConfigVersion, out var settings))
+            {
+                settings = new Settings(
+                    (int) await LongAsync(stage, "market.breadth_ma_days", ct).ConfigureAwait(false),
+                    (int) await LongAsync(stage, "market.sector_composite_min_members", ct).ConfigureAwait(false),
+                    (double) await DecimalAsync(stage, "market.regime_breadth_high", ct).ConfigureAwait(false),
+                    (double) await DecimalAsync(stage, "market.regime_breadth_low", ct).ConfigureAwait(false));
+
+                byVersion[stage.ConfigVersion] = settings;
+            }
+
+            var breadth = await BreadthAsync(stage, ct).ConfigureAwait(false);
+            var above = await BenchmarkAboveItsAverageAsync(stage, settings.BreadthMaDays, ct).ConfigureAwait(false);
+            var sectors = await SectorRelativeStrengthAsync(stage, settings.MinMembers, ct).ConfigureAwait(false);
+
+            if (breadth is null)
+            {
+                unknownBreadth++;
+            }
+
+            rows.Add(new Row(
+                date, breadth, Regime(breadth, above, settings.High, settings.Low), sectors));
+        }
+
+        // Ascending by date, which the calendar already is. Stated at the point that
+        // relies on it, because write order reaches output [CLAUDE.md section 6].
+        rows.Sort(static (a, b) => a.Date.CompareTo(b.Date));
+
+        var written = await WriteAsync(atEnd, rows, ct).ConfigureAwait(false);
+
+        return BackfillResult.Completed(
+            written, context.To,
+            string.Format(
+                CultureInfo.InvariantCulture,
+                "{0:N0} market_context_daily row(s) over {1:N0} trading date(s). {2:N0} carry an unknown " +
+                "breadth and are therefore labelled {3}, which is a date `indicator_daily` has no " +
+                "`dist_200dma` for rather than a date with no trend. {4:N0} risk_on, {5:N0} risk_off, " +
+                "{6:N0} mixed. vix is null on every one of them, the bulk feed carrying equities and not " +
+                "the index [D-80, open item 30].",
+                written, dates.Count, unknownBreadth, Mixed,
+                rows.Count(static r => r.Label == RiskOn),
+                rows.Count(static r => r.Label == RiskOff),
+                rows.Count(static r => r.Label == Mixed)));
+    }
+
+    /// <summary>
+    /// The four configured values one date is composed under, held per resolved version so
+    /// a range whose config never moved reads them once [C08's precedent].
+    /// </summary>
+    private readonly record struct Settings(int BreadthMaDays, int MinMembers, double High, double Low);
 
     /// <summary>
     /// D-80. Three values, and the benchmark contributes a sign test rather than a

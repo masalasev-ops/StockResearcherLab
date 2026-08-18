@@ -6577,6 +6577,79 @@ rather than left describing something untrue, being the passages in `SentimentRa
 from the suite running against the developer database. That is item 36's rule applied to
 its own case.
 
+#### 2026-08-17, checkpoint 3.14, and the calendar that had to move up a layer
+
+**Built.** C10 `MarketContextEngine`, C34 `FlowEngine` and C35 `SentimentEngine` gained
+`IBackfillStage`. Every stage in the compute layer that a range touches now has a range
+mode except C11, which is 3.15.
+
+**C35 is C08's shape and C34 and C10 are not, which is the partition key showing through.**
+C35 is ticker-partitioned: one read of a ticker's whole sentiment history per chunk of two
+hundred, then the existing public `Compute` per date. C34 and C10 are date-partitioned, so
+there is no ticker loop to hoist and the range is the nightly work with its bounds moved;
+what is batched in C10 is the write, 1,260 single-row upserts becoming one COPY.
+
+**C35 has no window to slice and that is a property of `Compute` rather than of the loop.**
+C08 has to cut a bar window because its arithmetic consumes whatever list it is handed;
+`Compute` here derives all three of its windows from the date and then reads a dictionary,
+so a day outside them is ignored on either side. The whole history is passed unsliced and
+the property is asserted rather than read off the code, with a padded history carrying
+extreme values twenty days before the baseline and twenty days after the date.
+
+**`Membership` moved out of `IndicatorEngine` and is now shared**, epochs, the epoch map
+and an epoch's members. C35 needs exactly what C08 has, and two copies of the rule deciding
+which universe a past date sees is INVARIANT 13's failure rather than an ordinary
+duplication. It moved whole rather than being reimplemented beside its original.
+
+**The trading calendar moved from the stages to the driver, and the stage contract is what
+forced it.** `TradingCalendar.SessionsAsync` reads `price_daily`. C08, C09 and C10 declare
+that table; **C34 and C35 declare neither it nor anything else carrying a session list**, so
+the first run of C35's range mode failed loudly on `UndeclaredTableAccessException`, which
+is the guard working. Widening a Reads cell is an authored `ARCHITECTURE.html` §3 edit and
+not a build session's [`CLAUDE.md` §13], so the read moved up instead of the contract moving
+out: `BackfillRun` declares `price_daily` for itself under the name `BackfillRun`, resolves
+the calendar once, and hands it to every range stage through `BackfillContext.SessionsAsync`.
+
+**That is a better answer than the widening would have been, and it is also a decision a
+human should confirm.** Better, because a calendar read per stage is a calendar read that
+can disagree between stages inside one run, and a backfill whose compute layers evaluate
+different date sets writes a store nothing produced; there is now one read per run and the
+date set is shared by construction. What wants confirming is that a driver declaring a read
+set of its own is the intended shape, since the stage registry is the single declaration of
+who touches what and this adds a non-stage to that picture. No stage's declared set moved,
+no §3 cell moved, and `ReadDeclarationConformanceTests` is untouched.
+
+**Three seam tests, and two of them proved nothing until they were mutated.** Every range
+here spans five dates rather than one, which is 3.13's lesson applied in advance. Then each
+range path was mutated and the tests run:
+
+- C35's baseline read starved by thirty days: **the anchor failed**, as it should.
+- C34's insider window halved in the range path only: **the anchor passed**. Every trade in
+  the fixture fell within forty-five days, so the fixture could not tell the window from
+  half of it. A purchase seventy days back was added and it now fails.
+- C10's breadth computed at the range end for every date, which is the classic range bug:
+  **the anchor passed**. The fixture wrote a constant `dist_200dma` per ticker, so every
+  date had the same breadth. It now has six names crossing above their averages on six
+  different dates, breadth running 0, 1, 2, 3, 4 of six across the five, and the test
+  asserts that distinctness as well as the equality.
+
+**Both were the same mistake and it is the one this file keeps recording**: a fixture flat
+in the dimension the test is about satisfies any claim, including a wrong one. The
+correction is in the fixtures and the reason is written beside each.
+
+**414 tests.** `ci.ps1` green.
+
+**What 3.14 does not deliver is its own measurement.** The scope line asks for a range join
+measured against the looped-with-the-index shape over one month, the faster taken and which
+one recorded. Both C34 and C10 are built as the loop, and the loop is not a default taken
+for convenience: their statements express every bound relative to one date, so widening them
+means cross joining each CTE against a date set, which is a rewrite of the arithmetic rather
+than of its bounds, and this phase's position is that the arithmetic is not reimplemented for
+the backfill [D-93]. **The measurement that would settle it cannot be run yet.** C34 reads
+`insider_transaction`, which 3.9's sweep has not written, and C10 reads `indicator_daily`,
+which no backfill has written; a timing over empty tables measures nothing. It is recorded
+as owed against 3.16's driver run rather than answered from a guess.
+
 #### 2026-08-17, item 33's five classes, and two mutations that changed what is claimed
 
 **Seventeen tests over five classes, and the reason they could not be written before was

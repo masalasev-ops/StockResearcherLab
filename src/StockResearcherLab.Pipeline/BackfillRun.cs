@@ -88,7 +88,16 @@ public sealed class BackfillRun
         // The refusal on a range mismatch went with the position it protected. A range
         // start that differs is simply a different set of attempt rows, and a range end
         // that differs no longer changes anything at all.
-        var context = new BackfillContext(from, to, data, _clock, config, _allowance);
+        // The trading calendar, declared by this driver rather than by the stages that
+        // need it. One read per run, shared, so two compute stages in one backfill cannot
+        // evaluate different date sets [3.14].
+        var calendar = new StageData(
+            _connectionString,
+            new DeclaredAccess("BackfillRun", ["price_daily"], []));
+
+        var context = new BackfillContext(
+            from, to, data, _clock, config, _allowance,
+            token => TradingCalendar.SessionsAsync(calendar, from, to, token));
 
         var startedAt = _clock.UtcNow;
         var stopwatch = Stopwatch.StartNew();

@@ -197,7 +197,7 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
     ///
     /// **What is precomputed and what is not.** The benchmark is one series and is read
     /// once. The sector composites are per membership epoch rather than per date, which is
-    /// the saving `MembershipEpochsAsync` explains. Everything else is a function of one
+    /// the saving `Membership.EpochsAsync` explains. Everything else is a function of one
     /// ticker's own bars, which is why this partitions by ticker at all
     /// [`CLAUDE.md` §5].
     ///
@@ -215,8 +215,7 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
 
         var atEnd = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
 
-        var dates = await TradingCalendar.SessionsAsync(atEnd, context.From, context.To, ct)
-            .ConfigureAwait(false);
+        var dates = await context.SessionsAsync(ct).ConfigureAwait(false);
 
         if (dates.Count == 0)
         {
@@ -224,8 +223,8 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
                 0, context.To, "no trading date in the range carries a price_daily bar, so nothing is computed");
         }
 
-        var epochs = await MembershipEpochsAsync(atEnd, context.From, context.To, ct).ConfigureAwait(false);
-        var epochOf = EpochOf(dates, epochs);
+        var epochs = await Membership.EpochsAsync(atEnd, context.From, context.To, ct).ConfigureAwait(false);
+        var epochOf = Membership.EpochOf(dates, epochs);
 
         if (epochOf.Count == 0)
         {
@@ -271,7 +270,7 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
         {
             var span = epochOf.Where(kv => kv.Value == epoch).Select(kv => kv.Key).ToList();
 
-            members[epoch] = await EpochMembersAsync(atEnd, epoch, ct).ConfigureAwait(false);
+            members[epoch] = await Membership.MembersAsync(atEnd, epoch, ct).ConfigureAwait(false);
 
             composites[epoch] = await EpochCompositesAsync(
                 atEnd, epoch, span.Min().AddDays(-CompositePadDays), span.Max(),
@@ -405,84 +404,6 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
     }
 
     private static string Iso(DateOnly d) => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-
-    /// <summary>
-    /// The membership epochs a range spans: the distinct <c>security_daily</c> dates at
-    /// or before each trading date, which is the set of dates on which membership can
-    /// have changed.
-    ///
-    /// **This is what makes a range affordable, and it is exact rather than an
-    /// approximation.** `Universe.AsOf(D)` takes each ticker's most recent row at or
-    /// before D, and C01 writes weekly [3.11], so every trading date inside one week
-    /// resolves the same member set. The sector composite is therefore computed once per
-    /// epoch and not once per date: 292 times over this phase's window rather than about
-    /// 1,260.
-    ///
-    /// **The composite may be reused across the dates of an epoch because it enters the
-    /// output only as a ratio.** `Relative` divides the adjusted close by the composite
-    /// and `Change` divides two of those, so `RsChangeVsSector` carries the composite as
-    /// `comp[t-63] / comp[t]`. Chaining from a different base rescales every level by one
-    /// constant and cancels. That holds because the composite feeds `Change` alone; it
-    /// would not hold for a slope, and the day this stage takes a slope of the sector
-    /// series this reasoning has to be revisited rather than inherited.
-    /// </summary>
-    public static async Task<IReadOnlyList<DateOnly>> MembershipEpochsAsync(
-        StageContext context, DateOnly from, DateOnly to, CancellationToken ct = default)
-    {
-        var rows = await context.Data.ReadAsync(
-            "security_daily",
-            $"""
-             SELECT DISTINCT date FROM security_daily
-             WHERE date <= {Literal(to)}
-               AND date >= COALESCE(
-                   (SELECT max(date) FROM security_daily WHERE date <= {Literal(from)}),
-                   {Literal(from)})
-             ORDER BY date;
-             """,
-            ct).ConfigureAwait(false);
-
-        return rows.Select(r => DateOnly.FromDateTime((DateTime) r[0]!)).ToList();
-    }
-
-    /// <summary>
-    /// The epoch each trading date resolves its membership through, which is the latest
-    /// <c>security_daily</c> date at or before it.
-    ///
-    /// A trading date earlier than every epoch has none, and that is not an error: it is
-    /// a date C01 never evaluated, so it has no membership and no rows are written for
-    /// it. Returning it as absent rather than as the first epoch is what keeps that
-    /// distinction, since taking the earliest would stamp a later universe on a date the
-    /// universe did not cover [INVARIANT 13].
-    /// </summary>
-    public static IReadOnlyDictionary<DateOnly, DateOnly> EpochOf(
-        IEnumerable<DateOnly> tradingDates, IReadOnlyList<DateOnly> epochs)
-    {
-        var map = new Dictionary<DateOnly, DateOnly>();
-
-        foreach (var d in tradingDates)
-        {
-            DateOnly? found = null;
-
-            foreach (var e in epochs)
-            {
-                if (e <= d)
-                {
-                    found = e;
-                }
-                else
-                {
-                    break;
-                }
-            }
-
-            if (found is { } epoch)
-            {
-                map[d] = epoch;
-            }
-        }
-
-        return map;
-    }
 
     /// <summary>
     /// Tickers taken per pass. One read of a whole series is the unit of work [3.13], so
@@ -633,28 +554,6 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
     /// a halt, and reading more would cost without buying anything.
     /// </summary>
     private const int CompositePadDays = 400;
-
-    /// <summary>
-    /// The active members of one epoch and their sectors, which is the same read the
-    /// nightly path makes with that epoch's date substituted.
-    /// </summary>
-    private static async Task<IReadOnlyDictionary<string, string?>> EpochMembersAsync(
-        StageContext context, DateOnly epoch, CancellationToken ct)
-    {
-        var rows = await context.Data.ReadAsync(
-            "security_daily",
-            $"SELECT m.ticker, m.sector FROM {Universe.AsOf(epoch)} m WHERE m.is_active ORDER BY m.ticker;",
-            ct).ConfigureAwait(false);
-
-        var map = new Dictionary<string, string?>(StringComparer.Ordinal);
-
-        foreach (var r in rows)
-        {
-            map[(string) r[0]!] = r[1] as string;
-        }
-
-        return map;
-    }
 
     /// <summary>
     /// One epoch's sector composites over a span, which is the nightly statement with its

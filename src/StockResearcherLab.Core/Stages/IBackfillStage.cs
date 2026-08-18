@@ -77,13 +77,17 @@ public readonly record struct BackfillResult(
 /// </summary>
 public sealed class BackfillContext
 {
+    private readonly Func<CancellationToken, Task<IReadOnlyList<DateOnly>>>? _sessions;
+    private IReadOnlyList<DateOnly>? _resolved;
+
     public BackfillContext(
         DateOnly from,
         DateOnly to,
         IStageData data,
         IClock clock,
         IConfigStore config,
-        IUnitAllowance allowance)
+        IUnitAllowance allowance,
+        Func<CancellationToken, Task<IReadOnlyList<DateOnly>>>? sessions = null)
     {
         ArgumentNullException.ThrowIfNull(data);
         ArgumentNullException.ThrowIfNull(clock);
@@ -102,6 +106,41 @@ public sealed class BackfillContext
         Clock = clock;
         Config = config;
         Allowance = allowance;
+        _sessions = sessions;
+    }
+
+    /// <summary>
+    /// The trading dates this range covers, resolved once by the driver and shared by
+    /// every stage in it.
+    ///
+    /// **Resolved here rather than by each stage, for two reasons and the second is the
+    /// one that forced it** [3.14]. A calendar read per stage is a calendar read that can
+    /// disagree between stages inside one run, and a backfill whose compute layers
+    /// evaluate different date sets writes a store nothing produced. And the session list
+    /// lives in `price_daily`, which C34 and C35 do not declare and cannot be given
+    /// without an authored `ARCHITECTURE.html` §3 edit; the driver declares it for itself
+    /// instead, so the stage contract is enforced rather than widened.
+    ///
+    /// Memoised, so a range with four stages in it reads the calendar once.
+    /// </summary>
+    public async Task<IReadOnlyList<DateOnly>> SessionsAsync(CancellationToken ct = default)
+    {
+        if (_resolved is { } already)
+        {
+            return already;
+        }
+
+        if (_sessions is null)
+        {
+            throw new InvalidOperationException(
+                "This BackfillContext was constructed without a session source, so the trading " +
+                "calendar cannot be resolved. The driver supplies it; a context built by hand has " +
+                "to supply one too rather than falling back to a stage's own read, which would put " +
+                "`price_daily` inside the declared set of every stage that walks a range.");
+        }
+
+        _resolved = await _sessions(ct).ConfigureAwait(false);
+        return _resolved;
     }
 
     /// <summary>First date of the range, inclusive.</summary>

@@ -1,3 +1,4 @@
+using StockResearcherLab.Pipeline;
 using StockResearcherLab.Pipeline.Compute;
 using Xunit;
 
@@ -29,7 +30,7 @@ public sealed class IndicatorEpochTests
     [Fact]
     public void ATradingDateTakesTheLatestEpochAtOrBeforeIt()
     {
-        var map = IndicatorEngine.EpochOf(
+        var map = Membership.EpochOf(
             [new(2021, 1, 11), new(2021, 1, 15), new(2021, 1, 18), new(2021, 1, 25)], Weekly);
 
         Assert.Equal(new DateOnly(2021, 1, 10), map[new(2021, 1, 11)]);
@@ -55,7 +56,7 @@ public sealed class IndicatorEpochTests
             new(2021, 1, 14), new(2021, 1, 15),
         };
 
-        var map = IndicatorEngine.EpochOf(week, Weekly);
+        var map = Membership.EpochOf(week, Weekly);
 
         Assert.Single(map.Values.Distinct());
         Assert.Equal(new DateOnly(2021, 1, 10), map.Values.First());
@@ -71,7 +72,7 @@ public sealed class IndicatorEpochTests
     [Fact]
     public void ADateBeforeEveryEpochHasNoneRatherThanTheEarliest()
     {
-        var map = IndicatorEngine.EpochOf(
+        var map = Membership.EpochOf(
             [new(2021, 1, 4), new(2021, 1, 8), new(2021, 1, 11)], Weekly);
 
         Assert.False(map.ContainsKey(new(2021, 1, 4)));
@@ -88,7 +89,7 @@ public sealed class IndicatorEpochTests
     [Fact]
     public void ADateOnAnEpochTakesThatEpochRatherThanThePreviousOne()
     {
-        var map = IndicatorEngine.EpochOf([new(2021, 1, 17)], Weekly);
+        var map = Membership.EpochOf([new(2021, 1, 17)], Weekly);
 
         Assert.Equal(new DateOnly(2021, 1, 17), map[new(2021, 1, 17)]);
     }
@@ -102,7 +103,7 @@ public sealed class IndicatorEpochTests
     [Fact]
     public void NoEpochsMapsNothingRatherThanEverything()
     {
-        var map = IndicatorEngine.EpochOf([new(2021, 1, 11), new(2021, 1, 12)], []);
+        var map = Membership.EpochOf([new(2021, 1, 11), new(2021, 1, 12)], []);
 
         Assert.Empty(map);
     }

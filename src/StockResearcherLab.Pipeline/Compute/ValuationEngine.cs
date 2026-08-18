@@ -201,8 +201,7 @@ public sealed class ValuationEngine : IStage, IBackfillStage
 
         var atEnd = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
 
-        var dates = await TradingCalendar.SessionsAsync(atEnd, context.From, context.To, ct)
-            .ConfigureAwait(false);
+        var dates = await context.SessionsAsync(ct).ConfigureAwait(false);
 
         if (dates.Count == 0)
         {

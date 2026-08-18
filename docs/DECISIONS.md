@@ -1923,6 +1923,79 @@ backfill is running.
 
 ---
 
+**D-104 The benchmark is a reference series: fetched into `price_daily`, admitted to
+nothing.** `ACTIVE`
+Two compute components measure against a benchmark and for most of the backfill window
+neither could, because nothing had ever fetched one. C02's sweep pool is every admitted
+common stock, live and delisted [D-4, INVARIANT 1], and the benchmark is an ETF, which D-2
+puts out of scope. So the sweep never asked for it, and nothing errored.
+
+**What a reference series is.** A price series a component reads as a comparison, held in
+`price_daily` beside every other series and admitted to nothing else. It is never written
+to `security` or to `security_daily`, so it is a member of no universe on any date, is
+never a candidate, is never ranked inside a cell, and can never become a position. **D-2 is
+untouched by this.** D-2 says which instruments can be selected, and a reference series is
+not selectable. The exception is to C02's fetch list and not to the universe definition,
+which is where absolute filters live and stay [INVARIANT 1]. Nothing downstream narrows,
+because nothing downstream gains a member.
+
+**Which components read it.** `IndicatorEngine` for `rs_change_21d`, `rs_change_63d`,
+`rs_21d_63d_change` and `rs_20d_slope`, which are the ticker's return over the benchmark's
+[`METRICS.md` §2]. `MarketContextEngine` for the regime label's sign test, which is whether
+the benchmark closed above its own `market.breadth_ma_days` average [D-80]. **Breadth is
+not one of them**: it is counted off `indicator_daily.dist_200dma` over that date's
+universe and reads no benchmark at all. The sector composites read none either, being built
+from the universe's own members, which is the reason the peer benchmark needs no ETF
+[D-42].
+
+**The measurement that forced it,** taken 2026-08-18 with C08 and C10 having run the whole
+window. **`SPY.US` held 265 bars in `price_daily`, first 2025-07-22, and zero rows in
+`price_fetch_attempt`.** The 265 are what the unfiltered nightly bulk feed had accumulated
+since July 2025. The empty attempt table is the sweep saying it never asked, which is the
+distinction an absent row is there to make [0010].
+
+**What it cost, which is why this is a decision and not a defect note.** **2,690,981 of
+4,143,273 `indicator_daily` rows carried null `rs_change_21d`, `rs_change_63d` and
+`rs_20d_slope`**, being every row before the benchmark's history began. **1,497 of 1,584
+`market_context_daily` rows were labelled `mixed` and none was `risk_off`**, against 192
+dates whose breadth was at or below the 0.40 floor and 925 at or above the 0.60 ceiling,
+with all 87 `risk_on` in 2026. Both components were behaving exactly as written:
+`BenchmarkAboveItsAverageAsync` returns null below `market.breadth_ma_days` bars rather
+than averaging over whatever is stored, and `Regime` returns `mixed` on a null. Breadth
+itself was right throughout, 2022 averaging 0.376. Nothing errored, both runs completed,
+and both reported plausible counts. That is `CLAUDE.md` §1 arriving as a measurement rather
+than as a warning.
+
+**What the reasoning had been, so this is a replacement rather than an addition.**
+`METRICS.md` §2 and `IndicatorEngine.Benchmark` both record that C02 writes every row the
+bulk feed returns with no universe filter, so the series is present. That is true of the
+nightly feed's retained window and was read as covering history. It does not, because the
+backfill loads history through `eod/{t}` per ticker and that path takes a pool. **A series
+a component depends on is loaded by something that names it, not by something that happens
+to sweep past it.**
+
+**How a second one is added.** `ReferenceSeries.All` is the set, stated once, and C02's
+pool is the admitted common stock union that set. An index, a sector proxy or a second
+benchmark is one string in that list and no other change: the pool picks it up, the sweep
+fetches its whole history at one unit, and the component that wants it names it. A
+component reading a series absent from that list is reading something no sweep guarantees,
+which is the state this decision was written out of.
+
+**Stated in code rather than as a config key, and that is the point rather than an
+omission.** Config resolves as of the simulated date [INVARIANT 13], so a benchmark held as
+a key would resolve per date, and a change to it would leave one relative-strength column
+computed against two different series with nothing in the row saying which. Changing a
+benchmark splits history into halves that cannot be pooled [`CLAUDE.md` §12], and a change
+that splits history is a code change carrying a decision, not a config row.
+
+**The load is a re-run of C02 over the same range and costs about three units.** The sweep
+resumes by attempt record [D-99, 0010], so every ticker already carrying an attempt at the
+range start is not dispatched and the remaining set is the reference series alone. Two
+symbol-list calls build the pool and one `eod/{t}` call fetches the series. **Then C08 and
+C10 are re-run**, because their rows were written against a benchmark that was not there.
+
+---
+
 ## Open
 
 **D-53 Whether the local digest model stays local once measured.** `OPEN`

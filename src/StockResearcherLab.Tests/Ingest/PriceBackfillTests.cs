@@ -74,6 +74,16 @@ public sealed class PriceBackfillTests : IAsyncLifetime
     /// </summary>
     private static readonly DateOnly To = new(2021, 1, 8);
 
+    /// <summary>
+    /// What the double's pool comes to: twenty live common stocks, two delisted, and the
+    /// reference series C02 now fetches alongside them [D-104].
+    ///
+    /// Stated once because eight assertions read it. A second reference series moves them
+    /// together rather than moving six of the eight and leaving two disagreeing about the
+    /// size of the same pool.
+    /// </summary>
+    private static readonly int Pool = 22 + ReferenceSeries.All.Count;
+
     // ------------------------------------------------------------ the parse ---
 
     /// <summary>
@@ -150,22 +160,43 @@ public sealed class PriceBackfillTests : IAsyncLifetime
     /// Every admitted common stock, live and delisted, and the two lists are disjoint
     /// [3.1]. A pool taken from either alone is survivorship-filtered in one direction
     /// or holds only the dead in the other.
+    ///
+    /// **And every reference series, which is the clause that was missing** [D-104]. C08
+    /// and C10 both measure against `SPY.US` and no sweep had ever asked for it, because
+    /// the pool was admitted common stock and the benchmark is an ETF. Nothing errored:
+    /// the cost was 2,690,981 indicator rows with null relative strength and a regime
+    /// column holding no `risk_off` at all. This is the assertion that would have said so.
+    ///
+    /// **`LETF.US` stays out and that is half of what this pins.** The union is the named
+    /// list and not a widening to ETFs, so an ETF nobody named is still excluded and D-2
+    /// is intact.
     /// </summary>
     [Fact]
-    public async Task ThePoolIsTheUnionOfTheLiveAndDelistedAdmittedLists()
+    public async Task ThePoolIsTheTwoAdmittedListsAndTheReferenceSeries()
     {
         var handler = new ProviderDouble();
         var stage = new PriceIngestor(Client(handler));
 
         var pool = await stage.PoolAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        // Twenty live common stocks and two delisted. The funds and ETFs in both lists
-        // are out under D-4, so a pool that took the lists whole would be 25.
-        Assert.Equal(22, pool.Count);
+        // Twenty live common stocks, two delisted and one reference series. The funds and
+        // ETFs in both lists are out under D-4, so a pool that took the lists whole would
+        // be 25 and one that took them and dropped the benchmark would be 22.
+        Assert.Equal(22 + ReferenceSeries.All.Count, pool.Count);
         Assert.Equal("D01.US", pool[0]);
-        Assert.Equal("L20.US", pool[^1]);
+
+        foreach (var series in ReferenceSeries.All)
+        {
+            Assert.Contains(series, pool);
+        }
+
         Assert.DoesNotContain("LETF.US", pool);
         Assert.DoesNotContain("DFUND.US", pool);
+
+        // Ordinal, which the frontier rule reads. Stated against the whole pool rather
+        // than against its last element, because what sorts last moved when the
+        // benchmark joined and the property that matters did not.
+        Assert.Equal(pool.OrderBy(t => t, StringComparer.Ordinal).ToList(), pool);
 
         Assert.Equal(2, handler.SymbolListCalls);
     }
@@ -222,14 +253,14 @@ public sealed class PriceBackfillTests : IAsyncLifetime
         var result = await RunAsync(handler, ct).ConfigureAwait(true);
 
         Assert.False(result.WasHalted);
-        Assert.Equal(22, handler.SeriesCalls);
+        Assert.Equal(Pool, handler.SeriesCalls);
 
-        // Twenty-two tickers at a concurrency of eight is three chunks.
+        // The pool at a concurrency of eight is three chunks.
         Assert.Equal(3, handler.UserCalls);
 
-        // The pool size plus the chunk count plus the two symbol lists, against the
-        // 46 the per-ticker read would have made.
-        Assert.Equal(27, handler.TotalRequests);
+        // The pool size plus the three chunk gate reads plus the two symbol lists, against
+        // the 48 the per-ticker read would have made.
+        Assert.Equal(Pool + 5, handler.TotalRequests);
     }
 
     /// <summary>
@@ -254,10 +285,10 @@ public sealed class PriceBackfillTests : IAsyncLifetime
 
         Assert.False(done.WasHalted);
 
-        // Fourteen rather than twenty-two: the eight the halted run loaded carry an
+        // The pool less eight: the eight the halted run loaded carry an
         // attempt for this range and are not asked for again.
-        Assert.Equal(14, second.SeriesCalls);
-        Assert.Equal(22, (await AttemptedAsync(ct).ConfigureAwait(true)).Count);
+        Assert.Equal(Pool - 8, second.SeriesCalls);
+        Assert.Equal(Pool, (await AttemptedAsync(ct).ConfigureAwait(true)).Count);
         Assert.Contains("8 carried an attempt", done.Detail ?? "", StringComparison.Ordinal);
     }
 
@@ -279,7 +310,7 @@ public sealed class PriceBackfillTests : IAsyncLifetime
         var done = await RunAsync(first, ct).ConfigureAwait(true);
 
         Assert.False(done.WasHalted);
-        Assert.Equal(22, first.SeriesCalls);
+        Assert.Equal(Pool, first.SeriesCalls);
 
         var again = new ProviderDouble();
         var second = await RunAsync(again, ct).ConfigureAwait(true);
@@ -287,7 +318,7 @@ public sealed class PriceBackfillTests : IAsyncLifetime
         Assert.False(second.WasHalted);
         Assert.Equal(0, again.SeriesCalls);
         Assert.Equal(0, second.RowsWritten);
-        Assert.Contains("22 carried an attempt", second.Detail ?? "", StringComparison.Ordinal);
+        Assert.Contains($"{Pool} carried an attempt", second.Detail ?? "", StringComparison.Ordinal);
 
         // **And it says so in its status rather than only in its count** [3.16]. The
         // sequence driver halts on a source that writes no row, and this zero is the one
@@ -321,7 +352,7 @@ public sealed class PriceBackfillTests : IAsyncLifetime
         var first = new ProviderDouble(failures: failures);
         await RunAsync(first, ct).ConfigureAwait(true);
 
-        Assert.Equal(22, first.SeriesCalls);
+        Assert.Equal(Pool, first.SeriesCalls);
 
         // Attempted, and recorded as having yielded nothing rather than as absent.
         var attempt = await AttemptAsync("L05.US", ct).ConfigureAwait(true);
@@ -365,10 +396,10 @@ public sealed class PriceBackfillTests : IAsyncLifetime
         var result = await RunAsync(handler, ct).ConfigureAwait(true);
 
         Assert.False(result.WasHalted);
-        Assert.Equal(22, handler.SeriesCalls);
+        Assert.Equal(Pool, handler.SeriesCalls);
 
-        // Twenty-one wrote a bar; L05 wrote none and did not stop the other twenty-one.
-        Assert.Equal(21, result.RowsWritten);
+        // Every pool member but one wrote a bar; L05 wrote none and stopped none of them.
+        Assert.Equal(Pool - 1, result.RowsWritten);
     }
 
     /// <summary>
@@ -476,7 +507,7 @@ public sealed class PriceBackfillTests : IAsyncLifetime
 
         // The sweep really did walk the pool, so the measurement is not over nothing.
         Assert.False(result.WasHalted);
-        Assert.Equal(Tickers + 2, handler.SeriesCalls);
+        Assert.Equal(Tickers + 2 + ReferenceSeries.All.Count, handler.SeriesCalls);
 
         TestContext.Current.TestOutputHelper?.WriteLine(
             $"physical opens {opens} over {handler.SeriesCalls} tickers at concurrency {concurrency}");
@@ -817,13 +848,20 @@ public sealed class PriceBackfillTests : IAsyncLifetime
         /// Generated wider than the fixtures actually use, at both the two-digit and the
         /// four-digit width, so adding a `liveCount` between them does not silently leave
         /// rows behind. Deleting a name no test wrote is free.
+        ///
+        /// **The reference series are named here because the pool now carries them**
+        /// [D-104], so a sweep fixture fetches one and this is what takes it back out.
+        /// The suite runs against the `_tests` database and never the development one
+        /// [`TestDatabase.Suffix`], which is what makes deleting a real ticker's rows by
+        /// name safe here and would not be if that were not so.
         /// </summary>
         public static string[] EveryFixtureTicker()
             => [.. Enumerable.Range(1, 99).Select(i => "L" + i.ToString("D2", CultureInfo.InvariantCulture) + ".US"),
                 .. Enumerable.Range(1, 999).Select(i => "L" + i.ToString("D4", CultureInfo.InvariantCulture) + ".US"),
+                .. ReferenceSeries.All,
                 "LETF.US", "LFUND.US", "D01.US", "D02.US", "DFUND.US"];
-
         /// <summary>Gate reads. One per chunk since 3.6; one per ticker before it.</summary>
+
         public int UserCalls => Volatile.Read(ref _userCalls);
 
         /// <summary>Every request, billed or not. The provider's rate limiter counts these.</summary>

@@ -105,6 +105,11 @@ public sealed class PriceIngestor : IBackfillStage
     /// already applies it, which is the same universe filter applied sooner rather than
     /// a second one.
     ///
+    /// **Plus the reference series, which are read and never selected** [D-104]. They are
+    /// unioned into the pool because a component that measures against a series needs it
+    /// fetched, and they reach no other table, so D-2 and INVARIANT 1 are untouched: what
+    /// they govern is what can be selected, and a reference series cannot.
+    ///
     /// **Depth is whatever the call returns.** One unit buys five years or twenty, so
     /// the load depth is a disk decision rather than a unit one, and deep history
     /// cannot be re-fetched cheaply once it is the deep past [D-94]. The range bounds
@@ -221,9 +226,10 @@ public sealed class PriceIngestor : IBackfillStage
 
         var detail = string.Format(
             CultureInfo.InvariantCulture,
-            "{0:N0} bar(s) over {1:N0} of {2:N0} admitted common stock(s), live and delisted. {3:N0} " +
+            "{0:N0} bar(s) over {1:N0} of {2:N0} admitted common stock(s), live and delisted, plus " +
+            "{4:N0} reference series [D-104]. {3:N0} " +
             "carried an attempt for this range already and were not dispatched [0010].",
-            written, loaded, pool.Count, pool.Count - remaining.Count);
+            written, loaded, pool.Count, pool.Count - remaining.Count, ReferenceSeries.All.Count);
 
         // **An empty remaining set is `covered` rather than `ok` with a zero** [3.16].
         // The distinction is only knowable here, where both the pool and the remaining
@@ -310,10 +316,19 @@ public sealed class PriceIngestor : IBackfillStage
         string Ticker, DateOnly AttemptedOn, DateOnly? LastYield, long Rows);
 
     /// <summary>
-    /// Every admitted common stock, live and delisted, ordinal.
+    /// Every admitted common stock, live and delisted, plus every reference series,
+    /// ordinal.
     ///
     /// Two calls at one unit each. The two lists are disjoint, measured at 3.1, so this
     /// is a union rather than a superset taken from one of them.
+    ///
+    /// **The reference series are unioned in and are not an admission** [D-104]. They go
+    /// no further than `price_daily`: C01 writes `security` and `security_daily` from the
+    /// symbol list and never from this pool, so a series here is fetched and is a member
+    /// of nothing. **This is the line that was missing.** C08 and C10 both read `SPY.US`
+    /// and nothing had ever fetched it, because the pool was admitted common stock and the
+    /// benchmark is an ETF, and the cost was 2,690,981 indicator rows with null relative
+    /// strength and a regime column with no `risk_off` in it. Nothing errored.
     /// </summary>
     public async Task<IReadOnlyList<string>> PoolAsync(CancellationToken ct = default)
     {
@@ -322,6 +337,7 @@ public sealed class PriceIngestor : IBackfillStage
 
         var pool = new SortedSet<string>(live.Keys, StringComparer.Ordinal);
         pool.UnionWith(delisted.Keys);
+        pool.UnionWith(ReferenceSeries.All);
 
         return pool.ToList();
     }

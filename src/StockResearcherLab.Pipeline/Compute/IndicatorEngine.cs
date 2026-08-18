@@ -55,12 +55,18 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
     /// <summary>
     /// The benchmark, read from <c>price_daily</c> rather than from a store of its own.
     ///
-    /// C02 writes every row the bulk feed returns with no universe filter, so the
-    /// series is already there among roughly fifty thousand tickers a day. D-2 puts
-    /// ETFs out of scope as candidates, which is a statement about <c>security</c> and
-    /// not about what may be read as a benchmark.
+    /// **The name is <see cref="ReferenceSeries.Benchmark"/> and not a second literal**
+    /// [D-104]. What made this column empty for four of five and a half years was that the
+    /// reader named a series the fetch pool did not, and one string read by both is what
+    /// stops that recurring.
+    ///
+    /// The reasoning this replaces was that C02 writes every row the bulk feed returns
+    /// with no universe filter, so the series is already there. That is true of the
+    /// nightly feed's retained window and was read as covering history: the backfill loads
+    /// history through `eod/{t}` per ticker, that path takes a pool, and the pool was
+    /// admitted common stock alone. `SPY.US` held 265 bars and no attempt row [D-104].
     /// </summary>
-    public const string Benchmark = "SPY.US";
+    public const string Benchmark = ReferenceSeries.Benchmark;
 
     private static readonly string[] ConflictTarget = ["ticker", "date"];
 

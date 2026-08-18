@@ -73,19 +73,50 @@ public sealed class BackfillSequenceTests
     [Fact]
     public void EveryRegisteredStageWithARangeModeIsInTheOrder()
     {
-        var missing = PipelineComposition
-            .AllOwnersForConformance(TestDatabase.ConnectionString)
-            .OfType<IBackfillStage>()
-            .Select(s => s.Name)
-            .Where(n => !BackfillSequence.SourceOrder.Contains(n, StringComparer.Ordinal))
-            .OrderBy(n => n, StringComparer.Ordinal)
-            .ToList();
+        var missing = MissingFromOrder(BackfillSequence.SourceOrder);
 
         Assert.True(
             missing.Count == 0,
             "These components have a range mode and are not in BackfillSequence.SourceOrder, so a full " +
             "backfill would complete without ever running them: " + string.Join(", ", missing));
     }
+
+    /// <summary>
+    /// The same check against an order with a source cut out of it, because a
+    /// conformance test that has never failed has not been tested.
+    ///
+    /// **The omission it stands for is the one that costs the most.** C11 is last and
+    /// ranks what the four above it wrote, so a backfill without it completes, reports
+    /// the row counts of eleven sources, and leaves `percentile_daily` holding whatever
+    /// the nightly runs put there. The first thing that reads the gap is a screen in
+    /// phase 4.
+    /// </summary>
+    [Fact]
+    public void TheCheckFailsOnAnOrderWithASourceCutOutOfIt()
+    {
+        var shortened = BackfillSequence.SourceOrder
+            .Where(n => n != "PercentileEngine")
+            .ToArray();
+
+        var missing = MissingFromOrder(shortened);
+
+        Assert.Equal(["PercentileEngine"], missing);
+    }
+
+    /// <summary>
+    /// Components with a range mode that the given order does not name, ordinal.
+    ///
+    /// Shared by the assertion and by the fixture above rather than written twice, so
+    /// the deliberate failure exercises the check that runs rather than a copy of it.
+    /// </summary>
+    private static IReadOnlyList<string> MissingFromOrder(IReadOnlyList<string> order)
+        => PipelineComposition
+            .AllOwnersForConformance(TestDatabase.ConnectionString)
+            .OfType<IBackfillStage>()
+            .Select(s => s.Name)
+            .Where(n => !order.Contains(n, StringComparer.Ordinal))
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
 
     /// <summary>
     /// The ingest sources come before C01, and C01 before the compute layer.

@@ -16,7 +16,7 @@ Correct them directly. Do not record intentions here.
 | 0 Rails | DONE | d9cb5df | Signed off 2026-08-06. Checkpoints 0.1 to 0.8, plus CI, the sign-off review, and pass O's corrections. 25 tests green. Step 1 was met by running every CI step locally, because no hosted runner has ever picked up a job on this account. Step 2 ran at `d4baeaf` and does not cover pass O's four corrected files. Both gaps are in the phase 0 block below |
 | 1 Ingest and universe | IN PROGRESS | 050d5c7 | Every checkpoint 1.1 to 1.14 landed, 136 tests. All twelve definition-of-done lines met live on 2026-08-09: the universe rebuilt to 2,840 names and `run-night` ran all seven stages end to end. Four findings are open and all four are authored questions, not build work: C01 never deactivates, the universe is 2,840 rather than roughly 2,000, C05 cannot fit any schedule, and CI cannot catch the timeout failure class. The CI runner gap is recorded below rather than at sign-off |
 | 2 Compute | IN PROGRESS | 68aafa4 | Every checkpoint 2.1 to 2.15 landed, 221 tests. Five components built: C08, C09, C10, C11 and C35. All eleven definition-of-done lines met on 2026-08-11, with `run-night` completing twelve stages on the blessed date 2026-08-07 and the compute layer digesting identically on re-run. Two components had never executed before this phase ran them and both were broken at the write, which is the phase's largest finding. `METRICS.md` is still the unauthored draft 2.1 produced and all nine of its PROPOSAL entries are now running code |
-| 3 Backfill | IN PROGRESS | 13215f6 | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b`, 314 with D-98's implementation, 324 with its two open items closed, 326 with the backfill driver, 332 with range-scoped resumption and 338 with the frontier position and the connection retry, `ci.ps1` green at each, then 336 at `5be4d33` when the frontier's four tests were replaced by two, 336 again at `3fcdd57` and `cf42116`, and **342 at `7c25f13`** where D-100 replaced the intermittent retry test with two and added five at the provider client. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built, and ~~3.6 has been run once: it failed at 58 percent after 2h10m, leaving `price_daily` at 78 million rows and 12 GB~~ **3.6 completed on 2026-08-13**, after three failed attempts, a vacuum, and its resumption rebuilt onto `price_fetch_attempt` [D-99, 0010]: 33,359,792 bars over 18,812 tickers in 108.4 minutes, the pool covered at 50,737 attempt rows, and `price_daily` at 109.6 million rows and 18.3 GB. 3.7 to 3.10 are unrun and the phase's remaining sweeps spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them. The open findings are the table at the foot of this file rather than a second list here; **item 24 blocks 3.7 and every nightly run against the backfilled store** |
+| 3 Backfill | IN PROGRESS | 13215f6 | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b`, 314 with D-98's implementation, 324 with its two open items closed, 326 with the backfill driver, 332 with range-scoped resumption and 338 with the frontier position and the connection retry, `ci.ps1` green at each, then 336 at `5be4d33` when the frontier's four tests were replaced by two, 336 again at `3fcdd57` and `cf42116`, and **342 at `7c25f13`** where D-100 replaced the intermittent retry test with two and added five at the provider client. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built, and ~~3.6 has been run once: it failed at 58 percent after 2h10m, leaving `price_daily` at 78 million rows and 12 GB~~ **3.6 completed on 2026-08-13**, after three failed attempts, a vacuum, and its resumption rebuilt onto `price_fetch_attempt` [D-99, 0010]: 33,359,792 bars over 18,812 tickers in 108.4 minutes, the pool covered at 50,737 attempt rows, and `price_daily` at 109.6 million rows and 18.3 GB. ~~3.7 to 3.10 are unrun and the phase's remaining sweeps spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them.~~ The open findings are the table at the foot of this file rather than a second list here; ~~**item 24 blocks 3.7 and every nightly run against the backfilled store**~~ [closed, item 24]. **Every checkpoint 3.1 to 3.16 is built as of 2026-08-17, at 429 tests, 416 before 3.16.** What is built and what has been run are different lines and the difference is the phase's remaining work. **Run:** 3.6, 3.7, 3.8 and 3.10 swept and completed, and 3.11 filled `security_daily`. **Built and unrun:** 3.9, which is the last owed sweep at roughly three days of allowance, and the whole of stage D, so `indicator_daily` and `valuation_daily` still carry phase 2's nightly rows. **3.16 spends nothing to build and its first invocation is a spending decision**, C05's sweep being inside the order. 3.17 and 3.18 are outstanding and 3.17's timing line is owed against a stage D run |
 | 4 Screens and selection | NOT STARTED | | |
 | 5 Digest chain | NOT STARTED | | |
 | 6 Researcher | NOT STARTED | | |
@@ -6814,11 +6814,110 @@ The record is not swept for which claims are affected: naming the property is wh
 reader discount them, and re-deriving each one would be a larger edit than the fact
 warrants.
 
+#### 2026-08-17, checkpoint 3.16, and the zero that had to stop meaning two things
+
+**Built.** `BackfillSequence` runs the twelve sources over one range in order, through
+the same `BackfillRun` the single-stage form uses, and `Worker backfill <from> <to>` is
+the sources-in-order half the checkpoint is named for. The single-stage half was pulled
+forward to 3.6, which needed it, and is unchanged.
+
+**The order is the evening order with two differences and both are properties of a
+range.** C07 FreshnessGuard is absent: it decides which stored date tonight may use by
+reading the bulk feed, and a range's dates come from the exchange calendar instead
+[3.14]. C01 UniverseBuilder is present, where the night does not run it at all: live it
+is weekly and driven separately, and over a range its evaluation dates are inside the
+window. It sits after the ingest and before the compute layer, which is where its inputs
+and its readers put it [D-92, 3.7, 3.12].
+
+**`NightlyRun`'s zero-row halt could not be carried over on the row count, and finding
+that is what the checkpoint mostly was.** The plan says the halt semantics are preserved
+and it also says the driver is resumable, and on a row count those two clauses
+contradict each other. A sweep resumes on its own attempt record [D-99], so the run
+after the one that finished dispatches nothing and writes nothing, **and that run is the
+one proving the sweep is complete**. Reading its zero as a short table would stop the
+sequence at the first finished source and the driver could never resume past the ingest.
+
+**So the two zeroes are separated where the difference is known, which is inside the
+stage.** `BackfillResult` gains `covered`, returned by the six sources that can
+legitimately have nothing to do: the five sweeps when the remaining set is empty, and
+C01 when the range holds no Sunday. The halt then keys on the status, and a zero that
+factory did not produce is a source that had work and did none of it. That is the
+resumption clause and the halt clause both honoured rather than one traded for the other,
+and it is a status the run log wanted anyway: an operator reading `ok, 0 rows` could not
+tell the two apart either.
+
+**The sequence form requires both dates, and that is a refusal rather than a warning.**
+`to` defaults to today and today moves at midnight. C02, C04 and C06 stamp their attempt
+rows with the range start; **C03 and C05 stamp the range end**, because that column is
+also what the nightly rotation orders on [D-99], so those two presented with a `to` one
+day later see an empty attempt set and sweep their whole pool again. A rebuild spans days
+by construction, so a defaulted `to` is the ordinary case rather than an edge, and the
+cost of the mistake is a day of allowance twice over. There is no single-day rebuild the
+refusal costs anything.
+
+**Three mutations run rather than three claims trusted.** Treating `covered` as a short
+table fails the resumption test. Removing a source from the order fails the
+registry-agreement test, and that one also has a permanent fixture rather than only a
+transient mutation, `PercentileEngine` cut out of a copy of the order and run through the
+same comparison the real assertion uses. A halt that does not stop the sequence fails the
+halt test.
+
+**The check that matters most is the one against the registry, in the direction nothing
+else covers.** A component gains a range mode, nobody adds it to the order, and a full
+backfill completes reporting the row counts of the eleven that did run while one table
+keeps whatever the nightly runs put there. Nothing errors. C11 is the worst instance
+because it is last, so the first thing to read the gap is a screen in phase 4.
+
+**429 tests, 416 before.** `ci.ps1` green.
+
+**Nothing was run and no unit was spent**, which is what the single-stage half recorded
+at 3.6 for the same reason. The paths exercised are the ones that make no provider call:
+the help text, the sequence form with no dates, with one date, and with a range that ends
+before it starts, and the single-stage form against an unregistered name and against
+`FreshnessGuard`. **What is therefore unexercised is the sequence's own console path**,
+the per-source pre-run report and the step lines, because any valid invocation of it
+dispatches real work. `BackfillSequence` itself is covered at twelve tests over doubles.
+**C01's `covered` branch is also untested**, that class having no end-to-end range test
+at all, and building one is 3.11's gap rather than this checkpoint's.
+
+#### 2026-08-17, what the run log says a sequence run would actually do
+
+Read through `/api/runs` against the developer store rather than assumed, 1,714 rows.
+Three things came out of it and two of them are about the record rather than the code.
+
+**A sequence run over `2021-01-04..2026-08-13` is the one that finds C03 covered**, and
+no other `to` does. C03's completed sweep is `run_log` 1635 over that range and its
+attempt rows carry its end. C02, C04 and C06 key on the range start, which is
+`backfill.window_start` in every sweep run so far, so any `to` leaves them covered. C01
+recomputes and costs no unit. **C05 would then start its real sweep**, which is 3.9's
+owed three days, so the first sequence run is a spending decision and not a checkpoint's
+to take.
+
+**`PriceIngestor` has no `run_log` row at all**, across every one of the 1,714. The 3.6
+sweep's row 1517 is recorded in this file and is gone from the database, deleted by
+`PriceBackfillTests.SeedAsync` clearing `run_log WHERE stage = 'PriceIngestor'` while the
+suite still ran against the developer store. **That is open item 26 arriving as a
+measurement**, and item 26 is closed by the suite having its own database since 3.13:
+what is closed is the mechanism, and what is not is the row. It costs nothing
+operationally, resumption being the attempt record and `RUNBOOK.md` already saying the
+log is an account rather than a mechanism. It costs the driver's pre-run report, which
+will say the price sweep has never run a range beside a `price_daily` holding 109.6
+million bars. Opened as item 40.
+
+**C05's six range rows are fixture rows and all six are `failed`.** Every one carries
+`started_at` 2026-08-05T02:52, which is `FlowSweepTests`'s own fixed clock, and the same
+timestamp appears on three `FundamentalsIngestor` rows. So the pre-run report will show
+an operator a failed flow sweep that never happened. It is item 22's shape a third time,
+it is bounded by the report deciding nothing, and it is why that line says so in its own
+sentence.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
+| 40 | **The 3.6 sweep's `run_log` row is gone from the developer database, and `PriceIngestor` reads as never having run a range.** Measured 2026-08-17 through `/api/runs`: **zero** rows for that stage across all 1,714, against a `price_daily` holding 109.6 million bars and a row 1517 this file records as `ok` over 108.4 minutes. `PriceBackfillTests.SeedAsync` clears `run_log WHERE stage = 'PriceIngestor'` before each test and the suite still ran against the developer store when it did. **This is open item 26's harm as a measurement rather than as a risk**, and item 26 is closed: what was closed is the mechanism, the suite having had its own database since 3.13, and what was not is the row. **It costs no behaviour.** Resumption is `price_fetch_attempt` and is untouched, and `RUNBOOK.md` already states the log is an account rather than a mechanism. What it costs is the account, and specifically 3.16's pre-run report, which will tell an operator the price sweep has never run. **The same clear will run again** on the suite's own database only, so the loss is bounded to what has already happened | A human deciding whether the row is reconstructed from this file or the loss is left recorded. Reconstruction means inserting a row nothing produced, which is why it is not a build session's call |
+| 39 | **`RUNBOOK.md`'s ingest-sweep paragraph says a sweep's attempt rows are stamped with `from`, and that is false for two of the five.** Read whitespace-tolerant, the phrase breaking across a line: `attempt\s+rows\s+are\s+stamped\s+with\s+`from`[^.]*\.` finds "attempt rows are stamped with `from`, so that is the argument one sweep has to keep constant across the days it spans." **C02, C04 and C06 do stamp the range start. C03 and C05 stamp the range end**, which is D-99's recorded asymmetry and is in both components' comments: that column is also what the nightly rotation orders on, so an attempt stamped with a 2021 window start would put every swept ticker back at the head of the rotation. The paragraph's own next clause, "pass `to` as well if the range end matters", is the hedge that keeps the advice right while the reason stated for it is wrong. **The cost of believing it is a re-sweep of two whole pools**, which is why it is an item rather than a note. Reported and not edited: it is authored prose stating a rule [`CLAUDE.md` §13]. 3.16's own subsection beside it states the fact for the sequence form, so the document currently carries both | The next authored amendment to `RUNBOOK.md`'s backfill section |
 | 38 | ~~**Every universe reader currently resolves an empty universe, and 3.8's range path swept over one without saying so.**~~ **The sweep half is closed and the nightly half is not** [2026-08-17]. 3.11 filled `security_daily` to 771,145 rows over 2021-01-10..2026-08-09, and 3.8 re-run dispatched the live remainder. **The 678 self-healed and cost less than the estimate**: measured against the filled table the remainder was **594 names, not 678**, because the live half as of the range end is `security_daily`'s 2,864 rather than the frozen column's 2,949, and it cost **2,971 units** against a rough 3,400. No name was re-fetched and nothing was reconstructed: the names carried no attempt row, so D-99's resume set dispatched exactly them. **The precondition is built**, `BackfillPool.RequireUniverseCoverageAsync` throwing rather than halting on an uncovered range and called by C04 and C06 before either half of the pool is built. **What stays open is the nightly path**, where C04 returns `ok` with zero rows on an empty universe and cannot tell "no members today", which is legitimate, from "the table is unfilled for this date", which is not. One integer reaches the guard and both states produce it. It is separable by the same count the range precondition asks, and it was left unfixed deliberately. The original text follows. ~~`security_daily` holds **0 rows**, measured 2026-08-17. C01 stopped writing `security.is_active` at 3.11 [D-92] and 3.12 moved eight components onto `security_daily`; 3.11 is the checkpoint that fills it and is held pending D-102's remaining measurement. So the window between those two has every reader on an empty table. **It is not symmetric across the two paths.** C04's nightly path guards it and returns `ok` with zero rows and a sentence naming the cause; its range path has no such guard, so 3.8's second day built a pool of 16,861 where day one read 19,706, swept it, and reported Completed. Nothing errored. **The measured cost so far is 678 active names with no attempt row**, being `security`'s 2,949 less the 2,271 of them day one reached. **Three separate authored questions and none is a tidy-up**: what a range pool's live half is while `security_daily` is empty; whether a range path that finds no live universe should halt the way `CLAUDE.md` §6 says a stage does rather than sweep half a pool; and whether the 678 are fetched at all, given the only table that still lists them is the column with no writer at item 36. **What is not in doubt is the delisted half**, complete at 16,861 of 16,861~~ | **The nightly guard alone.** The range half is closed by the precondition and by 3.11 having run |
 | 37 | **`ci.ps1` mirrors `ci.yml`'s steps and asserts that it does; it mirrors none of the environment those steps run in, and its green does not say so.** Step 1 is `Assert-MirrorsWorkflow`, placed first on the reasoning that a divergence in the step list makes every result below it an answer about the wrong question. The same reasoning applies one level down and is not applied: the `env:` block is mirrored by construction, `ConnectionStrings__Postgres`, `DOTNET_NOLOGO` and `DOTNET_CLI_TELEMETRY_OPTOUT` set together at `ci.ps1:421-423` to the three keys `ci.yml` sets; the `services:` block is mirrored by nothing. CI stands up `postgres:18` with `POSTGRES_HOST_AUTH_METHOD: trust`; `ci.ps1` resolves the developer's own connection string and swaps the database name, so the server version, the auth method and every server setting are whatever this machine has. **That is what let 23 consecutive red CI runs sit under 23 green local ones** [D-103]. **The shape, and it is not to replicate CI's environment**: trust authentication is precisely the property the failing test needed absent, and copying it locally would destroy on this machine what it just fixed in CI. What is wanted is that `ci.ps1` reads `ci.yml`'s `services` and `env` blocks and reports what differs, so its green carries its own scope, which is the same discipline as stating an expected count before a sweep. **Cheap and not free**: the parse is a third `ci.yml` reader after `Assert-MirrorsWorkflow` and `guards.ps1`, and what a difference means is a judgement per key rather than a diff, since `Database` differing is the design and `POSTGRES_HOST_AUTH_METHOD` differing is the defect | Not while a backfill is running. The next session that touches `ci.ps1` or `ci.yml`, or the batched pass |
 | 36 | **`security.is_active` now has no writer and no reader, and the column is still there.** C01 stopped writing it at 3.11 when identity and membership split [D-92]; the last eight readers moved to `security_daily` at 3.12. **The count, swept 2026-08-16**: one definition, `0001_snapshot.sql` declaring `is_active boolean NOT NULL DEFAULT true`; **zero** live readers in `src`; two test doc comments describing the old read, corrected in the same commit rather than left to describe something untrue; and the historical references in this document, which are the record and keep what they said. **Nothing is dropped.** A column with no writer is a schema change and an authored decision, and this sweep is the input that decision needs. It joins open item 14, which named the same four columns and predicted exactly this window: "nothing writes them after 3.11 and nothing reads them after 3.12". **What the sweep also answered is how many readers there were**, which is the part worth keeping: the plan said "every reader of the universe" and enumerated five, and there were eight. C03, C05 and C06 were still filtering on the frozen column, which is a regression on the nightly path rather than a tidy-up: their universe had stopped moving while nothing errored. **A ninth was found by the sweep itself**, C10 having two `security` reads where only one had been converted, which is the one-of-a-pair shape a fourth time this phase and the first caught by a sweep rather than by a failure. **Outside those, nothing reads `security` as a universe at all**: two guard tests issue `SELECT count(*) FROM security` to exercise the read path, which is about `IStageData` and not about membership | An authored decision, with item 14. Dropping the four columns moves `ExpectedMonetary` and `SchemaParityTests`'s count from 19 to 18 |

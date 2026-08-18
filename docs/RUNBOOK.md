@@ -137,6 +137,41 @@ after clearing the first two. Plain vacuum makes the dead space reusable and the
 remaining inserts consume it. `FULL` rewrites 16 GB under an exclusive lock to shrink a
 file the sweep then refills.
 
+### Running the whole backfill
+
+`Worker backfill <from> <to>`, every source in order [3.16]. No stage name, and both
+dates required. The order is C02, C03, C05, C06, C04, then C01, then the six compute
+stages ending at C11, each finishing before the next begins.
+
+**Both dates are required here and the reason is a bill.** `to` would otherwise default
+to today and today moves at midnight. C02, C04 and C06 stamp their attempt rows with the
+range start and do not care what `to` is; **C03 and C05 stamp the range end**, because
+that column is also what the nightly rotation orders on, so those two presented with a
+`to` one day later see an empty attempt set and sweep their whole pool again. A rebuild
+spans days by construction, so this is the ordinary case rather than an edge.
+
+**Re-issuing the identical command is how a rebuild is resumed.** Every source resumes
+on its own attempt record, so a source that has already finished dispatches nothing,
+reports `covered`, and falls through in seconds. That status exists for this: a source
+that writes no row stops the sequence, because the ones after it derive from what it
+wrote, and a finished sweep writing no row is the one case where that zero is a
+completed state rather than a short table.
+
+**A halt stops the sequence and it is not a failure.** The gate stopped that source part
+way through its pool, so everything after it would derive from a store missing rows the
+next run will fetch. Exit 2 and run the same command again after the provider's day
+rolls over. Exit 1 is a source that threw, a source that wrote nothing, or a source the
+registry does not have; the last of those is a registry built without a provider token.
+
+**Sources not reached are named in the output rather than absent from it.** A source
+missing from a report and a source that ran and did nothing read the same way at a
+glance, and over twelve of them that is how a short backfill gets read as a complete one.
+
+**The pre-run report reads `run_log` and decides nothing.** It names each source's last
+range run so an operator can see what happened before spending another day. `run_log` is
+an account rather than a mechanism: deleting those rows changes no behaviour, and a row
+left behind by a test fixture is a row this report will show.
+
 ### Why a per-ticker write failure is not tolerated
 
 Two per-ticker failures are tolerated and they are enumerated above in the failure

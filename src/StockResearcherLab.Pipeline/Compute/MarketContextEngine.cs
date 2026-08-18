@@ -281,6 +281,13 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
     /// <summary>
     /// Whether the benchmark closed above its own n-day average. A sign test, so it
     /// carries no threshold of its own [D-80].
+    ///
+    /// **The window is bounded below rather than filtered after the fact** [3.17]. The
+    /// row number over every bar at or before the date read the benchmark's whole series
+    /// to keep `maDays` of it, which was 265 rows while nothing had fetched the series
+    /// and is 8,444 now that something has [D-104]. Same rows, since `PRIMARY KEY
+    /// (ticker, date)` admits no tie in date, and an index scan of two hundred rather
+    /// than a scan of every bar the series ever had.
     /// </summary>
     private static async Task<bool?> BenchmarkAboveItsAverageAsync(
         StageContext context, int maDays, CancellationToken ct)
@@ -293,6 +300,8 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
                 WHERE ticker = '{IndicatorEngine.Benchmark}'
                   AND date <= {Literal(context.Date)}
                   AND adj_close IS NOT NULL
+                ORDER BY date DESC
+                LIMIT {maDays.ToString(CultureInfo.InvariantCulture)}
             )
             SELECT count(*) AS bars,
                    max(adj_close) FILTER (WHERE rn = 1) AS last_close,
@@ -321,6 +330,25 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
     /// between runs of the same binary, and this column reaches the cached prefix where
     /// a byte difference breaks the cache and roughly triples the input bill silently
     /// [INVARIANT 6].
+    ///
+    /// **The composite window is bounded per member rather than filtered after the fact,
+    /// and this was the larger half of C10's 391.8 minutes** [3.17]. The row number over
+    /// every bar at or before the date read 22,034,626 rows belonging to universe
+    /// members, some of them reaching back to 1962, sorted 16.8 million of them to disk
+    /// at 236 MB a date, and kept 64 a ticker. **The cost was the whole store per date
+    /// rather than the window per date**, which is why the per-date figure barely moved
+    /// across the range: 14,641 ms at the median against 15,912 on the last date, the
+    /// 248 ms first date being the one before the first membership epoch, where the
+    /// universe is empty and there is nothing to join to. The lateral asks each member
+    /// for its own last 64 bars through `price_daily_pkey`: 2,849 index scans of 64 rows,
+    /// measured warm at 814 ms a date against about 15 seconds.
+    ///
+    /// **The same rows, not a narrower window.** `row_number() OVER (PARTITION BY ticker
+    /// ORDER BY date DESC) &lt;= 64` and `ORDER BY date DESC LIMIT 64` per ticker select
+    /// the same bars, `PRIMARY KEY (ticker, date)` admitting no tie in date to break. A
+    /// lower bound in calendar days would not have been the same rows: a member with a
+    /// gap inside its last 64 sessions would contribute fewer, and the count is what the
+    /// `HAVING` and the 63-day chain both test.
     /// </summary>
     private static async Task<string> SectorRelativeStrengthAsync(
         StageContext context, int minMembers, CancellationToken ct)
@@ -331,11 +359,17 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
                  WHERE m.is_active AND m.sector IS NOT NULL
             ),
             windowed AS (
-                SELECT u.sector, p.ticker, p.date, p.adj_close,
-                       row_number() OVER (PARTITION BY p.ticker ORDER BY p.date DESC) AS rn
-                FROM price_daily p
-                JOIN universe u ON u.ticker = p.ticker
-                WHERE p.date <= {Literal(context.Date)} AND p.adj_close IS NOT NULL AND p.adj_close > 0
+                SELECT u.sector, b.ticker, b.date, b.adj_close, b.rn
+                FROM universe u
+                CROSS JOIN LATERAL (
+                    SELECT p.ticker, p.date, p.adj_close,
+                           row_number() OVER (ORDER BY p.date DESC) AS rn
+                    FROM price_daily p
+                    WHERE p.ticker = u.ticker AND p.date <= {Literal(context.Date)}
+                      AND p.adj_close IS NOT NULL AND p.adj_close > 0
+                    ORDER BY p.date DESC
+                    LIMIT {CompositeWindow.ToString(CultureInfo.InvariantCulture)}
+                ) b
             ),
             kept AS (
                 SELECT sector, ticker, date, adj_close FROM windowed

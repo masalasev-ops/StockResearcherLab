@@ -7255,6 +7255,117 @@ the calendar returns, so these predate it. Recorded rather than investigated; th
 that would settle it is which tickers those rows carry and what `run_log` was doing when
 they were written.
 
+#### 2026-08-18, D-104 and the benchmark loaded
+
+The exception item 45 forced, authored as D-104 and then acted on. A reference series is a
+price series a component reads as a comparison: fetched into `price_daily` by C02's sweep,
+written to `security` and `security_daily` never, so it is a member of no universe on any
+date and cannot become a candidate, a ranked row or a position. D-2 governs what can be
+selected and is untouched; the exception is to a fetch list.
+
+`ReferenceSeries.All` states the set once and `PriceIngestor.PoolAsync` unions it in, so
+adding a second benchmark is one string. `IndicatorEngine.Benchmark` now names
+`ReferenceSeries.Benchmark` rather than carrying its own literal, which is the defect in
+one line: the reader named a series the fetch pool did not.
+
+**The load is a re-run of C02 over the same range and it dispatched 62 tickers.** The
+sweep resumes by attempt record, so of a pool of 50,608 the 50,546 already carrying an
+attempt at 2021-01-04 were not asked again. The 62 are the benchmark plus 61 names in
+today's symbol lists that were not in the pool the 3.6 sweep built, which is the list
+moving over five days rather than anything wrong. **64,373 bars.**
+
+**The benchmark checked before anything computed on it.** 8,444 bars, 1993-01-29 to
+2026-08-17, between 248 and 254 a year with no gap; 1,409 of them inside the window;
+**zero rows with a null or non-positive `adj_close`**, which is what a benchmark read
+nulls on.
+
+**Its dates against the calendar's, which is the check that says the series is whole.**
+The calendar holds 1,585 dates in the window and the benchmark 1,409, with **zero
+benchmark dates outside the calendar** and 176 calendar dates the benchmark has no bar
+for. Those 176 are 122 weekend dates and **54 weekdays, every one of them a US market
+holiday**: 2021-01-18, 2021-02-15, 2021-04-02, 2021-05-31, 2021-07-05, 2021-09-06,
+2021-11-25, 2021-12-24, 2022-06-20 and so on, which is 9.6 a year against the 9 to 10 the
+exchange keeps. **This settles item 42 from the other side.** That item counted the
+calendar's non-session dates with a weekday test; this counts them against a series that
+trades on exactly the sessions, and the two agree.
+
+**The calendar moved from 1,584 dates to 1,585**, the 62 loaded tickers having carried a
+date nothing else in the window did. The re-runs below therefore cover one date more than
+the runs they replace, and a row-count difference of one is that and not a hole.
+
+**`price_daily` is now 109,840,131 rows.**
+
+#### 2026-08-18, C10's 391.8 minutes were two unbounded reads, not one
+
+The instruction named the as-of derivation. It is one of the two and it is the smaller,
+and the difference was measured rather than assumed before either was touched.
+
+**What `EXPLAIN (ANALYZE, BUFFERS)` said at 2026-08-13, the last date of the range.**
+Breadth planned and executed in under a millisecond. The benchmark read took 2 ms against
+265 bars. **The sector composite took 61.4 seconds**, and inside it two things: a parallel
+sequential scan of `price_daily` filtered to `date <= D`, 36.4 million rows a worker over
+three workers, and the `Universe.AsOf` subquery re-executed once per worker at 32.2
+seconds of the 61.4. The join then sorted 16.8 million rows to disk, 236 MB an external
+merge.
+
+**The two reads, separately.**
+
+`Universe.AsOf` is `DISTINCT ON (ticker) ... WHERE date <= D`, so it reads every
+`security_daily` row at or before the date, 771,145 of them at the end of the window, and
+its cost grows with where the date sits. Measured warm at the range's start, middle and
+end: **130, 288 and 464 ms**. Over 1,585 dates that is about 8 minutes.
+
+The sector composite is `row_number() OVER (PARTITION BY ticker ORDER BY date DESC)` over
+every bar at or before the date, keeping 64 a ticker. **The universe's members hold
+22,034,626 bars and the oldest reaches back to 1962**, so the read is the whole store per
+date rather than the window per date. That is why the per-date figure barely moved across
+the range, 14,641 ms at the median against 15,912 on the last date, and why the 248 ms
+first date is not a warm-up: it is 2021-01-04, before the first membership epoch on
+2021-01-10, where the universe is empty and there is nothing to join to.
+
+**Both are now bounded and both were proved before the re-run.**
+
+`Universe.AsOf` takes a loose index scan over the ticker column and one lookup a ticker,
+which is D-102's technique applied to the other table. **38, 52 and 65 ms** at the same
+three dates. It is exactly `DISTINCT ON` by construction. A cheaper form exists, reading
+the single evaluation date at or before D at 1 ms, and it was not taken: it is equivalent
+only while C01 writes every member on every evaluation date, so it borrows a property of a
+different component, and `UniverseAsOfTests.ADepartedNameIsAbsentFromTheUniverseOnEveryLaterNight`
+would have to be rewritten to match the writer before it would pass. **A fixture that has
+to be weakened to admit a change is the fixture saying no.**
+
+The composite asks each member for its own last 64 bars through `price_daily_pkey`. Same
+rows: `PRIMARY KEY (ticker, date)` admits no tie in date, so the row number and the limit
+select the same bars. A lower bound in calendar days would not have been the same rows,
+because a member with a gap inside its last 64 sessions would contribute fewer and the
+count is what the `HAVING` and the 63-day chain both test. **814 ms a date warm against
+about 15 seconds**, with the index scans reading 64 rows a member across 2,849 members.
+
+The benchmark read is bounded the same way and is the small one. It read 265 rows a date
+while nothing had fetched the series and would now read 8,444 to keep 200.
+
+**One statement rather than two call sites, which is a deviation from the instruction and
+is stated as one.** The instruction said to fix the as-of derivation in C10 and C11 and
+nowhere else. `Universe.AsOf` is the statement both take and five other components take it
+too, so fixing it in place changes what C08, C35 and five ingest stages issue. The
+alternative was a second variant for the two stages that measured slow, which is the
+two-copies-of-one-rule shape `Universe` exists to prevent and that D-102 records as the
+source of every silent hole this phase has found. **What makes it safe is that no output
+moves**, and that is measured below rather than left as a claim.
+
+**The as-of rewrite is proved over the whole window and not over a sample.**
+**1,585 dates, 5,726,409 rows, 0 mismatched dates.** Every column of the subquery was
+compared rather than the `is_active`-filtered member set, so the result holds for every
+caller however it filters and the argument about departure rows is not needed at all. The
+shipped statement was not transcribed into the probe: it carried a project reference and
+called `Universe.AsOf`, so the code ran. Evidence at
+`docs/evidence/phase-3/asof-loose-scan-set-identity-20260818.txt`.
+
+The composite rewrite was compared the same way at three dates spanning the range,
+identical at all three, and its whole-window comparison is the re-run below against the
+1,584 rows it replaces: `breadth` and `sector_relative_strength` read no benchmark, so
+they are the two columns that must not move.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 

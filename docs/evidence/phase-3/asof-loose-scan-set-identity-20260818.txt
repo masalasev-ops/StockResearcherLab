@@ -1,0 +1,62 @@
+Set-identity proof for the as-of universe pick, run 2026-08-18 against the developer
+store. The new statement is not transcribed: the probe was a scratchpad file-based app
+carrying a project reference to StockResearcherLab.Pipeline and calling Universe.AsOf,
+so what ran is the compiled code. The old statement is transcribed from a053a6d's
+parent, being the form it replaces and no longer present in source.
+
+Every trading date in the window, not a sample. All five columns of every row, not the
+is_active-filtered member set: if the whole subquery output matches then every caller
+matches however it filters, and the argument about departure rows is not needed.
+
+=== OLD, as it stood at 2d62c81 ===
+(
+    SELECT DISTINCT ON (ticker) ticker, sector, size_bucket, market_cap, is_active
+    FROM security_daily
+    WHERE date <= DATE 'D'
+    ORDER BY ticker, date DESC
+)
+
+=== NEW, printed from Universe.AsOf(2026-08-13) through the project reference ===
+(
+    WITH RECURSIVE tickers AS (
+        SELECT min(ticker) AS ticker FROM security_daily WHERE date <= DATE '2026-08-13'
+        UNION ALL
+        SELECT (SELECT min(s.ticker) FROM security_daily s
+                WHERE s.ticker > t.ticker AND s.date <= DATE '2026-08-13')
+        FROM tickers t WHERE t.ticker IS NOT NULL
+    )
+    SELECT r.ticker, r.sector, r.size_bucket, r.market_cap, r.is_active
+    FROM tickers t
+    CROSS JOIN LATERAL (
+        SELECT s.ticker, s.sector, s.size_bucket, s.market_cap, s.is_active
+        FROM security_daily s
+        WHERE s.ticker = t.ticker AND s.date <= DATE '2026-08-13'
+        ORDER BY s.date DESC
+        LIMIT 1
+    ) r
+    WHERE t.ticker IS NOT NULL
+)
+
+=== RESULT ===
+
+
+dates compared     1,585
+rows compared      5,726,409
+mismatched dates   0
+elapsed            666,946 ms
+
+=== TIMING, taken separately and warm, and not from the run above ===
+The run above alternates the two forms per date, so its 666,946 ms is both of them
+against a cache each keeps warm for the other. The per-form figures are from a separate
+probe at three dates:
+
+  date          old      loose     epoch
+  2021-06-30    130 ms    38 ms     2 ms
+  2024-01-15    288 ms    52 ms     1 ms
+  2026-08-13    464 ms    65 ms     1 ms
+
+All three forms returned identical member sets at all three dates. The epoch form reads
+the single evaluation date at or before D and is not the form taken: it is equivalent
+only while C01 writes every member on every evaluation date, which is a property of a
+different component, and UniverseAsOfTests.ADepartedNameIsAbsentFromTheUniverseOnEvery-
+LaterNight seeds a member on one epoch only and would have to be rewritten to admit it.

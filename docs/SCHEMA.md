@@ -99,6 +99,17 @@ Grain: ticker by day. **Writer: PriceIngestor.**
 
 `ticker`, `date`, `open`, `high`, `low`, `close`, `adj_close`, `volume`.
 
+**What is in here is wider than the universe, and one part of it is deliberate**
+[D-104]. The backfill sweep loads every admitted common stock, live and delisted, plus
+every reference series: a price series a component reads as a comparison and that is
+admitted to nothing, written to neither `security` nor `security_daily` and therefore a
+member of no universe on any date. `SPY.US` is the only one. The nightly bulk feed also
+lands whatever else the exchange returns, which is where the ETFs and funds in this table
+come from and is not deliberate. **The distinction matters because a reader cannot see
+it**: C08 and C10 both read `SPY.US`, the sweep's pool did not carry it, and its 265 bulk
+rows looked like a loaded series while four of five and a half years of relative strength
+and regime were empty.
+
 ### price_fetch_attempt
 Grain: one row per ticker. **Writer: PriceIngestor.**
 

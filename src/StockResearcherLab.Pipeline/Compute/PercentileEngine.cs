@@ -194,8 +194,16 @@ public sealed class PercentileEngine : IStage, IBackfillStage
 
         var floorSeen = 0;
 
+        // The unit is a date, this loop being date-partitioned, and it covers the ranking
+        // UPDATE per source table plus the fallback count that follows it [3.17]. This is
+        // the checkpoint `BUILD_PLAN.md` calls the one deciding the phase's timing line,
+        // so the distribution rather than the total is what it is measured on [3.15].
+        var elapsed = new List<long>();
+
         foreach (var date in dates)
         {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+
             var stage = await context.ForDateAsync(date, ct).ConfigureAwait(false);
 
             if (!byVersion.TryGetValue(stage.ConfigVersion, out var minMembers))
@@ -230,6 +238,8 @@ public sealed class PercentileEngine : IStage, IBackfillStage
                         : c;
                 }
             }
+
+            elapsed.Add((long) System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
 
         var report = new List<(MetricTable Source, string Metric, Fallback Counts)>();
@@ -248,8 +258,8 @@ public sealed class PercentileEngine : IStage, IBackfillStage
                 CultureInfo.InvariantCulture,
                 "{0:N0} trading date(s). {1} The counts are summed over the range rather than " +
                 "per date, so a metric that fell back on one date in twelve hundred is visible " +
-                "as a number rather than lost in a line nobody reads [METRICS.md 6.6].",
-                dates.Count, Detail(report, floorSeen)));
+                "as a number rather than lost in a line nobody reads [METRICS.md 6.6]. {2}",
+                dates.Count, Detail(report, floorSeen), RangeTiming.Describe("date", elapsed)));
     }
 
     /// <summary>

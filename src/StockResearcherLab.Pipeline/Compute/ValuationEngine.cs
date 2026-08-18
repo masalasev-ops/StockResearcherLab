@@ -231,8 +231,14 @@ public sealed class ValuationEngine : IStage, IBackfillStage
         long written = 0;
         var rowsWritten = 0;
 
+        // The unit is a chunk and not a date: this loop is ticker-outer, so one pass
+        // computes every date in the range for two hundred names [3.17, `CLAUDE.md` §5].
+        var elapsed = new List<long>();
+
         foreach (var chunk in Chunks(pool, TickerChunk))
         {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+
             var filings = await RangeFilingsAsync(atEnd, chunk, context.From, context.To, ct)
                 .ConfigureAwait(false);
             var bars = await RangeBarsAsync(atEnd, chunk, context.From, context.To, ct)
@@ -289,6 +295,8 @@ public sealed class ValuationEngine : IStage, IBackfillStage
 
             rowsWritten += rows.Count;
             written += await WriteAsync(atEnd, rows, ct).ConfigureAwait(false);
+
+            elapsed.Add((long) System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
 
         return BackfillResult.Completed(
@@ -297,9 +305,12 @@ public sealed class ValuationEngine : IStage, IBackfillStage
                 CultureInfo.InvariantCulture,
                 "{0:N0} trading date(s) over a pool of {1:N0} ticker(s) with a readable quarterly filing, " +
                 "{2:N0} row(s) composed in {3:N0} chunk(s) of {4}. The pool is wider than the universe " +
-                "deliberately and that is the phase 2 obligation still open.",
+                "deliberately and that is the phase 2 obligation still open. {5}",
                 dates.Count, pool.Count, rowsWritten,
-                (pool.Count + TickerChunk - 1) / TickerChunk, TickerChunk));
+                (pool.Count + TickerChunk - 1) / TickerChunk, TickerChunk,
+                RangeTiming.Describe(
+                    string.Create(CultureInfo.InvariantCulture, $"chunk of {TickerChunk} ticker(s)"),
+                    elapsed)));
     }
 
     /// <summary>One priced session, which is all the range path needs from a bar.</summary>

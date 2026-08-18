@@ -126,6 +126,14 @@ public sealed class PercentileSeamTests
         Assert.Contains("floor 15", detail, StringComparison.Ordinal);
         Assert.Contains($"{Seam.Dates().Count:N0} trading date(s)", detail, StringComparison.Ordinal);
 
+        // **The per-date wall clock reaches the line through the real range path** [3.17].
+        // A compute stage is not run twice, so instrumentation that compiles and does not
+        // emit is a figure the phase cannot recover: the run it was owed from is gone.
+        // One unit per date of the fixture's range, which is what says the stopwatch is
+        // inside the loop rather than around it.
+        Assert.Contains("Per date: first", detail, StringComparison.Ordinal);
+        Assert.Contains($"over {Seam.Dates().Count:N0} unit(s)", detail, StringComparison.Ordinal);
+
         // The counts are the range's, not one date's: every one of the sixteen names ranks
         // in the bucket on each of the five dates, for the metric the fixture fills.
         Assert.Contains("in the size bucket alone", detail, StringComparison.Ordinal);

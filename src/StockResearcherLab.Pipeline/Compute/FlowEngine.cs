@@ -113,8 +113,14 @@ public sealed class FlowEngine : IStage, IBackfillStage
         // key once and one that moved reads it again at the boundary.
         var byVersion = new Dictionary<int, int>();
 
+        // The unit is a date, this loop being date-partitioned, and it covers the write
+        // as well as the compute: the statement is one INSERT per date [3.17].
+        var elapsed = new List<long>();
+
         foreach (var date in dates)
         {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+
             var stage = await context.ForDateAsync(date, ct).ConfigureAwait(false);
 
             if (!byVersion.TryGetValue(stage.ConfigVersion, out var lagDays))
@@ -140,6 +146,8 @@ public sealed class FlowEngine : IStage, IBackfillStage
             {
                 datesWithRows++;
             }
+
+            elapsed.Add((long) System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
 
         return BackfillResult.Completed(
@@ -150,8 +158,9 @@ public sealed class FlowEngine : IStage, IBackfillStage
                 "one row. A date with none is a date no ticker had a visible filing for, which is an " +
                 "ordinary early-window fact rather than a gap. The {3:N0} day insider window and the " +
                 "institutional lag are applied per date, so a backfilled row reads only what was public " +
-                "on it [INVARIANT 12's shape].",
-                written, dates.Count, datesWithRows, WindowDays));
+                "on it [INVARIANT 12's shape]. {4}",
+                written, dates.Count, datesWithRows, WindowDays,
+                RangeTiming.Describe("date", elapsed)));
     }
 
     /// <summary>

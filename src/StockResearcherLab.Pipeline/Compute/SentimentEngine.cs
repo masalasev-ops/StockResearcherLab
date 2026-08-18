@@ -205,8 +205,14 @@ public sealed class SentimentEngine : IStage, IBackfillStage
         var rowsComposed = 0;
         var belowFloor = 0;
 
+        // The unit is a chunk and not a date: this loop is ticker-outer, so one pass
+        // computes every date in the range for two hundred names [3.17, `CLAUDE.md` §5].
+        var elapsed = new List<long>();
+
         foreach (var chunk in Chunks(everMember, TickerChunk))
         {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+
             var history = await RangeHistoryAsync(atEnd, chunk, dates[0], context.To, ct).ConfigureAwait(false);
 
             var rows = new List<Row>();
@@ -243,6 +249,8 @@ public sealed class SentimentEngine : IStage, IBackfillStage
 
             rowsComposed += rows.Count;
             written += await WriteAsync(atEnd, rows, ct).ConfigureAwait(false);
+
+            elapsed.Add((long) System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
 
         return BackfillResult.Completed(
@@ -252,9 +260,12 @@ public sealed class SentimentEngine : IStage, IBackfillStage
                 "{0:N0} row(s) over {1:N0} trading date(s) and {2:N0} membership epoch(s), from {3:N0} " +
                 "ticker(s) a member on at least one, in {4:N0} chunk(s) of {5}. {6:N0} row(s) carry fewer " +
                 "than the baseline floor's days and are null on all three, which is a name the ingest had " +
-                "not reached rather than a name with no attention [METRICS.md 4.1].",
+                "not reached rather than a name with no attention [METRICS.md 4.1]. {7}",
                 rowsComposed, dates.Count, members.Count, everMember.Count,
-                (everMember.Count + TickerChunk - 1) / TickerChunk, TickerChunk, belowFloor));
+                (everMember.Count + TickerChunk - 1) / TickerChunk, TickerChunk, belowFloor,
+                RangeTiming.Describe(
+                    string.Create(CultureInfo.InvariantCulture, $"chunk of {TickerChunk} ticker(s)"),
+                    elapsed)));
     }
 
     /// <summary>

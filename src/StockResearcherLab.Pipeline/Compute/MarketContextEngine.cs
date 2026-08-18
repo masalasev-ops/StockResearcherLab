@@ -152,8 +152,15 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
 
         var unknownBreadth = 0;
 
+        // The unit is a date, this loop being date-partitioned, and it times the compute
+        // alone: the write is one batched COPY after the loop, so it is in the total in
+        // `run_log.duration_ms` and not in any per-date figure [3.14, 3.17].
+        var elapsed = new List<long>();
+
         foreach (var date in dates)
         {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+
             var stage = await context.ForDateAsync(date, ct).ConfigureAwait(false);
 
             if (!byVersion.TryGetValue(stage.ConfigVersion, out var settings))
@@ -178,6 +185,8 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
 
             rows.Add(new Row(
                 date, breadth, Regime(breadth, above, settings.High, settings.Low), sectors));
+
+            elapsed.Add((long) System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
 
         // Ascending by date, which the calendar already is. Stated at the point that
@@ -194,11 +203,12 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
                 "breadth and are therefore labelled {3}, which is a date `indicator_daily` has no " +
                 "`dist_200dma` for rather than a date with no trend. {4:N0} risk_on, {5:N0} risk_off, " +
                 "{6:N0} mixed. vix is null on every one of them, the bulk feed carrying equities and not " +
-                "the index [D-80, open item 30].",
+                "the index [D-80, open item 30]. {7}",
                 written, dates.Count, unknownBreadth, Mixed,
                 rows.Count(static r => r.Label == RiskOn),
                 rows.Count(static r => r.Label == RiskOff),
-                rows.Count(static r => r.Label == Mixed)));
+                rows.Count(static r => r.Label == Mixed),
+                RangeTiming.Describe("date, compute only", elapsed)));
     }
 
     /// <summary>

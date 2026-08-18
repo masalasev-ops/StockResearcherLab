@@ -286,8 +286,16 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
         long written = 0;
         var depth = maxBars + dates.Count;
 
+        // The unit's wall clock, reported rather than left to `run_log.duration_ms`
+        // [3.17]. The unit is a chunk and not a date: this loop is ticker-outer, so one
+        // pass computes every date in the range for two hundred names and a per-date
+        // figure does not exist here [`CLAUDE.md` §5].
+        var elapsed = new List<long>();
+
         foreach (var chunk in Chunks(everMember, TickerChunk))
         {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+
             var series = await ChunkSeriesAsync(atEnd, chunk, depth, context.To, ct).ConfigureAwait(false);
             var medians = await ChunkMediansAsync(atEnd, chunk, dates, ct).ConfigureAwait(false);
 
@@ -330,6 +338,8 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
             });
 
             written += await WriteAsync(atEnd, rows, ct).ConfigureAwait(false);
+
+            elapsed.Add((long) System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
 
         return BackfillResult.Completed(
@@ -338,9 +348,12 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
                 CultureInfo.InvariantCulture,
                 "{0:N0} trading date(s) over {1:N0} membership epoch(s), {2:N0} ticker(s) a member on at " +
                 "least one, in {3:N0} chunk(s) of {4}. The composite is rebuilt per epoch rather than per " +
-                "date, which is exact because it enters the output only as a ratio.",
+                "date, which is exact because it enters the output only as a ratio. {5}",
                 dates.Count, composites.Count, everMember.Count,
-                (everMember.Count + TickerChunk - 1) / TickerChunk, TickerChunk));
+                (everMember.Count + TickerChunk - 1) / TickerChunk, TickerChunk,
+                RangeTiming.Describe(
+                    string.Create(CultureInfo.InvariantCulture, $"chunk of {TickerChunk} ticker(s)"),
+                    elapsed)));
     }
 
     /// <summary>

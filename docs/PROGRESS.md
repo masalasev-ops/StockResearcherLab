@@ -6912,11 +6912,80 @@ an operator a failed flow sweep that never happened. It is item 22's shape a thi
 it is bounded by the report deciding nothing, and it is why that line says so in its own
 sentence.
 
+#### 2026-08-18, 3.17's first compute run failed in the driver's own calendar read
+
+**`Worker backfill IndicatorEngine 2021-01-04 2026-08-13`, `run_log` 1715, `failed` at
+300,254 ms with `rows_written` NULL.** Nothing reached `indicator_daily`: the throw is in
+`TradingCalendar.SessionsAsync`, which is the first statement of a range execution, before
+membership is read and before any chunk is composed. The gate was green at `019fb47` and
+the database was otherwise quiet, the Api stopped and CI finished, which was the point of
+running it alone.
+
+**300,254 ms is the connection string's `Command Timeout=300` and not a transient fault.**
+This is a statement that did not finish in five minutes, so a retry is not what it needs.
+`StageData.OpenAsync` reported `0 connection open(s) retried`, which is the count doing its
+job: the pool was not the problem.
+
+**The statement is `SELECT DISTINCT date FROM price_daily WHERE date BETWEEN ... ORDER BY
+date` over 109.8 million rows**, and D-102 already measured what Postgres does with that
+shape one table over: **it does not do a loose index scan for `DISTINCT`**, so the plan is
+one full pass over every index entry. That decision measured the pass at 1,146,298 buffers
+for `DISTINCT ticker`. This is the same pass for `DISTINCT date`.
+
+**Item 25 does not name this read and could not have.** It names C01's `LiquidAsync`, C07's
+unbounded nightly `GROUP BY date`, and C08's and C10's window shapes.
+`TradingCalendar.SessionsAsync` arrived at 3.14, when the calendar moved up to the driver
+so that two compute stages in one backfill could not evaluate different date sets. It is
+the fifth read of that shape, it is the one that actually stopped a run, and item 25's
+closing sentence was "**Nothing here is measured**". One of them is now.
+
+**The blast radius is all six compute stages rather than C08.** Every range execution in
+the compute layer reaches its date list through `BackfillContext.SessionsAsync`, which is
+memoised per run and therefore paid once per stage. Six stages is six full passes. C34 and
+C35 are affected identically despite declaring neither `price_daily` nor anything else
+carrying a session list, because the driver declares it for them [3.14].
+
+**Three candidate fixes, and the choice is not a build session's** [`CLAUDE.md` §3, §11].
+Each is recorded with what would decide it rather than with a preference dressed as a
+measurement.
+
+*Raise the command timeout on this read alone.* The form D-102 is consistent with: that
+decision tried four access paths, rejected all four, let the whole-table pass stand and
+gave the two pool statements an explicit `commandTimeoutSeconds`. The cost is unmeasured
+and bounded below by 300 s a stage, so at least half an hour across six, and D-102's
+comparable pass took 1,063.9 s. That pushes against `BUILD_PLAN.md`'s "a full rebuild
+finishes in minutes rather than hours" rather than against correctness.
+
+*A recursive loose index scan.* **D-102 rejected exactly this form and the reason it gives
+is what makes the two cases different.** It regressed seventeen-fold inside `LiquidAsync`
+because a recursive CTE reports a fixed estimate of 100 rows whatever the data, so every
+node above it was costed for a hundred tickers when 88,341 arrived. Here the CTE is the
+entire statement: nothing sits above it to mis-plan, and the true cardinality is about
+1,400 sessions against that same estimate of 100 rather than 88,341. D-102's isolated
+measurement of the form, 436,340 buffers with one descent per distinct value and zero heap
+fetches, is the number that applies when there is nothing above it. **What argues against
+adopting it on that basis is D-102's own closing warning**, that a form measured in
+isolation and adopted on that measurement is the failure that entry exists to record.
+
+*Take the session list from the benchmark's own series.* `WHERE ticker = <benchmark>` uses
+the `(ticker, date)` primary key and returns about 1,400 rows immediately. It is a change
+of meaning rather than of access path: "the sessions the store holds" becomes "the sessions
+the benchmark holds", and a gap in one ticker's history would silently drop a session from
+every compute stage in the range. That is an authored decision and it is the one this
+system's failure mode argues hardest about.
+
+**Re-running C08 after a fix is not running the stage twice.** No row was written, no
+timing figure was taken, and `rows_written` is NULL rather than 0. The instruction that no
+compute stage runs twice is about not double-writing and not re-taking a measurement, and
+neither has happened. Recorded here so that the decision is made against the fact rather
+than against the invocation count. Opened as item 41.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
+| 41 | **`TradingCalendar.SessionsAsync` does not complete against the backfilled `price_daily`, and it is the first statement of every compute range execution.** Measured 2026-08-18: `run_log` 1715, `IndicatorEngine` over `2021-01-04..2026-08-13`, `failed` at **300,254 ms** with `rows_written` NULL, which is the connection string's `Command Timeout=300` and therefore a statement that did not finish in five minutes rather than a transient fault; `0 connection open(s) retried` alongside it. The statement is `SELECT DISTINCT date FROM price_daily WHERE date BETWEEN ... ORDER BY date` over 109.8 million rows, and D-102 measured one table over that **Postgres does not do a loose index scan for `DISTINCT`**, so the plan is one full pass over every index entry. **This is item 25's shape and item 25 does not name it**: that item lists C01's `LiquidAsync`, C07's unbounded nightly `GROUP BY date` and C08's and C10's window shapes, and this read arrived later, at 3.14, when the calendar moved up to the driver so two compute stages in one backfill could not evaluate different date sets. Item 25 closes "nothing here is measured" and this one now is. **All six compute stages are blocked, not C08**, every range execution reaching its dates through `BackfillContext.SessionsAsync`; it is memoised per run, so the cost is one full pass per stage and six across the layer. **Three candidate fixes are recorded in the narrative above with what would decide each**: an explicit command timeout, which is the form D-102 is consistent with and costs at least 300 s a stage; a recursive loose index scan, which D-102 rejected inside `LiquidAsync` for a reason that does not transfer, nothing sitting above this CTE to be mis-costed, against D-102's own warning about adopting a form on an isolated measurement; and taking the sessions from the benchmark's series, which is instant and is a change of meaning rather than of access path | A human choosing among the three, since two of them engage D-102 and the third is a correctness decision. **Nothing was written**, so whichever is chosen, the re-run is not a second run of the stage |
 | 40 | **The 3.6 sweep's `run_log` row is gone from the developer database, and `PriceIngestor` reads as never having run a range.** Measured 2026-08-17 through `/api/runs`: **zero** rows for that stage across all 1,714, against a `price_daily` holding 109.6 million bars and a row 1517 this file records as `ok` over 108.4 minutes. `PriceBackfillTests.SeedAsync` clears `run_log WHERE stage = 'PriceIngestor'` before each test and the suite still ran against the developer store when it did. **This is open item 26's harm as a measurement rather than as a risk**, and item 26 is closed: what was closed is the mechanism, the suite having had its own database since 3.13, and what was not is the row. **It costs no behaviour.** Resumption is `price_fetch_attempt` and is untouched, and `RUNBOOK.md` already states the log is an account rather than a mechanism. What it costs is the account, and specifically 3.16's pre-run report, which will tell an operator the price sweep has never run. **The same clear will run again** on the suite's own database only, so the loss is bounded to what has already happened | A human deciding whether the row is reconstructed from this file or the loss is left recorded. Reconstruction means inserting a row nothing produced, which is why it is not a build session's call |
 | 39 | ~~**`RUNBOOK.md`'s ingest-sweep paragraph says a sweep's attempt rows are stamped with `from`, and that is false for two of the five.** Read whitespace-tolerant, the phrase breaking across a line: `attempt\s+rows\s+are\s+stamped\s+with\s+`from`[^.]*\.` finds "attempt rows are stamped with `from`, so that is the argument one sweep has to keep constant across the days it spans." **C02, C04 and C06 do stamp the range start. C03 and C05 stamp the range end**, which is D-99's recorded asymmetry and is in both components' comments: that column is also what the nightly rotation orders on, so an attempt stamped with a 2021 window start would put every swept ticker back at the head of the rotation. The paragraph's own next clause, "pass `to` as well if the range end matters", is the hedge that keeps the advice right while the reason stated for it is wrong. **The cost of believing it is a re-sweep of two whole pools**, which is why it is an item rather than a note. Reported and not edited: it is authored prose stating a rule [`CLAUDE.md` §13]. 3.16's own subsection beside it states the fact for the sequence form, so the document currently carries both~~ **Closed 2026-08-18, human-directed, as a clean edit under D-73 with both prior wordings verbatim in `CHANGELOG.md` and a `[D-99]` at each point of change.** **The sweep found a second passage the item had not**, which is why the instruction was to sweep the document rather than correct the sentence: "it dispatches the pool members carrying no attempt row for this range start", inside "Every exit resumes the same way", is the sentence an operator reads to know what a resumed run will dispatch and it carried the same wrong rule. A third clause went with the first, "`to` defaults to today and moves at midnight, and nothing resumes on it", which is false in its second half for exactly the two components that do. Re-swept after the edit, whitespace-tolerant, pattern `[^.]*\b(stamp(ed\|s\|ing)?\|range\s+start\|range\s+end\|resumes?\s+on)\b[^.]*\.`: six passages, every one stating the asymmetry correctly | Closed |
 | 38 | ~~**Every universe reader currently resolves an empty universe, and 3.8's range path swept over one without saying so.**~~ **The sweep half is closed and the nightly half is not** [2026-08-17]. 3.11 filled `security_daily` to 771,145 rows over 2021-01-10..2026-08-09, and 3.8 re-run dispatched the live remainder. **The 678 self-healed and cost less than the estimate**: measured against the filled table the remainder was **594 names, not 678**, because the live half as of the range end is `security_daily`'s 2,864 rather than the frozen column's 2,949, and it cost **2,971 units** against a rough 3,400. No name was re-fetched and nothing was reconstructed: the names carried no attempt row, so D-99's resume set dispatched exactly them. **The precondition is built**, `BackfillPool.RequireUniverseCoverageAsync` throwing rather than halting on an uncovered range and called by C04 and C06 before either half of the pool is built. **What stays open is the nightly path**, where C04 returns `ok` with zero rows on an empty universe and cannot tell "no members today", which is legitimate, from "the table is unfilled for this date", which is not. One integer reaches the guard and both states produce it. It is separable by the same count the range precondition asks, and it was left unfixed deliberately. The original text follows. ~~`security_daily` holds **0 rows**, measured 2026-08-17. C01 stopped writing `security.is_active` at 3.11 [D-92] and 3.12 moved eight components onto `security_daily`; 3.11 is the checkpoint that fills it and is held pending D-102's remaining measurement. So the window between those two has every reader on an empty table. **It is not symmetric across the two paths.** C04's nightly path guards it and returns `ok` with zero rows and a sentence naming the cause; its range path has no such guard, so 3.8's second day built a pool of 16,861 where day one read 19,706, swept it, and reported Completed. Nothing errored. **The measured cost so far is 678 active names with no attempt row**, being `security`'s 2,949 less the 2,271 of them day one reached. **Three separate authored questions and none is a tidy-up**: what a range pool's live half is while `security_daily` is empty; whether a range path that finds no live universe should halt the way `CLAUDE.md` §6 says a stage does rather than sweep half a pool; and whether the 678 are fetched at all, given the only table that still lists them is the column with no writer at item 36. **What is not in doubt is the delisted half**, complete at 16,861 of 16,861~~ | **The nightly guard alone.** The range half is closed by the precondition and by 3.11 having run |

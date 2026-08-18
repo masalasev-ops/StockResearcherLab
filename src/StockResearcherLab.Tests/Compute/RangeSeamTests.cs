@@ -61,6 +61,24 @@ internal static class Seam
         Assert.False(result.WasHalted, result.Detail ?? "halted with no detail");
     }
 
+    /// <summary>The same range execution, returning the run log line it composed.</summary>
+    public static async Task<string?> RunRangeReportingAsync(IStage stage, CancellationToken ct)
+    {
+        var run = new BackfillRun(
+            new StageRegistry([stage]),
+            new RunLog(TestDatabase.ConnectionString),
+            new FrozenClock(To),
+            TestDatabase.ConnectionString,
+            new UnitAllowance(new EodhdClient(
+                new HttpClient(new NoProviderCall()) { BaseAddress = new Uri(EodhdUrl.BaseAddress) },
+                "test-token", new FrozenClock(To))));
+
+        var result = await run.RunAsync(stage.Name, From, To, ct).ConfigureAwait(false);
+
+        Assert.False(result.WasHalted, result.Detail ?? "halted with no detail");
+        return result.Detail;
+    }
+
     public static async Task RunNightlyAsync(IStage stage, DateOnly date, CancellationToken ct)
     {
         var config = new ConfigStore(TestDatabase.ConnectionString);

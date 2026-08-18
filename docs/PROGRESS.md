@@ -6577,6 +6577,46 @@ rather than left describing something untrue, being the passages in `SentimentRa
 from the suite running against the developer database. That is item 36's rule applied to
 its own case.
 
+#### 2026-08-17, checkpoint 3.15, and a fixture that ranked the same way five times
+
+**Built.** C11 `PercentileEngine` gained `IBackfillStage`. Every component the compute
+layer has now carries a range mode.
+
+**It is one UPDATE per source table per date and the statement is the nightly one.**
+C11 is the component `CLAUDE.md` §5's partition rule was written for: a percentile on a day
+needs every name in the cell on that day, so there is nothing to hoist out of the loop and
+the range is the nightly work with its date moved. **Widening the statement is not the same
+statement.** `UpdateSql` ranks within `(size_bucket, sector)` on one date; ranking across a
+range means adding the date to every partition clause, which is only equivalent while no
+cell's membership moves, and it stops being equivalent the first time one does.
+
+**The fallback counts are summed across the range rather than reported per date**, because
+a per-date line over 1,260 dates is not a line anybody reads and the question §6.6 asks is
+which metrics fell back and how often.
+
+**The anchor passed before it meant anything, and the distinctness assertion is what said
+so.** The fixture's first version moved `dist_200dma` with the date while keeping the same
+ordering across tickers. **A percentile is a rank**, so identical ordering ranks identically
+however the values move, and all five dates produced the same answer; a range path ranking
+one date and writing it to all five would have passed. Rotating the value by the date offset
+permutes the ordering instead. Then the range path was mutated to rank every date at the
+range end and the anchor failed, which is what makes it load-bearing.
+
+**That is the third fixture in two checkpoints flat in the dimension its test was about.**
+C34's trades all sat inside half its window, C10's breadth was constant across dates, and
+C11's ranking order was. The pattern is worth naming rather than fixing three times: a
+seam test compares two paths, so anything the fixture holds constant is agreed on by both
+of them for free.
+
+**416 tests.** `ci.ps1` green.
+
+**What 3.15 does not deliver is the timing line it is named for.** `BUILD_PLAN.md` calls it
+the checkpoint that decides whether the phase meets its timing line, and that decision is
+the wall clock of a real range run over a loaded store. Nothing is loaded: no compute
+backfill has been run, so `indicator_daily` and `valuation_daily` still carry phase 2's
+nightly rows. The figure is owed against the run at 3.16, and migration `0007` already names
+partitioning as what an adverse finding would recommend [open item 27's standing half].
+
 #### 2026-08-17, checkpoint 3.14, and the calendar that had to move up a layer
 
 **Built.** C10 `MarketContextEngine`, C34 `FlowEngine` and C35 `SentimentEngine` gained

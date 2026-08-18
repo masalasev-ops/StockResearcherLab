@@ -125,6 +125,11 @@ public sealed class FlowSweepTests
         Assert.Empty(again.Asked);
         Assert.Equal(0, result.RowsWritten);
         Assert.False(result.WasHalted);
+
+        // **And it says so in its status rather than only in its count** [3.16]. The
+        // sequence driver halts on a source that writes no row, and this zero is the one
+        // case where that is the completed state rather than a short table.
+        Assert.True(result.WasCovered);
     }
 
     /// <summary>

@@ -225,8 +225,16 @@ public sealed class PriceIngestor : IBackfillStage
             "carried an attempt for this range already and were not dispatched [0010].",
             written, loaded, pool.Count, pool.Count - remaining.Count);
 
-        return halted
-            ? BackfillResult.Halted(written, context.To, detail + " " + haltDetail)
+        // **An empty remaining set is `covered` rather than `ok` with a zero** [3.16].
+        // The distinction is only knowable here, where both the pool and the remaining
+        // set are in hand, and the sequence driver's zero-row halt rests on it.
+        if (halted)
+        {
+            return BackfillResult.Halted(written, context.To, detail + " " + haltDetail);
+        }
+
+        return remaining.Count == 0
+            ? BackfillResult.Covered(context.To, detail)
             : BackfillResult.Completed(written, context.To, detail);
     }
 

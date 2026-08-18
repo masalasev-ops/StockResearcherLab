@@ -40,8 +40,9 @@ public interface IBackfillStage : IStage
 /// </summary>
 /// <param name="RowsWritten">Rows written across the whole range.</param>
 /// <param name="Status">
-/// `ok` for a range that completed, `halted` for one the allowance gate stopped.
-/// The run log carries it, so an operator sees the difference without reading detail.
+/// `ok` for a range that completed, `halted` for one the allowance gate stopped, and
+/// `covered` for one that found nothing left to do. The run log carries it, so an
+/// operator sees the difference without reading detail.
 /// </param>
 /// <param name="Detail">The line worth reading. Lands in `run_log.error`, the only free-text column that table has.</param>
 /// <param name="LastDateCovered">
@@ -62,7 +63,31 @@ public readonly record struct BackfillResult(
     public static BackfillResult Halted(long rowsWritten, DateOnly lastDateCovered, string detail)
         => new(rowsWritten, "halted", detail, lastDateCovered);
 
+    /// <summary>
+    /// The range had nothing left to do, so nothing was dispatched and no row was
+    /// written. A completed state and not a short one [3.16].
+    ///
+    /// **This exists for the sequence driver's zero-row halt and would not otherwise be
+    /// worth a status.** `NightlyRun` halts the night when a stage that writes writes
+    /// nothing, because the next stage cannot tell a short table from a real one. That
+    /// rule is exactly as necessary over a range and cannot be applied to a row count
+    /// there: a sweep resumes on its own attempt record, so the run after the one that
+    /// finished dispatches nothing and writes nothing, and it is the run that proves the
+    /// sweep is complete [D-99, `RUNBOOK.md`]. Reading that as a short table would make
+    /// the driver refuse to resume, which is the property 3.16 is for.
+    ///
+    /// So the two zeroes are separated where the difference is known, which is inside
+    /// the stage: it is the one place that has both the pool and the remaining set. A
+    /// zero this factory did not produce is a stage that had work and did none of it,
+    /// and the sequence halts on it.
+    /// </summary>
+    public static BackfillResult Covered(DateOnly lastDateCovered, string detail)
+        => new(0, "covered", detail, lastDateCovered);
+
     public bool WasHalted => string.Equals(Status, "halted", StringComparison.Ordinal);
+
+    /// <summary>Nothing was left to do. See <see cref="Covered"/>.</summary>
+    public bool WasCovered => string.Equals(Status, "covered", StringComparison.Ordinal);
 }
 
 /// <summary>

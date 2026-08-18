@@ -46,13 +46,19 @@ switch (command)
         Console.WriteLine("  stages                list the registered components and what each writes.");
         Console.WriteLine("  run <stage> [date]    run one stage. Date defaults to today, US Eastern.");
         Console.WriteLine("  run-night [date]      run the evening sequence in order, halting on the first failure.");
+        Console.WriteLine("  backfill <from> <to>  run every source over a range, in order, each finishing");
+        Console.WriteLine("                        before the next begins. Sources already swept report");
+        Console.WriteLine("                        `covered` and fall through, so re-issuing the identical");
+        Console.WriteLine("                        command is how an interrupted rebuild is resumed.");
+        Console.WriteLine("                        BOTH DATES ARE REQUIRED HERE, because a rebuild spans");
+        Console.WriteLine("                        days and a defaulted `to` moves at midnight.");
         Console.WriteLine("  backfill <stage> [from] [to]");
         Console.WriteLine("                        run one stage over a range. From defaults to");
         Console.WriteLine("                        backfill.window_start and to defaults to today.");
-        Console.WriteLine("                        PASS BOTH DATES FOR A MULTI-DAY SWEEP. A resume point");
-        Console.WriteLine("                        belongs to the range that produced it, and the default");
-        Console.WriteLine("                        `to` moves at midnight, so a halt resumed the next day");
-        Console.WriteLine("                        on defaults is a different range and is refused.");
+        Console.WriteLine("                        PASS BOTH DATES FOR A MULTI-DAY SWEEP. C03 and C05");
+        Console.WriteLine("                        stamp their attempt rows with the range end, and the");
+        Console.WriteLine("                        default `to` moves at midnight, so a sweep resumed the");
+        Console.WriteLine("                        next day on defaults re-sweeps its pool whole [D-99].");
         Console.WriteLine("                        Exit 0 completed, 2 halted on the allowance, 1 failed.");
         Console.WriteLine("                        A halt is the gate working: run it again, with the same");
         Console.WriteLine("                        two dates, after the provider's day rolls over.");
@@ -121,9 +127,14 @@ async Task<int> RunNightAsync()
 }
 
 /// <summary>
-/// One stage over a range. 3.16's driver, narrowed to a single named stage because
-/// that is what the sweeps at 3.6 and 3.7 need; the full sources-in-order form is
-/// 3.16's own and lands there.
+/// A range, either one named stage or every source in order. 3.16's driver; the
+/// single-stage half was pulled forward to 3.6, which needed it, and the
+/// sources-in-order half lands here.
+///
+/// **Which form is being asked for is read off the first argument** rather than off a
+/// flag. `backfill PriceIngestor 2021-01-04 2026-08-17` names a stage;
+/// `backfill 2021-01-04 2026-08-17` does not, and a date is not a stage name in any
+/// registry this system can have.
 ///
 /// **This command spends real allowance** and is the only one in this file that can.
 /// It is therefore deliberately explicit about what it is about to do before it does
@@ -132,13 +143,34 @@ async Task<int> RunNightAsync()
 /// </summary>
 async Task<int> BackfillAsync()
 {
-    if (args.Length < 2)
+    // The sequence form is the no-stage-name one, so the argument positions shift by
+    // one and the parse says which. A stage name that parsed as a date would be the
+    // ambiguity here and there is no such name.
+    var named = args.Length > 1 && !IsIsoDate(args[1]);
+    var stageName = named ? args[1] : null;
+    var dateArg = named ? 2 : 1;
+
+    // **The sequence form states both dates or it does not run**, and the reason is a
+    // bill rather than tidiness [D-99]. `to` defaults to today and today moves at
+    // midnight. C02, C04 and C06 stamp their attempt rows with the range start and do
+    // not care; **C03 and C05 stamp the range end**, because that column is also what
+    // the nightly rotation orders on, so a rebuild resumed the next morning on defaults
+    // presents those two with an empty attempt set and re-sweeps both pools whole. A
+    // full rebuild spans days by construction, so this is the ordinary case rather than
+    // an edge, and there is no single-day rebuild the refusal costs anything.
+    //
+    // The single-stage form keeps its defaults. It is issued for one compute stage at a
+    // time as well as for a sweep, and the warning in the help text is what it has.
+    if (!named && args.Length < 3)
     {
-        Console.Error.WriteLine("backfill needs a stage name. 'stages' lists them.");
+        Console.Error.WriteLine(
+            "backfill over every source needs both dates: backfill <from> <to>. `to` would otherwise " +
+            "default to today, and today moves at midnight; C03 and C05 stamp their attempt rows with " +
+            "the range end, so a rebuild resumed the next morning on defaults would re-sweep both " +
+            "pools whole [D-99]. A full rebuild spans days, so this is the ordinary case.");
         return 1;
     }
 
-    var stageName = args[1];
     var connectionString = RequireConnectionString();
     var clock = new SystemClock();
 
@@ -169,21 +201,28 @@ async Task<int> BackfillAsync()
     // The range end first, because the window start is config and config resolves as
     // of the date being asked about rather than as of now [INVARIANT 13, D-43]. It is
     // the same date the range stages resolve their own keys against.
-    var to = args.Length > 3
-        ? DateOnly.ParseExact(args[3], "yyyy-MM-dd", CultureInfo.InvariantCulture)
+    var to = args.Length > dateArg + 1
+        ? DateOnly.ParseExact(args[dateArg + 1], "yyyy-MM-dd", CultureInfo.InvariantCulture)
         : clock.Today;
 
-    var from = args.Length > 2
-        ? DateOnly.ParseExact(args[2], "yyyy-MM-dd", CultureInfo.InvariantCulture)
+    var from = args.Length > dateArg
+        ? DateOnly.ParseExact(args[dateArg], "yyyy-MM-dd", CultureInfo.InvariantCulture)
         : ConfigValue.Date(await new ConfigStore(connectionString)
             .RequireAsync("backfill.window_start", to).ConfigureAwait(false));
+
+    var label = stageName ?? "all sources";
 
     if (from > to)
     {
         Console.Error.WriteLine(
-            $"backfill {stageName}  from {Iso(from)} is after to {Iso(to)}. An empty range is a typo " +
+            $"backfill {label}  from {Iso(from)} is after to {Iso(to)}. An empty range is a typo " +
             "rather than a no-op, so it is refused before anything is spent.");
         return 1;
+    }
+
+    if (stageName is null)
+    {
+        return await BackfillEverythingAsync(registry, run, from, to).ConfigureAwait(false);
     }
 
     Console.WriteLine($"backfill {stageName}  range {Iso(from)}..{Iso(to)}");
@@ -238,6 +277,62 @@ async Task<int> BackfillAsync()
     // the mechanism working: a multi-day sweep halts in the ordinary course.
     return result.WasHalted ? 2 : 0;
 }
+
+/// <summary>
+/// Every source over one range, in order [3.16].
+///
+/// **It is the same twelve commands the single-stage form issues one at a time**, run
+/// through the same <see cref="BackfillRun"/> against the same range, so a sequence run
+/// and a hand-issued sweep are the same work and leave the same `run_log` rows.
+///
+/// **A halt is expected here rather than exceptional.** The ingest sources spend days,
+/// so the ordinary course of a full rebuild is: run it, it halts at exit 2 somewhere in
+/// the ingest, run the identical command again after the provider's day rolls over, and
+/// the sources already finished report `covered` and fall through in seconds.
+/// </summary>
+async Task<int> BackfillEverythingAsync(StageRegistry registry, BackfillRun run, DateOnly from, DateOnly to)
+{
+    Console.WriteLine($"backfill all sources  range {Iso(from)}..{Iso(to)}");
+    Console.WriteLine($"  {BackfillSequence.SourceOrder.Length} source(s), in order, each finishing before the next begins");
+
+    // The same pre-run line the single-stage form prints, one per source. It reports and
+    // decides nothing [0010]: where each source picks up is its own attempt record. What
+    // it is for is seeing, before another day is spent, which sources have already run
+    // and how they ended.
+    foreach (var name in BackfillSequence.SourceOrder)
+    {
+        var last = await run.LastRangeRunAsync(name).ConfigureAwait(false);
+        Console.WriteLine(last is null
+            ? $"  {name,-22} no previous range run recorded"
+            : $"  {name,-22} last {last.Status}, reached {Iso(last.LastDateCovered)}, run_log row " +
+              last.RunLogId.ToString(CultureInfo.InvariantCulture));
+    }
+
+    var result = await new BackfillSequence(registry, run, Console.WriteLine)
+        .ExecuteAsync(from, to).ConfigureAwait(false);
+
+    Console.WriteLine($"  {result.Summary()}");
+
+    // Printed after the summary rather than instead of it. A stopped sequence is read
+    // for which source stopped it and what the ones after it did not do, and that is
+    // exactly what a row count cannot say.
+    foreach (var step in result.Steps.Where(s => s.Detail is not null))
+    {
+        Console.WriteLine($"  {step.Stage,-22} {step.Outcome}: {step.Detail}");
+    }
+
+    return result.ExitCode;
+}
+
+/// <summary>
+/// Whether an argument is a date rather than a stage name, which is how the two forms
+/// of `backfill` are told apart [3.16].
+///
+/// Invariant culture, exact, so a machine whose locale reads `04/01/2021` the other way
+/// round cannot make this answer differ between two developers [`CLAUDE.md` §6].
+/// </summary>
+static bool IsIsoDate(string arg)
+    => DateOnly.TryParseExact(arg, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
 
 static string Iso(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 

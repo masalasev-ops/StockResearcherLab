@@ -288,6 +288,11 @@ public sealed class PriceBackfillTests : IAsyncLifetime
         Assert.Equal(0, again.SeriesCalls);
         Assert.Equal(0, second.RowsWritten);
         Assert.Contains("22 carried an attempt", second.Detail ?? "", StringComparison.Ordinal);
+
+        // **And it says so in its status rather than only in its count** [3.16]. The
+        // sequence driver halts on a source that writes no row, and this zero is the one
+        // case where that is the completed state rather than a short table.
+        Assert.True(second.WasCovered);
     }
 
     /// <summary>

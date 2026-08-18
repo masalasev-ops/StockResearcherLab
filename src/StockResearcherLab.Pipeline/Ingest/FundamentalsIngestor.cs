@@ -168,8 +168,15 @@ public sealed class FundamentalsIngestor : IBackfillStage
             rows, dispatched, pool.Count, collisions, holdingRows, holdingCollisions,
             pool.Count - remaining.Count);
 
-        return halted
-            ? BackfillResult.Halted(rows, context.To, detail + " " + haltDetail)
+        // An empty remaining set is `covered` rather than `ok` with a zero, which is the
+        // distinction the sequence driver's zero-row halt rests on [3.16].
+        if (halted)
+        {
+            return BackfillResult.Halted(rows, context.To, detail + " " + haltDetail);
+        }
+
+        return remaining.Count == 0
+            ? BackfillResult.Covered(context.To, detail)
             : BackfillResult.Completed(rows, context.To, detail);
     }
 

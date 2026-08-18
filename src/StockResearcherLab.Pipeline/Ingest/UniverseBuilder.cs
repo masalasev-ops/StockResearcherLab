@@ -130,7 +130,11 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
         var dates = EvaluationDates(context.From, context.To);
         if (dates.Count == 0)
         {
-            return BackfillResult.Completed(0, context.To, RangeDetail(dates, [], [], 0));
+            // `covered` rather than `ok` with a zero. A range holding no Sunday has
+            // nothing to evaluate, which is a completed state and not a short table, and
+            // the sequence driver's zero-row halt reads the difference off the status
+            // rather than off the count [3.16].
+            return BackfillResult.Covered(context.To, RangeDetail(dates, [], [], 0));
         }
 
         // One fetch for the range. The symbol lists are not configuration and not

@@ -238,7 +238,11 @@ public sealed class FlowIngestor : IStage, IBackfillStage
 
         if (haltedOn is null)
         {
-            return BackfillResult.Completed(insiderRows, context.To, detail);
+            // An empty remaining set is `covered` rather than `ok` with a zero, which is
+            // the distinction the sequence driver's zero-row halt rests on [3.16].
+            return remaining.Count == 0
+                ? BackfillResult.Covered(context.To, detail)
+                : BackfillResult.Completed(insiderRows, context.To, detail);
         }
 
         return BackfillResult.Halted(insiderRows, context.To, detail + " " + DescribeGatedHalt(haltedOn));

@@ -228,8 +228,15 @@ public sealed class EventsIngestor : IStage, IBackfillStage
             written, dispatched, pool.Count, yielded, dispatched - yielded,
             pool.Count - remaining.Count);
 
-        return halted
-            ? BackfillResult.Halted(written, context.To, detail + " " + haltDetail)
+        // An empty remaining set is `covered` rather than `ok` with a zero, which is the
+        // distinction the sequence driver's zero-row halt rests on [3.16].
+        if (halted)
+        {
+            return BackfillResult.Halted(written, context.To, detail + " " + haltDetail);
+        }
+
+        return remaining.Count == 0
+            ? BackfillResult.Covered(context.To, detail)
             : BackfillResult.Completed(written, context.To, detail);
     }
 

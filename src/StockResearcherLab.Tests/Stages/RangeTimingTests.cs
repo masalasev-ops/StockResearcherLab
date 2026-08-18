@@ -75,4 +75,68 @@ public sealed class RangeTimingTests
         Assert.Contains("no unit ran", line, StringComparison.Ordinal);
         Assert.DoesNotContain("median", line, StringComparison.Ordinal);
     }
+
+    // ------------------------------------------ the spans outside the loop ---
+
+    /// <summary>
+    /// Marks are the spans between calls, named and summed [item 43].
+    ///
+    /// Driven off an injected millisecond source rather than a stopwatch, so the
+    /// assertion is on arithmetic rather than on how long the test machine took.
+    /// </summary>
+    [Fact]
+    public void MarksAreTheSpansBetweenCallsAndTheSumIsTheirTotal()
+    {
+        var now = 0L;
+        var phases = new PhaseTimer(() => now);
+
+        now = 40;
+        phases.Mark("calendar");
+        now = 140;
+        phases.Mark("epochs");
+        now = 1_140;
+        phases.Mark("composites");
+
+        Assert.Equal([("calendar", 40L), ("epochs", 100L), ("composites", 1_000L)], phases.Phases);
+
+        var line = phases.Describe();
+        Assert.Contains("calendar 40 ms", line, StringComparison.Ordinal);
+        Assert.Contains("epochs 100 ms", line, StringComparison.Ordinal);
+        Assert.Contains("composites 1,000 ms", line, StringComparison.Ordinal);
+        Assert.Contains("1,140 ms in all", line, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// **`Skip` drops a span rather than folding it into the next phase**, which is the
+    /// property C10 depends on: its write is one batched COPY after the date loop, so the
+    /// loop's span sits between the last setup mark and the write and is already counted
+    /// by the per-date figures.
+    ///
+    /// Without the drop, C10's write would be reported as the loop plus the write and the
+    /// two accounts would double-count the larger of them.
+    /// </summary>
+    [Fact]
+    public void SkipDropsASpanRatherThanFoldingItIntoTheNextPhase()
+    {
+        var now = 0L;
+        var phases = new PhaseTimer(() => now);
+
+        now = 10;
+        phases.Mark("calendar");
+
+        now = 9_000;      // the date loop, timed by the per-unit figures
+        phases.Skip();
+
+        now = 9_250;
+        phases.Mark("write");
+
+        Assert.Equal([("calendar", 10L), ("write", 250L)], phases.Phases);
+        Assert.DoesNotContain("8,990", phases.Describe(), StringComparison.Ordinal);
+        Assert.Contains("260 ms in all", phases.Describe(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NoPhaseSaysSoRatherThanReportingAZero()
+        => Assert.Contains(
+            "nothing timed", new PhaseTimer(() => 0).Describe(), StringComparison.Ordinal);
 }

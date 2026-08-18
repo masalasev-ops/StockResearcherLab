@@ -134,6 +134,14 @@ public sealed class PercentileSeamTests
         Assert.Contains("Per date: first", detail, StringComparison.Ordinal);
         Assert.Contains($"over {Seam.Dates().Count:N0} unit(s)", detail, StringComparison.Ordinal);
 
+        // **And the spans outside the loop, for the same reason** [item 43]. C08's run
+        // reported 22 chunks against a stage duration more than twice their sum, and the
+        // missing half was never timed because nothing above the loop was instrumented.
+        // A per-unit line that accounts for part of a stage while reading as though it
+        // accounts for the whole is the failure that item records.
+        Assert.Contains("Outside the work loop: calendar", detail, StringComparison.Ordinal);
+        Assert.Contains("ms in all", detail, StringComparison.Ordinal);
+
         // The counts are the range's, not one date's: every one of the sixteen names ranks
         // in the bucket on each of the five dates, for the metric the fixture fills.
         Assert.Contains("in the size bucket alone", detail, StringComparison.Ordinal);

@@ -137,9 +137,15 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        // Everything that is not the date loop, named [item 43]. Here that is a calendar
+        // read before it and one batched COPY after it, which the per-date figure has
+        // never covered [3.14].
+        var phases = new PhaseTimer();
+
         var atEnd = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
 
         var dates = await context.SessionsAsync(ct).ConfigureAwait(false);
+        phases.Mark("calendar");
 
         if (dates.Count == 0)
         {
@@ -189,11 +195,16 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
             elapsed.Add((long) System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
 
+        // The date loop's span, which `elapsed` already holds. Dropped rather than left
+        // to fall into the write phase below.
+        phases.Skip();
+
         // Ascending by date, which the calendar already is. Stated at the point that
         // relies on it, because write order reaches output [CLAUDE.md section 6].
         rows.Sort(static (a, b) => a.Date.CompareTo(b.Date));
 
         var written = await WriteAsync(atEnd, rows, ct).ConfigureAwait(false);
+        phases.Mark("write");
 
         return BackfillResult.Completed(
             written, context.To,
@@ -203,12 +214,13 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
                 "breadth and are therefore labelled {3}, which is a date `indicator_daily` has no " +
                 "`dist_200dma` for rather than a date with no trend. {4:N0} risk_on, {5:N0} risk_off, " +
                 "{6:N0} mixed. vix is null on every one of them, the bulk feed carrying equities and not " +
-                "the index [D-80, open item 30]. {7}",
+                "the index [D-80, open item 30]. {7} {8}",
                 written, dates.Count, unknownBreadth, Mixed,
                 rows.Count(static r => r.Label == RiskOn),
                 rows.Count(static r => r.Label == RiskOff),
                 rows.Count(static r => r.Label == Mixed),
-                RangeTiming.Describe("date, compute only", elapsed)));
+                RangeTiming.Describe("date, compute only", elapsed),
+                phases.Describe()));
     }
 
     /// <summary>

@@ -199,9 +199,13 @@ public sealed class ValuationEngine : IStage, IBackfillStage
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        // Everything before the chunk loop, named [item 43].
+        var phases = new PhaseTimer();
+
         var atEnd = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
 
         var dates = await context.SessionsAsync(ct).ConfigureAwait(false);
+        phases.Mark("calendar");
 
         if (dates.Count == 0)
         {
@@ -226,7 +230,10 @@ public sealed class ValuationEngine : IStage, IBackfillStage
             minPointsOf[date] = minPoints;
         }
 
+        phases.Mark("settings");
+
         var pool = await RangePoolAsync(atEnd, context.To, ct).ConfigureAwait(false);
+        phases.Mark("pool");
 
         long written = 0;
         var rowsWritten = 0;
@@ -305,12 +312,13 @@ public sealed class ValuationEngine : IStage, IBackfillStage
                 CultureInfo.InvariantCulture,
                 "{0:N0} trading date(s) over a pool of {1:N0} ticker(s) with a readable quarterly filing, " +
                 "{2:N0} row(s) composed in {3:N0} chunk(s) of {4}. The pool is wider than the universe " +
-                "deliberately and that is the phase 2 obligation still open. {5}",
+                "deliberately and that is the phase 2 obligation still open. {5} {6}",
                 dates.Count, pool.Count, rowsWritten,
                 (pool.Count + TickerChunk - 1) / TickerChunk, TickerChunk,
                 RangeTiming.Describe(
                     string.Create(CultureInfo.InvariantCulture, $"chunk of {TickerChunk} ticker(s)"),
-                    elapsed)));
+                    elapsed),
+                phases.Describe()));
     }
 
     /// <summary>One priced session, which is all the range path needs from a bar.</summary>

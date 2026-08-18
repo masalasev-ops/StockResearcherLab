@@ -146,9 +146,13 @@ public sealed class SentimentEngine : IStage, IBackfillStage
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        // Everything before the chunk loop, named [item 43].
+        var phases = new PhaseTimer();
+
         var atEnd = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
 
         var dates = await context.SessionsAsync(ct).ConfigureAwait(false);
+        phases.Mark("calendar");
 
         if (dates.Count == 0)
         {
@@ -158,6 +162,7 @@ public sealed class SentimentEngine : IStage, IBackfillStage
 
         var epochs = await Membership.EpochsAsync(atEnd, context.From, context.To, ct).ConfigureAwait(false);
         var epochOf = Membership.EpochOf(dates, epochs);
+        phases.Mark("epochs");
 
         if (epochOf.Count == 0)
         {
@@ -187,6 +192,8 @@ public sealed class SentimentEngine : IStage, IBackfillStage
             floorOf[date] = floor;
         }
 
+        phases.Mark("settings");
+
         var members = new Dictionary<DateOnly, IReadOnlySet<string>>();
 
         foreach (var epoch in epochOf.Values.Distinct().OrderBy(static d => d))
@@ -194,6 +201,8 @@ public sealed class SentimentEngine : IStage, IBackfillStage
             var byTicker = await Membership.MembersAsync(atEnd, epoch, ct).ConfigureAwait(false);
             members[epoch] = byTicker.Keys.ToHashSet(StringComparer.Ordinal);
         }
+
+        phases.Mark("members");
 
         var everMember = members.Values
             .SelectMany(static m => m)
@@ -260,12 +269,13 @@ public sealed class SentimentEngine : IStage, IBackfillStage
                 "{0:N0} row(s) over {1:N0} trading date(s) and {2:N0} membership epoch(s), from {3:N0} " +
                 "ticker(s) a member on at least one, in {4:N0} chunk(s) of {5}. {6:N0} row(s) carry fewer " +
                 "than the baseline floor's days and are null on all three, which is a name the ingest had " +
-                "not reached rather than a name with no attention [METRICS.md 4.1]. {7}",
+                "not reached rather than a name with no attention [METRICS.md 4.1]. {7} {8}",
                 rowsComposed, dates.Count, members.Count, everMember.Count,
                 (everMember.Count + TickerChunk - 1) / TickerChunk, TickerChunk, belowFloor,
                 RangeTiming.Describe(
                     string.Create(CultureInfo.InvariantCulture, $"chunk of {TickerChunk} ticker(s)"),
-                    elapsed)));
+                    elapsed),
+                phases.Describe()));
     }
 
     /// <summary>

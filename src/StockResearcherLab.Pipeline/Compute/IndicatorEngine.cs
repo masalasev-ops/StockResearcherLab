@@ -213,9 +213,14 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        // Everything before the chunk loop, named [item 43]. C08's run at `run_log` 1716
+        // put 53.5 percent of the stage in here and reported none of it.
+        var phases = new PhaseTimer();
+
         var atEnd = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
 
         var dates = await context.SessionsAsync(ct).ConfigureAwait(false);
+        phases.Mark("calendar");
 
         if (dates.Count == 0)
         {
@@ -225,6 +230,7 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
 
         var epochs = await Membership.EpochsAsync(atEnd, context.From, context.To, ct).ConfigureAwait(false);
         var epochOf = Membership.EpochOf(dates, epochs);
+        phases.Mark("epochs");
 
         if (epochOf.Count == 0)
         {
@@ -254,10 +260,13 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
             settingsOf[date] = s;
         }
 
+        phases.Mark("settings");
+
         var maxBars = settingsOf.Values.Max(s => s.Bars);
         var padStart = dates[0].AddDays(-CompositePadDays);
 
         var benchmark = await RangeBenchmarkAsync(atEnd, padStart, context.To, ct).ConfigureAwait(false);
+        phases.Mark("benchmark");
 
         // Per epoch: that epoch's members and that epoch's composites. Held for the whole
         // run because the loop below is ticker-outer, which is what stops a series being
@@ -276,6 +285,8 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
                 atEnd, epoch, span.Min().AddDays(-CompositePadDays), span.Max(),
                 settingsOf[span.Max()].MinSectorMembers, ct).ConfigureAwait(false);
         }
+
+        phases.Mark("members and composites");
 
         var everMember = members.Values
             .SelectMany(m => m.Keys)
@@ -348,12 +359,13 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
                 CultureInfo.InvariantCulture,
                 "{0:N0} trading date(s) over {1:N0} membership epoch(s), {2:N0} ticker(s) a member on at " +
                 "least one, in {3:N0} chunk(s) of {4}. The composite is rebuilt per epoch rather than per " +
-                "date, which is exact because it enters the output only as a ratio. {5}",
+                "date, which is exact because it enters the output only as a ratio. {5} {6}",
                 dates.Count, composites.Count, everMember.Count,
                 (everMember.Count + TickerChunk - 1) / TickerChunk, TickerChunk,
                 RangeTiming.Describe(
                     string.Create(CultureInfo.InvariantCulture, $"chunk of {TickerChunk} ticker(s)"),
-                    elapsed)));
+                    elapsed),
+                phases.Describe()));
     }
 
     /// <summary>

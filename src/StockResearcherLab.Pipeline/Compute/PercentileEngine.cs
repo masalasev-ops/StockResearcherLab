@@ -174,7 +174,12 @@ public sealed class PercentileEngine : IStage, IBackfillStage
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        // Everything that is not the date loop, named [item 43]. Here that is the
+        // calendar read alone, the ranking UPDATEs being inside the loop.
+        var phases = new PhaseTimer();
+
         var dates = await context.SessionsAsync(ct).ConfigureAwait(false);
+        phases.Mark("calendar");
 
         if (dates.Count == 0)
         {
@@ -258,8 +263,9 @@ public sealed class PercentileEngine : IStage, IBackfillStage
                 CultureInfo.InvariantCulture,
                 "{0:N0} trading date(s). {1} The counts are summed over the range rather than " +
                 "per date, so a metric that fell back on one date in twelve hundred is visible " +
-                "as a number rather than lost in a line nobody reads [METRICS.md 6.6]. {2}",
-                dates.Count, Detail(report, floorSeen), RangeTiming.Describe("date", elapsed)));
+                "as a number rather than lost in a line nobody reads [METRICS.md 6.6]. {2} {3}",
+                dates.Count, Detail(report, floorSeen), RangeTiming.Describe("date", elapsed),
+                phases.Describe()));
     }
 
     /// <summary>

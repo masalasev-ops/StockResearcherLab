@@ -7017,11 +7017,69 @@ item 42.
 **The last date is 2026-08-12 against a range end of 2026-08-13**, which is 3.6's sweep
 end and not a defect.
 
+#### 2026-08-18, C08 over the window, and the instrumentation covers less than half the stage
+
+**`run_log` 1716, `ok`, 4,143,273 rows, 2,043,579 ms.** `Worker backfill IndicatorEngine
+2021-01-04 2026-08-13` on a quiet database, gate green at `79418bb` beforehand, `0
+connection open(s) retried`. 1,584 trading dates over 292 membership epochs, 4,290 tickers
+a member on at least one, in 22 chunks of 200. **The first compute stage of the phase to
+have run over a range.**
+
+**The four figures, per chunk of 200 tickers: first 50,579 ms, median 45,452 ms, last
+18,589 ms, total 950,200 ms over 22 units.**
+
+**The last figure is a partial chunk and is not a speed-up.** 4,290 tickers is 21 chunks
+of 200 and a remainder of 90, so the twenty-second unit carries 90 names. Per ticker it is
+206.5 ms against the median chunk's 227.3 ms, which is the same rate rather than a faster
+one. Stated because "last 18,589 ms" against a median of 45,452 ms reads as a run that
+accelerated, and a reader taking it that way would draw the opposite conclusion about
+degradation from the one the numbers support.
+
+**First against median is 1.11, which answers the warm-up question this figure exists for.**
+The working set survives between units inside one process: 50,579 ms against 45,452 ms is
+an eleven percent cold-start premium paid once. That is the question `PROGRESS.md`'s cost
+brackets turned on, where item 32 measured a different statement at 531.1s cold against
+22.6s warm, a factor of twenty-three. **Twenty-three does not generalise to this loop**,
+and until this run nothing on record covered many units inside one run [3.11's owed
+bracket].
+
+**53.5 percent of the stage is outside the instrumented loop and only the run could show
+it.** The chunk loop totals 950,200 ms against a stage duration of 2,043,579 ms, leaving
+**1,093,379 ms, 18.2 minutes**, in the setup: the calendar read, the epoch map, one
+membership read and one composite build per epoch across **292 epochs**, and the benchmark
+series. So the four figures describe 46.5 percent of the run and the phase's timing line
+cannot be assembled from them alone. **This is a defect in the instrumentation rather than
+in the stage**, it was invisible before a stage had run over a real range, and it applies
+to all six: every compute range mode times its loop and none of them times what precedes
+it. Opened as item 43.
+
+**Item 41's timing in place, and what it does and does not say.** The read no longer ends
+the run: the same statement that failed at 300,254 ms at `run_log` 1715 is inside a stage
+that completed. What the run does not do is isolate it, the setup being one unbroken span,
+so the re-run **bounds** the calendar read above by 18.2 minutes rather than measuring it.
+The probe's 5,836 ms stays the only isolated figure and stays warm. What makes the bound
+worth having anyway is what dominates the span: 292 epochs of membership and composite
+reads against one calendar read, so the read is a small part of a setup that is itself the
+larger half. Isolating it needs the instrumentation item 43 records as missing.
+
+**Coverage.** 4,143,273 rows against 1,584 x 4,290 = 6,795,360 possible ticker-days, which
+is 61.0 percent, at 2,616 rows a date. The rest is membership: a ticker is written on a
+date only where that date's epoch holds it and its window has bars.
+
+**Done-when line 3 is now under measured pressure.** `BUILD_PLAN.md` asks that a full
+rebuild finish "in minutes rather than hours". One compute stage of six took 34.1 minutes,
+and C11 is the one the plan calls the checkpoint deciding the timing line. **Recorded now,
+before the remaining stages run**, because a bound loosened after the number arrives is
+result-shopping whatever the reasoning says [`CLAUDE.md` §11]. Nothing is proposed here:
+the finding is that the line is at risk and the decision belongs to whoever signs the phase
+off.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
+| 43 | **Every compute range mode times its work loop and none of them times what precedes it, so the per-unit figures describe less than half a stage.** Measured 2026-08-18 on the first one to run: C08 at `run_log` 1716 reported 950,200 ms across 22 chunks against a stage duration of **2,043,579 ms**, leaving **1,093,379 ms, 53.5 percent**, in an unbroken setup span before the loop starts. For C08 that span is the calendar read, the epoch map, one membership read and one composite build per epoch across 292 epochs, and the benchmark series. **The shape is the same in all six**: `RangeTiming` was wired into each loop at 3.17 and nothing above the loop is instrumented, which was invisible until a stage ran over a real range. **Two consequences.** The phase's timing line cannot be assembled from the per-unit figures, because they cover 46.5 percent of the one stage measured and an unknown fraction of the others; and item 41's calendar read is bounded above by that span rather than measured inside it, so its only isolated figure remains a warm probe. **What is not wrong is the loop figures themselves**, which are exact for what they cover, and the total is in `run_log.duration_ms` throughout. The gap is between them | Before the remaining five compute stages are read as timed, and before `ARCHITECTURE.html` §16's figures are restated at sign-off. The cheap form is a second `RangeTiming` line over the setup phases, which is a code change and not this session's to add mid-run |
 | 42 | **`price_daily` holds about twelve percent more distinct dates than the exchange traded, and every compute range execution evaluates all of them.** Measured 2026-08-18 as a by-product of item 41's set proof: **1,584 distinct dates** over 2021-01-04..2026-08-12, against roughly **1,409** US sessions for that span. Both the old statement and the new one return the identical 1,584, so it is a property of the store and not of the access path. `TradingCalendar.SessionsAsync` returns the dates `price_daily` holds, which is what its summary says it returns and is deliberate: a calendar walk would produce a row of nulls on a day the exchange did not trade, indistinguishable from a name with no history. **What is unread is which way the surplus runs.** Either the estimate is wrong for this window, or the ingest holds bars on dates the US exchanges were shut, which would be a name trading somewhere the pool should not carry it from. The second would put roughly 175 dates of computed rows into every compute table with no session behind them, and nothing downstream could tell them from real ones. **Not a blocker for 3.17**: the rows are written either way and the question is what they mean, not whether the run completes | A query against `price_daily` grouping the surplus dates by how many tickers carry a bar on each. A date with one or two names behind it is a different finding from a date with three thousand, and the count decides which |
 | 41 | **`TradingCalendar.SessionsAsync` does not complete against the backfilled `price_daily`, and it is the first statement of every compute range execution.** Measured 2026-08-18: `run_log` 1715, `IndicatorEngine` over `2021-01-04..2026-08-13`, `failed` at **300,254 ms** with `rows_written` NULL, which is the connection string's `Command Timeout=300` and therefore a statement that did not finish in five minutes rather than a transient fault; `0 connection open(s) retried` alongside it. The statement is `SELECT DISTINCT date FROM price_daily WHERE date BETWEEN ... ORDER BY date` over 109.8 million rows, and D-102 measured one table over that **Postgres does not do a loose index scan for `DISTINCT`**, so the plan is one full pass over every index entry. **This is item 25's shape and item 25 does not name it**: that item lists C01's `LiquidAsync`, C07's unbounded nightly `GROUP BY date` and C08's and C10's window shapes, and this read arrived later, at 3.14, when the calendar moved up to the driver so two compute stages in one backfill could not evaluate different date sets. Item 25 closes "nothing here is measured" and this one now is. **All six compute stages are blocked, not C08**, every range execution reaching its dates through `BackfillContext.SessionsAsync`; it is memoised per run, so the cost is one full pass per stage and six across the layer. **Three candidate fixes are recorded in the narrative above with what would decide each**: an explicit command timeout, which is the form D-102 is consistent with and costs at least 300 s a stage; a recursive loose index scan, which D-102 rejected inside `LiquidAsync` for a reason that does not transfer, nothing sitting above this CTE to be mis-costed, against D-102's own warning about adopting a form on an isolated measurement; and taking the sessions from the benchmark's series, which is instant and is a change of meaning rather than of access path. **Resolved 2026-08-18, human-directed: the loose index scan.** The D-102 distinction and the index reasoning are at the point of change, the second because `DISTINCT ticker` is served by `PRIMARY KEY (ticker, date)` and `DISTINCT date` cannot be, needing `price_daily_date_ticker_ix (date, ticker)` from 0007, which is why the two shapes read as interchangeable and are not. **Set proved before speed: 1,584 dates both ways, 0 missing, 0 extra, ascending**, both statements extracted mechanically from source rather than transcribed, transcript at `docs/evidence/phase-3/calendar-loose-scan-set-identity-20260818.txt`. **The old form is measured rather than inferred at 308,762 ms**, given no command timeout, which settles that `run_log` 1715 was 8.8 seconds past a limit rather than a hang. **The new form's own figure is taken in place from the C08 re-run and not from that probe**, the probe's 5,836 ms being a warm reading behind a cold one; recorded in the narrative above with the run | Closed on the form. The timing is the re-run's, recorded against it |
 | 40 | **The 3.6 sweep's `run_log` row is gone from the developer database, and `PriceIngestor` reads as never having run a range.** Measured 2026-08-17 through `/api/runs`: **zero** rows for that stage across all 1,714, against a `price_daily` holding 109.6 million bars and a row 1517 this file records as `ok` over 108.4 minutes. `PriceBackfillTests.SeedAsync` clears `run_log WHERE stage = 'PriceIngestor'` before each test and the suite still ran against the developer store when it did. **This is open item 26's harm as a measurement rather than as a risk**, and item 26 is closed: what was closed is the mechanism, the suite having had its own database since 3.13, and what was not is the row. **It costs no behaviour.** Resumption is `price_fetch_attempt` and is untouched, and `RUNBOOK.md` already states the log is an account rather than a mechanism. What it costs is the account, and specifically 3.16's pre-run report, which will tell an operator the price sweep has never run. **The same clear will run again** on the suite's own database only, so the loss is bounded to what has already happened | A human deciding whether the row is reconstructed from this file or the loss is left recorded. Reconstruction means inserting a row nothing produced, which is why it is not a build session's call |

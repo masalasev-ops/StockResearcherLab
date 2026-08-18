@@ -6738,10 +6738,16 @@ resumption proof.
 **3.13 claims its done-when.** The phase's line is "re-running any compute stage over a
 date, against a store whose ingest has not moved, reproduces what the backfill wrote byte
 for byte", tested at 3.13 as range mode against nightly, and both C08 and C09 now carry
-it. **What stays owed is C09's range detail line**, which reports dates, pool and row
+it. ~~**What stays owed is C09's range detail line**, which reports dates, pool and row
 counts and no null counts where C08's reports eight, so the two report lines cannot be
 read against each other. That was recorded when C09's range mode landed and is unchanged
-here.
+here.~~ **Corrected on 2026-08-17: it is both engines, not one.** Read directly rather
+than remembered. `IndicatorEngine`'s range detail reports dates, epochs, tickers and
+chunks; `ValuationEngine`'s reports dates, pool, rows and chunks. **Neither carries a null
+count.** The eight and the twelve live on the two *nightly* `Detail` helpers, so the gap is
+the range line against the nightly line on **both** engines, and the work owed is two report
+lines rather than one. The original named C09 alone because that was the engine in front of
+me when it was written, which is the reading-from-memory this file has a rule against.
 
 **One process note, stated rather than left to be inferred.** `ci.ps1` was run after this
 commit and after the test-database commit, and not after the three sweeps at `c949b89`;

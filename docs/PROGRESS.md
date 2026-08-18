@@ -7540,6 +7540,21 @@ before phase 4 reads the column rather than after.
 **Four of six compute stages: 71.85 minutes.** C08 21.45, C09 32.36, C10 15.40, C35 2.64.
 C34 and C11 are not run: C11 waits for the flow sweep and C34 is that sweep's engine.
 
+**`ci.ps1` green at `167a5a0`**, 7 results: `guards.ps1` ok over 131 files, restore, build
+at 0 warnings and 0 errors, no secrets file present, 12 migrations applied from an empty
+server, the second migrate finding nothing to apply, and 436 of 436 tests passing.
+
+**What this instruction's done-when asked for, against what it got.** The exception is
+authored and names the role rather than the ticker. The benchmark is loaded and was
+verified against the calendar before anything computed on it. C08 and C10 are re-run with
+four figures each and the two coverage queries are reported. C10's new total was reported
+before C35 started and is not hours. No stage was re-run beyond the two: C02's re-run is
+the load itself, and C35 was a first range run rather than a second. **One line was not met
+as written**: the as-of derivation was to be fixed in the market context and percentile
+engines and nowhere else, and it was fixed once in the statement both take, which seven
+components take. The deviation, the alternative that was rejected and the whole-window
+proof that no output moves are recorded above.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 

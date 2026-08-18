@@ -7183,11 +7183,84 @@ what it has now is the figure to decide on.
 that said it resolves when the backfill runs. Not queried here: the instruction for this
 pass is the timing figures, and the done-when queries are a separate reading.
 
+#### 2026-08-18, C10 over the window, and the benchmark was never loaded
+
+**`run_log` 1718, `ok`, 1,584 rows, 391.80 minutes.** Per date, compute only: **first 248
+ms, median 14,641 ms, last 15,912 ms, total 23,506,705 ms over 1,584 units. Outside the
+work loop: calendar 66 ms, write 197 ms; 263 ms in all.** Six and a half hours to produce
+1,584 rows, which is one row a date and the whole of this stage's output.
+
+**Item 43's `Skip` earned itself on the one stage that needed it.** C10's write is a single
+batched COPY after the date loop, and it comes back at 197 ms sitting beside a loop of
+23,506,705 ms. Without the drop it would have been reported as the loop plus the write and
+the two accounts would have double-counted six hours.
+
+**First 248 ms against a median of 14,641 ms is not a warm-up, it is the shape of the
+statement.** `Universe.AsOf(date)` is `SELECT DISTINCT ON (ticker) ... FROM security_daily
+WHERE date <= X`, so the earliest dates match almost nothing and the latest match all
+771,145 rows. **The per-date cost therefore grows through the range and the total is
+quadratic in its length**, which is why first, median and last read 248, 14,641 and 15,912.
+It runs twice a date, once for breadth and once for the sector composite.
+
+**C08 does not pay this and the difference is an abstraction it uses and C10 does not.**
+Membership changes only on the 292 weekly evaluation dates, so C08 and C35 derive it once
+per epoch through `Membership.EpochsAsync` and never touch `security_daily` inside their
+loops. C10 and C11 still call `Universe.AsOf` per date. **This is the measurement 3.14 owed
+and deferred**: its scope line asked for the looped shape against the alternative measured
+over one month with the faster taken, and `PROGRESS.md` recorded that as owed against
+3.16's driver run because the tables were empty. They are not empty now.
+
+#### 2026-08-18, the benchmark has 265 bars and two components depend on it
+
+**`SPY.US` holds 265 bars in `price_daily`, first 2025-07-22, and carries zero rows in
+`price_fetch_attempt`.** The 3.6 sweep never asked for it. Its pool is every admitted
+common stock, live and delisted, and **the benchmark is an ETF**, which D-4 excludes from
+the universe. Its only bars are what the unfiltered nightly bulk feed has left since
+2025-07-22. Nothing about this errored at any point.
+
+**What that costs C10.** `BenchmarkAboveItsAverageAsync` returns null below 200 bars, which
+is correct and deliberate: a shorter window is not the average the column names. So
+`benchmarkAbove` is null for every date before roughly 2026-04, and `Regime` returns
+`mixed` whenever it is null. **1,497 of 1,584 dates are `mixed` and 0 are `risk_off`,
+against 192 dates whose breadth is at or below the 0.40 floor and 925 at or above the 0.60
+ceiling.** All 87 `risk_on` fall in 2026. **Breadth itself is right**: 2022 averages 0.376
+across 259 dates, which is the bear market showing up exactly where it should.
+
+**What it costs C08, which is larger.** `IndicatorEngine.Benchmark` is the same `SPY.US`.
+**2,690,981 of 4,143,273 `indicator_daily` rows carry null `rs_change_21d`,
+`rs_change_63d` and `rs_20d_slope`**, being every row before the benchmark's history
+starts: 2021 through 2024 are zero on all three across 2,690,981 rows, 2025 is partial and
+2026 is populated. The columns that do not read the benchmark are fine throughout,
+`dist_200dma` at 100 percent and `rs_change_vs_sector` at about 98, which is what says the
+cause is the benchmark rather than the stage.
+
+**This is `CLAUDE.md` §1 exactly.** Both components null correctly rather than computing
+over a short window, both runs completed, both wrote plausible row counts, and four of the
+five and a half years of relative strength and regime are empty or degenerate. The only
+thing that would have shown it is a query against what was written, which is what this is.
+
+**The fix is one `eod/{t}` call and an authored decision, not a compute change.** Loading
+`SPY.US`'s history costs about one unit. What it needs first is a decision about the price
+pool: the sweep's pool is admitted common stock [INVARIANT 1, D-4] and a benchmark is a
+reference series rather than a universe member, so carrying it means an explicit exception
+stated somewhere rather than a widening of the criteria. **Then C08 and C10 both need
+re-running**, which is a second run of two compute stages and is not a build session's call.
+Opened as item 45.
+
+**Three of six compute stages: 7.64 hours.** C08 34.06 minutes, C09 32.36, C10 391.80.
+
+**One observation not chased.** `indicator_daily` carries 1,272 rows dated 2001, outside
+the range this run covered and outside the window. C08's range mode writes only the dates
+the calendar returns, so these predate it. Recorded rather than investigated; the query
+that would settle it is which tickers those rows carry and what `run_log` was doing when
+they were written.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
+| 45 | **The benchmark's history was never loaded, and two compute components are empty or degenerate for four of the five and a half years because of it.** Measured 2026-08-18: **`SPY.US` holds 265 bars in `price_daily`, first 2025-07-22, and zero rows in `price_fetch_attempt`.** The 3.6 sweep never asked for it, its pool being every admitted common stock and the benchmark being an ETF that D-4 excludes from the universe; the 265 bars are what the unfiltered nightly bulk feed has left since 2025-07-22. **C10**: `BenchmarkAboveItsAverageAsync` nulls below 200 bars, correctly, so `benchmarkAbove` is null before roughly 2026-04 and `Regime` returns `mixed` whenever it is. **1,497 of 1,584 dates are `mixed` and 0 are `risk_off`, against 192 dates at or below the breadth floor and 925 at or above the ceiling**, with all 87 `risk_on` in 2026. Breadth itself is correct, 2022 averaging 0.376. **C08, which is larger**: **2,690,981 of 4,143,273 `indicator_daily` rows carry null `rs_change_21d`, `rs_change_63d` and `rs_20d_slope`**, every row before the benchmark's history starts, while `dist_200dma` at 100 percent and `rs_change_vs_sector` at about 98 show the stage is fine and the input is not. **Nothing errored at any point**: both components null rather than computing over a short window, which is the design working, and both runs reported plausible counts. **The fix is about one unit**, a single `eod/{t}` call for one ticker, and it is blocked on a decision rather than on cost: the price pool is admitted common stock [INVARIANT 1, D-4] and a benchmark is a reference series rather than a universe member, so carrying it is an explicit exception that has to be stated rather than a criterion widened. Evidence at `docs/evidence/phase-3/benchmark-history-and-dependents-20260818.txt` | An authored decision on the price pool, then a re-run of C08 and C10, which is a second run of two compute stages. Before phase 4 reads relative strength or the regime label, and before `VALIDITY.md`'s claims rest on either |
 | 44 | **A nightly run and a range sweep of the same component write one another's attempt rows with different dates, and each undoes the other's work.** Read out of the source 2026-08-18 while deciding whether the night pauses for 3.9's sweep. `flow_fetch_attempt` holds one row per ticker, upserted on ticker by both paths. **C05's nightly stamps `context.Date`**, the run date; **its sweep stamps `context.To`**, the range end, and computes its remaining set as the pool minus the tickers carrying that exact date [D-99]. With a sweep over `..2026-08-13` running on 2026-08-18 the two dates differ, so: a ticker the night touches has its sweep stamp overwritten, falls back into the remaining set and is walked again at ten units a page; and a ticker the sweep has just fetched whole carries 2026-08-13, which `RotationSelection` orders **ahead of** the night's own 2026-08-18 under `ThenBy(attempted date)` ascending, so the rotation prefers precisely the names the sweep just covered. Each direction is a re-fetch of work already paid for. **C03 has the same shape**, its sweep also stamping the range end. **This is not what `backfill.unit_reserve` addresses**: the phase 3 plan gives that key's purpose as "holding back what a night costs so a sweep cannot starve the nightly run", which guarantees the night can run and says nothing about the two paths sharing a column. **Bounded now and not later**: nothing in this repository schedules a nightly run, there is no cron, Task Scheduler entry, `BackgroundService` or `IHostedService` anywhere in it, so today this is an operator choice; once the system is live and the night is not optional, it stops being one | An authored decision, before go-live and before any sweep is run against a store a scheduled night is also writing. For 3.9 the answer taken was to pause the night for the sweep's days, which is free while nothing schedules it |
 | 43 | **Every compute range mode times its work loop and none of them times what precedes it, so the per-unit figures describe less than half a stage.** Measured 2026-08-18 on the first one to run: C08 at `run_log` 1716 reported 950,200 ms across 22 chunks against a stage duration of **2,043,579 ms**, leaving **1,093,379 ms, 53.5 percent**, in an unbroken setup span before the loop starts. For C08 that span is the calendar read, the epoch map, one membership read and one composite build per epoch across 292 epochs, and the benchmark series. **The shape is the same in all six**: `RangeTiming` was wired into each loop at 3.17 and nothing above the loop is instrumented, which was invisible until a stage ran over a real range. **Two consequences.** The phase's timing line cannot be assembled from the per-unit figures, because they cover 46.5 percent of the one stage measured and an unknown fraction of the others; and item 41's calendar read is bounded above by that span rather than measured inside it, so its only isolated figure remains a warm probe. **What is not wrong is the loop figures themselves**, which are exact for what they cover, and the total is in `run_log.duration_ms` throughout. The gap is between them. **Built 2026-08-18, human-directed, before the remaining five ran**: `PhaseTimer` names each span outside the work loop and every range mode reports one, C08 marking calendar, epochs, settings, benchmark and members-and-composites, C10 marking its trailing batched write, and C09, C35, C34 and C11 marking what each has. `Skip` drops the loop's own span rather than folding it into the phase after it, which is C10's case and would otherwise double-count the loop. **C08 is deliberately not re-run for it.** Its total is measured, 2,043,579 ms at `run_log` 1716, and its breakdown is not; the missing figure is which of the five phases the 1,093,379 ms sits in, and the phase's timing line is assembled from totals rather than from breakdowns, which C08 has. **So nothing this item exists to protect is lost by leaving it**, and the one question the breakdown would have answered for C08 alone, item 41's calendar read in place, stays bounded rather than isolated | Closed on the instrumentation. What stays open is the C08 breakdown, which is not recoverable without a second run and is not worth one |
 | 42 | **`price_daily` holds about twelve percent more distinct dates than the exchange traded, and every compute range execution evaluates all of them.** Measured 2026-08-18 as a by-product of item 41's set proof: **1,584 distinct dates** over 2021-01-04..2026-08-12, against roughly **1,409** US sessions for that span. Both the old statement and the new one return the identical 1,584, so it is a property of the store and not of the access path. `TradingCalendar.SessionsAsync` returns the dates `price_daily` holds, which is what its summary says it returns and is deliberate: a calendar walk would produce a row of nulls on a day the exchange did not trade, indistinguishable from a name with no history. **What is unread is which way the surplus runs.** Either the estimate is wrong for this window, or the ingest holds bars on dates the US exchanges were shut, which would be a name trading somewhere the pool should not carry it from. The second would put roughly 175 dates of computed rows into every compute table with no session behind them, and nothing downstream could tell them from real ones. **Not a blocker for 3.17**: the rows are written either way and the question is what they mean, not whether the run completes. **Answered 2026-08-18 by the query this item asked for, and it is the second reading.** The distribution is bimodal with three orders of magnitude between the modes: median **18,315** tickers a date, p25 16,901, p75 20,582, against **159 dates below 100** and **162 below 1,000**, p1 at 3 and p5 at 12, and almost nothing between 500 and 1,000. **The thin dates are the days the exchange was shut**: 122 Saturdays and Sundays, and the remainder read off the list as the US market holiday calendar, New Year, Independence Day, Christmas, Thanksgiving, Martin Luther King, Presidents' Day, Memorial Day, Labor Day, Juneteenth and Good Friday with their observances. **1,584 less 162 is 1,422 against the estimate's roughly 1,409**, so the estimate was sound and the whole surplus is non-sessions. **The weekend rows change character sharply**: one ticker a weekend in early 2021, then exactly twelve on every Saturday and Sunday from 2025-07-05 to the window's end, which is an instrument or provider change rather than scattered bad rows. **The cost is downstream and not in `price_daily`**, whose window holds 34,287,467 ticker-days: `SessionsAsync` returns all 1,584, so every compute range execution evaluates 162 dates the market did not trade, C10 labels a regime on each, C11 ranks cells on each, and phase 4 would score screens and compute forward returns across them. Transcript at `docs/evidence/phase-3/tickers-per-date-20260818.txt` | **Answered and not chased, as directed.** What it needs now is an authored decision about what a session is, before phase 4 reads any of it. The measurement changes how option 3 at item 41 looks, a calendar taken from one ticker's series having excluded exactly these while risking real dates, so the two decisions are one |

@@ -176,6 +176,20 @@ public sealed class FlowIngestor : IStage, IBackfillStage
 
         string? haltedOn = null;
 
+        // **What the gate said, kept rather than reduced to a bool** [item 47].
+        // `AllowanceVerdict` has three values because an exhausted allowance and an
+        // unusable reading are different observations, and the two call for different
+        // actions: `Exhausted` means wait for tomorrow, `Stale` means make one billable
+        // call. This sweep threw the verdict away at the lambda below and its halt line
+        // named only the ticker, so the halt of 2026-08-19 at 00:40Z could not be told
+        // apart from an exhausted one without reading `/api/user` by hand and applying
+        // the rule on paper. The other four sweeps keep `decision.Detail`.
+        //
+        // A captured local rather than a changed signature on `GetAllPagesAsync`, whose
+        // gate is a predicate shared with every other pager. Safe to capture because
+        // this loop is serial by design, stated above: one walk asks the gate at a time.
+        AllowanceDecision? refusal = null;
+
         // **Serial rather than parallel, and that is the paging.** C02 and C03 fan out
         // because one ticker is one call; here one ticker is a walk whose length is
         // discovered as it runs, so a bounded worker pool would have several walks
@@ -189,8 +203,18 @@ public sealed class FlowIngestor : IStage, IBackfillStage
             // cost is a `/api/user` read per page, which spends no units.
             var read = await WalkAsync(
                 ticker, pageSize,
-                async token => (await context.NextUnitAsync(weight, reserve, allowance, token)
-                    .ConfigureAwait(false)).Fits,
+                async token =>
+                {
+                    var decision = await context
+                        .NextUnitAsync(weight, reserve, allowance, token).ConfigureAwait(false);
+
+                    if (!decision.Fits)
+                    {
+                        refusal = decision;
+                    }
+
+                    return decision.Fits;
+                },
                 ct).ConfigureAwait(false);
 
             if (read is null)
@@ -245,7 +269,7 @@ public sealed class FlowIngestor : IStage, IBackfillStage
                 : BackfillResult.Completed(insiderRows, context.To, detail);
         }
 
-        return BackfillResult.Halted(insiderRows, context.To, detail + " " + DescribeGatedHalt(haltedOn));
+        return BackfillResult.Halted(insiderRows, context.To, detail + " " + DescribeGatedHalt(haltedOn, refusal));
     }
 
     /// <summary>
@@ -263,13 +287,30 @@ public sealed class FlowIngestor : IStage, IBackfillStage
     /// an end-to-end range test would stamp an attempt row for every real ticker. The
     /// suite now prepares its own store [item 26, 3.13] and the end-to-end test is owed
     /// rather than refused, but the distinction stays asserted here as well as there.
+    ///
+    /// **And the gate's own reason, which this line did not carry** [item 47]. `Exhausted`
+    /// and `Stale` are the same sentence to a reader and opposite instructions to an
+    /// operator: the first means wait for tomorrow, the second means make one billable
+    /// call, `/api/user` being free and therefore unable to roll the provider's counter.
+    /// The halt of 2026-08-19 at 00:40Z was `Stale` against an allowance 98 percent
+    /// unspent, and telling it apart took a hand-written read and the rule applied on
+    /// paper. `AllowanceDecision.Detail` already says which and carries the remaining
+    /// figure and any drift between the provider's limit and the configured one.
+    ///
+    /// **Null is a halt whose reason was lost rather than a halt with no reason**, and it
+    /// says so rather than rendering an empty string. A gate that refused always produced
+    /// a decision, so a null here is this component failing to keep it.
     /// </summary>
-    public static string DescribeGatedHalt(string ticker) => string.Format(
+    public static string DescribeGatedHalt(string ticker, AllowanceDecision? refusal = null) => string.Format(
         CultureInfo.InvariantCulture,
         "HALTED on the allowance gate at {0}, mid-walk. That ticker carries no attempt row and is " +
         "walked again from its first page by the next run, so no partial history is recorded as " +
-        "complete. This is not a D-71 shortfall and is not counted as one.",
-        ticker);
+        "complete. This is not a D-71 shortfall and is not counted as one. The gate said: {1}",
+        ticker,
+        refusal is { } d
+            ? $"{d.Verdict}. {d.Detail}"
+            : "nothing was kept, which is this component losing the verdict rather than the gate " +
+              "not giving one [item 47].");
 
     /// <summary>
     /// The sweep's pool, which is the live universe in ticker order.

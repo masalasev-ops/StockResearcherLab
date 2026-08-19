@@ -1,4 +1,5 @@
 ﻿using System.Globalization;
+using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Core;
 using StockResearcherLab.Data.Eodhd;
 using StockResearcherLab.Pipeline.Ingest;
@@ -132,6 +133,95 @@ public sealed class FlowRangeTests
 
         // And the halt is not counted as an under-delivery anywhere.
         Assert.DoesNotContain("under-delivered", gated, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// **A stale reading and an exhausted one produce different halt lines** [item 47].
+    ///
+    /// The two are opposite instructions to an operator. `Exhausted` means the day is
+    /// spent and the next run is tomorrow. `Stale` means the reading belongs to another
+    /// day and one billable call clears it, `/api/user` being free and therefore unable
+    /// to roll the provider's counter by itself.
+    ///
+    /// **This is asserted because the sweep collapsed them and it cost a diagnosis.** At
+    /// 00:40Z on 2026-08-19 the sweep halted at its first ticker having written nothing,
+    /// and the halt line named the ticker and no more. The allowance was 98 percent
+    /// unspent and the verdict was `Stale`; telling that from `Exhausted` took a
+    /// hand-written read of `/api/user` and `AllowanceRule` applied on paper.
+    ///
+    /// Driven through `AllowanceRule.Decide` rather than through hand-built decisions, so
+    /// what is asserted is the rule's own two verdicts rather than two strings this test
+    /// invented.
+    /// </summary>
+    [Fact]
+    public void AStaleReadingAndAnExhaustedOneProduceDifferentHaltLines()
+    {
+        var day = new DateOnly(2026, 8, 19);
+
+        // Spent to the reserve on the day being run: nothing left for a ten-unit page.
+        var exhausted = AllowanceRule.Decide(
+            new AllowanceReading(Used: 49_995, Limit: 100_000, StampedOn: day),
+            day, reserve: 50_000, projectedWeight: 10, configuredLimit: 100_000);
+
+        // Barely spent, but the counter still belongs to yesterday.
+        var stale = AllowanceRule.Decide(
+            new AllowanceReading(Used: 1_957, Limit: 100_000, StampedOn: day.AddDays(-1)),
+            day, reserve: 50_000, projectedWeight: 10, configuredLimit: 100_000);
+
+        Assert.Equal(AllowanceVerdict.Exhausted, exhausted.Verdict);
+        Assert.Equal(AllowanceVerdict.Stale, stale.Verdict);
+
+        var onExhausted = FlowIngestor.DescribeGatedHalt("SRLC.US", exhausted);
+        var onStale = FlowIngestor.DescribeGatedHalt("SRLC.US", stale);
+
+        // **The lines differ**, which is the whole property and is asserted before
+        // anything about their wording, because two lines can each contain the right
+        // words and still be the same line.
+        Assert.NotEqual(onExhausted, onStale);
+
+        // Each names its own verdict and neither names the other's.
+        Assert.Contains("Exhausted", onExhausted, StringComparison.Ordinal);
+        Assert.DoesNotContain("Stale", onExhausted, StringComparison.Ordinal);
+        Assert.Contains("Stale", onStale, StringComparison.Ordinal);
+        Assert.DoesNotContain("Exhausted", onStale, StringComparison.Ordinal);
+
+        // And each carries the figure an operator would act on. Exhausted says what is
+        // left against what the next unit costs; stale says what was spent and on which
+        // day, which is the pair that makes "not today's number" legible.
+        Assert.Contains("5 are left above the reserve", onExhausted, StringComparison.Ordinal);
+        Assert.Contains("The next unit projects at 10 units", onExhausted, StringComparison.Ordinal);
+
+        Assert.Contains("1957 spent units belong to a different day", onStale, StringComparison.Ordinal);
+        Assert.Contains("stamped 2026-08-18", onStale, StringComparison.Ordinal);
+        Assert.Contains("2026-08-19", onStale, StringComparison.Ordinal);
+
+        // The stale line names the way out, which is the whole reason the two must not
+        // read alike: one billable call clears it and /api/user is not one.
+        Assert.Contains("first billable call", onStale, StringComparison.Ordinal);
+
+        // Both are still halts at the same ticker with the same resumption promise, so
+        // the shared half of the sentence has not been lost to the new half.
+        foreach (var line in new[] { onExhausted, onStale })
+        {
+            Assert.Contains("HALTED on the allowance gate at SRLC.US", line, StringComparison.Ordinal);
+            Assert.Contains("walked again from its first page", line, StringComparison.Ordinal);
+            Assert.Contains("is not a D-71 shortfall", line, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// **A halt with no decision kept says so rather than rendering an empty reason**
+    /// [item 47]. The gate that refused always produced one, so a null is this component
+    /// losing it, and a line that quietly omitted the reason would read as a gate that
+    /// gave none.
+    /// </summary>
+    [Fact]
+    public void AHaltWithNoDecisionKeptSaysSoRatherThanRenderingNothing()
+    {
+        var line = FlowIngestor.DescribeGatedHalt("SRLC.US");
+
+        Assert.Contains("nothing was kept", line, StringComparison.Ordinal);
+        Assert.Contains("losing the verdict", line, StringComparison.Ordinal);
     }
 
     /// <summary>

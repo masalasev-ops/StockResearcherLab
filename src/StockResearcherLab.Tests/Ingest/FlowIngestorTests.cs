@@ -105,6 +105,69 @@ public sealed class FlowIngestorTests
     // -------------------------------------------------------------- parsing ---
 
     /// <summary>
+    /// **The parse stores the date it was sent and never manufactures one** [item 49].
+    ///
+    /// `insider_transaction` holds ten rows whose `transaction_date` is outside any
+    /// plausible range: one at `0024-01-01` and nine across 2027 to 2033, the furthest
+    /// being `BEAM.US` at 2033-06-06 against a filing of 2023-06-08. The question that
+    /// item asks is whether the provider sent those or this parse made them, and this is
+    /// the half of the answer that can be pinned in a fixture.
+    ///
+    /// **One named field, parsed exactly, or null.** `transaction_date` is read by name
+    /// rather than by position, so no other date in the payload can reach the column, and
+    /// `TryParseExact` on `yyyy-MM-dd` neither expands a two-digit year nor accepts a
+    /// near-miss. **A date this parse cannot read becomes null rather than a guess**,
+    /// which is the null-means-unknown rule applied where it costs something: an
+    /// unreadable date silently coerced would be indistinguishable from a real one.
+    ///
+    /// **What this does not decide** is whether the ingest should reject an out-of-range
+    /// date rather than store it. That is item 49's authored half, and this fixture is
+    /// what would fail when it is answered, which is the point of pinning it now.
+    /// </summary>
+    [Fact]
+    public void TheParseStoresTheDateItWasSentAndNullsWhatItCannotRead()
+    {
+        var rows = FlowIngestor.ParseFilings("CCS.US", Filings("""
+            [{"accession_number":"A1","filed_at":"2023-06-08",
+              "derivative":[
+                {"transaction_code":"A","transaction_date":"2033-06-06"},
+                {"transaction_code":"A","transaction_date":"0024-01-01"},
+                {"transaction_code":"A","transaction_date":"24-01-01"},
+                {"transaction_code":"A","transaction_date":"2023-13-45"},
+                {"transaction_code":"A","transaction_date":"2023-06-08T00:00:00Z"},
+                {"transaction_code":"A","transaction_date":""},
+                {"transaction_code":"A"}]}]
+            """));
+
+        var dates = rows.OrderBy(r => r.Ordinal).Select(r => r.TransactionDate).ToList();
+
+        // Sent in the future, stored in the future. Nothing bounds it today.
+        Assert.Equal(new DateOnly(2033, 6, 6), dates[0]);
+
+        // Sent as year 24, stored as year 24. This is the row `BCO.US` carries, and it
+        // is the provider's string rather than a two-digit year this parse widened.
+        Assert.Equal(new DateOnly(24, 1, 1), dates[1]);
+
+        // **A two-digit year is not silently expanded**, which is what would have made
+        // the row above this parse's doing rather than the payload's.
+        Assert.Null(dates[2]);
+
+        // An impossible month and day is null rather than rolled forward.
+        Assert.Null(dates[3]);
+
+        // A timestamp is taken by its first ten characters, which is the one leniency.
+        Assert.Equal(new DateOnly(2023, 6, 8), dates[4]);
+
+        // Empty and absent are both unknown, and neither becomes the filing date.
+        Assert.Null(dates[5]);
+        Assert.Null(dates[6]);
+
+        // **No row borrowed `filed_at`**, which is the substitution that would turn an
+        // unknown transaction date into a plausible one nobody could later question.
+        Assert.DoesNotContain(new DateOnly(2023, 6, 8), dates.Skip(5));
+    }
+
+    /// <summary>
     /// The S4 rubric disqualifies option exercises and scheduled plan activity, so a
     /// count that cannot separate an open-market purchase from an award is not the
     /// count the screen needs [D-61]. transaction_code is what does that.

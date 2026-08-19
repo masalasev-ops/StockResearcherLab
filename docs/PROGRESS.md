@@ -2961,11 +2961,11 @@ an attempt timestamp, would have been wrong even though it looks equivalent.
 **Measured:** the before-state above, and seven tests over a six-member pool and a
 rotation of two.
 
-**Not measured, and it cannot be today.** The after-state of `fcf_yield` coverage
+~~**Not measured, and it cannot be today.** The after-state of `fcf_yield` coverage
 needs enough runs to cycle a pool of roughly 4,800 at 500 a run, which is about ten
 runs at ~5,000 units each. The allowance stood at 90,518 of 100,000 after the form4
 ordering probe, so there is room for one run today and not for ten. The figure is
-owed, and it is the observable this change exists to move.
+owed, and it is the observable this change exists to move.~~ **Measured 2026-08-19 once 3.7 had swept: 6,530,800 of 14,844,295 rows in the window, 44.0 percent, over 8,224 of 9,673 tickers.** Recorded against carried obligation 0006 in the 3.18 entry below.
 
 The coverage line now separates new from refreshed and names the oldest attempt date
 in the selection, so a frozen rotation is visible in the run log rather than in a
@@ -7632,6 +7632,85 @@ than the window: 3 rows in 1993 rising through 20,242 in 2015 and 61,516 in 2021
 2021 through 2026 each between 49,360 and 61,516 over 506 to 576 tickers.
 
 **Eleven rows carry a transaction date outside any plausible range**, opened as item 49.
+
+#### 2026-08-19, the replay line, half proved and half owed
+
+**The compute layer replays byte-identically over a historical date against the backfilled
+store.** 2024-01-16 digested before and after, `md5` over each row rendered whole and
+ordered by its key, then all four stages re-run over that single date through the range
+path:
+
+| store | rows | digest before and after |
+|---|---|---|
+| `indicator_daily` | 2,543 | `d843224bb341e67cabc771a11c7ddabe` |
+| `valuation_daily` | 9,489 | `c84b3eb409bedb77cb7b4444d3a9cd21` |
+| `sentiment_derived_daily` | 2,543 | `a611abcc2b327e9ca1814b2db7d8f398` |
+| `market_context_daily` | 1 | `c86ddbfb8d35cee47273c1c92a4333c8` |
+
+Unchanged on all four. That is the property the done-when names, over a store two orders
+of magnitude larger than the one phase 2 asserted it on.
+
+**The end-to-end half through `run-night` is owed and was not run, and the reason is item
+44 rather than time.** `FlowIngestor`'s nightly path stamps `context.Date` on its attempt
+rows and its sweep stamps `context.To`. The 3.9 sweep is mid-flight with 600 tickers
+stamped 2026-08-13, and a night over a historical date would stamp that date onto whatever
+C05's rotation selected, dropping those tickers out of the sweep's attempted set and
+putting them back in the remaining one at about 83 units each. **The night was paused for
+exactly this and running `run-night` would have unpaused it.** So the line is owed until
+3.9 completes, and this was read out of the two call sites rather than assumed.
+
+#### 2026-08-19, carried obligation 0006 answered: `fcf_yield` after the sweep
+
+The obligation reads "read it once the pool has cycled", lands at 3.7 and is recorded at
+3.18. 3.7 is done, so it is a query rather than a wait, and this file said "Not measured,
+and it cannot be today", which is no longer true.
+
+**6,530,800 of 14,844,295 `valuation_daily` rows in the window carry `fcf_yield`, 44.0
+percent, over 8,224 of 9,673 tickers.** Before the sweep it was 464 of 5,713 rows, 8.1
+percent, on a store that held one date rather than the window.
+
+**Read as coverage of tickers rather than of rows it is 85 percent**, and the two readings
+differ for the reason the obligation exists: a ticker acquires `fcf_yield` only from the
+date its first usable filing is readable, so the row figure is diluted by every date before
+that and the ticker figure is not. Both are recorded because S1 ranks rows.
+
+#### 2026-08-19, `ARCHITECTURE.html` §16 measured, and the estimates are out by 4.6 times
+
+Sign-off item 3 asks for every after-backfill size restated from measurement, none having
+ever been checked against a table. Measured with `pg_total_relation_size`, so indexes are
+in the figure, which is what the column means.
+
+| store | §16 estimate | measured | rows |
+|---|---|---|---|
+| `price_daily` | 400 MB | **18 GB** | 109,791,136 |
+| `valuation_daily` | 540 MB | **2,533 MB** | 14,100,728 |
+| `indicator_daily` | 1.2 GB | 1,136 MB | 4,153,258 |
+| `sentiment_derived_daily` | 200 MB | 488 MB | 4,059,568 |
+| `fundamental_snapshot` | 60 MB | 343 MB | 830,465 |
+| `insider_transaction` | small | **227 MB at 21 percent of the sweep** | 589,812 |
+| `sentiment_daily` | 380 MB | 144 MB | 1,668,173 |
+| `security_daily` | 100 MB | 111 MB | 759,838 |
+| `events` | small | 101 MB | 472,626 |
+| `earnings_history` | 30 MB | 77 MB | 590,714 |
+| `institutional_holding` | small | 18 MB | 101,381 |
+| `market_context_daily` | small | 1,568 kB | 1,585 |
+| `flow_daily` | 52 MB | 464 kB, C34 not run over the range | 1,995 |
+| **whole database** | **~5 GB** | **23 GB** | |
+
+**`price_daily` at 45 times its estimate is the one that matters and it is not an error in
+the estimate's arithmetic.** §16 sized a five-year window over a universe of roughly 2,000
+names. What the design actually loads is every admitted common stock, live and delisted,
+at whatever depth `eod/{t}` returns, which D-94 records as deliberate: "one unit buys five
+years or twenty, so the load depth is a disk decision rather than a unit one". The estimate
+was never restated when that was decided. **The store is doing what it was told; the figure
+describes a different system.**
+
+**Two of the measurements are not final.** `insider_transaction` is 227 MB at 600 of 2,864
+members, so it lands near a gigabyte. `flow_daily` has three nightly dates in it and no
+range run, so its 52 MB estimate is untested rather than wrong.
+
+**The edit is not made here.** `ARCHITECTURE.html` is human-edited [`CLAUDE.md` §13], so
+the figures are produced and the restatement is the operator's.
 
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.

@@ -1774,3 +1774,33 @@ being read.
 process".
 
 > it dispatches the pool members carrying no attempt row for this range start.
+
+---
+
+## 2026-08-19, `CONFIG_REFERENCE.md`: two allowance keys named two consumers and have five
+
+Checkpoint 3.18 fills the Consumer column for every key phase 3 wired up, and that column
+means someone read the composition code rather than inferred from the name. Reading it
+found two rows wrong. A clean edit [D-73], with the prior wording here.
+
+**What was wrong.** `backfill.daily_unit_allowance` and `backfill.unit_reserve` are read
+by every sweep that spends: C02, C03, C04, C05 and C06, each passing them to
+`context.NextUnitAsync(weight, reserve, allowance, ct)`. Both rows named two of the five.
+
+**Cost of believing the old wording.** An operator changing the reserve to give a sweep
+more room would have expected it to affect the price and fundamentals sweeps and would
+have moved the floor under the sentiment, flow and events sweeps as well. The reserve is
+what guarantees a nightly run can still execute after a backfill day, so a row that
+understates its reach understates what a change to it touches.
+
+**The prior wording**, both rows as they stood at `9abe41f`.
+
+> | `backfill.daily_unit_allowance` | 100000 | 3.1, 3.3 | `PriceIngestor` C02, `FundamentalsIngestor` C03 | 3.6 |
+
+> | `backfill.unit_reserve` | 50000 | 3.3 | `PriceIngestor` C02, `FundamentalsIngestor` C03 | 3.6 |
+
+**The other eight were right and are now stamped rather than pending.** Their Verified
+cells carried a checkpoint number, being the checkpoint at which verification would land,
+and now carry the date it happened. `backfill.ticker_concurrency` gained a clause saying
+what does not read it, C05 being serial by design, because a concurrency key named for one
+component reads as an oversight rather than as a decision.

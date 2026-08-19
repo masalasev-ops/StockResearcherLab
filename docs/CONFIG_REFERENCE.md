@@ -137,16 +137,16 @@ absence from a grep over `src/` is what the entry states.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `backfill.window_start` | "2021-01-04" | D-94, 3.3 | `FundamentalsIngestor` C03, `UniverseBuilder` C01 [3.11], `Worker` backfill driver | 3.16 |
-| `backfill.ticker_concurrency` | 8 | 3.3 | `PriceIngestor` C02 | 3.6 |
-| `backfill.daily_unit_allowance` | 100000 | 3.1, 3.3 | `PriceIngestor` C02, `FundamentalsIngestor` C03 | 3.6 |
-| `backfill.unit_reserve` | 50000 | 3.3 | `PriceIngestor` C02, `FundamentalsIngestor` C03 | 3.6 |
-| `backfill.weight_eod` | 1 | 3.1, 3.3 | `PriceIngestor` C02 | 3.6 |
-| `backfill.weight_fundamentals` | 10 | 3.1, 3.3 | `FundamentalsIngestor` C03 | 3.7 |
-| `backfill.weight_sentiments_per_ticker` | 5 | 3.1, 3.3 | `SentimentIngestor` C04, `ExecuteRangeAsync` | 3.8 |
-| `backfill.weight_form4_page` | 10 | 3.1, 3.3 | `FlowIngestor` C05, `ExecuteRangeAsync` | 3.9 |
-| `backfill.weight_splits` | 1 | 3.1, 3.3 | `EventsIngestor` C06, `ExecuteRangeAsync` | 3.10 |
-| `backfill.weight_dividends` | 1 | 3.1, 3.3 | `EventsIngestor` C06, `ExecuteRangeAsync` | 3.10 |
+| `backfill.window_start` | "2021-01-04" | D-94, 3.3 | `FundamentalsIngestor` C03, `UniverseBuilder` C01 [3.11], `Worker` backfill driver | verified 2026-08-19 |
+| `backfill.ticker_concurrency` | 8 | 3.3 | `PriceIngestor` C02 alone. C05 is serial by design and the other three chunk without it | verified 2026-08-19 |
+| `backfill.daily_unit_allowance` | 100000 | 3.1, 3.3 | Every sweep that spends: `PriceIngestor` C02, `FundamentalsIngestor` C03, `SentimentIngestor` C04, `FlowIngestor` C05, `EventsIngestor` C06 [corrected 3.18; prior wording in `CHANGELOG.md`] | verified 2026-08-19 |
+| `backfill.unit_reserve` | 50000 | 3.3 | Every sweep that spends: `PriceIngestor` C02, `FundamentalsIngestor` C03, `SentimentIngestor` C04, `FlowIngestor` C05, `EventsIngestor` C06 [corrected 3.18; prior wording in `CHANGELOG.md`] | verified 2026-08-19 |
+| `backfill.weight_eod` | 1 | 3.1, 3.3 | `PriceIngestor` C02 | verified 2026-08-19 |
+| `backfill.weight_fundamentals` | 10 | 3.1, 3.3 | `FundamentalsIngestor` C03 | verified 2026-08-19 |
+| `backfill.weight_sentiments_per_ticker` | 5 | 3.1, 3.3 | `SentimentIngestor` C04, `ExecuteRangeAsync` | verified 2026-08-19 |
+| `backfill.weight_form4_page` | 10 | 3.1, 3.3 | `FlowIngestor` C05, `ExecuteRangeAsync` | verified 2026-08-19 |
+| `backfill.weight_splits` | 1 | 3.1, 3.3 | `EventsIngestor` C06, `ExecuteRangeAsync` | verified 2026-08-19 |
+| `backfill.weight_dividends` | 1 | 3.1, 3.3 | `EventsIngestor` C06, `ExecuteRangeAsync` | verified 2026-08-19 |
 
 **Every Consumer here reads `NOT BOUND` and that is the true state after 3.4.** The
 keys are seeded before anything resolves them, and 3.4 builds the gate they will be

@@ -7590,11 +7590,55 @@ counter rolling lazily. This measurement separates them: the boundary is UTC mid
 **the roll happens on the first billable call**, since a reading at 00:41Z said 2026-08-18
 and a reading at 00:42Z, after thirteen billable calls, said 2026-08-19 at 12 used.
 
+#### 2026-08-19, 3.9 day one: 600 of 2,864 members, and the sweep is five days rather than three
+
+`run_log` for `FlowIngestor`, halted, **500,268 insider transaction rows over 600 of 2,864
+universe members**, halting mid-walk at `CNXN.US`. **This one is the halt the plan
+predicts.** The gate read 49,992 used against a 100,000 limit with a 50,000 reserve,
+leaving 8 units against a 10-unit page, so the verdict was `Exhausted` where the first
+halt was `Stale`.
+
+The attempt record holds **600 rows stamped 2026-08-13**, the range end, which is D-99's
+asymmetry: 80 of them yielded nothing and carry a null `last_yield_date`, which is
+attempted-and-empty rather than never-attempted. `CNXN.US` carries no row at all, so the
+next run walks it whole from its first page.
+
+**The sweep is about five days rather than the plan's three, and that is measured rather
+than projected from the estimate.** 600 members cost 49,980 units, which is **83.3 units a
+member, 8.3 pages each**. 2,864 members at that rate is about **238,600 units**, and at
+50,000 usable a day that is **4.8 days**. 3.9 reads "three days by arithmetic, so it halts
+twice in the ordinary course"; the measurement says four halts rather than two.
+
+**Half the daily allowance is idle and that is an operator's decision, not this session's.**
+`backfill.unit_reserve` is 50,000 of 100,000 and exists so a sweep cannot starve the
+nightly run. The night is paused for this sweep's duration [item 44], so the reserve is
+holding back an allowance nothing will spend, and lowering it for the sweep's days would
+roughly halve the day count. **Recorded and not done**: risk and allowance keys are
+operator configuration [INVARIANT 14 for the risk half], and a key changed to make a
+measurement finish sooner is the shape `CLAUDE.md` §11 rules out.
+
+**D-71's shortfall reporting fired on 106 of the 600 tickers**, 537 rows short in total, of
+which 94 are short inside the history where a trailing window can reach them and 12 only at
+the oldest end. That is 17.7 percent of tickers and 0.107 percent of rows, so it is broad
+and shallow: `AAPL.US` 1 interior, `BCS.US` 44 final, `CBAN.US` 67 both. **The reporting is
+the mechanism working**, and what the numbers mean for S4 is a phase 4 reading rather than
+this checkpoint's.
+
+**`insider_transaction` now holds 589,865 rows over 591 tickers**, the difference from the
+sweep's own count being what the nightly path had already loaded.
+
+**The depth by year is the shape a filings index should have** and reaches back further
+than the window: 3 rows in 1993 rising through 20,242 in 2015 and 61,516 in 2021, with
+2021 through 2026 each between 49,360 and 61,516 over 506 to 576 tickers.
+
+**Eleven rows carry a transaction date outside any plausible range**, opened as item 49.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
+| 49 | **Eleven `insider_transaction` rows carry a transaction date outside any plausible range, one of them in the year 24 and nine of them in the future.** Measured 2026-08-19 from 3.9's first day, grouping 589,865 rows by year: **1 row at year 24**, the table's minimum being `0024-01-01`, and **9 rows across 2027, 2028, 2029, 2031 and 2033**, the maximum being `2033-06-06`. Everything between 1993 and 2026 has the shape a filings index should have. **This is not a lookahead and that is why it is an item rather than a blocker**: every consumer reads a trailing window bounded `date <= D`, so a row dated 2033 is invisible until 2033 and a row dated 0024 is always visible but is one row. **What it is instead is a parse or provider defect that nothing would have reported**, since D-71's shortfall check counts rows against `meta.total` and says nothing about whether a date is sane. 0.002 percent of rows, so it changes no metric. | A query naming the eleven tickers and their raw payload dates, deciding between a provider typo and a parse defect, and a decision on whether the ingest rejects a date outside a bound or stores what it was sent. Before phase 4 reads `insider_net_90d_usd` or `distinct_buyer_count` |
 | 48 | **A sweep run on its own between the provider's UTC midnight and the day's first billable call halts at zero and cannot unstick itself.** Measured 2026-08-19 at 00:40Z starting 3.9: the flow sweep halted at `A.US` having written 0 rows and walked 0 of 2,864 members. Read by hand from `/api/user`, which the gate reads and which spends no units: **1,957 used of a 100,000 limit, stamped 2026-08-18, against a UTC provider date of 2026-08-19**, so the verdict was `Stale` and the allowance was 98 percent unspent. **`AllowanceRule` is right to refuse**, 3.1 having measured that a reading across the boundary cannot be told from a rollover and that assuming the generous one spends into a wall. **The gap is that nothing in a sweep can clear it.** `/api/user` is free, so the gate's own read never rolls the counter; only a billable call does, and `Allowance.cs` names the remedy as "a nightly run clears this". **Item 44's decision paused the night for this sweep's duration**, so the documented remedy was the thing that had been switched off. **Cleared 2026-08-19 by running C02 over its already-covered range**, which makes two billable symbol-list calls before it reaches its gate: the counter rolled to `apiRequestsDate` 2026-08-19 at 12 used, the verdict became `Fits` with 49,988 above the reserve, and the sweep ran. **A by-product worth keeping**: 3.1 saw the counter still on the previous day at 02:52 UTC, which was consistent with a later boundary or with lazy rolling; this measurement says lazy rolling, the boundary being UTC midnight and the roll happening on the first billable call | An authored decision on how a sweep starts a provider day, before go-live, where the night is not optional and the question disappears, and before any unattended sweep is scheduled, where it does not |
 | 47 | **`FlowIngestor` is the one sweep whose halt line does not say why it halted, so `Exhausted` and `Stale` collapse into one message.** Read out of the source 2026-08-19 after the halt above could not be diagnosed from the run log. `AllowanceVerdict` has three values deliberately, `Allowance.cs` stating that "an exhausted allowance and an unusable reading are different observations and must not collapse into each other" and that "a verdict that says no for two different reasons tells an operator nothing about which one to act on". **Four of the five sweeps keep `decision.Detail` and put it in their halt line.** `FlowIngestor` passes the gate into `WalkAsync` as a `Func<CancellationToken, Task<bool>>`, so the verdict, the remaining figure and the configured-limit drift are all discarded at the lambda boundary, and `DescribeGatedHalt(ticker)` is built from the ticker alone. **The cost is the wrong action.** `Exhausted` means wait for tomorrow; `Stale` means make one billable call. The run log said neither, and the diagnosis took a hand-written read of `/api/user` and the rule applied on paper. **The fix is the callback's return type**, carrying the decision rather than a bool, and the halt line appending it as the other four do | A build session, and a test that a stale reading and an exhausted one produce different halt lines. Not urgent for 3.9, whose sweep now runs, and due before the sweep is ever run unattended |
 | 46 | **S3's inputs are absent on more than half the ticker-dates in the backfill window, and the coverage varies by a factor of 2.7 across years.** Measured 2026-08-18 from C35's first range run: **2,286,729 of 4,146,137 `sentiment_derived_daily` rows, 55.2 percent, are null on all three metrics**, carrying fewer than `sentiment.min_baseline_days` days inside the baseline window. Coverage of `sentiment_7d_level` by year: 2021 34.7 percent, 2022 42.2, 2023 33.0, **2024 23.8**, 2025 51.1, **2026 64.6**. **This is not item 45's shape and that was checked rather than assumed**: the raw `sentiment_daily` store carries rows in every year and the derived coverage tracks its density, 2024 being the thinnest in both at 168,119 raw rows over 3,629 tickers against 2021's 343,524 over 8,019. So the floor is working on genuinely thin per-name coverage and the input is the provider's. **What makes it a finding rather than a fact** is that the sentiment screen's effective population is therefore not stationary over the window, so a backfilled distribution for S3 is drawn from a population that changes size by 2.7 times across it | A segmentation decision in `VALIDITY.md`, before phase 4 tunes on S3 or D-86 counts a backfilled observation toward a shadow's distribution |

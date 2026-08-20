@@ -7845,11 +7845,101 @@ use**: restoring the 50,000 reserve after this sweep, the first invocation inser
 the second was refused, so the doubling reproduced under the guard and produced one row
 instead of two.
 
+#### 2026-08-20, the store cut to what the measurements need, and two gaps the verification found
+
+**The store was 23.7 GB against `ARCHITECTURE.html` §16's ~5 GB, and this pass closes the
+gap by moving the store rather than the figure.** The 2026-08-19 measurement above recorded
+why they diverged: §16 sized a five-year window over roughly 2,000 names, D-94 later made
+load depth a disk decision, and the estimate was never restated. The plan executed here was
+authored outside this repository and approved 2026-08-20 08:15. It keeps every screen
+definition and cuts the store to what the six compute stages actually read, re-fetching
+nothing.
+
+**`price_daily` was rebuilt rather than deleted from, and the reason is the disk.** The
+approved plan's Step 1 ran a date-batched `DELETE` from 08:57. At 10:44 it was 1 hour 47
+minutes in, on the fourth of ten yearly batches, with 58,658,366 tuples deleted of the
+100,831,651 that had to go. Measured while it ran: the data directory is `E:/PostgreSql/v18/data`
+and `E:` is a **ST2000DM008, a 7200 RPM SATA HDD**, while the machine's NVMe sits unused;
+`shared_buffers` is **128 MB**, the stock default against a 24 GB database; the cumulative
+cache hit ratio on `price_daily` was **74.49 percent**; and the backend sat on
+**`DataFileRead`** throughout, with WAL generation sampled at only **114 kB/s**. So the stage
+was scan-bound, not write-bound. The plan is an `Index Scan using price_daily_pkey` with the
+date as a **non-leading** column, so each batch walks the whole **4,533 MB** primary key;
+the planner declines the `(date, ticker)` index correctly, `date` carrying a correlation of
+**-0.32** against a heap ordered by ticker at **0.69**. Ten batches, each walking a 4.5 GB
+index and touching most of a 9 GB heap, through a 128 MB cache, on a platter.
+
+**The `DELETE` then `VACUUM FULL` pair does the work twice.** The final `VACUUM FULL` copies
+the survivors into a new file regardless, so the delete phase's only product is discarded.
+Rebuilding directly reaches the same end state in one sequential pass. Measured: **insert
+30:19, primary key 7:16, `(date, ticker)` index 0:23, `ANALYZE` 0.4s, 38 minutes in all**,
+against 4 to 7 further hours of batches plus the rewrite. The wait event moved from
+`DataFileRead` to `AioIoCompletion`, which is the readahead a sequential scan gets.
+
+**The plan predicted 9,028,681 survivors and the rebuild produced exactly that, to the row.**
+Two independent methods, the plan's count against the untouched 109.9M-row table and the
+rebuild's insert, same answer. Verified before the swap: 0 tickers outside the keep-set,
+4,291 distinct tickers, oldest row 2016-01-04, and `SPY.US` at **2,670 rows row-for-row
+identical** to the original. The swap ran under a guard that refuses on any of those.
+
+| | before | after |
+|---|---|---|
+| `price_daily` heap | 8,955 MB | **729 MB** |
+| `price_daily` indexes | 9,746 MB | **544 MB** |
+| `price_daily` total | 18 GB | **1,273 MB** |
+| rows | 109,860,332 | **9,028,681** |
+| distinct tickers | 88,398 | **4,291** |
+
+The original is retained as `price_daily_old` and is not dropped until the verification below
+is complete. `_keep_ticker` held **4,291** rows, asserted before any write.
+
+**The computed values reproduce, and that is the claim the pass exists to support.**
+Re-running C08, C09, C35, C10 and C11 over the three pre-registered verification dates
+(2022-06-16, 2023-09-14, 2025-04-15) and comparing whole rows by `IS DISTINCT FROM` across a
+keyed `FULL OUTER JOIN`, with every `_pctile` column excluded because those are a separate
+finding below: **`valuation_daily` 0 differing, `sentiment_derived_daily` 0,
+`market_context_daily` 0, `indicator_daily` 1 of 7,622.** Restricting `valuation_daily` to the
+keep-set was necessary because `_verify_valuation_before` was built as the member subset, 4,201
+rows where the date holds 9,331; the recomputed dates match their untouched neighbours exactly
+(9,331 against 9,330, 9,331 and 9,332), so the recompute is right and the snapshot is narrower
+than its own definition.
+
+**The percentile columns are not populated across the backfill window, and nothing recorded
+it.** `run_log` holds 8 `PercentileEngine` rows and every one before today is stamped
+2026-08-07, the nightly date. C11 has never been run over the range.
+
+| store | in-window rows | with percentiles |
+|---|---|---|
+| `indicator_daily` | 4,146,182 | **10,463** |
+| `valuation_daily` | 14,844,295 | **7,904** |
+| `sentiment_derived_daily` | 4,146,182 | **3,041** |
+
+Most of even those are today's three dates plus the one nightly date. Adjacent untouched dates
+read **0 of 2,568** populated. Screens read the percentile store and nothing else, so this is
+the state phase 4 would have met.
+
+**`security.first_seen` is derived from `price_daily` and the prune truncates it.**
+`UniverseBuilder` upserts `security` on `ticker` alone and takes `first_seen` and `last_seen`
+from `min` and `max` over `price_daily` bounded `date <= asOf`. **2,916 of 4,399 rows carry a
+`first_seen` before 2016-01-04**, the earliest being 1962-01-02. The next C01 run moves those
+forward with no error and no trace. The universe half of the plan's verification requires
+running C01 on the three Sunday evaluation dates, so it is **not run**, and
+`_verify_security_before` holds the pre-prune identity table against the decision.
+
+**Sizes now.** `price_daily` 1,273 MB, `valuation_daily` 2,533 MB unpruned, database 25 GB
+with both copies present. Dropping `price_daily_old` takes it to **6,827 MB**, and Step 2's
+`valuation_daily` prune takes it to about 5.4 GB, which is §16's total.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
+| 54 | **Computed rows exist at three dates that never had a price bar, and test residue is sitting in the live store.** Measured 2026-08-20. `indicator_daily` holds 1,272 rows at 2001-06-20, `valuation_daily` 1,816 at 2001-07-11 and `sentiment_derived_daily` 2,841 at 2001-10-03, 5,929 rows in all. They are real tickers, `A.US` and `AAPL.US` among them, not fixtures: a whitespace-tolerant grep for `2001-[0-9]{2}-[0-9]{2}` across `--include=*.cs` returns nothing. **`price_daily_old` was queried before it is dropped and returns zero tickers with bars on all three dates**, so these were never computed from inputs and predate the prune rather than being orphaned by it. `run_log` has no row on any of the three. Separately it holds 585 rows of which 76 are `Quiet-*` and a large block `Trespasser-*`, plus `SrlTestWalkingStage` on 2019-12-30 and 2019-12-31; `flow_daily` carries six synthetic `SRLROT*.US` tickers and `indicator_daily` one `UNCY.US` row for a ticker with no `security_daily` row and no prices. Item 26 records the suite gaining its own database at 3.13, which is after these were written | Whoever decides whether a derived store may hold a row its inputs cannot produce. The 2001 rows are 0.026 percent of 23M computed rows and no metric is known to move, so this is a hygiene and provenance question rather than a correctness one |
+| 53 | **`flow_daily` was computed against roughly a fifth of the insider corpus and nothing said so.** Measured 2026-08-20 by re-running C34 over its three existing dates: 2026-08-07 went from **661 rows to 5,871**, and values moved with it, `ABCL.US` from 0 to 864,937.19 with `distinct_buyer_count` 0 to 2. The cause is not the prune. `FlowEngine` drives its row set from `SELECT DISTINCT ticker FROM visible` over `insider_transaction`, which 3.9's sweep has grown to 1,849,027 rows over 1,828 tickers since those rows were written. So the table held values derived from the corpus as it stood before the sweep, and read identically to current ones. **The re-run has replaced them**, which is a correction rather than a loss, and `_verify_flow_before` holds the prior state | Phase 4, which reads `insider_net_90d_usd` and `distinct_buyer_count`. Whether a derived store should carry the coverage its inputs had when it was written is the general form, and C34 is the first place it has bitten |
+| 52 | **A recompute moved one row whose inputs did not move, which is a counterexample to the phase's byte-identical line.** Measured 2026-08-20. Re-running C08 over 2025-04-15 reproduced 7,621 of 7,622 rows exactly. `OBNK.US` lost all four benchmark-relative metrics, `rs_change_21d`, `rs_change_63d`, `rs_21d_63d_change` and `rs_20d_slope` going from values to null. **Its own bars are unchanged at 1,338, first 2018-05-09 both sides, and `SPY.US` is unchanged at 2,670**, so neither its input nor the benchmark's moved. It is an active member on that date at epoch 2025-04-13, and it is the only one of 2,556 rows carrying a null `rs_change_21d`. The phase's done-when asserts that re-running a compute stage over a date against a store whose ingest has not moved reproduces byte for byte, and for this ticker the ingest did not move | Phase 3 sign-off. One row in 7,622 is small; a value that appears and disappears without an input change is the class `CLAUDE.md` §1 exists for, and the replay line cannot be signed off while a counterexample stands unexplained |
+| 51 | **`security.first_seen` is derived from `price_daily` and the prune truncates it silently on the next C01 run.** Read out of the source 2026-08-20: `UniverseBuilder.WriteIdentityAsync` upserts `security` with `ConflictTarget` of `ticker` alone, so it overwrites, and `first_seen` and `last_seen` come from `min` and `max` over `price_daily` bounded `date <= asOf`. The prune truncated that table at 2016-01-04. **2,916 of 4,399 `security` rows carry a `first_seen` earlier than that**, the earliest 1962-01-02, so two thirds of the identity table moves forward the next time C01 runs, with no error. D-48 makes `first_seen`, `last_seen` and `delisted_date` the basis for reconstructing membership per date. `_verify_security_before` holds the pre-prune values | Before the next C01 run of any kind, nightly or backfill, and before the universe half of the prune's own verification, which is held for this reason. The decision is whether `first_seen` means first listed or first retained, and if the former it cannot be derived from a pruned `price_daily` |
+| 50 | **The backfill has no percentiles, and `run_log` is what says so rather than any check.** Measured 2026-08-20: `indicator_daily` carries a non-null `atr_pct_pctile` on **10,463 of 4,146,182** in-window rows, `valuation_daily` **7,904 of 14,844,295**, `sentiment_derived_daily` **3,041 of 4,146,182**, and most of even those are the three dates this pass recomputed plus the single nightly date. Adjacent untouched dates read **0 of 2,568** populated. `run_log` holds 8 `PercentileEngine` rows and every one before 2026-08-20 is stamped 2026-08-07, so C11 has never executed over the range. Checkpoint 3.15 built and benchmarked the range mode and its fixture ranked the same way five times; what is absent is the run. Nothing failed, because a percentile column that is null looks exactly like a metric that did not qualify for its cell | Phase 4, and arguably phase 3's own done-when. Screens read the percentile store and nothing else, so on this store every screen scores null for every name on every backfilled date. It is a compute run at zero provider units, not an ingest gap |
 | 49 | ~~**Ten `insider_transaction` rows carry a transaction date outside any plausible range, one of them in the year 24 and nine of them in the future.**~~ **Re-measured 2026-08-20 at day three: 28 rows, 7 before 1990 and 21 after 2026, over a store three times the size.** 0.0015 percent of 1,849,027 rows against 0.0017 percent of 589,865, so the rate is flat and this accretes with the data rather than growing in it. **The early rows fall only in years 0015, 0024 and 0025**, every one a two-digit year zero-padded to four, which is the provider truncating and padding back: 2015, 2024 and 2025. That is corroboration of the diagnosis below rather than a new finding, the parse having already been proved unable to expand a two-digit year. Measured 2026-08-19 from 3.9's first day, grouping 589,865 rows by year: **1 row at `0024-01-01`** and **9 across 2027, 2028, 2029, 2031 and 2033**, the furthest being `BEAM.US` at 2033-06-06. **Recorded as eleven when opened and corrected to ten**, the count having been added up wrong from the year table. Everything between 1993 and 2026 has the shape a filings index should have. **Not a lookahead**: every consumer reads a trailing window bounded `date <= D`, so a 2033 row is invisible until 2033. **Diagnosed 2026-08-19 and it is the provider's data, not this parse.** `ParseFilings` reads `Date(tx, "transaction_date")`, one field by name rather than by position, so no other date in the payload can reach the column; and `Date` is `TryParseExact` on `yyyy-MM-dd` returning null on anything else, so it neither expands a two-digit year nor rolls an impossible one forward. Pinned by `FlowIngestorTests.TheParseStoresTheDateItWasSentAndNullsWhatItCannotRead`, whose decisive case is that `"24-01-01"` comes back **null**: the parse could not have manufactured `0024-01-01`, so the payload carried it. **The shape of the nine says what they are.** Five are one `BE.US` filing, accession 0001209191-18-044124, all `derivative`, all code A at a zero price, titled "Stock Option (Right to Buy)" and "Restricted Stock Unit", filed 2018-07-26 and dated 2028-07-24, which is ten years less two days. `BEAM.US` is the same shape at ten years, `ALV.US` an RSU at three. So the provider is putting a vesting or expiry date in `transaction_date` on award rows rather than sending a wrong one. 0.002 percent of rows and no metric moves | **The diagnosis is closed; the decision is not.** What remains is whether the ingest rejects a date outside a bound, or stores what it was sent and lets a consumer decide. The fixture pins the current answer, so whichever way it goes has a test to fail. Before phase 4 reads `insider_net_90d_usd` or `distinct_buyer_count`, both of which window on this column |
 | 48 | **A sweep run on its own between the provider's UTC midnight and the day's first billable call halts at zero and cannot unstick itself.** Measured 2026-08-19 at 00:40Z starting 3.9: the flow sweep halted at `A.US` having written 0 rows and walked 0 of 2,864 members. Read by hand from `/api/user`, which the gate reads and which spends no units: **1,957 used of a 100,000 limit, stamped 2026-08-18, against a UTC provider date of 2026-08-19**, so the verdict was `Stale` and the allowance was 98 percent unspent. **`AllowanceRule` is right to refuse**, 3.1 having measured that a reading across the boundary cannot be told from a rollover and that assuming the generous one spends into a wall. **The gap is that nothing in a sweep can clear it.** `/api/user` is free, so the gate's own read never rolls the counter; only a billable call does, and `Allowance.cs` names the remedy as "a nightly run clears this". **Item 44's decision paused the night for this sweep's duration**, so the documented remedy was the thing that had been switched off. **Cleared 2026-08-19 by running C02 over its already-covered range**, which makes two billable symbol-list calls before it reaches its gate: the counter rolled to `apiRequestsDate` 2026-08-19 at 12 used, the verdict became `Fits` with 49,988 above the reserve, and the sweep ran. **Recurred 2026-08-20 and was cleared identically**, which is what makes this a property of starting a provider day rather than an incident: at 00:30Z the counter read 95,683 used stamped 2026-08-19 against a provider date of 2026-08-20, and the same C02 run rolled it to 18 used stamped 2026-08-20 for **18 units**, incidentally writing 24,430 bars over 17 names that had no attempt row. So the remedy is cheap and repeatable, and it is still a second component run to unstick the first. **A by-product worth keeping**: 3.1 saw the counter still on the previous day at 02:52 UTC, which was consistent with a later boundary or with lazy rolling; this measurement says lazy rolling, the boundary being UTC midnight and the roll happening on the first billable call | An authored decision on how a sweep starts a provider day, before go-live, where the night is not optional and the question disappears, and before any unattended sweep is scheduled, where it does not |
 | 47 | ~~**`FlowIngestor` is the one sweep whose halt line does not say why it halted, so `Exhausted` and `Stale` collapse into one message.**~~ **CLOSED 2026-08-19.** Read out of the source 2026-08-19 after the halt above could not be diagnosed from the run log. `AllowanceVerdict` has three values deliberately, `Allowance.cs` stating that "an exhausted allowance and an unusable reading are different observations and must not collapse into each other" and that "a verdict that says no for two different reasons tells an operator nothing about which one to act on". **Four of the five sweeps keep `decision.Detail` and put it in their halt line.** `FlowIngestor` passes the gate into `WalkAsync` as a `Func<CancellationToken, Task<bool>>`, so the verdict, the remaining figure and the configured-limit drift are all discarded at the lambda boundary, and `DescribeGatedHalt(ticker)` is built from the ticker alone. **The cost is the wrong action.** `Exhausted` means wait for tomorrow; `Stale` means make one billable call. The run log said neither, and the diagnosis took a hand-written read of `/api/user` and the rule applied on paper. **The fix is the callback's return type**, carrying the decision rather than a bool, and the halt line appending it as the other four do | Closed. The lambda keeps the decision in a captured local rather than reducing it to a bool, which is why `GetAllPagesAsync`'s shared predicate signature did not have to move, and the loop being serial by design is what makes the capture safe. `DescribeGatedHalt` takes the decision and appends its verdict and detail. **A null is rendered as a lost verdict rather than as an empty reason**, because a gate that refused always produced one. Two tests: `FlowRangeTests.AStaleReadingAndAnExhaustedOneProduceDifferentHaltLines`, driven through `AllowanceRule.Decide` so the rule's own verdicts are what is asserted, and `.AHaltWithNoDecisionKeptSaysSoRatherThanRenderingNothing`. 438 of 438 green |

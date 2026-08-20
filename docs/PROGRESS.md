@@ -7752,13 +7752,106 @@ provider's own counter rather than a tally of its own, so it halts on what is ge
 whoever spent it. Recorded here because it recurred, and because a day's arithmetic that
 divides by 100,000 is a floor rather than a figure.
 
+#### 2026-08-20, 3.9 day three: item 48 recurs on schedule and is cleared the same way
+
+**The `Stale` deadlock is not a one-off, and the second occurrence is what makes it a
+property rather than an incident.** Read 2026-08-20 at 00:30Z, thirty minutes past the
+provider's UTC midnight: `/api/user` returned **95,683 used stamped 2026-08-19** against a
+provider date of 2026-08-20, so `AllowanceRule.Decide` would have returned `Stale` and the
+sweep would have halted at zero for the second consecutive start. **The gate's own read
+cannot clear it by construction**, `/api/user` costing nothing being exactly why it is safe
+to call before every unit.
+
+**Cleared by the same C02 run item 48 names**, `backfill PriceIngestor 2021-01-04
+2026-08-13`, whose symbol-list calls are billable and happen before it reaches its own gate.
+The counter rolled to **18 used stamped 2026-08-20** and the verdict became `Fits`. The run
+cost **18 units** and was not idle work: it walked **17 of 50,627** admitted names that had
+no attempt row for this range and wrote **24,430 bars**, the 50,610 already attempted being
+skipped. So the documented remedy is cheap, but it is still a second component run to
+unstick the first, which is what item 48 is open about.
+
+**Armed for 80,000 units on the operator's instruction.** `backfill.unit_reserve` took a
+version at **20,000**, so the gate's `limit - used - reserve` leaves the day's whole spend
+at 80,000 across both components rather than 80,000 on top of C02's. The reading
+immediately after the roll was **79,982 above the reserve**, which is 80,000 less the 18 C02
+had spent.
+
+**The sweep: 887,533 insider transaction rows over 960 of 2,864 universe members in 49.27
+minutes**, halting mid-walk at `PR.US`. The 1,100 members days one and two covered carried
+an attempt for this range and were not walked. The halt line again reads out entire:
+
+> The gate said: Exhausted. The next unit projects at 10 units and 2 are left above the
+> reserve of 20000, from 79998 of 100000 spent on 2026-08-20.
+
+**79,998 of the 80,000 armed, 2 units above the floor.** That is the fifth sweep day to
+stop within single digits of its floor: three earlier ones stopped within 7, 1 and 7 units
+of a 50,000 reserve, 3.9 day two within 7 of a 5,000 one, and this within 2 of a 20,000 one.
+It is the gate doing arithmetic against the provider's own counter rather than a tally of
+its own, which is why the figure holds whatever else spends on the key.
+
+**The per-member cost reproduces to the tenth of a unit.** 79,980 units over 960 members is
+**83.31 a member**; day one was 49,980 over 600, **83.30**. Day two ran 84.4. **A side
+effect worth keeping**: the shared key's sibling was quiet across this hour, because a
+second consumer spending during the run would have inflated the counter and pushed the rate
+up, and it did not.
+
+**The store after three days**: `insider_transaction` **1,849,027 rows over 1,828 tickers**,
+the attempt record **2,060 rows stamped 2026-08-13** of which **233 yielded nothing**. So
+**2,060 of 2,864 members are done, 71.9 percent**, against 38.4 at day two and 21.0 at day
+one.
+
+**804 members remain, which is one more armed day rather than two.** At 83.3 units a member
+that is about **66,900 units**, inside a single 80,000 day and outside a 50,000 one.
+
+**Day one's unit projection held and its day count did not, for a reason that is a decision
+rather than an error.** It put the whole pool at about 238,600 units; three days have spent
+**172,165** for 2,060 members and 66,900 remain, which totals **239,065**, inside a quarter
+of a percent. The 4.8 days it derived assumed 50,000 usable a day, and two of the three days
+were armed above that on instruction, so the pool finishes on day four.
+
+**D-71's shortfall reporting fired on 180 of the 960 tickers**, 755 rows short, 148 short
+inside the history and 32 only at the oldest end. The rate across three disjoint
+alphabetical slices is **17.7, 18.0 and 18.8 percent of tickers** and **0.107, 0.086 and
+0.085 percent of rows**. Steady across a fifth of the pool at a time is what a broad shallow
+provider gap looks like; a defect in this code would concentrate somewhere.
+
+**Item 49 re-measured against a store three times the size, and the shape sharpens the
+diagnosis.** 28 rows now carry a transaction date outside any plausible range against 10 at
+day one, **7 before 1990 and 21 after 2026**, which is 0.0015 percent of 1,849,027 rows
+against 0.0017 percent of 589,865. The rate is flat, so this accretes with the data rather
+than growing in it. **The seven early rows fall only in years 0015, 0024 and 0025**:
+`NDSN.US` at 0015-11-23 twice and 0015-11-24, `BCO.US` at 0024-01-01, `GIC.US` at 0024-01-07,
+`HMN.US` at 0025-05-29, `GS.US` at 0025-07-25. Every one of them is a two-digit year
+zero-padded to four, and item 49 already proved this parse cannot do that, `TryParseExact`
+on `yyyy-MM-dd` returning null on `"24-01-01"` rather than expanding it. So the provider
+truncates a year to two digits and pads it back, and 2015, 2024 and 2025 are what these
+are. The 21 late rows keep the award shape day one found, five of them one `BE.US` filing
+dated ten years less two days after it was filed.
+
+**A retried arming appends a duplicate version, and the hazard is not the duplicate.**
+`backfill.unit_reserve` carries pairs of identical rows at v2/v3, v13/v14, v15/v16 and now
+v17/v18, each pair the same value under the same `set_by`. **The statement was not the
+cause and that was tested rather than assumed**: the arming probe reported `rows before 17`
+and `the statement reported 1 row(s)` while inserting v18, so v17 already existed before it
+ran; and a probe doing nothing but appending a line to a file produced exactly one line per
+`dotnet run`, so one invocation is one execution. What remains is that the command itself
+ran twice. **The effect today is nil**, resolution taking `MAX(version)` for a key and each
+pair carrying an identical value, which is why the rows are left in place rather than
+deleted from an append-only table. **The hazard is the case where it is not nil**: a retry
+that landed a different value would be taken silently by the same `MAX(version)`, and
+nothing would look wrong. **An arming that refuses to append when the latest row already
+carries this exact value and reason removes the class, and it caught the fault on its first
+use**: restoring the 50,000 reserve after this sweep, the first invocation inserted v19 and
+the second was refused, so the doubling reproduced under the guard and produced one row
+instead of two.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
-| 49 | **Ten `insider_transaction` rows carry a transaction date outside any plausible range, one of them in the year 24 and nine of them in the future.** Measured 2026-08-19 from 3.9's first day, grouping 589,865 rows by year: **1 row at `0024-01-01`** and **9 across 2027, 2028, 2029, 2031 and 2033**, the furthest being `BEAM.US` at 2033-06-06. **Recorded as eleven when opened and corrected to ten**, the count having been added up wrong from the year table. Everything between 1993 and 2026 has the shape a filings index should have. **Not a lookahead**: every consumer reads a trailing window bounded `date <= D`, so a 2033 row is invisible until 2033. **Diagnosed 2026-08-19 and it is the provider's data, not this parse.** `ParseFilings` reads `Date(tx, "transaction_date")`, one field by name rather than by position, so no other date in the payload can reach the column; and `Date` is `TryParseExact` on `yyyy-MM-dd` returning null on anything else, so it neither expands a two-digit year nor rolls an impossible one forward. Pinned by `FlowIngestorTests.TheParseStoresTheDateItWasSentAndNullsWhatItCannotRead`, whose decisive case is that `"24-01-01"` comes back **null**: the parse could not have manufactured `0024-01-01`, so the payload carried it. **The shape of the nine says what they are.** Five are one `BE.US` filing, accession 0001209191-18-044124, all `derivative`, all code A at a zero price, titled "Stock Option (Right to Buy)" and "Restricted Stock Unit", filed 2018-07-26 and dated 2028-07-24, which is ten years less two days. `BEAM.US` is the same shape at ten years, `ALV.US` an RSU at three. So the provider is putting a vesting or expiry date in `transaction_date` on award rows rather than sending a wrong one. 0.002 percent of rows and no metric moves | **The diagnosis is closed; the decision is not.** What remains is whether the ingest rejects a date outside a bound, or stores what it was sent and lets a consumer decide. The fixture pins the current answer, so whichever way it goes has a test to fail. Before phase 4 reads `insider_net_90d_usd` or `distinct_buyer_count`, both of which window on this column |
-| 48 | **A sweep run on its own between the provider's UTC midnight and the day's first billable call halts at zero and cannot unstick itself.** Measured 2026-08-19 at 00:40Z starting 3.9: the flow sweep halted at `A.US` having written 0 rows and walked 0 of 2,864 members. Read by hand from `/api/user`, which the gate reads and which spends no units: **1,957 used of a 100,000 limit, stamped 2026-08-18, against a UTC provider date of 2026-08-19**, so the verdict was `Stale` and the allowance was 98 percent unspent. **`AllowanceRule` is right to refuse**, 3.1 having measured that a reading across the boundary cannot be told from a rollover and that assuming the generous one spends into a wall. **The gap is that nothing in a sweep can clear it.** `/api/user` is free, so the gate's own read never rolls the counter; only a billable call does, and `Allowance.cs` names the remedy as "a nightly run clears this". **Item 44's decision paused the night for this sweep's duration**, so the documented remedy was the thing that had been switched off. **Cleared 2026-08-19 by running C02 over its already-covered range**, which makes two billable symbol-list calls before it reaches its gate: the counter rolled to `apiRequestsDate` 2026-08-19 at 12 used, the verdict became `Fits` with 49,988 above the reserve, and the sweep ran. **A by-product worth keeping**: 3.1 saw the counter still on the previous day at 02:52 UTC, which was consistent with a later boundary or with lazy rolling; this measurement says lazy rolling, the boundary being UTC midnight and the roll happening on the first billable call | An authored decision on how a sweep starts a provider day, before go-live, where the night is not optional and the question disappears, and before any unattended sweep is scheduled, where it does not |
+| 49 | ~~**Ten `insider_transaction` rows carry a transaction date outside any plausible range, one of them in the year 24 and nine of them in the future.**~~ **Re-measured 2026-08-20 at day three: 28 rows, 7 before 1990 and 21 after 2026, over a store three times the size.** 0.0015 percent of 1,849,027 rows against 0.0017 percent of 589,865, so the rate is flat and this accretes with the data rather than growing in it. **The early rows fall only in years 0015, 0024 and 0025**, every one a two-digit year zero-padded to four, which is the provider truncating and padding back: 2015, 2024 and 2025. That is corroboration of the diagnosis below rather than a new finding, the parse having already been proved unable to expand a two-digit year. Measured 2026-08-19 from 3.9's first day, grouping 589,865 rows by year: **1 row at `0024-01-01`** and **9 across 2027, 2028, 2029, 2031 and 2033**, the furthest being `BEAM.US` at 2033-06-06. **Recorded as eleven when opened and corrected to ten**, the count having been added up wrong from the year table. Everything between 1993 and 2026 has the shape a filings index should have. **Not a lookahead**: every consumer reads a trailing window bounded `date <= D`, so a 2033 row is invisible until 2033. **Diagnosed 2026-08-19 and it is the provider's data, not this parse.** `ParseFilings` reads `Date(tx, "transaction_date")`, one field by name rather than by position, so no other date in the payload can reach the column; and `Date` is `TryParseExact` on `yyyy-MM-dd` returning null on anything else, so it neither expands a two-digit year nor rolls an impossible one forward. Pinned by `FlowIngestorTests.TheParseStoresTheDateItWasSentAndNullsWhatItCannotRead`, whose decisive case is that `"24-01-01"` comes back **null**: the parse could not have manufactured `0024-01-01`, so the payload carried it. **The shape of the nine says what they are.** Five are one `BE.US` filing, accession 0001209191-18-044124, all `derivative`, all code A at a zero price, titled "Stock Option (Right to Buy)" and "Restricted Stock Unit", filed 2018-07-26 and dated 2028-07-24, which is ten years less two days. `BEAM.US` is the same shape at ten years, `ALV.US` an RSU at three. So the provider is putting a vesting or expiry date in `transaction_date` on award rows rather than sending a wrong one. 0.002 percent of rows and no metric moves | **The diagnosis is closed; the decision is not.** What remains is whether the ingest rejects a date outside a bound, or stores what it was sent and lets a consumer decide. The fixture pins the current answer, so whichever way it goes has a test to fail. Before phase 4 reads `insider_net_90d_usd` or `distinct_buyer_count`, both of which window on this column |
+| 48 | **A sweep run on its own between the provider's UTC midnight and the day's first billable call halts at zero and cannot unstick itself.** Measured 2026-08-19 at 00:40Z starting 3.9: the flow sweep halted at `A.US` having written 0 rows and walked 0 of 2,864 members. Read by hand from `/api/user`, which the gate reads and which spends no units: **1,957 used of a 100,000 limit, stamped 2026-08-18, against a UTC provider date of 2026-08-19**, so the verdict was `Stale` and the allowance was 98 percent unspent. **`AllowanceRule` is right to refuse**, 3.1 having measured that a reading across the boundary cannot be told from a rollover and that assuming the generous one spends into a wall. **The gap is that nothing in a sweep can clear it.** `/api/user` is free, so the gate's own read never rolls the counter; only a billable call does, and `Allowance.cs` names the remedy as "a nightly run clears this". **Item 44's decision paused the night for this sweep's duration**, so the documented remedy was the thing that had been switched off. **Cleared 2026-08-19 by running C02 over its already-covered range**, which makes two billable symbol-list calls before it reaches its gate: the counter rolled to `apiRequestsDate` 2026-08-19 at 12 used, the verdict became `Fits` with 49,988 above the reserve, and the sweep ran. **Recurred 2026-08-20 and was cleared identically**, which is what makes this a property of starting a provider day rather than an incident: at 00:30Z the counter read 95,683 used stamped 2026-08-19 against a provider date of 2026-08-20, and the same C02 run rolled it to 18 used stamped 2026-08-20 for **18 units**, incidentally writing 24,430 bars over 17 names that had no attempt row. So the remedy is cheap and repeatable, and it is still a second component run to unstick the first. **A by-product worth keeping**: 3.1 saw the counter still on the previous day at 02:52 UTC, which was consistent with a later boundary or with lazy rolling; this measurement says lazy rolling, the boundary being UTC midnight and the roll happening on the first billable call | An authored decision on how a sweep starts a provider day, before go-live, where the night is not optional and the question disappears, and before any unattended sweep is scheduled, where it does not |
 | 47 | ~~**`FlowIngestor` is the one sweep whose halt line does not say why it halted, so `Exhausted` and `Stale` collapse into one message.**~~ **CLOSED 2026-08-19.** Read out of the source 2026-08-19 after the halt above could not be diagnosed from the run log. `AllowanceVerdict` has three values deliberately, `Allowance.cs` stating that "an exhausted allowance and an unusable reading are different observations and must not collapse into each other" and that "a verdict that says no for two different reasons tells an operator nothing about which one to act on". **Four of the five sweeps keep `decision.Detail` and put it in their halt line.** `FlowIngestor` passes the gate into `WalkAsync` as a `Func<CancellationToken, Task<bool>>`, so the verdict, the remaining figure and the configured-limit drift are all discarded at the lambda boundary, and `DescribeGatedHalt(ticker)` is built from the ticker alone. **The cost is the wrong action.** `Exhausted` means wait for tomorrow; `Stale` means make one billable call. The run log said neither, and the diagnosis took a hand-written read of `/api/user` and the rule applied on paper. **The fix is the callback's return type**, carrying the decision rather than a bool, and the halt line appending it as the other four do | Closed. The lambda keeps the decision in a captured local rather than reducing it to a bool, which is why `GetAllPagesAsync`'s shared predicate signature did not have to move, and the loop being serial by design is what makes the capture safe. `DescribeGatedHalt` takes the decision and appends its verdict and detail. **A null is rendered as a lost verdict rather than as an empty reason**, because a gate that refused always produced one. Two tests: `FlowRangeTests.AStaleReadingAndAnExhaustedOneProduceDifferentHaltLines`, driven through `AllowanceRule.Decide` so the rule's own verdicts are what is asserted, and `.AHaltWithNoDecisionKeptSaysSoRatherThanRenderingNothing`. 438 of 438 green |
 | 46 | **S3's inputs are absent on more than half the ticker-dates in the backfill window, and the coverage varies by a factor of 2.7 across years.** Measured 2026-08-18 from C35's first range run: **2,286,729 of 4,146,137 `sentiment_derived_daily` rows, 55.2 percent, are null on all three metrics**, carrying fewer than `sentiment.min_baseline_days` days inside the baseline window. Coverage of `sentiment_7d_level` by year: 2021 34.7 percent, 2022 42.2, 2023 33.0, **2024 23.8**, 2025 51.1, **2026 64.6**. **This is not item 45's shape and that was checked rather than assumed**: the raw `sentiment_daily` store carries rows in every year and the derived coverage tracks its density, 2024 being the thinnest in both at 168,119 raw rows over 3,629 tickers against 2021's 343,524 over 8,019. So the floor is working on genuinely thin per-name coverage and the input is the provider's. **What makes it a finding rather than a fact** is that the sentiment screen's effective population is therefore not stationary over the window, so a backfilled distribution for S3 is drawn from a population that changes size by 2.7 times across it | A segmentation decision in `VALIDITY.md`, before phase 4 tunes on S3 or D-86 counts a backfilled observation toward a shadow's distribution |
 | 45 | ~~**The benchmark's history was never loaded, and two compute components are empty or degenerate for four of the five and a half years because of it.**~~ **CLOSED 2026-08-18 by D-104 and the re-runs.** Measured 2026-08-18: **`SPY.US` held 265 bars in `price_daily`, first 2025-07-22, and zero rows in `price_fetch_attempt`.** The 3.6 sweep never asked for it, its pool being every admitted common stock and the benchmark being an ETF that D-4 excludes from the universe. **C10**: 1,497 of 1,584 dates `mixed` and 0 `risk_off`, against 192 dates at or below the breadth floor. **C08**: 2,690,981 of 4,143,273 `indicator_daily` rows with null `rs_change_21d`, `rs_change_63d` and `rs_20d_slope`. **Nothing errored at any point.** Closed by D-104, which makes a reference series a fetched series admitted to nothing, and by `ReferenceSeries.All` being what C02's pool is unioned with. `SPY.US` now holds 8,444 bars from 1993-01-29 with zero rows in `security` or `security_daily`. **After the re-runs: 1,486 null of 4,146,182 on `rs_change_21d`, and 925 `risk_on`, 177 `risk_off`, 483 `mixed` with every `risk_off` date at or below the floor and every `risk_on` at or above the ceiling.** 2022 carries 142 `risk_off` dates where it carried none. Evidence at `docs/evidence/phase-3/benchmark-history-and-dependents-20260818.txt` | Closed |

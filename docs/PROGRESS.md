@@ -7712,6 +7712,46 @@ range run, so its 52 MB estimate is untested rather than wrong.
 **The edit is not made here.** `ARCHITECTURE.html` is human-edited [`CLAUDE.md` §13], so
 the figures are produced and the restatement is the operator's.
 
+#### 2026-08-19, 3.9 day two: 500 more members, and item 47 read out on its first real halt
+
+`run_log` for `FlowIngestor`, halted, **461,871 insider transaction rows over 500 of 2,864
+universe members**, in **22.00 minutes**, halting mid-walk at `GIS.US`. The 600 members day
+one covered carried an attempt for this range and were not walked, which is D-99 resuming
+rather than restarting over a fifth of the pool.
+
+**The halt line said why it halted, which is item 47 closing and then being used the same
+day.** Day one's diagnosis took a hand-written `/api/user` read and the rule applied on
+paper; this one reads out of the run log entire:
+
+> The gate said: Exhausted. The next unit projects at 10 units and 7 are left above the
+> reserve of 5000, from 94993 of 100000 spent on 2026-08-19.
+
+**Armed to a figure and landing on it.** The operator's instruction was to spend down to
+5,000 units left. `backfill.unit_reserve` took a version at 5,000, the same lever 3.7 day
+four, 3.8 and 3.10 used, and the sweep stopped at **94,993 of 100,000 with 5,007 unspent**,
+7 above the floor. That is the fourth arming to land within single digits of its reserve.
+A version restoring 50,000 followed, so the next sweep lowers it deliberately rather than
+inheriting a floor it did not choose.
+
+**The store after two days**: `insider_transaction` **961,859 rows over 969 tickers**, and
+the attempt record **1,100 rows stamped 2026-08-13**, of which **132 yielded nothing** and
+carry a null `last_yield_date`. So 1,100 of 2,864 members are done, 38.4 percent, and the
+969 tickers holding rows against 1,100 attempted is the same attempted-and-empty
+distinction day one recorded at 80 of 600.
+
+**D-71's shortfall reporting fired on 90 of the 500 tickers**, 395 rows short in total, 83
+short inside the history and 7 only at the oldest end. Day one was 106 of 600 at 537 rows.
+The rate is steady across two disjoint alphabetical slices, 17.7 percent then 18.0, which
+is what a broad shallow provider gap looks like rather than a defect that would concentrate.
+
+**The 2,796 units this day could not account for are the sibling project, not a new
+anomaly.** Day one's sweep ended with the counter at 49,992 and the next reading, 13 hours
+later with nothing of this project running, was 52,788. That is the observation already
+recorded above under a named candidate: the EODHD key is shared, and the gate subtracts the
+provider's own counter rather than a tally of its own, so it halts on what is genuinely left
+whoever spent it. Recorded here because it recurred, and because a day's arithmetic that
+divides by 100,000 is a floor rather than a figure.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 

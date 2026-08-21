@@ -172,7 +172,6 @@ public sealed class FlowIngestor : IStage, IBackfillStage
         long insiderRows = 0;
         var walked = 0;
         var shortfalls = new List<Shortfall>();
-        var attempts = new List<Attempt>(remaining.Count);
 
         string? haltedOn = null;
 
@@ -222,7 +221,8 @@ public sealed class FlowIngestor : IStage, IBackfillStage
                 // 404, being a ticker the filings index does not carry. An ordinary
                 // fact rather than a fault, and it still takes an attempt row so the
                 // sweep does not offer it again.
-                attempts.Add(new Attempt(ticker, context.To, null, 0));
+                await RecordAttemptAsync(
+                    settings, new Attempt(ticker, context.To, null, 0), ct).ConfigureAwait(false);
                 walked++;
                 continue;
             }
@@ -246,11 +246,12 @@ public sealed class FlowIngestor : IStage, IBackfillStage
                 shortfalls.Add(new Shortfall(ticker, read.Value.Shortfall, read.Value.Position));
             }
 
-            attempts.Add(new Attempt(ticker, context.To, written > 0 ? context.To : null, written));
+            await RecordAttemptAsync(
+                settings,
+                new Attempt(ticker, context.To, written > 0 ? context.To : null, written),
+                ct).ConfigureAwait(false);
             walked++;
         }
-
-        await RecordAttemptsAsync(settings, attempts, ct).ConfigureAwait(false);
 
         var detail = string.Format(
             CultureInfo.InvariantCulture,
@@ -408,6 +409,31 @@ public sealed class FlowIngestor : IStage, IBackfillStage
     /// <summary>One attempt, written whether or not it yielded rows [D-95].</summary>
     private readonly record struct Attempt(
         string Ticker, DateOnly AttemptedOn, DateOnly? LastYield, long Rows);
+
+    /// <summary>
+    /// One ticker's attempt row, written the moment that ticker's walk finishes.
+    ///
+    /// **The range sweep writes as it goes rather than once after the loop**
+    /// [item 58]. Accumulating and flushing at the end records nothing at all when
+    /// the loop throws: 3.9's day four walked 443 members and committed their
+    /// filings, then the pager threw on a later ticker and every one of those
+    /// attempt rows was lost, so the next run would buy the same coverage again at
+    /// about 83.3 units a member. D-99 says the attempt record is what a sweep has
+    /// done, and that a clean halt, a command timeout and a `kill -9` are the same
+    /// thing to the next run. A record written only on the success path says none
+    /// of that, and this is what makes the claim true for this stage.
+    ///
+    /// **Ordering.** One row a call means the copy order is the pool's order rather
+    /// than a sort, which is still deterministic because the pool is
+    /// `Universe.MembersAsOf` over one date. Nothing reads this table by position:
+    /// `AttemptedOnAsync` reads it as a set.
+    ///
+    /// The nightly path keeps the batched form below, its selection being one
+    /// bounded rotation rather than a walk whose length is discovered as it runs.
+    /// </summary>
+    private static Task RecordAttemptAsync(
+        StageContext context, Attempt attempt, CancellationToken ct)
+        => RecordAttemptsAsync(context, new List<Attempt> { attempt }, ct);
 
     /// <summary>
     /// The attempt record for every ticker this run selected.

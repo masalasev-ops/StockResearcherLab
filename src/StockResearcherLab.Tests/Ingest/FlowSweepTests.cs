@@ -103,6 +103,46 @@ public sealed class FlowSweepTests
     }
 
     /// <summary>
+    /// **The property 3.9's day four cost about 37,000 units to discover** [item 58].
+    ///
+    /// A sweep that throws part-way must still leave the attempt row of every ticker
+    /// it walked whole. Day four walked 443 members, committed their filings, and
+    /// wrote no attempt row at all, because the rows were accumulated in a list and
+    /// flushed after the loop: the halt path reached that flush and the exception
+    /// path did not. The pool selects on tickers with no attempt row, so the next run
+    /// bought the same coverage again.
+    ///
+    /// The failure here is the real one rather than a synthetic throw: `links.next`
+    /// followed by an empty page, which `GetAllPagesAsync` refuses to record as a
+    /// complete history [A20, D-71, item 59].
+    /// </summary>
+    [Fact]
+    public async Task ASweepThatThrowsKeepsTheAttemptRowsOfEveryTickerItWalkedWhole()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ResetAsync(ct).ConfigureAwait(true);
+
+        const int Whole = 3;
+        var handler = new FlowHandler(alreadySpent: 0) { IncompleteAfter = Whole };
+
+        await Assert.ThrowsAsync<PagedReadIncompleteException>(
+            () => RunAsync(handler, ct)).ConfigureAwait(true);
+
+        var walked = handler.Asked.Distinct(StringComparer.Ordinal).ToList();
+        var attempted = await AttemptedAsync(ct).ConfigureAwait(true);
+
+        // The three that completed a walk, and only those.
+        Assert.Equal(walked.Take(Whole).Order(StringComparer.Ordinal), attempted);
+
+        // Not the one that threw. Its history is partial and a row here would say
+        // it was covered, which is the outcome the attempt record exists to prevent.
+        Assert.DoesNotContain(walked[Whole], attempted, StringComparer.Ordinal);
+
+        // And the run stopped there rather than walking on past a failure.
+        Assert.Equal(Whole + 1, walked.Count);
+    }
+
+    /// <summary>
     /// A completed sweep re-invoked over the same range walks nothing, which is what
     /// makes a re-invocation safe rather than a second bill at ten units a page.
     /// </summary>
@@ -301,6 +341,17 @@ public sealed class FlowSweepTests
         /// <summary>A ticker the filings index answers 404 for.</summary>
         public string? NotFound { get; init; }
 
+        /// <summary>
+        /// Serve this many tickers whole, then send the shape that failed 3.9's day
+        /// four [item 59]: a page offering `links.next` followed by an empty page, so
+        /// the pager exits without `serverRanOut` and refuses the partial history.
+        /// A count rather than a ticker, because the pool's order is the pool's to
+        /// decide and a name pinned here would be a second place it is stated.
+        /// </summary>
+        public int? IncompleteAfter { get; init; }
+
+        private readonly HashSet<string> _seen = new(StringComparer.Ordinal);
+
         private int Billable => _pagesServed * 10;
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -321,6 +372,22 @@ public sealed class FlowSweepTests
             ticker = ticker[..ticker.IndexOf('/', StringComparison.Ordinal)];
 
             Asked.Add(ticker);
+            _seen.Add(ticker);
+
+            // The malformed pair, once this many tickers have been served whole. Both
+            // of its pages carry the same ticker, so the count does not advance under it.
+            if (IncompleteAfter is int whole && _seen.Count > whole)
+            {
+                Interlocked.Increment(ref _pagesServed);
+
+                return Json(_seen.Count > whole && Asked.Count(t =>
+                        string.Equals(t, ticker, StringComparison.Ordinal)) == 1
+                    ? string.Format(
+                        CultureInfo.InvariantCulture,
+                        """{{"data":[{0},{1}],"meta":{{"total":4}},"links":{{"next":"/next"}}}}""",
+                        Filing(ticker, 1), Filing(ticker, 2))
+                    : """{"data":[],"meta":{"total":4},"links":{"next":"/next"}}""");
+            }
 
             if (string.Equals(ticker, NotFound, StringComparison.Ordinal))
             {

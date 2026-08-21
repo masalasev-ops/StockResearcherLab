@@ -76,13 +76,13 @@ them here rather than editing the architecture, and note the gap where it is lar
 
 | Figure | Estimated | Measured | Date |
 |---|---|---|---|
-| Universe size | ~2,000 | | |
+| Universe size | ~2,000 | **2,433 to 2,864 active per evaluation date**, 4,290 distinct ever-members across 292 weekly dates | 2026-08-21, phase 3 |
 | Candidates per night | 26-30 | | |
 | Screen overlap | 10-15% | | |
 | Cache hit rate | >90% | | |
 | Annual cost | ~$50 | | |
-| Database size after backfill | ~5 GB | 18.3 GB in `price_daily` alone, 3.6 complete and 3.7 to 3.10 unrun | 2026-08-13, phase 3 |
-| Full backfill rebuild time | minutes | | |
+| Database size after backfill | ~5 GB | ~~18.3 GB in `price_daily` alone, 3.6 complete and 3.7 to 3.10 unrun~~ **superseded by the 2026-08-20 prune. `price_daily` is 1,273 MB. The database is 26 GB of which 18 GB is `price_daily_old`, the retained rollback copy; 8,149 MB without it. Step 2's `valuation_daily` prune is outstanding and takes it to about 5.4 GB** | 2026-08-13, corrected 2026-08-21, phase 3 |
+| Full backfill rebuild time | minutes | **hours, and the line is not met.** Compute alone is **105.62 minutes** over the five stages that have run a range: C09 32.36, C11 33.77, C08 21.45, C10 15.40, C35 2.64. C34 has never run one [item 55]. C01's universe pass adds 71.54, giving **177.16 minutes**. The ingest half is allowance-bound at 100,000 units a provider day across five sweeps and took roughly two calendar weeks | 2026-08-21, phase 3 |
 | Technical columns per name | ~40 | 15 | 2026-08-11, phase 2 |
 | Compute layer, one date, whole universe | not estimated | 14.4 s over five stages | 2026-08-11, phase 2 |
 

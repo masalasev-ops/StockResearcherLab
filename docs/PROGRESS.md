@@ -8049,12 +8049,56 @@ remedy**: if TT.US repeats, the run fails at the same place and the second day's
 lost the same way, because the defect that loses them is unchanged. That is an operator
 spending decision and is left as one.
 
+#### 2026-08-21, day four resumed: the attempt fix earns itself back, and TT.US is not transient
+
+**3.9 stands at 2,575 of 2,864 members, 89.9 percent, against 2,060 at the start of the
+day.** 289 remain. `insider_transaction` is 2,269,858 rows over 2,271 tickers.
+
+**Item 58 was fixed before any of this was spent**, at `8e1502c`, and the run that followed is
+what it was fixed for. `run_log` 1759, `failed` after 24.24 minutes on the same
+`PagedReadIncompleteException`, and it **recorded 461 members on its way there**. Under the
+code it replaced every one of those would have been discarded, exactly as day four's first
+run discarded 443. The failure cost one ticker instead of a day. `TT.US` carries no attempt
+row, which is correct: its history is partial and a row would say it was covered.
+
+**Verified in the store rather than only in the suite**: `flow_fetch_attempt` climbed 2,064 to
+2,114 across a 180-second sample during the run, fifty members at 3.6 seconds each, where the
+same measurement against the old code held flat at 2,060 for three and a half minutes.
+
+**Item 59 reproduces exactly and is a property rather than a hiccup.** The second failure is
+the same ticker, the same endpoint and the same numbers: `sec-filings/TT.US/form4`, **523 rows
+against a reported 653**, twice, hours apart. So re-running is not a remedy. **It is now a
+hard block on 3.9**, because the pool is walked in ticker order and every member before
+`TT.US` now carries an attempt row, which puts `TT.US` first in what remains: the next run
+fails on it before reaching any of the other 289.
+
+**Two armings did nothing and the record needs correcting.** ~~Armed for 80,000 units on the
+operator's instruction, `backfill.unit_reserve` taking a version at 20,000~~ **[corrected
+2026-08-21]**. Config resolves as of the simulated date [INVARIANT 13] and `FlowIngestor`
+takes its settings from `context.ForDateAsync(context.To)`, where `context.To` is the range
+end 2026-08-13. Versions 20 and 21 are stamped 2026-08-20 and 2026-08-21, so **neither was in
+force on 2026-08-13 and resolution fell through to v19's 50,000**. The halt at `run_log` 1758
+said so in its own words: "1 are left above the reserve of 50000, from 49999 of 100000 spent
+on 2026-08-21". **Every arming that ever took effect is stamped 2026-08-13 17:16 Eastern**,
+v14 through v19, which is the range end. So day four's first run also ran against 50,000
+rather than the 20,000 the plan called for, and v22 was stamped at the range end to make the
+10,000 floor resolve. This is open item 34 in practice rather than in the abstract.
+
+**A near miss worth recording because it nearly spent the operator's units on stale code.**
+The first resumed run was launched with `dotnet run --no-build` after the fix was built into
+`Pipeline` and `Tests` but not into `Worker`, whose copy of `StockResearcherLab.Pipeline.dll`
+was eight hours old. It was caught by the attempt count staying flat when the fix requires it
+to climb, killed after about four minutes, and the artifact was then checked by grepping the
+built DLL for `RecordAttemptAsync` rather than by trusting the build. **`ci.ps1`'s own header
+names this exact failure**, `dotnet test --no-build` reporting green off a stale binary, and
+it was walked into anyway from the other direction.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
-| 59 | **The filings endpoint offered a next link and then returned an empty page, which the pager names as never having happened.** Measured 2026-08-21 at `run_log` 1757: `sec-filings/TT.US/form4` yielded 523 rows against a reported total of 653, and `GetAllPagesAsync` threw `PagedReadIncompleteException` because the loop exited with `serverRanOut` false. The only exit that does that is `page.Rows.Count == 0` after a non-null `NextPath`. **The guard is correct and should not be softened**: what was missed is unknown, so recording a partial filing history behind a record saying it was covered is the one outcome the attempt record exists to prevent [A20, D-71]. What is unknown is whether this is transient or a property of that ticker's index, and one 502 on the same night at `run_log` 1755 suggests the provider was generally unwell | Before the next 3.9 attempt, because it decides whether re-running is a remedy or a wager. Walking TT.US alone costs about 70 units and answers it. Note that a retry inside the pager would also have to preserve item 58's attempt rows to be worth anything |
+| 59 | **REPRODUCED AND NOW BLOCKING 3.9 [2026-08-21].** The second attempt failed on the same ticker, the same endpoint and the same numbers, hours apart: `sec-filings/TT.US/form4`, 523 rows against a reported 653, at `run_log` 1757 and again at 1759. **It is a property of that ticker's index rather than a hiccup, so re-running is not a remedy.** And it now blocks the checkpoint: the pool is walked in ticker order and every member before `TT.US` carries an attempt row, so `TT.US` is first in what remains and the next run fails on it before reaching any of the other 289. **The decision this needs is authored**, because `CLAUDE.md` §6 permits exactly two per-item tolerances and both are enumerated in `RUNBOOK.md`; a third, letting one ticker's malformed index be recorded as unreachable rather than failing the stage, is not something a build session may add. The alternatives are to pin `TT.US` as permanently uncoverable, to vary the page size and see whether the empty page moves, or to leave 3.9 at 89.9 percent. The original observation follows. **The filings endpoint offered a next link and then returned an empty page, which the pager names as never having happened.** Measured 2026-08-21 at `run_log` 1757: `sec-filings/TT.US/form4` yielded 523 rows against a reported total of 653, and `GetAllPagesAsync` threw `PagedReadIncompleteException` because the loop exited with `serverRanOut` false. The only exit that does that is `page.Rows.Count == 0` after a non-null `NextPath`. **The guard is correct and should not be softened**: what was missed is unknown, so recording a partial filing history behind a record saying it was covered is the one outcome the attempt record exists to prevent [A20, D-71]. What is unknown is whether this is transient or a property of that ticker's index, and one 502 on the same night at `run_log` 1755 suggests the provider was generally unwell | Before the next 3.9 attempt, because it decides whether re-running is a remedy or a wager. Walking TT.US alone costs about 70 units and answers it. Note that a retry inside the pager would also have to preserve item 58's attempt rows to be worth anything |
 | 58 | **`FlowIngestor`'s range mode writes its attempt rows once at the end, so an exception loses the resume position for everything the run did, and the record says otherwise.** Measured 2026-08-21: day four walked **443 members** and committed their rows, `insider_transaction` going 1,849,027 to 2,269,858 over 1,828 to 2,271 tickers, while `flow_fetch_attempt` stayed at **2,060, unchanged**. Read out of the source: `ExecuteRangeAsync` declares `var attempts = new List<Attempt>(remaining.Count)` at FlowIngestor.cs:175 and calls `RecordAttemptsAsync` at :253, **after** the `foreach`. The halt path breaks out of the loop and reaches it, which is why days one to three recorded theirs; the exception path does not. **This contradicts D-99 and 0010 as stated**, "written as it goes, so a clean halt, a command timeout and a `kill -9` are the same thing to the next run". A `kill -9` would lose them too. Cost this time: about 37,000 provider units bought coverage that is not recorded and will be bought again | Before the next 3.9 attempt, and it is the more important of the two. The other four sweeps share `RecordAttemptsAsync` and want the same check, since the claim is made of all of them. Flushing per ticker, or per small batch, makes the exception path cost one ticker rather than a day |
 | 57 | **1,823,849 computed rows stand on dates the exchange never traded, and the cause is closed while the residue is not.** Measured 2026-08-21. 121 in-window dates carry compute rows and no percentile, every one a Saturday or Sunday with **zero price bars** against an average of 3,402 on real sessions. `price_daily_old` shows what made them look like sessions: `SRLSNTIN.US` and the twelve `SRLFRGA.US` to `SRLROTF.US` synthetic tickers. **Weekend dates carrying bars: 140 before the prune, 0 after**, so the calendar stopped inventing sessions the moment the test tickers went and C11 correctly skipped all 121. What remains is what C08, C09 and C35 wrote against those phantom dates before the prune: `indicator_daily` 331,416 rows, `sentiment_derived_daily` 331,416, `valuation_daily` 1,161,017. This is item 42's cause identified and its residue outstanding, and it is the same root cause as item 54's test residue | Before phase 4. Item 42's own trigger is that a "+21 trading days" count drawn from these dates is wrong and that is exactly what the primary claim's forward returns are. Deleting the rows is destructive SQL; whether a compute stage should have written a row for a date with no bar at all is the authored half |
 | 56 | **A provider 502 is not retried and discards a whole range run.** Measured 2026-08-21 00:00:39Z: `backfill PriceIngestor 2021-01-04 2026-08-13` failed after 34.4 seconds with "'eod/GEEQ.US' returned 502. Body: 502 Bad Gateway nginx/1.19.10", recorded at `run_log` 1755 as `failed` against its range start. Item 28 closed the "retries nothing on a transport fault" gap, but a 502 is an HTTP status rather than a transport fault and falls outside that fix. Every sweep in this phase runs for tens of minutes to hours, and the resume machinery means nothing is lost, but a single upstream hiccup still ends the run and needs a human to notice and reissue it | Whoever next touches `EodhdClient`'s retry predicate. A 502, 503 and 504 are upstream-transient in the same sense a socket reset is; a 404 is not and is already handled separately per ticker |

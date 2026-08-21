@@ -8007,11 +8007,55 @@ as written**: output depends on the run's date range, not only on the date, the 
 version and the store. `OBNK.US` is the only exposed name on that date, being the one member
 of 2,556 whose last bar precedes the benchmark floor.
 
+#### 2026-08-21, 3.9 day four failed on a page the provider had never sent, and the resume position went with it
+
+**The sweep did not complete and 3.9 is still open.** `run_log` 1757, `failed` after 39.38
+minutes, `rows_written` null. Armed to 20,000 reserve at `config_rows` v20 under the approved
+plan, so 80,000 was usable across both components. The provider day had rolled: the
+`PriceIngestor` unstick at 00:00:39Z reached its series fetch rather than halting at zero,
+which is what proves the gate returned `Fits` and not `Stale`, so item 48 behaved as
+documented for the third time.
+
+**What failed is a page shape the code names as never having been seen.** The error is
+`PagedReadIncompleteException` on `sec-filings/TT.US/form4`, 523 rows collected against a
+reported total of 653. `EodhdClient.GetAllPagesAsync` throws that when the loop exits without
+`serverRanOut`, and the only exit that does so is the endpoint offering a `NextPath` and then
+returning **an empty page**. The comment on that break reads "A next link that yields nothing
+would otherwise spin. The endpoint has never done this; the loop does not depend on it not
+doing it." It has now. **The guard did the right thing**: what was missed is unknown, so it
+refused to record a partial filing history rather than write one that looks complete [A20,
+D-71].
+
+**The gate is not implicated and that was checked rather than assumed.** A gate refusal
+returns `new PagedRead(..., StoppedByGate: true)` and never throws, and the range loop's
+`StoppedByGate` branch deliberately writes no attempt row so the next run walks that ticker
+whole. That path is intact; this failure took the exception path instead.
+
+**The expensive finding is the attempt record, and it contradicts what the record claims
+about resumption.** `insider_transaction` went from 1,849,027 rows over 1,828 tickers to
+**2,269,858 over 2,271**, so **443 members were walked and their rows committed**.
+`flow_fetch_attempt` is **still 2,060, unchanged**. `ExecuteRangeAsync` builds `attempts` as a
+`List<Attempt>` and calls `RecordAttemptsAsync` **once, after the loop**. A clean halt breaks
+out of the loop and reaches it, which is why days one to three recorded theirs. An exception
+does not. So D-99 and 0010's "written as it goes, so a clean halt, a command timeout and a
+`kill -9` are the same thing to the next run" is **false for this stage's exception path**,
+and the pool selects on tickers with no attempt row, so those 443 will be walked again at
+about 83.3 units each.
+
+**The arithmetic says 3.9 cannot finish today.** Roughly 37,000 units bought 443 members whose
+coverage is unrecorded, leaving about 43,000 of the armed 80,000. Finishing needs those 443
+redone plus the ~361 never reached, about 67,000. **Re-running now is a wager rather than a
+remedy**: if TT.US repeats, the run fails at the same place and the second day's units are
+lost the same way, because the defect that loses them is unchanged. That is an operator
+spending decision and is left as one.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 
 | # | Item | Trigger |
 |---|---|---|
+| 59 | **The filings endpoint offered a next link and then returned an empty page, which the pager names as never having happened.** Measured 2026-08-21 at `run_log` 1757: `sec-filings/TT.US/form4` yielded 523 rows against a reported total of 653, and `GetAllPagesAsync` threw `PagedReadIncompleteException` because the loop exited with `serverRanOut` false. The only exit that does that is `page.Rows.Count == 0` after a non-null `NextPath`. **The guard is correct and should not be softened**: what was missed is unknown, so recording a partial filing history behind a record saying it was covered is the one outcome the attempt record exists to prevent [A20, D-71]. What is unknown is whether this is transient or a property of that ticker's index, and one 502 on the same night at `run_log` 1755 suggests the provider was generally unwell | Before the next 3.9 attempt, because it decides whether re-running is a remedy or a wager. Walking TT.US alone costs about 70 units and answers it. Note that a retry inside the pager would also have to preserve item 58's attempt rows to be worth anything |
+| 58 | **`FlowIngestor`'s range mode writes its attempt rows once at the end, so an exception loses the resume position for everything the run did, and the record says otherwise.** Measured 2026-08-21: day four walked **443 members** and committed their rows, `insider_transaction` going 1,849,027 to 2,269,858 over 1,828 to 2,271 tickers, while `flow_fetch_attempt` stayed at **2,060, unchanged**. Read out of the source: `ExecuteRangeAsync` declares `var attempts = new List<Attempt>(remaining.Count)` at FlowIngestor.cs:175 and calls `RecordAttemptsAsync` at :253, **after** the `foreach`. The halt path breaks out of the loop and reaches it, which is why days one to three recorded theirs; the exception path does not. **This contradicts D-99 and 0010 as stated**, "written as it goes, so a clean halt, a command timeout and a `kill -9` are the same thing to the next run". A `kill -9` would lose them too. Cost this time: about 37,000 provider units bought coverage that is not recorded and will be bought again | Before the next 3.9 attempt, and it is the more important of the two. The other four sweeps share `RecordAttemptsAsync` and want the same check, since the claim is made of all of them. Flushing per ticker, or per small batch, makes the exception path cost one ticker rather than a day |
 | 57 | **1,823,849 computed rows stand on dates the exchange never traded, and the cause is closed while the residue is not.** Measured 2026-08-21. 121 in-window dates carry compute rows and no percentile, every one a Saturday or Sunday with **zero price bars** against an average of 3,402 on real sessions. `price_daily_old` shows what made them look like sessions: `SRLSNTIN.US` and the twelve `SRLFRGA.US` to `SRLROTF.US` synthetic tickers. **Weekend dates carrying bars: 140 before the prune, 0 after**, so the calendar stopped inventing sessions the moment the test tickers went and C11 correctly skipped all 121. What remains is what C08, C09 and C35 wrote against those phantom dates before the prune: `indicator_daily` 331,416 rows, `sentiment_derived_daily` 331,416, `valuation_daily` 1,161,017. This is item 42's cause identified and its residue outstanding, and it is the same root cause as item 54's test residue | Before phase 4. Item 42's own trigger is that a "+21 trading days" count drawn from these dates is wrong and that is exactly what the primary claim's forward returns are. Deleting the rows is destructive SQL; whether a compute stage should have written a row for a date with no bar at all is the authored half |
 | 56 | **A provider 502 is not retried and discards a whole range run.** Measured 2026-08-21 00:00:39Z: `backfill PriceIngestor 2021-01-04 2026-08-13` failed after 34.4 seconds with "'eod/GEEQ.US' returned 502. Body: 502 Bad Gateway nginx/1.19.10", recorded at `run_log` 1755 as `failed` against its range start. Item 28 closed the "retries nothing on a transport fault" gap, but a 502 is an HTTP status rather than a transport fault and falls outside that fix. Every sweep in this phase runs for tens of minutes to hours, and the resume machinery means nothing is lost, but a single upstream hiccup still ends the run and needs a human to notice and reissue it | Whoever next touches `EodhdClient`'s retry predicate. A 502, 503 and 504 are upstream-transient in the same sense a socket reset is; a 404 is not and is already handled separately per ticker |
 | 55 | **C34 `FlowEngine` has never run over the range, so checkpoint 3.14's third component holds three dates of five and a half years.** Measured 2026-08-21: `SELECT DISTINCT date FROM flow_daily` returns exactly 2026-08-07, 2026-08-13 and 2026-08-14, and every `FlowEngine` `run_log` row is a single-date range. 3.14's scope is "C10, C34 and C35 over a range" and the other two ran: C10 at `run_log` 1721 over 1,585 dates, C35 at 1722 over 4,146,137 rows. It costs **zero provider units**, C34 reading `insider_transaction` and `institutional_holding` rather than the provider, so this is a compute run rather than an ingest gap | Immediately after 3.9's sweep completes, so it computes over the finished insider corpus rather than a partial one. Running it before the sweep finishes would bake in the same staleness item 53 records |

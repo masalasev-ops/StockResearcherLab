@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using StockResearcherLab.Core;
@@ -385,11 +385,33 @@ public sealed class EodhdClient
 
             offset += pageSize;
 
-            // A next link that yields nothing would otherwise spin. The endpoint
-            // has never done this; the loop does not depend on it not doing it.
-            // This is the client stopping while more was on offer, so it falls to
-            // the throw below rather than to the shortfall.
-            if (page.Rows.Count == 0)
+            // **An empty page is this window being empty, not the client failing to
+            // ask** [item 59, measured 2026-08-22]. `links.next` is `offset + limit <
+            // meta.total` arithmetic over a total this endpoint over-counts, so it
+            // carries no statement about whether rows remain. Walked by hand,
+            // `sec-filings/TT.US/form4` is served 0 rows at offset 600 of a claimed
+            // 653 and offered a successor anyway, because 650 is still below 653; at
+            // offset 650 it is served 0 rows and offered none. Breaking on the empty
+            // page ended that walk one page short of its own clean end and routed it
+            // to the fatal half of D-71, whose test is that asking again would fix
+            // it. Asking again ends the walk, so the break was in the wrong branch.
+            // The walk now reaches `serverRanOut` and records 523 of 653 as the
+            // shortfall D-71's recorded half was written for.
+            //
+            // **The spin that break prevented is prevented by the offset instead**,
+            // below. Nothing here is tolerated that was refused before: the throw is
+            // unchanged and still reachable, and no threshold is introduced [D-71
+            // says none is to be added].
+
+            // An offset at or past the reported total cannot address a row of a
+            // `total`-sized index, so the walk is at most `ceil(total / pageSize)`
+            // pages however many successors are offered. Against this endpoint's own
+            // arithmetic it never fires, `links.next` being absent once `offset +
+            // pageSize` reaches `total`; it fires only for an endpoint that offers a
+            // successor it cannot honour, which is the client stopping while more was
+            // on offer. That leaves `serverRanOut` false and falls to the throw,
+            // which is D-71's fatal half kept rather than widened.
+            if (total is int addressable && offset >= addressable)
             {
                 break;
             }

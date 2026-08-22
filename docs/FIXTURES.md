@@ -131,6 +131,20 @@ fail on purpose, because a conformance test that has never failed has not been t
 These are named in other documents as things that must be provable. They become rows
 above when they are written.
 
+- A ticker whose two benchmark windows do not intersect, which is the divergence the
+  replay done-when records as not claimed and no fixture reaches [item 52, BUILD_PLAN
+  phase 3's replay line]. **What it has to contain**: a member on the replayed date
+  whose own price history carries a hole long enough that its last `RequiredBars` of
+  272 bars, which C08 takes by row count with no lower date bound, end before the
+  benchmark window opens, that window being `CompositePadDays` of 400 calendar days
+  before the range start on the range path and the run date on the nightly path. With
+  no overlap `Relative` yields null at every offset and all four benchmark-relative
+  columns go null at once while erroring on nothing. `OBNK.US` is the measured
+  instance at an 873-day hole, and it cannot serve: its last bar is 2026-02-05, so it
+  is not a member on any date the replay can use, which is why the class needs a
+  built fixture rather than a real name. **The obligation is listed and the fixture is
+  not built**, because which of the two bounds is correct is unasked and a fixture
+  asserting either would answer it by implication
 - The worked arbitration example in `ARCHITECTURE.html` §10, which must reproduce
   exactly [BUILD_PLAN phase 7]
 - A prefix snapshot, asserting one hash across a full night of calls [phase 6]

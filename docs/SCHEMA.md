@@ -48,6 +48,26 @@ there.
 universe must be reconstructable per date including names that no longer exist
 [D-48].
 
+**`first_seen` and `last_seen` mean the earliest and latest bar the store holds for
+that ticker, not the earliest and latest that existed** [item 51]. Both come from
+`min` and `max` over `price_daily` bounded `date <= asOf`, and the upsert conflicts on
+`ticker` alone, so both are recomputed from whatever `price_daily` holds each time C01
+runs rather than accumulated. A prune of `price_daily` therefore moves them forward on
+the next run, with no error and nothing to compare against: the 2026-08-21 prune
+truncated that table at 2016-01-04, and 2,916 of 4,399 `security` rows carried a
+`first_seen` earlier than that, the earliest 1962-01-02.
+
+**Nothing reads either column.** Confirmed 2026-08-22 by reading the lines rather than
+by the grep that found them: every occurrence of `first_seen` in `src/` outside
+`0001_snapshot.sql` is inside `UniverseBuilder.cs`, which is the writer, at the column
+list, the derivation, and the two records that carry it between them; and the only
+statements selecting from `security` at all are two `count(*)` guards in the test
+suite. So the truncation costs nothing today. The exposure is D-48, which makes these
+two and `delisted_date` the basis for reconstructing membership per date: a
+reconstruction written later would read a lifespan that starts where the retained
+history starts. **What the column would have to mean for that to work, and whether it
+can be derived from a pruned `price_daily` at all, is unauthored and open at item 51.**
+
 **The clean gap count is computed, never stored** [M.1]. UniverseBuilder counts rows
 in `fundamental_snapshot` for that ticker whose `filing_date_unknown_reason` is
 `none` and whose `filing_date_effective` is at or before the date being built, and

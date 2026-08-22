@@ -1881,3 +1881,36 @@ mechanism instead, so a later session testing the other reading knows it was exp
 
 The fundamentals paragraph is unchanged and is now the second of two, and the marker on
 the heading gained "and again at item 52".
+
+
+---
+
+## 2026-08-22, `SCHEMA.md`: `security.first_seen` says what it means, and what it means changed under it
+
+The prune truncated `price_daily` at 2016-01-04 and `first_seen` is derived from that
+table, so the column's meaning moved without the column moving. A clean edit [D-73],
+because this is a spec describing a column a reader needs the current meaning of.
+
+**There is no prior wording to quote, and that is the finding.** `security`'s entry
+listed `ticker`, `name`, `first_seen`, `last_seen`, `delisted_date` and defined only
+`delisted_date`. The two lifespan columns were named and never said what they held, so
+nothing in the document was falsified by the prune and nothing in it was true about the
+store either. A column whose meaning is only in the reader's head cannot be contradicted
+by a change to the data.
+
+**What was added.** That `first_seen` and `last_seen` mean the earliest and latest bar
+the store holds rather than the earliest and latest that existed; that both are
+recomputed from `price_daily` bounded `date <= asOf` on every C01 run against a
+conflict target of `ticker` alone, so a prune moves them forward silently; and the
+measured extent, 2,916 of 4,399 rows carrying a `first_seen` before the 2016-01-04
+floor, the earliest 1962-01-02, all three re-read off the store on 2026-08-22.
+
+**And that nothing reads either column.** Confirmed by reading the lines rather than by
+the grep that found them. That is the answer to the second half of item 51 and it costs
+nothing to state: the truncation has no consumer today, and the exposure is D-48's
+future per-date reconstruction rather than anything running now.
+
+**What was deliberately not written.** Whether `first_seen` should mean first listed or
+first retained is a decision, and if it is the former it cannot be derived from a pruned
+`price_daily` at all. That stays open at item 51 and is named in the document as
+unauthored rather than settled in passing [`CLAUDE.md` §13].

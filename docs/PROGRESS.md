@@ -8280,6 +8280,24 @@ benchmark window producing relative strength the nightly path nulls, and item 60
 range end being a byte-repeat of the date before it. Running the sequence to 2026-08-13
 would lay both down again, and neither is a build decision.
 
+**Sign-off step 1 is met. `ci.ps1` green at `f26053c`**, all seven results: `guards.ps1`
+5 checks over 131 files, restore, build at 0 warnings and 0 errors, no secrets file
+present, migrate from an empty server applying all 12 migrations, migrate again with
+nothing to apply, and **441 tests passed and 0 failed**. Step 2, the review in a session
+that did not build the phase, is not run here and cannot be: this session committed.
+
+**The store after both runs**, measured 2026-08-22. `price_daily` 9,028,681 rows over
+4,291 tickers and 2,768 dates; `valuation_daily` 14,846,111 over 1,585 dates;
+`indicator_daily` 4,147,454 and `sentiment_derived_daily` 4,149,023 over 1,580 dates
+each; **`flow_daily` 5,538,965 over 1,464 dates**; `market_context_daily` 1,585;
+`security_daily` 771,145 over 292 evaluation dates; `insider_transaction` 2,552,578 over
+2,528 tickers. The date counts do not agree with each other and three of the
+disagreements are open items rather than news: `indicator_daily` at 1,580 against
+`valuation_daily` at 1,585 and `price_daily` at 2,768 is items 42, 57 and 54.
+
+**The provider day cost 25,430 units of 100,000**, both runs included, leaving 74,570
+unspent at the time of writing.
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 

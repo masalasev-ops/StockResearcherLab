@@ -1,4 +1,4 @@
-# DECISIONS.md
+﻿# DECISIONS.md
 
 The register. One entry per decision, each with the reason it was made. Reasons
 are the point: they are what stops a later session re-litigating something already
@@ -2043,6 +2043,71 @@ compute stage and the ordinary case for an ingest one, since fetching the dates 
 does not hold yet is how the frontier moves at all. A check on the run would have made the
 backfill unable to extend the store, and every test of the refusal would still have
 passed. The six calendar consumers are exactly the six the wrong end harms.
+
+
+**D-106 A sweep marker records the coverage a sweep reached, not the invocation that
+reached it.** `ACTIVE`
+Closes open item 44, which item 62 was merged into.
+
+**One column carried both the sweep marker and the rotation's freshness ordering**, on
+`fundamental_fetch_attempt` and `flow_fetch_attempt`, the only two tables a nightly path
+and a range path both write. D-99 named the split and deferred it in its own words:
+"This is the thing to split if it ever bites, and it is not split now." D-105 then
+refused the only range end C03 and C05 were stamped for, so the next sequence backfill
+would have re-dispatched both pools whole.
+
+**The split gives the sweep its own column.** `swept_through_date` is the sweep's, and
+the rotation keeps `last_attempted_date` as the freshness ordering it was always for.
+Each reader now answers its own question and neither can undo the other's work: a range
+stamp cannot make a ticker look freshly attempted to the night, and a nightly attempt
+cannot satisfy a sweep.
+
+**The marker is read as "swept through at least this date", never as equality, and that
+is the rule this decision exists to state.** A marker compared by equality records which
+invocation happened. A marker compared by coverage records what the store holds, which is
+the only one of the two a later run has any use for. The difference is not academic:
+equality re-dispatches a completed pool the moment a range end moves by a day, and a
+range end moves whenever a frontier correction finds one, which is item 44's third
+trigger and the general case D-99 did not foresee. **Nothing would fail while it did so.**
+The pool would be re-fetched, every row would be rewritten with the same values, every
+stage would report `ok`, and the only visible trace would be the bill. That is why the
+reading rule is the decision rather than a detail of the migration.
+
+**A column split alone does not give this.** Splitting the column and keeping the
+equality test leaves a marker of 2026-08-13 against a corrected end of 2026-08-12,
+matching nothing and re-dispatching exactly as before. Both halves are required and the
+second is the one that generalises.
+
+**The evidence is the fall-through rather than an illustration of it.** The first
+sequence run after the split, over 2021-01-04..2026-08-12:
+
+```
+FundamentalsIngestor   covered   0 of 4,156
+FlowIngestor           covered   0 of 2,864
+EventsIngestor         covered   0 of 4,117
+SentimentIngestor      covered   0 of 4,117
+```
+
+Roughly **440,000 provider units and 4.9 provider days became 36 units and 20 seconds**.
+
+**The 36 is not a rounding of zero and it says something about what `covered` means.**
+C02 reported `ok`, dispatching 35 of 50,615 admitted names plus the reference series
+[D-104], those being names the symbol list has admitted since the sweep ran and which
+therefore carry no marker at all. The pool rebuilds itself live from the provider on
+every run, so `covered` is a statement about a pool that moves rather than about a fixed
+list. A marker read as coverage is what lets a moving pool report `covered` for the part
+of itself that has not moved.
+
+**The stamp is unchanged and stays the range end on both tables.** D-99's asymmetry is
+deliberate and per stage: C03's and C05's nightly and sweep calls are the same call,
+where C02's, C04's and C06's differ in depth, which is why those three key on the range
+start. What was wrong was the shared column and the reading, not the choice of stamp, so
+that decision is not reopened.
+
+Migration `0013_attempt_sweep_marker.sql`, `FundamentalsIngestor` C03 and `FlowIngestor`
+C05. Both halves are asserted: a range run stamps the marker and leaves the ordering
+untouched, and a nightly attempt moves the ordering and leaves the marker untouched.
+One alone is satisfied by a component that writes neither.
 
 ---
 

@@ -53,20 +53,31 @@ that ticker, not the earliest and latest that existed** [item 51]. Both come fro
 `min` and `max` over `price_daily` bounded `date <= asOf`, and the upsert conflicts on
 `ticker` alone, so both are recomputed from whatever `price_daily` holds each time C01
 runs rather than accumulated. A prune of `price_daily` therefore moves them forward on
-the next run, with no error and nothing to compare against: the 2026-08-21 prune
-truncated that table at 2016-01-04, and 2,916 of 4,399 `security` rows carried a
-`first_seen` earlier than that, the earliest 1962-01-02.
+the next run, with no error and nothing to compare against, and that has now happened
+rather than being a risk: the 2026-08-21 prune truncated that table at 2016-01-04, and
+the C01 run of 2026-08-22 [`run_log` 1780] took the `security` rows carrying a
+`first_seen` earlier than that **from 2,916 of 4,399 to 3**, the earliest moving from
+1962-01-02 to 1986-06-06.
+
+**The retained reading is the meaning, and it is settled rather than open** [item 51,
+closed 2026-08-22]. The alternative, first listed, is no longer derivable from this
+store: `price_daily` does not hold the bars it would be computed from, and C01 recomputes
+both columns from that table on every run. A column cannot be defined as something the
+system has no way to produce, so naming it "first listed" would describe something that
+is not there and would read as a defect on every future comparison. **What this costs is
+stated rather than implied**: D-48 makes these two and `delisted_date` the basis for
+reconstructing membership per date, so a reconstruction written later reads a lifespan
+that starts where the retained history starts, and a name that traded before the prune
+floor looks younger than it was. Any analysis needing true listing dates needs a source
+outside this store.
 
 **Nothing reads either column.** Confirmed 2026-08-22 by reading the lines rather than
 by the grep that found them: every occurrence of `first_seen` in `src/` outside
 `0001_snapshot.sql` is inside `UniverseBuilder.cs`, which is the writer, at the column
 list, the derivation, and the two records that carry it between them; and the only
 statements selecting from `security` at all are two `count(*)` guards in the test
-suite. So the truncation costs nothing today. The exposure is D-48, which makes these
-two and `delisted_date` the basis for reconstructing membership per date: a
-reconstruction written later would read a lifespan that starts where the retained
-history starts. **What the column would have to mean for that to work, and whether it
-can be derived from a pruned `price_daily` at all, is unauthored and open at item 51.**
+suite. So the truncation cost no behaviour, which is why it was allowed to happen with
+the values recorded first rather than being prevented.
 
 **The clean gap count is computed, never stored** [M.1]. UniverseBuilder counts rows
 in `fundamental_snapshot` for that ticker whose `filing_date_unknown_reason` is

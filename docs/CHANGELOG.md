@@ -1954,3 +1954,28 @@ Prior wording:
 The stamp is still the range end and both dates are still required. What changed is the
 column it lands in and that the marker reads as coverage, so the earlier-`to` direction
 is now a fall-through where it used to re-sweep both pools whole.
+
+## 2026-08-22, `SCHEMA.md`: `first_seen` means first retained, and the question closes [item 51]
+
+A clean edit, `SCHEMA.md` being a document read to know the current state [D-73]. The
+entry already carried the meaning; what it also carried was the meaning being open, and
+a spec that states a rule and then says the rule is unauthored settles nothing.
+
+Prior wording, the closing sentence of the "nothing reads either column" paragraph:
+
+> So the truncation costs nothing today. The exposure is D-48, which makes these two and
+> `delisted_date` the basis for reconstructing membership per date: a reconstruction
+> written later would read a lifespan that starts where the retained history starts.
+> **What the column would have to mean for that to work, and whether it can be derived
+> from a pruned `price_daily` at all, is unauthored and open at item 51.**
+
+and the prune sentence above it:
+
+> A prune of `price_daily` therefore moves them forward on the next run, with no error
+> and nothing to compare against: the 2026-08-21 prune truncated that table at
+> 2016-01-04, and 2,916 of 4,399 `security` rows carried a `first_seen` earlier than
+> that, the earliest 1962-01-02.
+
+Both are replaced because the truncation stopped being prospective on 2026-08-22, when
+C01 ran inside the 3.16 sequence and took the count from 2,916 to 3. The retained reading
+is now stated as settled, with what it costs D-48 stated rather than implied.

@@ -8512,6 +8512,239 @@ until the `first_seen` decision is taken. Full method and figures at
 
 ---
 
+#### 2026-08-22, the sign-off review, in a session that did not build this phase
+
+Sign-off step 2 [`BUILD_PLAN.md`]. Read at `cb327d0`. This session had not committed to
+this repository before this entry and has corrected nothing. It fixed nothing, re-ran no
+stage, spent no provider units and closed no item. Store figures below were read through a
+read-only connection from outside the repository.
+
+**Reproduced rather than taken.** `ci.ps1` run here at `cb327d0`: **451 passed, 0 failed,
+exit 0**, twelve migrations applied from an empty server and idempotent on the second
+pass, `guards.ps1` five checks over 133 files. That is the build session's count exactly.
+**GitHub CI is green at `cb327d0` itself**, run 32574010412, which is one commit better
+than the record claims: the file says green at `aae9464`, and the two commits after it are
+covered too.
+
+##### The three escalated judgements
+
+**One, the timing verdict. The measurement stands and the closure does not.** Every figure
+traces to the store: `run_log` 1763 to 1768 read here as C11 30.92, C34 25.75, C09 18.57,
+C08 9.44, C10 9.41, C35 4.72, summing to **98.81**, and 1710's C01 at **71.54**, giving
+**170.35**. The six prior figures at 1717 to 1756 reproduce likewise, as do the row counts
+behind all four causes of the move from 203.55. Nothing was tuned and the bound was not
+moved, which is what `CLAUDE.md` §11 asks.
+
+**The closure is a different act from the measurement, and the prompt reserved it.**
+`prompts/spent/phase-3-four-decisions-and-one-sequence-run.md` says "Record the total
+against the timing done-when as a measurement", and then, in the same paragraph, "whether
+'minutes' was a requirement with a reason or an aspiration written before anything was
+measured **is a human's call with the figure in front of them**". Its done-when asks that
+the total "is recorded as a measurement, untuned". Recording was asked; closing was not.
+The build session recorded correctly and then took the call as well.
+
+**The argument offered for the closure is over-broad, checked against both sources it
+cites.** D-88 and `SCREEN_LIFECYCLE.md` §6.7 gate **promotions and retirements of
+screens**, on the ground that the set of screens is the set of rubrics, so either splits
+the primary claim. Neither mentions the compute backfill, and a screen promotion does not
+on its own force one: screens read the percentile store, which is C11's output rather than
+its input. What does force a rebuild is not gated by them. **D-104, authored in this same
+phase, is the counterexample sitting beside it**: adding a reference series ends "**Then
+C08 and C10 are re-run**, because their rows were written against a benchmark that was not
+there", and that decision states in terms that such a change "is a code change carrying a
+decision, not a config row". It passes through no D-88 boundary. **Phase 3 itself re-ran
+its compute half twice**, once for item 57's delete and once for the corrected range end,
+and neither was a promotion or a retirement. So "a design that bundles its own rebuild
+triggers into a single boundary" is not established by the two documents cited, and the
+recurring path the verdict says does not exist is the one this phase spent two runs on.
+
+*The finding is the reasoning, not the figure.* 170.35 minutes is measured, correct and
+not met. Whether that matters is still open and is still a human's.
+
+**Two, 3.16 having never executed. A checkpoint that has never run is not met, on this
+plan's own definition.** `BUILD_PLAN.md` opens "A phase is not done because the code
+exists. It is done when the stated proof passes, which in every case is something that can
+be run rather than something that can be argued." Today's prompt put "one sequence run
+completes" in its own done-when and it did not complete. The build session's account of
+what is covered is accurate: `BackfillSequenceTests` carries twelve tests, verified here,
+over the declared order, the cut-out-source fixture, fall-through on `covered`, the
+allowance halt, failure not being reported as a halt, an unregistered source, a source with
+no range mode, and a `run_log` row per source. `BackfillSequence.SourceOrder` is wired into
+`Worker/Program.cs:311`. What is unproven is composition against the real registry and
+store, which is a narrow gap rather than an empty one.
+
+**It is a bar question and the bar should not be paid at 440,000 units.** The two are
+coupled and the coupling points one way: item 44 is what makes the run cost 440,000, so
+authoring item 44's remedy first turns the same run cheap, because C03 and C05 would then
+fall through as `covered` exactly as the other three sweeps do. Running it now buys proof
+of ordering at the price of re-fetching work already paid for, and leaves item 44 open
+regardless. **Recommend 3.16 be signed off as a named exception, closed by the first
+sequence run after item 44's decision lands, rather than by a run bought now.**
+
+**Three, item 44's trigger. It has fired, confirmed against the store, and it precedes
+phase 4 rather than blocking it.** Every figure and every line number in the item is
+correct as read here. `FundamentalsIngestor.cs:85` and `FlowIngestor.cs:161` both resolve
+`context.ForDateAsync(context.To)`; `:202` and `:344` both read `last_attempted_date =
+asOf`; `PriceIngestor.cs:257`, `EventsIngestor.cs:278` and `SentimentIngestor.cs:243` all
+key on the range start. The attempt tables read exactly as the item states:
+
+| table | `last_attempted_date` | rows |
+|---|---|---|
+| `price_fetch_attempt` | 2021-01-04 | 50,827 |
+| `event_fetch_attempt` | 2021-01-04 | 19,726 |
+| `sentiment_fetch_attempt` | 2021-01-04 | 19,726 |
+| `fundamental_fetch_attempt` | **2026-08-13** | 20,068 |
+| `flow_fetch_attempt` | **2026-08-13** | 2,864 |
+
+D-105 refuses 2026-08-13, so the trigger is live rather than pending.
+`backfill.unit_reserve` resolves to 10,000 at version 22, which is the 90,000 usable the
+item works from.
+
+**It does not block phase 4's checkpoints being authored.** Phase 4 builds screens over the
+percentile store and backfills screen scores, and neither needs C03 or C05 to re-dispatch.
+What it blocks is the next full sequence backfill, and trigger two names go-live. So it
+precedes phase 4 and must land before whichever of those comes first.
+
+##### The three standing questions
+
+**Does the code match the architecture.** On everything read, yes.
+`BackfillSequence.SourceOrder` matches the evening order with the universe between ingest
+and compute and C11 last; the five ingest stages split correctly on range start against
+range end; the ten `backfill.*` keys exist in `config_rows` and four Consumer entries were
+re-verified against composition code rather than by name. No magic number was found at a
+call site in what was read. Nothing read contradicts `ARCHITECTURE.html`.
+
+**Does every number trace.** Overwhelmingly yes, and the exceptions are in the sweep below.
+
+**Was any contradiction resolved silently.** **No.** The one candidate was the replay
+done-when being narrowed at `8021261` to accommodate item 52, which would be a build
+session editing phase scope to match what it built [`CLAUDE.md` §3, §13]. It is not:
+`prompts/spent/phase-3-four-decisions-and-one-sequence-run.md` directs it in terms, both
+the amendment and the refusal to harmonise the windows. The timing closure in judgement one
+is the opposite case: an authored call taken rather than reported, but taken **loudly**,
+with its reasoning written out where a reviewer would find it. Nothing was buried.
+
+##### The trace sweep, with its coverage stated
+
+**Coverage.** Every store-checkable figure in all five rows of the definition-of-done walk,
+**52 of 52** distinct tickers named as evidence anywhere in this file, the closing row
+counts of the nine phase-3 items carrying one (40, 42, 44, 50, 51, 53, 55, 57, 60 with 62),
+the four carried obligations, and seven cited source line numbers. **About 115 distinct
+checkable claims.** It is not the whole file and does not claim to be: the item table holds
+63 items and the sweep sampled the phase-3 band.
+
+**Ten claims did not reproduce as stated. They separate into two classes, and the class
+matters more than the count.**
+
+***Never traced, two.*** These were wrong when written.
+
+1. **"over 1,462 of 1,462 dates" is 1,457 of 1,462, and the gap is the window's first
+   week.** `indicator_daily` and `sentiment_derived_daily` both hold **1,457** distinct
+   in-window dates and both begin **2021-01-11**, while `price_daily`, `valuation_daily`,
+   `market_context_daily` and `flow_daily` all hold 1,462 and begin 2021-01-04. The five
+   absent sessions, 2021-01-04 to 2021-01-08, carry roughly 3,700 price bars each.
+   **The mechanism is `security_daily`, whose earliest row is 2021-01-10**, five sessions
+   after `backfill.window_start`: the stages keyed on membership have no epoch at or before
+   the window start and correctly write nothing, while the stages that are not keyed on it
+   cover the full window. Nothing errored and every count looks ordinary, which is the
+   shape §1 describes. It bears on phase 4, whose screens read the percentile store: on
+   those five sessions the indicator and sentiment screens have nothing to read. It is 0.34
+   percent of the window and is a coverage statement rather than a corruption one. **The
+   heading "the percentile store is now complete over the window" is the claim to correct**,
+   not the arithmetic under it, which is right.
+2. **Item 53's `ABCL.US` citation does not trace in either direction.** The item reads
+   "`ABCL.US` from 0 to 864,937.19 with `distinct_buyer_count` 0 to 2". The live row on
+   2026-08-07 reads **95,400** and **1**, and `_verify_flow_before`, the snapshot the item
+   names as holding the prior state, **also** reads 95,400 and 1. So the cited before-value
+   contradicts the item's own named evidence and the cited after-value survives nowhere.
+   The 661 row count in the same sentence does reproduce from that snapshot. Item 53 is open
+   and handed to phase 4, so its headline instance is worth restating from something that
+   still exists.
+
+***Moved because the store changed underneath, eight.*** These traced when written and are
+dated measurements in a record, so they are correct as records. They are listed because a
+later reader re-running them will not reproduce them.
+
+3. `OTCFF.US`, already found and recorded by the build session. Confirmed: zero bars, no
+   `security` row, `price_fetch_attempt.rows_last_attempt` still **1,209**.
+4. `AABA.US` 5,908, `AAME.US` 10,707, `OSM1.US` 1,296 and `CYTR.US` 7,796 are the same
+   class as `OTCFF.US`, cited with bar counts and holding zero bars after the 2026-08-20
+   prune. **All four still trace to `price_fetch_attempt`**, which retains what the sweep
+   fetched, so the citations are recoverable rather than lost. `A.US`'s cited 6,722 is the
+   same and reads 2,667 in `price_daily` today.
+5. Item 53's `flow_daily` on 2026-08-07 at 5,871 now reads **5,885**, C34's range re-run at
+   `run_log` 1763 having rewritten the window.
+6. Item 53's `insider_transaction` at 1,849,027 rows over 1,828 tickers now reads
+   **2,552,578** over **2,528**, 3.9 having completed after that measurement.
+7. **The sentiment coverage ratio mixes scopes.** "1,641,317 of the 1,644,015 rows that
+   carry a value at all, 99.8 percent" puts an in-window numerator over a whole-table
+   denominator. In-window rows carrying `article_count_z_own_90d` are **1,642,154**, so the
+   in-window figure is 99.95 percent. The 1,644,015 is correct over the whole table of
+   3,814,766.
+
+**Everything else in the sweep reproduced exactly**, including all thirteen `run_log`
+timings, item 57's five after-counts and its no-bar predicate returning zero in every table,
+item 51's 4,399 and 2,916 and 1962-01-02, D-105's 5,729 residual as 2,864 plus 2,864 plus 1
+against a single bar on 2026-08-13, the 1,254 delisted names all carrying in-window bars,
+`AAMC.US` 965, `ABL.US` 1,192, `ACCD.US` 1,071, `SPY.US` 2,670, `MH.US`'s all-zero OHLCV bar
+at 2025-07-23 sitting at the head of its history, `OBNK.US`'s last bar at 2026-02-05, zero
+null `rs_change_21d` on 2026-08-12, and all four carried obligations.
+
+##### The four partial lines, each confirmed partial in the way stated
+
+1. **3.16.** Partial as described. No full-sequence run exists in `run_log`; the compute six
+   at 1763 to 1768 are six process starts in the sequence's declared order rather than the
+   sequence.
+2. **3.17.** Partial as described. `run_log` 1769 to 1774 hold the replay's six compute
+   stages on 2026-08-12 and no ingest stage, with row counts 5,885, 2,864, 9,621, 2,864, 1
+   and 21,234, matching the transcript exactly. The reason given for skipping ingest holds.
+3. **The timing line.** Measured and not met, as stated. Its closure is judgement one.
+4. **Items 44 and 62.** Open with the mechanism recorded, and the record is accurate to the
+   line and to the row.
+
+##### The three store-side lines, checked against the database
+
+**Five years present: met.** `price_daily` 2016-01-04 to 2026-08-17 over **2,768** dates and
+**4,291** tickers, and **1,462** in-window sessions. Reproduces the record exactly.
+
+**Delisted names carrying in-window bars: met.** **1,254** rows with a `delisted_date`, and
+**1,254** of them carry a bar inside 2021-01-04..2026-08-12. Read as a population this is
+stronger than a spot check and it reproduces exactly.
+
+**Replay byte for byte: evidenced but not independently re-checkable here.** The execution
+reproduces from `run_log` to the row, above. **The diff itself cannot be re-run, because the
+five `_replay_before_*` snapshots were dropped after use.** The transcript says so plainly
+and gives a defensible reason, and the retained `_verify_*` tables are item 52's older ones
+over 2022-06-16 to 2025-04-15, not this date. So this line rests on the transcript rather
+than on the store. Its CI half is independent and did pass here, inside the 451. **Recorded
+as a limit on what a later session can re-derive, not as a doubt about the result.**
+
+##### Verdict
+
+**Phase 3 signs off with named exceptions.** The build is sound, the store matches the record
+to a degree the sweep did not expect, sign-off step 1 is satisfied at HEAD on both runners,
+and the phase's own account of what it did not do is accurate everywhere it was checked. Four
+exceptions are named rather than waived.
+
+1. **The timing line's closure is returned to the operator.** The measurement stands. The
+   verdict that nothing depends on the rebuild being fast rests on a reading of D-88 and
+   `SCREEN_LIFECYCLE.md` §6.7 that neither supports, and D-104 contradicts. The line stays
+   measured and not met; whether it closes is unanswered.
+2. **3.16 is not met and should be signed off as unmet**, closed by the first sequence run
+   after item 44's decision lands rather than by a 440,000-unit run bought to prove ordering
+   that twelve tests already cover against fakes.
+3. **Item 44's decision is owed before the next sequence backfill or go-live**, whichever
+   comes first. It does not block phase 4's checkpoints being authored.
+4. **Two figures need restating**, both above: the 1,462-of-1,462 date coverage, which is
+   1,457 and has a mechanism worth recording for phase 4, and item 53's `ABCL.US` instance,
+   which no longer traces in either direction.
+
+**Nothing found here is a blocker.** None of the four touches an invariant, none changes a
+row the compute layer wrote, and the one coverage hole is five sessions of 1,462 with a
+known and benign cause. Phase 4's checkpoints can be authored.
+
+---
+
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.
 

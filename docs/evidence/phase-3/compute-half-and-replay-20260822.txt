@@ -193,3 +193,24 @@ Outside the window, `indicator_daily` carries 2,864 rows on 2026-08-13 and
 60's byte-repeats. They stand: 2026-08-13 carries one bar rather than none, so item 57's
 predicate cannot reach them, and the range now ends at 2026-08-12 so this run did not
 overwrite them either.
+
+CORRECTION APPENDED AT THE SIGN-OFF REVIEW, 2026-08-22
+-------------------------------------------------------
+Appended rather than edited in place: this file is a captured transcript and the
+figures above are what was derived at the time. Two of them were derived wrongly and
+the corrections are here so a reader meets them beside the originals.
+
+  "over 1,462 of 1,462 dates" is 1,457. indicator_daily and sentiment_derived_daily
+  both hold 1,457 distinct in-window dates and both begin 2021-01-11. The window's
+  first five sessions, 2021-01-04 to 2021-01-08, carry ~3,700 price bars each and no
+  computed row, because security_daily's earliest row is 2021-01-10 and a
+  membership-keyed stage has no epoch to resolve before it. Every date the table does
+  hold is covered, so the percentage above stands and the date coverage does not.
+
+  "1,641,317 of the 1,644,015 rows that carry a value at all, 99.8 percent" puts an
+  in-window numerator over a whole-table denominator. In-window rows carrying
+  article_count_z_own_90d are 1,642,154, giving 99.95 percent. 1,644,015 is correct
+  over the whole table of 3,814,766.
+
+Both re-measured against the developer store at the review. PROGRESS.md carries the
+corrections with the mechanism.

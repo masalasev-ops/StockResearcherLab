@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net;
 using System.Text;
 using Npgsql;
@@ -158,6 +158,50 @@ public sealed class FundamentalsRotationTests
         Assert.Equal(0, rows);
     }
 
+    /// <summary>
+    /// **The nightly half of the split: an attempt moves the rotation's ordering and
+    /// does not mark the sweep** [0013, item 44].
+    ///
+    /// The mirror of `FundamentalsRangeTests.ASweepStampsTheSweepMarkerAndLeavesThe`
+    /// `RotationOrderingUntouched`, and both directions are asserted because one alone
+    /// is satisfied by a component that writes neither column. Before 0013 a night
+    /// touching a ticker overwrote the sweep's marker, dropped it back into the
+    /// sweep's remaining set, and bought it a second time at ten units.
+    ///
+    /// `swept_through_date` is asserted null for every ticker the night walked, which
+    /// is what "this night said nothing about coverage" looks like in the table.
+    /// </summary>
+    [Fact]
+    public async Task ANightlyAttemptMovesTheRotationOrderingWithoutMarkingTheSweep()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ResetAsync(ct).ConfigureAwait(true);
+
+        var handler = new FundamentalsHandler();
+        var walked = await RunAsync(handler, Day1, maxPerRun: 6, ct).ConfigureAwait(true);
+
+        Assert.NotEmpty(walked);
+
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
+
+        await using var ordering = new NpgsqlCommand(
+            "SELECT count(*) FROM fundamental_fetch_attempt " +
+            "WHERE ticker LIKE @p AND last_attempted_date = @d;", conn);
+        ordering.Parameters.AddWithValue("p", Prefix + "%");
+        ordering.Parameters.AddWithValue("d", Day1);
+
+        Assert.Equal(
+            (long) walked.Count,
+            (long) (await ordering.ExecuteScalarAsync(ct).ConfigureAwait(true))!);
+
+        await using var marker = new NpgsqlCommand(
+            "SELECT count(*) FROM fundamental_fetch_attempt " +
+            "WHERE ticker LIKE @p AND swept_through_date IS NOT NULL;", conn);
+        marker.Parameters.AddWithValue("p", Prefix + "%");
+
+        Assert.Equal(0L, (long) (await marker.ExecuteScalarAsync(ct).ConfigureAwait(true))!);
+    }
+
     // ------------------------------------------------------- determinism ---
 
     /// <summary>
@@ -295,7 +339,10 @@ public sealed class FundamentalsRotationTests
 
         var attempt = stage.WriteSet.Single(w => w.Table == "fundamental_fetch_attempt");
         Assert.Equal(WriteOperation.Insert, attempt.Operation);
-        Assert.Equal(FundamentalsIngestor.AttemptColumns, attempt.Columns);
+        // The declared union, not either write shape [0013, item 44]. The nightly
+        // and sweep writes each supply a subset of it, which is what
+        // EnsureColumnsDeclared asks for.
+        Assert.Equal(FundamentalsIngestor.AttemptDeclaredColumns, attempt.Columns);
 
         var earnings = stage.WriteSet.Single(w => w.Table == "earnings_history");
         Assert.Equal(WriteOperation.Insert, earnings.Operation);

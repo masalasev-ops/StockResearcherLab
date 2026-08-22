@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net;
 using System.Text;
 using Npgsql;
@@ -137,20 +137,18 @@ public sealed class FundamentalsRangeTests
     }
 
     /// <summary>
-    /// **A different range end is a different sweep, and this is a known property
-    /// rather than a defect** [D-99].
+    /// **A LATER range end is more coverage than the sweep has, so it starts over**
+    /// [D-99, 0013].
     ///
-    /// C03 stamps the attempt with the range end because that column also orders the
-    /// nightly rotation's staleness, so an attempt stamped with a 2021 window start
-    /// would put every swept ticker back at the head of the rotation. The cost is that
-    /// `to` is load-bearing across the days a sweep spans, and `to` defaults to today.
-    /// Asking for a different one re-dispatches the whole pool at ten units a name.
-    ///
-    /// It is asserted so that it is a fact somebody can find rather than a warning in
-    /// a runbook, which is what `RUNBOOK.md` says about passing both dates.
+    /// The stamp is still the range end and that asymmetry is unchanged [D-99]. What
+    /// changed at 0013 is which column it lands in and how it is read: coverage
+    /// through a date rather than equality with one. A later end is genuinely more
+    /// than this sweep covered, so re-dispatching is correct rather than a cost, and
+    /// `to` stays load-bearing in that direction. The earlier-end direction is the
+    /// test below and is where equality was wrong.
     /// </summary>
     [Fact]
-    public async Task ASweepAskedForADifferentRangeEndStartsOver()
+    public async Task ASweepAskedForALaterRangeEndStartsOver()
     {
         var ct = TestContext.Current.CancellationToken;
         await ResetAsync(ct).ConfigureAwait(true);
@@ -164,6 +162,68 @@ public sealed class FundamentalsRangeTests
         await RunAsync(shifted, To.AddDays(1), ct).ConfigureAwait(true);
 
         Assert.Equal(Pool.Order(StringComparer.Ordinal), shifted.Asked.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// **An EARLIER range end is already covered, and this is the half item 44 was
+    /// filed for** [0013].
+    ///
+    /// D-105 refuses a range end past the ingest frontier, and the stamps this table
+    /// carried were written against an end it now refuses, so every later run asked
+    /// for an earlier one. Under the equality test that matched nothing and the whole
+    /// pool re-dispatched at ten units a ticker: measured at 20,068 tickers for
+    /// 200,680 units on the real store, with C05 alongside it for about 440,000 in
+    /// all. It is not a one-off either, being item 44's third trigger, "any later
+    /// frontier correction that moves a range end".
+    ///
+    /// A ticker swept through a later date is covered for an earlier one, which is
+    /// what the `&gt;=` says and what an equality could never say.
+    /// </summary>
+    [Fact]
+    public async Task ASweepAskedForAnEarlierRangeEndIsCoveredRatherThanStartingOver()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ResetAsync(ct).ConfigureAwait(true);
+
+        var first = new RangeHandler(alreadySpent: 0);
+        await RunAsync(first, To, ct).ConfigureAwait(true);
+
+        Assert.Equal(Pool.Order(StringComparer.Ordinal), first.Asked.Order(StringComparer.Ordinal));
+
+        var earlier = new RangeHandler(alreadySpent: 0);
+        var result = await RunAsync(earlier, To.AddDays(-1), ct).ConfigureAwait(true);
+
+        Assert.Empty(earlier.Asked);
+        Assert.True(result.WasCovered);
+    }
+
+    /// <summary>
+    /// **The sweep half of the split: a range run stamps its own marker and leaves the
+    /// rotation's ordering exactly where it found it** [0013, item 44].
+    ///
+    /// `last_attempted_date` is asserted still null rather than merely unequal to the
+    /// range end, because these tickers have never been through a nightly run and null
+    /// is what that means. A sweep writing it would put every swept name into the
+    /// rotation's freshness ordering ahead of names the night actually attempted,
+    /// which is the defect this column split closed.
+    /// </summary>
+    [Fact]
+    public async Task ASweepStampsTheSweepMarkerAndLeavesTheRotationOrderingUntouched()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ResetAsync(ct).ConfigureAwait(true);
+
+        await RunAsync(new RangeHandler(alreadySpent: 0), To, ct).ConfigureAwait(true);
+
+        Assert.Equal(Pool.Order(StringComparer.Ordinal), await AttemptedAsync(ct).ConfigureAwait(true));
+
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
+        await using var cmd = new NpgsqlCommand(
+            "SELECT count(*) FROM fundamental_fetch_attempt " +
+            "WHERE ticker LIKE @p AND last_attempted_date IS NOT NULL;", conn);
+        cmd.Parameters.AddWithValue("p", Prefix + "%");
+
+        Assert.Equal(0L, (long) (await cmd.ExecuteScalarAsync(ct).ConfigureAwait(true))!);
     }
 
     // ----------------------------------------------------------- harness ---
@@ -193,7 +253,7 @@ public sealed class FundamentalsRangeTests
         await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
         await using var cmd = new NpgsqlCommand(
             "SELECT ticker FROM fundamental_fetch_attempt " +
-            "WHERE ticker LIKE @p AND last_attempted_date = @d ORDER BY ticker;", conn);
+            "WHERE ticker LIKE @p AND swept_through_date = @d ORDER BY ticker;", conn);
         cmd.Parameters.AddWithValue("p", Prefix + "%");
         cmd.Parameters.AddWithValue("d", To);
 

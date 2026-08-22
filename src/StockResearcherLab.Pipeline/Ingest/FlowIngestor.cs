@@ -42,6 +42,26 @@ public sealed class FlowIngestor : IStage, IBackfillStage
     public static readonly string[] AttemptColumns =
         ["ticker", "last_attempted_date", "last_yield_date", "rows_last_attempt"];
 
+    /// <summary>
+    /// The sweep's set [0013, item 44]. One column different from the nightly list
+    /// above, and that column is the whole split: the upsert updates exactly what it
+    /// is handed, so a range run stamps how far it has swept and leaves the rotation's
+    /// ordering where it was.
+    /// </summary>
+    public static readonly string[] SweepAttemptColumns =
+        ["ticker", "swept_through_date", "last_yield_date", "rows_last_attempt"];
+
+    /// <summary>
+    /// The union, which is what the write set declares. `EnsureColumnsDeclared` asks
+    /// that a write supply a subset of what was declared, so one declaration covers
+    /// both shapes and either alone would fail the other [INVARIANT 10].
+    /// </summary>
+    public static readonly string[] AttemptDeclaredColumns =
+    [
+        "ticker", "last_attempted_date", "swept_through_date",
+        "last_yield_date", "rows_last_attempt"
+    ];
+
     private static readonly string[] InsiderKey =
         ["ticker", "accession_number", "transaction_side", "transaction_ordinal"];
 
@@ -61,7 +81,7 @@ public sealed class FlowIngestor : IStage, IBackfillStage
     public IReadOnlyList<TableWrite> WriteSet { get; } =
     [
         new TableWrite("insider_transaction", WriteOperation.Insert, InsiderColumns),
-        new TableWrite("flow_fetch_attempt", WriteOperation.Insert, AttemptColumns),
+        new TableWrite("flow_fetch_attempt", WriteOperation.Insert, AttemptDeclaredColumns),
     ];
 
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
@@ -221,7 +241,7 @@ public sealed class FlowIngestor : IStage, IBackfillStage
                 // 404, being a ticker the filings index does not carry. An ordinary
                 // fact rather than a fault, and it still takes an attempt row so the
                 // sweep does not offer it again.
-                await RecordAttemptAsync(
+                await RecordSweepAttemptAsync(
                     settings, new Attempt(ticker, context.To, null, 0), ct).ConfigureAwait(false);
                 walked++;
                 continue;
@@ -246,7 +266,7 @@ public sealed class FlowIngestor : IStage, IBackfillStage
                 shortfalls.Add(new Shortfall(ticker, read.Value.Shortfall, read.Value.Position));
             }
 
-            await RecordAttemptAsync(
+            await RecordSweepAttemptAsync(
                 settings,
                 new Attempt(ticker, context.To, written > 0 ? context.To : null, written),
                 ct).ConfigureAwait(false);
@@ -330,8 +350,20 @@ public sealed class FlowIngestor : IStage, IBackfillStage
     }
 
     /// <summary>
-    /// Tickers already carrying an attempt at this sweep's range end, which are the
-    /// ones it does not walk again [D-99].
+    /// Tickers already swept through this range's end, which are the ones it does not
+    /// walk again [D-99, 0013].
+    ///
+    /// **`swept_through_date`, and read as coverage rather than as equality** [item
+    /// 44]. Its own column since 0013, because this was `last_attempted_date`, which
+    /// the nightly rotation also orders on: a sweep stamp sorted ahead of any later
+    /// nightly date, so the rotation preferred the very names the sweep had just paid
+    /// for, and a night's stamp knocked a swept ticker back into the remaining set to
+    /// be bought again. Read with `&gt;=` rather than `=`, because D-105 refuses a
+    /// range end past the ingest frontier and these rows were stamped against an end
+    /// it now refuses; under equality every row matches nothing and the whole universe
+    /// re-dispatches at roughly 83.5 units a member, and that recurs on any later
+    /// frontier correction. A ticker swept through a later date is covered for an
+    /// earlier one.
     /// </summary>
     private static async Task<IReadOnlySet<string>> AttemptedOnAsync(
         StageContext context, DateOnly asOf, CancellationToken ct)
@@ -341,7 +373,7 @@ public sealed class FlowIngestor : IStage, IBackfillStage
             $"""
              SELECT ticker
              FROM flow_fetch_attempt
-             WHERE last_attempted_date = DATE '{asOf.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}'
+             WHERE swept_through_date >= DATE '{asOf.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}'
              ORDER BY ticker;
              """,
             ct).ConfigureAwait(false);
@@ -433,7 +465,15 @@ public sealed class FlowIngestor : IStage, IBackfillStage
     /// </summary>
     private static Task RecordAttemptAsync(
         StageContext context, Attempt attempt, CancellationToken ct)
-        => RecordAttemptsAsync(context, new List<Attempt> { attempt }, ct);
+        => WriteAttemptsAsync(context, new List<Attempt> { attempt }, AttemptColumns, ct);
+
+    /// <summary>
+    /// One swept ticker's row, into the sweep's column rather than the rotation's
+    /// [0013, item 44]. Same statement, same grain, one different column list.
+    /// </summary>
+    private static Task RecordSweepAttemptAsync(
+        StageContext context, Attempt attempt, CancellationToken ct)
+        => WriteAttemptsAsync(context, new List<Attempt> { attempt }, SweepAttemptColumns, ct);
 
     /// <summary>
     /// The attempt record for every ticker this run selected.
@@ -443,8 +483,12 @@ public sealed class FlowIngestor : IStage, IBackfillStage
     /// table and an unsorted enumeration is not a deterministic output
     /// [`CLAUDE.md` §6].
     /// </summary>
-    private static async Task RecordAttemptsAsync(
+    private static Task RecordAttemptsAsync(
         StageContext context, List<Attempt> attempts, CancellationToken ct)
+        => WriteAttemptsAsync(context, attempts, AttemptColumns, ct);
+
+    private static async Task WriteAttemptsAsync(
+        StageContext context, List<Attempt> attempts, string[] columns, CancellationToken ct)
     {
         if (attempts.Count == 0)
         {
@@ -454,7 +498,7 @@ public sealed class FlowIngestor : IStage, IBackfillStage
         attempts.Sort((a, b) => string.CompareOrdinal(a.Ticker, b.Ticker));
 
         await context.Data.BulkUpsertAsync(
-            "flow_fetch_attempt", AttemptColumns, AttemptConflictTarget,
+            "flow_fetch_attempt", columns, AttemptConflictTarget,
             async (w, c) =>
             {
                 foreach (var a in attempts)

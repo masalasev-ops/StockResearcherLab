@@ -1914,3 +1914,22 @@ future per-date reconstruction rather than anything running now.
 first retained is a decision, and if it is the former it cannot be derived from a pruned
 `price_daily` at all. That stays open at item 51 and is named in the document as
 unauthored rather than settled in passing [`CLAUDE.md` §13].
+
+## 2026-08-22, `SCHEMA.md`: the two attempt records gain the sweep marker [0013, item 44]
+
+A clean edit, these being spec entries describing tables whose shape changed under
+them [D-73]. `fundamental_fetch_attempt` and `flow_fetch_attempt` each gain
+`swept_through_date`, and `last_attempted_date` becomes nullable on both.
+
+Prior wording, identical in both entries, was the column line alone:
+
+> `ticker`, `last_attempted_date`, `last_yield_date`, `rows_last_attempt`.
+
+with no statement of what `last_attempted_date` meant to each reader, which is what
+let one column serve two purposes without the document showing it. The three carried
+properties at the foot of the `flow_fetch_attempt` entry are unchanged and still
+carried.
+
+Migration `0013_attempt_sweep_marker.sql`. The decision number for the split is owed
+and is not taken here: D-99 named the remedy and deferred it, item 44 records it, and
+authoring it is a human's [`CLAUDE.md` §13].

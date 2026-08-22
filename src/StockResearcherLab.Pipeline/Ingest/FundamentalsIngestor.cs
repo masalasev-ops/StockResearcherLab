@@ -51,8 +51,36 @@ public sealed class FundamentalsIngestor : IBackfillStage
     /// or not the fetch yielded rows, which is the distinction the old ordering could
     /// not make.
     /// </summary>
+    /// <remarks>
+    /// **The nightly set. It does not carry the sweep marker** [0013, item 44]. A
+    /// nightly attempt says nothing about what a sweep has covered, and writing the
+    /// two together is the defect 0013 closed: the upsert updates exactly the columns
+    /// it is handed, so leaving `swept_through_date` out of this list is what makes a
+    /// nightly run unable to satisfy a sweep.
+    /// </remarks>
     public static readonly string[] AttemptColumns =
         ["ticker", "last_attempted_date", "last_yield_date", "rows_last_attempt"];
+
+    /// <summary>
+    /// The sweep's set, and the mirror of the rule above: a range run stamps how far
+    /// it has swept and leaves the rotation's ordering exactly where it was [0013,
+    /// item 44]. The two lists differ in one column and that column is the whole
+    /// split.
+    /// </summary>
+    public static readonly string[] SweepAttemptColumns =
+        ["ticker", "swept_through_date", "last_yield_date", "rows_last_attempt"];
+
+    /// <summary>
+    /// The union, which is what the write set declares. `EnsureColumnsDeclared` asks
+    /// that what a write supplies is a subset of what the component declared, so one
+    /// declaration covers both shapes; declaring either alone would fail the other at
+    /// the point the connection opens [INVARIANT 10].
+    /// </summary>
+    public static readonly string[] AttemptDeclaredColumns =
+    [
+        "ticker", "last_attempted_date", "swept_through_date",
+        "last_yield_date", "rows_last_attempt"
+    ];
 
     // ------------------------------------------------------- range mode [3.7] ---
 
@@ -102,15 +130,26 @@ public sealed class FundamentalsIngestor : IBackfillStage
 
         // **Resumption is a set difference against this stage's own attempt record**,
         // which replaced the ticker position the run log used to carry [0010]. The
-        // sweep stamps every attempt with `settings.Date`, being the range end, so the
-        // remaining set is the pool minus the tickers already carrying one at that
-        // date.
+        // sweep stamps `swept_through_date` with `settings.Date`, being the range end,
+        // so the remaining set is the pool minus the tickers already swept through it.
         //
-        // **The range end here, where C02 keys on the range start.** This column is
-        // also what the nightly rotation orders on, read strictly before the run date
-        // [0006], so an attempt stamped with a 2021 window start would put every swept
-        // ticker back at the head of the rotation the next night. The sweep's own date
-        // is the one that means "attempted recently" to both readers.
+        // **The marker is the sweep's own column since 0013, and it reads as coverage
+        // through a date rather than as equality with one** [item 44]. Both halves
+        // matter and neither is decoration. Its own column, because this used to be
+        // `last_attempted_date`, which the nightly rotation also orders on: a sweep
+        // stamp then sorted ahead of any later nightly date and the rotation preferred
+        // the names the sweep had just paid for, while a night's stamp knocked a swept
+        // ticker back into this remaining set to be bought twice. Coverage rather than
+        // equality, because D-105 refuses a range end past the ingest frontier and the
+        // stamps in this table were written against an end it now refuses; under an
+        // equality test every one of them matches nothing and the whole pool
+        // re-dispatches at ten units a ticker, and that recurs on any later frontier
+        // correction that moves an end. A ticker swept through a later date is covered
+        // for an earlier one, which is what `>=` says.
+        //
+        // **The range end here, where C02 keys on the range start**, and that
+        // asymmetry is unchanged by the split [D-99]. This stage's nightly and sweep
+        // calls are the same call, where C02's differ in depth.
         var already = await AttemptedOnAsync(settings, ct).ConfigureAwait(false);
         var remaining = pool.Where(t => !already.Contains(t)).ToList();
 
@@ -153,7 +192,7 @@ public sealed class FundamentalsIngestor : IBackfillStage
             // entirely to a killed process, and this is now the only record of what the
             // sweep did, so it is committed as it goes. One small upsert against a
             // ten-unit call is not a cost worth optimising.
-            await RecordAttemptsAsync(
+            await RecordSweepAttemptsAsync(
                 settings,
                 [new Attempt(ticker, settings.Date, written > 0 ? settings.Date : null, written)],
                 ct).ConfigureAwait(false);
@@ -199,7 +238,7 @@ public sealed class FundamentalsIngestor : IBackfillStage
             $"""
              SELECT ticker
              FROM fundamental_fetch_attempt
-             WHERE last_attempted_date = DATE '{asOf}'
+             WHERE swept_through_date >= DATE '{asOf}'
              ORDER BY ticker;
              """,
             ct).ConfigureAwait(false);
@@ -330,7 +369,7 @@ public sealed class FundamentalsIngestor : IBackfillStage
     public IReadOnlyList<TableWrite> WriteSet { get; } =
     [
         new TableWrite("fundamental_snapshot", WriteOperation.Insert, Columns),
-        new TableWrite("fundamental_fetch_attempt", WriteOperation.Insert, AttemptColumns),
+        new TableWrite("fundamental_fetch_attempt", WriteOperation.Insert, AttemptDeclaredColumns),
         new TableWrite("earnings_history", WriteOperation.Insert, EarningsColumns),
 
         // C05's until D-98. It bought the same block a second time at 10 units a
@@ -487,8 +526,25 @@ public sealed class FundamentalsIngestor : IBackfillStage
     /// table and an unsorted enumeration is not a deterministic output
     /// [`CLAUDE.md` §6].
     /// </summary>
-    private static async Task RecordAttemptsAsync(
+    private static Task RecordAttemptsAsync(
         StageContext context, List<Attempt> attempts, CancellationToken ct)
+        => WriteAttemptsAsync(context, attempts, AttemptColumns, ct);
+
+    /// <summary>
+    /// The same rows into the sweep's column instead of the rotation's [0013, item 44].
+    ///
+    /// **The only difference is the column list, and that is deliberate.** The upsert
+    /// updates exactly the columns it is handed, so handing it `SweepAttemptColumns`
+    /// writes `swept_through_date` and leaves `last_attempted_date` at whatever the
+    /// nightly rotation last put there, including null for a ticker the night has
+    /// never attempted. One statement, one difference, nothing else to keep in step.
+    /// </summary>
+    private static Task RecordSweepAttemptsAsync(
+        StageContext context, List<Attempt> attempts, CancellationToken ct)
+        => WriteAttemptsAsync(context, attempts, SweepAttemptColumns, ct);
+
+    private static async Task WriteAttemptsAsync(
+        StageContext context, List<Attempt> attempts, string[] columns, CancellationToken ct)
     {
         if (attempts.Count == 0)
         {
@@ -498,7 +554,7 @@ public sealed class FundamentalsIngestor : IBackfillStage
         attempts.Sort((a, b) => string.CompareOrdinal(a.Ticker, b.Ticker));
 
         await context.Data.BulkUpsertAsync(
-            "fundamental_fetch_attempt", AttemptColumns, AttemptConflictTarget,
+            "fundamental_fetch_attempt", columns, AttemptConflictTarget,
             async (w, c) =>
             {
                 foreach (var a in attempts)

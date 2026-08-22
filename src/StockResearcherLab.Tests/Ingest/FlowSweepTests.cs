@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net;
 using System.Text;
 using Npgsql;
@@ -247,7 +247,7 @@ public sealed class FlowSweepTests
     {
         await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
         await using var cmd = new NpgsqlCommand(
-            "SELECT ticker FROM flow_fetch_attempt WHERE last_attempted_date = @d;", conn);
+            "SELECT ticker FROM flow_fetch_attempt WHERE swept_through_date = @d;", conn);
         cmd.Parameters.AddWithValue("d", To);
 
         var rows = new List<string>();
@@ -280,7 +280,7 @@ public sealed class FlowSweepTests
         await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
 
         await using (var cmd = new NpgsqlCommand(
-            "DELETE FROM flow_fetch_attempt WHERE last_attempted_date = @d;", conn))
+            "DELETE FROM flow_fetch_attempt WHERE swept_through_date = @d;", conn))
         {
             cmd.Parameters.AddWithValue("d", To);
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);

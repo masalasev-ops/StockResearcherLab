@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using StockResearcherLab.Core;
 using StockResearcherLab.Data.Eodhd;
 using StockResearcherLab.Pipeline.Ingest;
@@ -291,7 +291,10 @@ public sealed class FlowIngestorTests
         Assert.Contains("accession_number", insider.Columns);
 
         var attempt = stage.WriteSet.Single(w => w.Table == "flow_fetch_attempt");
-        Assert.Equal(FlowIngestor.AttemptColumns, attempt.Columns);
+        // The declared union, not either write shape [0013, item 44]. The nightly
+        // and sweep writes each supply a subset of it, which is what
+        // EnsureColumnsDeclared asks for.
+        Assert.Equal(FlowIngestor.AttemptDeclaredColumns, attempt.Columns);
 
         // **C03's since D-98**, and asserted here rather than only there: the write
         // moved, so the failure this rules out is the old call surviving the move and

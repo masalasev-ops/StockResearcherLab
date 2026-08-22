@@ -1,4 +1,4 @@
-# SCHEMA.md
+﻿# SCHEMA.md
 
 Every table, its grain, and which component owns which write to it. The ownership
 declaration is not documentation. It is the contract the conformance test in phase 0
@@ -220,7 +220,10 @@ rather than invisible.
 ### fundamental_fetch_attempt
 Grain: one row per ticker. **Writer: FundamentalsIngestor.**
 
-`ticker`, `last_attempted_date`, `last_yield_date`, `rows_last_attempt`.
+`ticker`, `last_attempted_date`, `swept_through_date`, `last_yield_date`,
+`rows_last_attempt`.
+
+**Two columns, two readers, and they were one column until 0013** [item 44]. `last_attempted_date` is the nightly rotation's freshness ordering and is **nullable**, null meaning the night has never attempted this ticker, which is a different fact from an absent row, meaning nothing has. `swept_through_date` is the range sweep's marker and is read as coverage, `>= the range end`, never as equality with it. One column served both and each reader undid the other's work: a sweep stamp sorted ahead of any later nightly date so the rotation preferred the names the sweep had just paid for, and a night's stamp knocked a swept ticker back into the sweep's remaining set to be bought again. Read as coverage rather than equality because D-105 refuses a range end past the ingest frontier, so every later run asks for an earlier end than the stamps carry, and under equality the whole pool re-dispatches; that recurs on any frontier correction that moves an end. The stamp is still the range end on both these tables, which is D-99's asymmetry and is unchanged.
 
 **The record is of the attempt, not of the result, and that is the whole point of
 it** [0006]. C03 ordered never-fetched first, where fetched meant any row in
@@ -285,7 +288,10 @@ may rest on an estimate other than the one it reports; whether it agrees with
 ### flow_fetch_attempt
 Grain: one row per ticker. **Writer: FlowIngestor.**
 
-`ticker`, `last_attempted_date`, `last_yield_date`, `rows_last_attempt`.
+`ticker`, `last_attempted_date`, `swept_through_date`, `last_yield_date`,
+`rows_last_attempt`.
+
+**Two columns, two readers, and they were one column until 0013** [item 44]. `last_attempted_date` is the nightly rotation's freshness ordering and is **nullable**, null meaning the night has never attempted this ticker, which is a different fact from an absent row, meaning nothing has. `swept_through_date` is the range sweep's marker and is read as coverage, `>= the range end`, never as equality with it. One column served both and each reader undid the other's work: a sweep stamp sorted ahead of any later nightly date so the rotation preferred the names the sweep had just paid for, and a night's stamp knocked a swept ticker back into the sweep's remaining set to be bought again. Read as coverage rather than equality because D-105 refuses a range end past the ingest frontier, so every later run asks for an earlier end than the stamps carry, and under equality the whole pool re-dispatches; that recurs on any frontier correction that moves an end. The stamp is still the range end on both these tables, which is D-99's asymmetry and is unchanged.
 
 **The same record as `fundamental_fetch_attempt` for the component D-91 explicitly
 left open** [D-95, 0008]. C05's ordering was copied from C03's by hand at 1.7 and kept

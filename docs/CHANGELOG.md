@@ -1804,3 +1804,44 @@ cells carried a checkpoint number, being the checkpoint at which verification wo
 and now carry the date it happened. `backfill.ticker_concurrency` gained a clause saying
 what does not read it, C05 being serial by design, because a concurrency key named for one
 component reads as an oversight rather than as a decision.
+
+
+---
+
+## 2026-08-22, `CONFIG_REFERENCE.md`: two paragraphs still said NOT BOUND after the table stopped
+
+The Backfill table was filled at 3.18 and stamped `verified 2026-08-19` for all ten keys.
+Two paragraphs around it were not touched and went on describing the state before that,
+so the document contradicted itself on the same screen. A clean edit [D-73], with the
+prior wording here.
+
+**What was wrong.** The prose above the table said four keys "still read NOT BOUND" and
+named them as the sweep weights for checkpoints not yet built; the paragraph below the
+table said "Every Consumer here reads `NOT BOUND` and that is the true state after 3.4".
+Neither was true at `f2f0746`: every one of the ten carries a consumer read out of the
+composition code and a verified date.
+
+**Cost of believing the old wording.** `CONFIG_REFERENCE.md` records the verified
+consumer precisely so an audit can tell a wired key from an unwired one. A document that
+says NOT BOUND beside a table saying otherwise makes the reader pick, and the rule it
+exists to enforce is that an unverified entry is worse than an absent one.
+
+**The prior wording**, both passages as they stood at `f2f0746`.
+
+> The six backfill keys now bound were confirmed the same way, at
+> `PriceIngestor.cs:108-111` and `FundamentalsIngestor.cs:88-94` for the range stages,
+> and `Program.cs:175` for the driver's read of `backfill.window_start`. The four that
+> still read NOT BOUND are the sweep weights for checkpoints not yet built, and their
+> absence from a grep over `src/` is what the entry states.
+
+> **Every Consumer here reads `NOT BOUND` and that is the true state after 3.4.** The
+> keys are seeded before anything resolves them, and 3.4 builds the gate they will be
+> passed to rather than the sweep that resolves them: `AllowanceRule.Decide` takes the
+> reserve, the weight and the configured allowance as arguments, and each sweep resolves
+> its own three for the date it is working on. So the column names the checkpoint that
+> will fill it rather than a component nothing has confirmed. An unverified entry is
+> worse than an absent one, and a guessed one is worse than both.
+
+**The reasoning in the second passage is kept and only its tense and its claim moved.**
+Why the reserve is a parameter rather than resolved inside the gate is still the reason
+the column read NOT BOUND at 3.4, and that is worth a reader knowing.

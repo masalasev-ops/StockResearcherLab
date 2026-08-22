@@ -127,11 +127,11 @@ the two sentiment keys at `SentimentIngestor.cs:51-52`, the two flow keys at
 at `EventsIngestor.cs:59-60`. Line numbers go stale; the file and the stage do not,
 and both are given so the next reader can find it either way.
 
-The six backfill keys now bound were confirmed the same way, at
-`PriceIngestor.cs:108-111` and `FundamentalsIngestor.cs:88-94` for the range stages,
-and `Program.cs:175` for the driver's read of `backfill.window_start`. The four that
-still read NOT BOUND are the sweep weights for checkpoints not yet built, and their
-absence from a grep over `src/` is what the entry states.
+All ten backfill keys were confirmed the same way, at `PriceIngestor.cs:108-111` and
+`FundamentalsIngestor.cs:88-94` for the range stages, and `Program.cs:175` for the
+driver's read of `backfill.window_start`. The four sweep weights that read NOT BOUND
+while their checkpoints were unbuilt were bound as each landed and are stamped in the
+table below [corrected 2026-08-22; prior wording in `CHANGELOG.md`].
 
 ## Backfill
 
@@ -148,13 +148,15 @@ absence from a grep over `src/` is what the entry states.
 | `backfill.weight_splits` | 1 | 3.1, 3.3 | `EventsIngestor` C06, `ExecuteRangeAsync` | verified 2026-08-19 |
 | `backfill.weight_dividends` | 1 | 3.1, 3.3 | `EventsIngestor` C06, `ExecuteRangeAsync` | verified 2026-08-19 |
 
-**Every Consumer here reads `NOT BOUND` and that is the true state after 3.4.** The
-keys are seeded before anything resolves them, and 3.4 builds the gate they will be
-passed to rather than the sweep that resolves them: `AllowanceRule.Decide` takes the
+**Every Consumer here read `NOT BOUND` after 3.4 and every one is now bound and
+stamped** [corrected 2026-08-22; prior wording in `CHANGELOG.md`]. The keys are seeded
+before anything resolves them, and 3.4 built the gate they are passed to rather than
+the sweep that resolves them: `AllowanceRule.Decide` takes the
 reserve, the weight and the configured allowance as arguments, and each sweep resolves
-its own three for the date it is working on. So the column names the checkpoint that
-will fill it rather than a component nothing has confirmed. An unverified entry is
-worse than an absent one, and a guessed one is worse than both.
+its own three for the date it is working on. So the column named the checkpoint that
+would fill it rather than a component nothing had confirmed, and each was filled as
+its sweep landed. An unverified entry is worse than an absent one, and a guessed one
+is worse than both.
 
 **The reserve is a parameter rather than resolved inside the gate, deliberately.**
 Resolving it once inside `BackfillContext` would bind the key in one place, and it

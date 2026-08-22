@@ -273,17 +273,34 @@ only prices are date-shaped, and they flip to per-ticker at 1 unit against 100
 a full rebuild finishes in minutes rather than hours; and the replay line below.
 
 **A replay of one historical date produces byte-identical output, over a fixed store**
-[amended, phase 3 plan §5; prior wording in `CHANGELOG.md`]. The line carries its
-reading rather than leaving it to a finding, because it is conditionally unsatisfiable
-on the other reading and a later session testing that one will find it fails without
-knowing whether that was expected.
+[amended, phase 3 plan §5 and again at item 52; prior wording in `CHANGELOG.md`]. The
+line carries its reading rather than leaving it to a finding, because it is
+conditionally unsatisfiable on the other reading and a later session testing that one
+will find it fails without knowing whether that was expected.
 
 *What is asserted.* Re-running any compute stage over a date, against a store whose
-ingest has not moved, reproduces what the backfill wrote byte for byte. Tested at 3.13
-as range mode against nightly for one date, and run end to end at 3.17 through
-`run-night`.
+ingest has not moved, reproduces what the backfill wrote byte for byte **for a ticker
+whose input windows both paths derive identically**. Tested at 3.13 as range mode
+against nightly for one date, and run end to end at 3.17 through `run-night`.
 
-*What is not claimed.* Byte identity does not survive a re-ingest of fundamentals.
+*What is not claimed, one.* **Byte identity does not survive a ticker whose two windows
+are derived differently, and the divergence is recorded with its mechanism rather than
+counted as a failure** [item 52]. C08 bounds a ticker's own history by row count, the
+last 272 bars with no lower date bound, so a delisted name still gets its last 272; it
+bounds the benchmark by calendar days. The nightly path opens the benchmark window at
+the run date, the range path at `CompositePadDays` of 400 before the range start. For a
+ticker carrying a long hole the two can therefore have zero overlap: `OBNK.US` has an
+873-day one, so on 2025-04-15 its 272-bar window is 2022-07-27 to 2023-08-24 against a
+nightly SPY window of 2024-03-15 to 2025-04-15, `Relative` yields null at every offset,
+and all four benchmark-relative columns go null at once while erroring on nothing. The
+range path's value reproduces to the digit from the wider window, so neither reading is
+a fault in the arithmetic. **Which bound is correct is a separate question nobody has
+asked**, and harmonising the two windows to satisfy this line would be a code change
+made to satisfy a done-when rather than because the behaviour is wrong. Both halves are
+stated here so a later session testing the other reading knows the divergence was
+expected and knows what produces it.
+
+*What is not claimed, two.* Byte identity does not survive a re-ingest of fundamentals.
 `filing_date_effective` is computed at ingest from the ticker's widest clean gap known
 at that moment, and a widest gap only grows, so a later re-ingest widens the
 substitution window and moves which rows are readable on a past date. D-62 states this

@@ -1845,3 +1845,39 @@ exists to enforce is that an unverified entry is worse than an absent one.
 **The reasoning in the second passage is kept and only its tense and its claim moved.**
 Why the reserve is a parameter rather than resolved inside the gate is still the reason
 the column read NOT BOUND at 3.4, and that is worth a reader knowing.
+
+
+---
+
+## 2026-08-22, `BUILD_PLAN.md`: the replay line took the counterexample rather than losing it
+
+Phase 3's replay done-when asserted byte identity without qualification, and item 52 is a
+standing counterexample to it: one row in 7,622 moved on a recompute whose inputs had not
+moved. The mechanism is known and it is neither the prune nor nondeterminism, so the line
+was amended to say what it asserts and what it does not, in the shape the paragraph
+already used for the fundamentals re-ingest. A clean edit [D-73], with the prior wording
+here.
+
+**What was wrong.** Nothing in the line was false about the case it had in mind. What it
+lacked was the case it did not: a ticker whose own-history window and whose benchmark
+window are derived by two different rules, which C08 does deliberately, and which can
+leave the two paths with no overlapping benchmark bars at all.
+
+**Why the line moved and the code did not.** Harmonising the two windows would satisfy
+the done-when and would be a code change made for that reason rather than because the
+behaviour is wrong. Which bound is correct, a row count that keeps a delisted name's last
+272 bars or a calendar span that keeps the benchmark aligned to the run date, is a
+separate question nobody has asked. The line now records the divergence with its
+mechanism instead, so a later session testing the other reading knows it was expected.
+
+**The prior wording**, as it stood at `8fdc1a7`.
+
+> *What is asserted.* Re-running any compute stage over a date, against a store whose
+> ingest has not moved, reproduces what the backfill wrote byte for byte. Tested at 3.13
+> as range mode against nightly for one date, and run end to end at 3.17 through
+> `run-night`.
+>
+> *What is not claimed.* Byte identity does not survive a re-ingest of fundamentals.
+
+The fundamentals paragraph is unchanged and is now the second of two, and the marker on
+the heading gained "and again at item 52".

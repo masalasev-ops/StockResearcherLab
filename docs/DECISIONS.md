@@ -1994,6 +1994,56 @@ range start is not dispatched and the remaining set is the reference series alon
 symbol-list calls build the pool and one `eod/{t}` call fetches the series. **Then C08 and
 C10 are re-run**, because their rows were written against a benchmark that was not there.
 
+**D-105 A compute range refuses a range end past the ingest frontier.** `ACTIVE`
+Closes open item 60.
+
+**The frontier is the newest date in `price_daily` carrying a real bar count, not the
+newest date present.** That distinction is the finding rather than a detail of it.
+Measured 2026-08-21: the store held 3,024 bars on 2026-08-12 and exactly one on each of
+2026-08-13, 2026-08-14 and 2026-08-17, all three `SPY.US`, D-104's benchmark load having
+run forward past where the equity sweep stopped. A driver reading the newest date present
+gets 2026-08-17; a driver reading a real bar count gets 2026-08-12. **The backfill read
+neither, because it never read the frontier at all and took its range end as given.**
+
+**It refuses rather than clamps.** A range end the store cannot cover is an operator
+error, and silently narrowing a five-year range is the class of failure this system exists
+to catch [`CLAUDE.md` §1]. Clamping would put the same silence one step further along: the
+run would complete, the numbers would look plausible, and the window analysed would not be
+the window asked for. The three exit codes already distinguish a refusal from a halt, so
+nothing had to be invented to tell an operator error from the allowance gate working.
+
+**C07 performs this check nightly and the backfill had no equivalent.** That is the same
+shape as the pool precondition and the seeding race: a guard present on one path and
+absent on the other. So the rule is C07's settledness read through C07's own keys,
+`freshness.settled_window_days` and `freshness.settled_fraction`, walking newest-first and
+taking the first date at or above that fraction of the trailing median. A key of its own
+would have been the same defect one level down, the two paths free to drift on what a real
+bar count is. It does not take C07's two absolute floors:
+`freshness.row_count_abort_below` is 40,000, sized for the bulk feed's whole-exchange row
+count against about 3,000 bars a session here, and applying it would refuse every range
+ever issued. Recency is not taken either, being a provider call and a question about
+currency rather than about what the store holds.
+
+**What it produced before it existed, recorded so the cost is a figure rather than a
+worry.** The compute range end was 2026-08-13, a date carrying one bar. `indicator_daily`
+took 2,864 rows on it and `sentiment_derived_daily` 2,864, with one `market_context_daily`
+row: **5,729 rows that were a byte-repeat of the day before.** Against 2026-08-12 they
+were 2,864 of 2,864 identical on `dist_200dma`, `adx14` and `atr_pct`, and breadth read
+0.70810056 on both against 0.7126397 on 2026-08-11. **A trailing-window stage cannot fail
+on a missing bar**, which is why nothing said so: the window ending on the unreached date
+holds the same bars as the window ending on the frontier, so the stage computes a correct
+answer to the wrong question. Those rows are indistinguishable from real ones except by
+the thinness of their date, and they stand: 2026-08-13 carries one bar rather than none,
+so item 57's no-bar predicate cannot reach them.
+
+**Where the check sits, because the placement is load-bearing and could have gone wrong
+silently.** It binds the trading calendar, in the session source the driver composes, and
+not the top of the range run. A range end past the frontier is an operator error for a
+compute stage and the ordinary case for an ingest one, since fetching the dates the store
+does not hold yet is how the frontier moves at all. A check on the run would have made the
+backfill unable to extend the store, and every test of the refusal would still have
+passed. The six calendar consumers are exactly the six the wrong end harms.
+
 ---
 
 ## Open

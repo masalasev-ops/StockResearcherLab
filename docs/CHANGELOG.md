@@ -1933,3 +1933,24 @@ carried.
 Migration `0013_attempt_sweep_marker.sql`. The decision number for the split is owed
 and is not taken here: D-99 named the remedy and deferred it, item 44 records it, and
 authoring it is a human's [`CLAUDE.md` §13].
+
+## 2026-08-22, `RUNBOOK.md`: the rebuild's date rule follows the attempt split [0013, item 44]
+
+A clean edit, `RUNBOOK.md` being a document read to know the current state [D-73]. The
+paragraph told an operator that C03 and C05 stamp the range end "because that column is
+also what the nightly rotation orders on", which stopped being true at 0013, and it gave
+only the direction that no longer costs anything.
+
+Prior wording:
+
+> **Both dates are required here and the reason is a bill.** `to` would otherwise
+> default to today and today moves at midnight. C02, C04 and C06 stamp their attempt
+> rows with the range start and do not care what `to` is; **C03 and C05 stamp the range
+> end**, because that column is also what the nightly rotation orders on, so those two
+> presented with a `to` one day later see an empty attempt set and sweep their whole
+> pool again. A rebuild spans days by construction, so this is the ordinary case rather
+> than an edge.
+
+The stamp is still the range end and both dates are still required. What changed is the
+column it lands in and that the marker reads as coverage, so the earlier-`to` direction
+is now a fall-through where it used to re-sweep both pools whole.

@@ -152,10 +152,18 @@ stages ending at C11, each finishing before the next begins.
 
 **Both dates are required here and the reason is a bill.** `to` would otherwise default
 to today and today moves at midnight. C02, C04 and C06 stamp their attempt rows with the
-range start and do not care what `to` is; **C03 and C05 stamp the range end**, because
-that column is also what the nightly rotation orders on, so those two presented with a
-`to` one day later see an empty attempt set and sweep their whole pool again. A rebuild
-spans days by construction, so this is the ordinary case rather than an edge.
+range start and do not care what `to` is; **C03 and C05 stamp the range end**, in
+`swept_through_date`, which is their own marker and not the column the nightly rotation
+orders on [0013, item 44]. That marker is read as coverage rather than as equality, so
+the two directions differ and only one of them costs:
+
+- **A `to` one day EARLIER is already covered** and both sweeps fall through in seconds.
+  This is the direction that matters in practice, because D-105 refuses a range end past
+  the ingest frontier and the frontier moves back whenever a correction finds it. Before
+  0013 this direction re-swept both pools whole, measured at about 440,000 units.
+- **A `to` one day LATER is more than either sweep covered**, so both sweep their whole
+  pool again. That is correct rather than a cost: the extra day is coverage nobody has
+  bought. A rebuild spans days by construction, so re-issue the *identical* command.
 
 **Re-issuing the identical command is how a rebuild is resumed.** Every source resumes
 on its own attempt record, so a source that has already finished dispatches nothing,

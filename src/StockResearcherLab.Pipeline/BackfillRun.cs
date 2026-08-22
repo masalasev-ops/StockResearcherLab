@@ -95,9 +95,28 @@ public sealed class BackfillRun
             _connectionString,
             new DeclaredAccess("BackfillRun", ["price_daily"], []));
 
+        // **The range end is checked against the ingest frontier here, where the driver
+        // turns it into a date set, and nowhere else** [item 60]. C07 asks this of the
+        // nightly path and the backfill had no equivalent, which is a guard on one path
+        // and not the other.
+        //
+        // **It binds the calendar rather than the run, and that is the whole placement
+        // decision.** A range end past the frontier is an operator error for a compute
+        // stage and the ordinary case for an ingest one: fetching the dates the store
+        // does not hold yet is how the frontier moves at all, so a check at the top of
+        // `RunAsync` would make the backfill unable to extend the store. The six stages
+        // that resolve the calendar are exactly the six the wrong end harms, so the
+        // check sits inside what only they call. An ingest stage never reaches it.
+        //
+        // It also means the frontier is read after whatever ran before it in a sequence,
+        // rather than once at the start against a store the ingest half has since moved.
         var context = new BackfillContext(
             from, to, data, _clock, config, _allowance,
-            token => TradingCalendar.SessionsAsync(calendar, from, to, token));
+            async token =>
+            {
+                await PriceFrontier.RequireCoveredAsync(calendar, config, to, token).ConfigureAwait(false);
+                return await TradingCalendar.SessionsAsync(calendar, from, to, token).ConfigureAwait(false);
+            });
 
         var startedAt = _clock.UtcNow;
         var stopwatch = Stopwatch.StartNew();

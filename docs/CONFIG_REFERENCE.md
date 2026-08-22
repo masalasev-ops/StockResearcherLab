@@ -386,8 +386,8 @@ value, but changing it to `vs_spy` is a defect and not a tuning option [INVARIAN
 | `cost.annual_budget` | 100 | — | CostLedger | unverified |
 | `freshness.row_count_abort_below` | 40000 | D-59 | FreshnessGuard | verified 2026-08-09 |
 | `freshness.row_count_alert_below` | 45000 | D-59 | FreshnessGuard | verified 2026-08-09 |
-| `freshness.settled_fraction` | 0.95 | D-70 | FreshnessGuard | verified 2026-08-09 |
-| `freshness.settled_window_days` | 20 | D-70 | FreshnessGuard | verified 2026-08-09 |
+| `freshness.settled_fraction` | 0.95 | D-70 | FreshnessGuard, PriceFrontier | verified 2026-08-09; second consumer verified 2026-08-22 |
+| `freshness.settled_window_days` | 20 | D-70 | FreshnessGuard, PriceFrontier | verified 2026-08-09; second consumer verified 2026-08-22 |
 | `price.reload_window_days` | 20 | A10 | PriceIngestor | verified 2026-08-09 |
 
 Phase P measured the bulk end-of-day row count [D-59]: about 50,000 rows on a settled
@@ -405,6 +405,16 @@ count is at or above `settled_fraction` of the median of the last
 `settled_window_days` dates before it, computed from `price_daily` alone [D-70].
 Recency still has no key, because it reads the exchange calendar for the most
 recent completed session and compares dates rather than crossing a bound.
+
+**`freshness.settled_*` has a second consumer and it is the same question asked of the
+other path** [item 60]. `PriceFrontier` is what the backfill driver uses to decide the
+newest date `price_daily` holds a real session for, and it refuses a range end past it.
+It reads these two keys rather than keys of its own so that the nightly path and the
+range path cannot drift on what a real bar count is. It deliberately does not read
+`freshness.row_count_*`: those floors are sized for the bulk feed's whole-exchange row
+count of about 50,000, and this store holds about 3,000 bars a session, so applying them
+to a range would refuse every range ever issued. Read at `BackfillRun.cs`, where the
+driver composes the check into the session source it hands the context.
 
 The two values and their reasoning are in D-64's closure rather than here,
 including why 0.95 sits six points above the measured part-settled ceiling rather

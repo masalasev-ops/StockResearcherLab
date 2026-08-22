@@ -3718,8 +3718,14 @@ and `SPY.US` present, are checks against a loaded store and stay unmet until it 
 rebuilt onto `price_fetch_attempt` in between. The landing is recorded at the foot of
 this section.
 
-**Both store-side done-when lines are met and one of them is met weakly.** `OTCFF.US`
-carries 1,209 bars from 2021-11-01 to 2026-08-12, every one of them inside the window.
+**Both store-side done-when lines are met and one of them is met weakly.** ~~`OTCFF.US`
+carries 1,209 bars from 2021-11-01 to 2026-08-12, every one of them inside the window.~~
+**Corrected 2026-08-22: this ticker no longer traces and the line is re-evidenced elsewhere.**
+The 2026-08-20 prune dropped `OTCFF.US` entirely, so `price_daily` holds zero bars for it
+and `security` has no row. What it fetched is not in doubt and the evidence survives:
+`price_fetch_attempt` still carries `rows_last_attempt` **1,209** against it. The done-when
+line itself stands on the population instead, 1,254 delisted names all carrying
+in-window bars, walked at Phase 3's definition of done above.
 **`SPY.US` is present with 265 bars and the sweep never touched it**: it is an ETF, so
 `SymbolList`'s `Common Stock` filter keeps it out of the pool, it carries no attempt
 row, and its depth is whatever the nightly bulk feed has left. The line is met by the
@@ -8296,6 +8302,52 @@ disagreements are open items rather than news: `indicator_daily` at 1,580 agains
 
 **The provider day cost 25,430 units of 100,000**, both runs included, leaving 74,570
 unspent at the time of writing.
+
+### Phase 3's definition of done, walked line by line
+
+Read at `0d01b41`. Every line quoted from `BUILD_PLAN.md` phase 3 and answered against
+what exists rather than against what was built for it. **Sign-off step 1 requires that
+the definition of done runs in CI or that this file names the line CI does not cover and
+why**, so the last column says which, for every line.
+
+| # | Line | State | What answers it, and whether CI covers it |
+|---|---|---|---|
+| 1 | five years present | **met** | `price_daily` holds 2016-01-04 to 2026-08-17 over 2,768 dates and 4,291 tickers, and the backfill window 2021-01-04..2026-08-12 is 1,462 sessions of it. **CI does not cover this and cannot**: `ci.ps1` drops and migrates an empty database, so no store-side line is checkable there. It is a query against the developer store, stated here with its figures |
+| 2 | a spot check confirms delisted names are included | **met, and re-evidenced 2026-08-22 because the ticker the record cited no longer exists** | **Read as a population rather than as one name**: `security` holds **1,254** rows with a `delisted_date`, and **all 1,254** carry `price_daily` bars inside 2021-01-04..2026-08-12. Named instances, delisted mid-window with history retained to the delisting date: `AAMC.US` delisted 2024-11-01 with 965 bars from 2021-01-04, `ABL.US` delisted 2025-12-31 with 1,192, `ACCD.US` delisted 2025-04-08 with 1,071. **The 3.6 record's `OTCFF.US` no longer traces and the correction is recorded there**: its `price_fetch_attempt` row still reads `rows_last_attempt` **1,209**, so the sweep did fetch it, and the 2026-08-20 prune dropped the ticker entirely, leaving zero bars and no `security` row. The other named ticker, `SPY.US`, is present at 2,670 bars but **the sweep never touched it**: it is an ETF, `SymbolList`'s `Common Stock` filter keeps it out of the pool, and its depth is whatever the nightly bulk feed left. **Not CI-coverable**, same reason as line 1 |
+| 3 | a full rebuild finishes in minutes rather than hours | **measured and NOT met** | **170.35 minutes** with C01, **98.92** without: compute six at 98.81 by `run_log` 1763 to 1768 plus C01's 71.54 at 1710. 2.84 hours and 1.65 hours. Recorded rather than adjusted [`CLAUDE.md` §11]. **Not CI-coverable**, and it is the one line that needs a human: whether "minutes" was a requirement with a reason or an aspiration written before anything was measured |
+| 4a | the replay line, what is asserted: re-running a compute stage over a date against a store whose ingest has not moved reproduces byte for byte, for a ticker whose windows both paths derive identically | **met, and evidenced twice** | In CI at the stage level: the 3.13 and 3.14 seam tests run each compute stage as range against nightly over a five-date range and compare rows, which **is** covered by `ci.ps1` and by GitHub CI. On the real store: 2026-08-12 snapshotted, all six stages re-run through the nightly path, `EXCEPT` both ways on whole rows, **0 and 0 across all five tables** including the percentile columns |
+| 4b | the replay line, what is not claimed: a ticker whose two windows are derived differently diverges, recorded with its mechanism | **stated, not exercised** | The mechanism is established at item 52 and written into the line. **The live replay could not exercise it and no replay of this date could**: the class needs a ticker with a long price hole that is also a member on the replayed date, and `OBNK.US`, the measured instance, has its last bar on 2026-02-05. No row on 2026-08-12 carries a null `rs_change_21d`. Not CI-coverable either, the suite having no fixture for the zero-overlap case |
+| 4c | the replay line, what is not claimed: byte identity does not survive a re-ingest of fundamentals | **stated, and it is D-62's accepted limitation** | Unchanged by this phase. `filing_date_effective` is computed at ingest from the widest clean gap known at that moment and a widest gap only grows |
+
+**Two checkpoints ran only in part, and both are recorded as part rather than claimed
+whole.**
+
+**3.16, the sequence driver.** The compute half ran through the same `BackfillRun` the
+sequence uses, on the same range, so the work done and the `run_log` rows written are the
+sequence's own. **What did not run is the driver's ordering and fall-through**, because
+at the corrected range end C03 and C05 re-dispatch their whole pools for about 440,000
+units and roughly 4.9 provider days, and the sequence would halt inside C03 without
+reaching the compute half [item 62]. So `BackfillSequence.ExecuteAsync` has still never
+been invoked against the real store. Its ordering is covered in CI by
+`BackfillSequenceTests`, including the cut-out-source fixture; its behaviour against a
+real multi-day sweep is not.
+
+**3.17, replay, determinism and timing.** The timing half is measured and is line 3
+above. The replay half is line 4a and ran as the **compute half rather than the literal
+evening order**: the five ingest stages were skipped deliberately, because a full
+`run-night` would have C02 reload twenty dates of bulk feed, giving 2026-08-13 to
+2026-08-21 real bars, and item 60's 5,729 stale rows on 2026-08-13 would stop being
+identifiable by their thin date and start looking ordinary. A verification step that
+conceals a known defect is worse than one that skips a stage.
+
+**What CI does cover, stated so the reviewer does not have to infer it.** `ci.ps1` and
+GitHub CI both run `guards.ps1`, build with warnings as errors, assert no secrets file is
+present, migrate from an empty server, assert migration idempotence, and run 451 tests.
+Green locally at every commit today and green on GitHub at `d9b359c`. **No store-side
+done-when line is covered by either**, because both run against a database they create
+and drop, which is what makes lines 1, 2 and 3 queries recorded here instead.
+
+---
 
 #### 2026-08-22, the compute half over the corrected range, and the replay reproduces byte for byte
 

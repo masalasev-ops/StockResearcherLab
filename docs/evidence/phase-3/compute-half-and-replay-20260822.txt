@@ -1,0 +1,195 @@
+THE COMPUTE HALF OVER THE CORRECTED RANGE, AND THE REPLAY, 2026-08-22
+=====================================================================
+
+Run after items 51, 52, 57 and 60 landed, against the store item 57's delete left.
+
+WHAT WAS RUN, AND WHAT WAS NOT
+------------------------------
+Six compute stages over 2021-01-04..2026-08-12, in `BackfillSequence.SourceOrder`,
+each finishing before the next began, through `Worker backfill <stage> <from> <to>`.
+That is the same `BackfillRun` the sequence driver uses on the same range, so the work
+and the `run_log` rows are the same; what it does not exercise is the sequence's own
+ordering and fall-through.
+
+NOT RUN, and each for a stated reason:
+
+  the five ingest sweeps   Nothing to do. Their coverage is complete at the 2026-08-13
+                           range end. C03 and C05 would nonetheless re-dispatch whole
+                           against the corrected end, about 440,000 units and roughly
+                           4.9 provider days, which is open item 62.
+
+  C01 UniverseBuilder      `security_daily` already covers 292 evaluation dates to
+                           2026-08-09, so the compute layer has the membership it
+                           reads. Item 51 also wanted C01 held until the `first_seen`
+                           decision is taken. Its 71.54 minutes stands from `run_log`
+                           1710 and is not re-measured here.
+
+THE RANGE END IS THE FRONTIER, AND THE DRIVER PRODUCED IT
+---------------------------------------------------------
+Earlier range runs used 2026-08-13. That is the date item 60 found present and empty.
+2026-08-12 is the frontier under the definition item 60 installed, and the driver
+computed it rather than being told it. Refusal proved first, against the real store:
+
+  $ Worker backfill IndicatorEngine 2026-08-10 2026-08-13
+  RangeEndBeyondFrontierException: The range ends at 2026-08-13 and the ingest
+  frontier is 2026-08-12. [...] 2026-08-12 holds 3,024 bar(s), against a trailing
+  median of 3,035. Skipped 3 newer date(s): 2026-08-17 holds 1 bar(s), below 0.95 of
+  a trailing median of 3,033; 2026-08-14 holds 1 bar(s), below 0.95 of a trailing
+  median of 3,034; 2026-08-13 holds 1 bar(s), below 0.95 of a trailing median of
+  3,035.
+
+So the changed argument is the driver's own rule giving the right answer on its first
+outing, rather than an operator picking a different date.
+
+THE RUN
+-------
+started  2026-08-22T05:38:51Z
+finished 2026-08-22T07:17:46Z
+TOTAL    5,935 s = 98.92 minutes wall clock, six processes end to end
+
+  stage                 run_log  minutes  rows written
+  FlowEngine            1763       25.75     5,527,195
+  IndicatorEngine       1764        9.44     3,811,857
+  ValuationEngine       1765       18.57    13,683,278
+  SentimentEngine       1766        4.72     3,811,857
+  MarketContextEngine   1767        9.41         1,462
+  PercentileEngine      1768       30.92    26,834,277
+                                  ------
+  sum of run_log                   98.81
+
+Wall clock exceeds the run_log sum by 0.11 minutes, which is six process starts.
+
+AGAINST THE PREVIOUS MEASUREMENT, UNTUNED
+-----------------------------------------
+Nothing was changed to make this faster. The comparison is stated because the figure
+moved a long way and a figure that moves without an explanation is not a measurement.
+
+  stage                  prev   now      delta   rows prev     rows now
+  FlowEngine            26.40  25.75     -0.65   5,533,080    5,527,195
+  IndicatorEngine       21.45   9.44    -12.01   4,146,137    3,811,857
+  ValuationEngine       32.36  18.57    -13.79  14,844,295   13,683,278
+  SentimentEngine        2.64   4.72     +2.08   4,146,137    3,811,857
+  MarketContextEngine   15.40   9.41     -5.99       1,585        1,462
+  PercentileEngine      33.77  30.92     -2.85  21,324,558   26,834,277
+                       ------ ------   -------
+  compute six          132.02  98.81    -33.21
+  plus C01 71.54       203.55 170.35
+
+Previous ids: 1761, 1720, 1717, 1722, 1721, 1756.
+
+Every stage but two wrote fewer rows, because item 57's delete removed the phantom
+sessions and the range end no longer repeats a date the ingest had not reached. C35
+went the other way, 2.64 to 4.72, on fewer rows. C11 wrote 5.5 million MORE rows in
+less time, which is the coverage that had been missing rather than a speedup.
+
+THE DONE-WHEN LINE IS STILL NOT MET AND IS NOT ADJUSTED
+-------------------------------------------------------
+"A full rebuild finishes in minutes rather than hours." 170.35 minutes is 2.84 hours
+with C01, and 98.92 is 1.65 hours without it. Neither reading is "minutes". The figure
+is recorded as measured. Whether "minutes" was a requirement with a reason or an
+aspiration written before anything was measured is a human's call with the figure in
+front of them [`CLAUDE.md` §11: never loosen a bound because a measurement missed it].
+
+THE REPLAY
+----------
+The replay done-when asserts that re-running a compute stage over a date, against a
+store whose ingest has not moved, reproduces what the backfill wrote byte for byte.
+
+Method: snapshot every row for 2026-08-12 in the five compute tables; run all six
+stages over that date through the NIGHTLY path, `Worker run <stage> 2026-08-12`; diff
+the snapshot against the result with `EXCEPT` in both directions, whole rows, all
+columns including the percentiles C11 rewrote.
+
+  stage                 nightly rows written
+  FlowEngine                           5,885
+  IndicatorEngine                      2,864
+  ValuationEngine                      9,621
+  SentimentEngine                      2,864
+  MarketContextEngine                      1
+  PercentileEngine                    21,234
+
+  table                     before_not_after  after_not_before
+  flow_daily                               0                 0
+  indicator_daily                          0                 0
+  market_context_daily                     0                 0
+  sentiment_derived_daily                  0                 0
+  valuation_daily                          0                 0
+
+BYTE-IDENTICAL ON EVERY ROW OF EVERY TABLE, both directions, zero differences.
+
+WHAT THIS REPLAY DOES NOT EVIDENCE, stated rather than left to be discovered:
+
+  1. It is the compute half, not the literal evening order. The five ingest stages
+     were skipped. A full `run-night` would have C02 reload twenty dates of bulk feed,
+     giving 2026-08-13 to 2026-08-21 real bars; item 60's 5,729 stale rows on
+     2026-08-13 would then stand on an ordinary ~3,000-bar session instead of being
+     identifiable by their thin date. A verification step that conceals a known defect
+     is worse than one that skips a stage, so it was not run.
+
+  2. It does not exercise item 52's divergence class, and this date cannot. That class
+     needs a ticker with a long price hole that is also a member on the replayed date.
+     `OBNK.US`, the measured instance, has its last bar on 2026-02-05 and is not in the
+     2026-08-12 population at all. No row on 2026-08-12 carries a null `rs_change_21d`.
+     So this confirms the asserted half of the replay line and leaves the not-claimed
+     half untested, which is what the amended line says it is for.
+
+  The five `_replay_before_*` snapshot tables were dropped after the diff. The store
+  already carries unexplained tables as an open item and this verification did not
+  need to add five more; the diff result above is the evidence.
+
+CARRIED OBLIGATIONS, READ OFF THE STORE AFTER THE RUN
+------------------------------------------------------
+Each was owed to phase 3 and each is a query against a populated table.
+
+  `fcf_yield`                 4,682,518 of 13,683,278 valuation rows, 34.2 percent.
+                              Phase 2 recorded 464 of 3,897, the fixed alphabetical
+                              head. 0006 owed this figure at 3.18 and this is it.
+
+  `ev_ebit_vs_own_5y`         3,168,835 of 13,683,278, 23.2 percent. Phase 2 recorded
+                              it computed for NO name, for want of five years of stored
+                              month-end samples. D-94's whole-history price load is what
+                              made it computable at the window start.
+
+  `dist_52w_high_20d_change`  3,805,985 of 3,814,766 indicator rows, 99.8 percent.
+                              Phase 2 recorded it computed for no name, needing 272
+                              trading dates against roughly 262 held.
+
+  sentiment, three metrics    `article_count_z_own_90d` 1,644,015 of 3,814,766, 43.1
+                              percent; `sentiment_delta_7v30` and `sentiment_7d_level`
+                              1,522,527 each, 39.9 percent. Phase 2 recorded 453 of
+                              2,841 names. C35's own line accounts for the remainder:
+                              2,169,705 rows carry fewer than the baseline floor's days
+                              and are null on all three, a name the ingest had not
+                              reached rather than a name with no attention.
+
+THE PERCENTILE STORE IS NOW COMPLETE OVER THE WINDOW
+-----------------------------------------------------
+This is phase 4's precondition: screens read the percentile store and nothing else.
+
+  table                     in-window rows   carrying a percentile
+  indicator_daily                3,811,902               3,811,660
+  sentiment_derived_daily        3,811,902               1,641,317
+  valuation_daily               13,683,278               3,580,230
+
+`indicator_daily` is 99.99 percent; the 242 uncovered are thin-cell nulls C11 reports
+by metric. Sentiment covers 1,641,317 of the 1,644,015 rows that carry a value at all,
+99.8 percent. Valuation covers 3,580,230 of the 4,682,518 that carry `fcf_yield`,
+76.5 percent, the remainder being the thin cells and nulls C11 enumerates per metric.
+
+Against item 50's opening measurement, `atr_pct_pctile` on 10,463 of 4,146,182 rows,
+over 1,462 of 1,462 dates rather than 1,458 of 1,579.
+
+ONE DISCREPANCY, RUN DOWN RATHER THAN LEFT
+-------------------------------------------
+C08 wrote 3,811,857 rows and `indicator_daily` holds 3,811,902 in-window, a difference
+of 45. All 45 are on 2026-08-07, phase 2's blessed date: the nightly path wrote 2,863
+rows there and 45 of those tickers are not active members under the current membership
+epoch, `UNCY.US` among them. The range run wrote 2,818 for that date and the upsert
+conflicts on ticker and date, so it does not remove a row for a name the epoch dropped.
+Same shape as item 54's residue and not a new finding.
+
+Outside the window, `indicator_daily` carries 2,864 rows on 2026-08-13 and
+`sentiment_derived_daily` the same, plus one `market_context_daily` row. Those are item
+60's byte-repeats. They stand: 2026-08-13 carries one bar rather than none, so item 57's
+predicate cannot reach them, and the range now ends at 2026-08-12 so this run did not
+overwrite them either.

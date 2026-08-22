@@ -16,7 +16,7 @@ Correct them directly. Do not record intentions here.
 | 0 Rails | DONE | d9cb5df | Signed off 2026-08-06. Checkpoints 0.1 to 0.8, plus CI, the sign-off review, and pass O's corrections. 25 tests green. Step 1 was met by running every CI step locally, because no hosted runner has ever picked up a job on this account. Step 2 ran at `d4baeaf` and does not cover pass O's four corrected files. Both gaps are in the phase 0 block below |
 | 1 Ingest and universe | IN PROGRESS | 050d5c7 | Every checkpoint 1.1 to 1.14 landed, 136 tests. All twelve definition-of-done lines met live on 2026-08-09: the universe rebuilt to 2,840 names and `run-night` ran all seven stages end to end. Four findings are open and all four are authored questions, not build work: C01 never deactivates, the universe is 2,840 rather than roughly 2,000, C05 cannot fit any schedule, and CI cannot catch the timeout failure class. The CI runner gap is recorded below rather than at sign-off |
 | 2 Compute | IN PROGRESS | 68aafa4 | Every checkpoint 2.1 to 2.15 landed, 221 tests. Five components built: C08, C09, C10, C11 and C35. All eleven definition-of-done lines met on 2026-08-11, with `run-night` completing twelve stages on the blessed date 2026-08-07 and the compute layer digesting identically on re-run. Two components had never executed before this phase ran them and both were broken at the write, which is the phase's largest finding. `METRICS.md` is still the unauthored draft 2.1 produced and all nine of its PROPOSAL entries are now running code |
-| 3 Backfill | IN PROGRESS | e619ba7 | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b`, 314 with D-98's implementation, 324 with its two open items closed, 326 with the backfill driver, 332 with range-scoped resumption and 338 with the frontier position and the connection retry, `ci.ps1` green at each, then 336 at `5be4d33` when the frontier's four tests were replaced by two, 336 again at `3fcdd57` and `cf42116`, and **342 at `7c25f13`** where D-100 replaced the intermittent retry test with two and added five at the provider client. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built, and ~~3.6 has been run once: it failed at 58 percent after 2h10m, leaving `price_daily` at 78 million rows and 12 GB~~ **3.6 completed on 2026-08-13**, after three failed attempts, a vacuum, and its resumption rebuilt onto `price_fetch_attempt` [D-99, 0010]: 33,359,792 bars over 18,812 tickers in 108.4 minutes, the pool covered at 50,737 attempt rows, and `price_daily` at 109.6 million rows and 18.3 GB. ~~3.7 to 3.10 are unrun and the phase's remaining sweeps spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them.~~ The open findings are the table at the foot of this file rather than a second list here; ~~**item 24 blocks 3.7 and every nightly run against the backfilled store**~~ [closed, item 24]. ~~**Every checkpoint 3.1 to 3.16 is built as of 2026-08-17, at 429 tests, 416 before 3.16, `ci.ps1` green at `e619ba7`.**~~ ~~What is built and what has been run are different lines and the difference is the phase's remaining work. **Run:** 3.6, 3.7, 3.8 and 3.10 swept and completed, and 3.11 filled `security_daily`. **Built and unrun:** 3.9, which is the last owed sweep at roughly three days of allowance, and the whole of stage D, so `indicator_daily` and `valuation_daily` still carry phase 2's nightly rows. **3.16 spends nothing to build and its first invocation is a spending decision**, C05's sweep being inside the order. 3.17 and 3.18 are outstanding and 3.17's timing line is owed against a stage D run.~~ **Restated 2026-08-22 at `126f5d8`, the paragraph above having gone four days and about fourteen commits stale.** Every checkpoint 3.1 to 3.18 is built, at **441 tests**, `guards.ps1` green. What is built and what has been run are different lines and the difference is what remains. **Run and complete:** every ingest sweep, 3.6, 3.7, 3.8, 3.9 and 3.10; 3.11's `security_daily` fill; and stage D except its last component, C08, C09, C10, C11 and C35 all carrying a range `run_log` row. **3.9 completed 2026-08-22 at `run_log` 1760**, 2,864 of 2,864 members, once item 59 turned out to be the pager rather than the ticker. **Outstanding:** ~~C34 over the range [item 55],~~ [closed 2026-08-22, `run_log` 1761, checkpoint 3.14 complete] the sequence driver 3.16 never having been invoked once, 3.17's `run-night` replay half [item 44], and the three sign-off blockers that need an authored decision rather than a build, items 51, 52 and 60. **The timing done-when is measured and not met**, 177.16 minutes against "minutes rather than hours", which is a finding rather than a bound to move [`CLAUDE.md` section 11] |
+| 3 Backfill | IN PROGRESS | e619ba7 | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b`, 314 with D-98's implementation, 324 with its two open items closed, 326 with the backfill driver, 332 with range-scoped resumption and 338 with the frontier position and the connection retry, `ci.ps1` green at each, then 336 at `5be4d33` when the frontier's four tests were replaced by two, 336 again at `3fcdd57` and `cf42116`, and **342 at `7c25f13`** where D-100 replaced the intermittent retry test with two and added five at the provider client. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built, and ~~3.6 has been run once: it failed at 58 percent after 2h10m, leaving `price_daily` at 78 million rows and 12 GB~~ **3.6 completed on 2026-08-13**, after three failed attempts, a vacuum, and its resumption rebuilt onto `price_fetch_attempt` [D-99, 0010]: 33,359,792 bars over 18,812 tickers in 108.4 minutes, the pool covered at 50,737 attempt rows, and `price_daily` at 109.6 million rows and 18.3 GB. ~~3.7 to 3.10 are unrun and the phase's remaining sweeps spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them.~~ The open findings are the table at the foot of this file rather than a second list here; ~~**item 24 blocks 3.7 and every nightly run against the backfilled store**~~ [closed, item 24]. ~~**Every checkpoint 3.1 to 3.16 is built as of 2026-08-17, at 429 tests, 416 before 3.16, `ci.ps1` green at `e619ba7`.**~~ ~~What is built and what has been run are different lines and the difference is the phase's remaining work. **Run:** 3.6, 3.7, 3.8 and 3.10 swept and completed, and 3.11 filled `security_daily`. **Built and unrun:** 3.9, which is the last owed sweep at roughly three days of allowance, and the whole of stage D, so `indicator_daily` and `valuation_daily` still carry phase 2's nightly rows. **3.16 spends nothing to build and its first invocation is a spending decision**, C05's sweep being inside the order. 3.17 and 3.18 are outstanding and 3.17's timing line is owed against a stage D run.~~ **Restated 2026-08-22 at `126f5d8`, the paragraph above having gone four days and about fourteen commits stale.** Every checkpoint 3.1 to 3.18 is built, at **441 tests**, `guards.ps1` green. What is built and what has been run are different lines and the difference is what remains. **Run and complete:** every ingest sweep, 3.6, 3.7, 3.8, 3.9 and 3.10; 3.11's `security_daily` fill; and stage D except its last component, C08, C09, C10, C11 and C35 all carrying a range `run_log` row. **3.9 completed 2026-08-22 at `run_log` 1760**, 2,864 of 2,864 members, once item 59 turned out to be the pager rather than the ticker. ~~**Outstanding:** C34 over the range [item 55], the sequence driver 3.16 never having been invoked once, 3.17's `run-night` replay half [item 44], and the three sign-off blockers that need an authored decision rather than a build, items 51, 52 and 60.~~ **Restated 2026-08-22 at the close of the day's work, at `718a43f` plus the run.** Items 51, 52, 57 and 60 all closed, at 451 tests, `ci.ps1` green at every commit and GitHub CI green on the branch at `d9b359c`. **The compute half re-ran whole over the corrected range** 2021-01-04..2026-08-12 in 98.81 minutes, and **the replay reproduced 2026-08-12 byte for byte across all five compute tables**, zero rows differing in either direction. **Two done-when lines are half evidenced and are recorded as half rather than claimed whole.** 3.16: the compute half ran through the same `BackfillRun` the sequence uses, so the work and the `run_log` rows are the sequence's, but the driver's own ordering and fall-through was not exercised, because at the corrected range end C03 and C05 re-dispatch whole for about 440,000 units [item 62]. 3.17: the replay is the compute half rather than the literal evening order, the five ingest stages skipped deliberately, because a full `run-night` would have C02 give 2026-08-13 real bars and item 60's stale rows there would stop being identifiable by their thin date. **The timing done-when is measured and not met**, 170.35 minutes with C01 against "minutes rather than hours", which is a finding rather than a bound to move [`CLAUDE.md` section 11]. **What phase 3 still needs is three authored decisions and a review, none of them build work**: the timing verdict, item 44 with item 62 which are the same shared column from two sides, and a decision number for item 60's refuse-not-clamp rule, D-104 being the highest allocated. Sign-off step 2 must run in a session that has not committed here |
 | 4 Screens and selection | NOT STARTED | | |
 | 5 Digest chain | NOT STARTED | | |
 | 6 Researcher | NOT STARTED | | |
@@ -82,7 +82,7 @@ them here rather than editing the architecture, and note the gap where it is lar
 | Cache hit rate | >90% | | |
 | Annual cost | ~$50 | | |
 | Database size after backfill | ~5 GB | ~~18.3 GB in `price_daily` alone, 3.6 complete and 3.7 to 3.10 unrun~~ **superseded by the 2026-08-20 prune. `price_daily` is 1,273 MB. The database is 26 GB of which 18 GB is `price_daily_old`, the retained rollback copy; 8,149 MB without it. Step 2's `valuation_daily` prune is outstanding and takes it to about 5.4 GB** | 2026-08-13, corrected 2026-08-21, phase 3 |
-| Full backfill rebuild time | minutes | **hours, and the line is not met.** ~~Compute alone is **105.62 minutes** over the five stages that have run a range~~ **132.01 minutes over six, C34 having run on 2026-08-22**: C11 33.77 [`run_log` 1756], C09 32.36 [1717], **C34 26.40 [1761]**, C08 21.45 [1720], C10 15.40 [1721], C35 2.64 [1722]. ~~C34 has never run one [item 55].~~ [closed, item 55]. C01's universe pass adds 71.54 [1710], giving ~~**177.16 minutes**~~ **203.55 minutes**, so the phase moved further from this line by measuring the component that was missing from the sum rather than by getting slower. The ingest half is allowance-bound at 100,000 units a provider day across five sweeps and took roughly two calendar weeks. **Every figure carries its `run_log` id as of 2026-08-22**, an audit pass having read the cell as unevidenced when the rows existed and the cell did not name them | 2026-08-21, ids added 2026-08-22, phase 3 |
+| Full backfill rebuild time | minutes | **hours, and the line is not met.** ~~Compute alone is **105.62 minutes** over the five stages that have run a range~~ **132.01 minutes over six, C34 having run on 2026-08-22**: C11 33.77 [`run_log` 1756], C09 32.36 [1717], **C34 26.40 [1761]**, C08 21.45 [1720], C10 15.40 [1721], C35 2.64 [1722]. ~~C34 has never run one [item 55].~~ [closed, item 55]. C01's universe pass adds 71.54 [1710], giving ~~**177.16 minutes**~~ ~~**203.55 minutes**~~ **170.35 minutes, re-measured 2026-08-22 over the corrected range and untuned.** The compute six ran end to end over 2021-01-04..**2026-08-12**, the frontier, in **98.81 minutes** by `run_log` and **98.92** wall clock over six process starts: C11 30.92 [`run_log` 1768], C34 25.75 [1763], C09 18.57 [1765], C08 9.44 [1764], C10 9.41 [1767], C35 4.72 [1766]. C01's 71.54 [1710] stands unchanged, not re-run. **Nothing was changed to make this faster and the movement is accounted for**: every stage but two wrote fewer rows, item 57's delete having removed the phantom sessions and the range end no longer repeating a date the ingest had not reached. C35 went the other way, 2.64 to 4.72 on fewer rows. C11 wrote **5.5 million more** rows in less time, 21,324,558 to 26,834,277, which is the percentile coverage that had been missing rather than a speedup. **The line is still not met on either reading**, 2.84 hours with C01 and 1.65 without, and it is recorded rather than adjusted [`CLAUDE.md` §11]. Per-stage deltas and the method at `docs/evidence/phase-3/compute-half-and-replay-20260822.txt`. The ingest half is allowance-bound at 100,000 units a provider day across five sweeps and took roughly two calendar weeks. **Every figure carries its `run_log` id as of 2026-08-22**, an audit pass having read the cell as unevidenced when the rows existed and the cell did not name them | 2026-08-22 over the corrected range, phase 3 |
 | Technical columns per name | ~40 | 15 | 2026-08-11, phase 2 |
 | Compute layer, one date, whole universe | not estimated | 14.4 s over five stages | 2026-08-11, phase 2 |
 
@@ -8296,6 +8296,81 @@ disagreements are open items rather than news: `indicator_daily` at 1,580 agains
 
 **The provider day cost 25,430 units of 100,000**, both runs included, leaving 74,570
 unspent at the time of writing.
+
+#### 2026-08-22, the compute half over the corrected range, and the replay reproduces byte for byte
+
+**The range end changed and the driver is what changed it.** Earlier range runs used
+2026-08-13, the date item 60 found present and empty. This run used **2026-08-12**, and
+that is not an operator picking a different argument: it is the frontier under the
+definition item 60 installed, computed by the driver on its first outing. Proved in the
+refusing direction against the real store before anything was run, `Worker backfill
+IndicatorEngine 2026-08-10 2026-08-13` returning the frontier, the three dates it walked
+past and their trailing medians.
+
+**The compute six ran end to end in 98.81 minutes by `run_log`, 98.92 wall clock**,
+`run_log` 1763 to 1768, over 2021-01-04..2026-08-12. C11 30.92, C34 25.75, C09 18.57,
+C08 9.44, C10 9.41, C35 4.72. With C01's unchanged 71.54 the rebuild figure is **170.35
+minutes** against the 203.55 recorded before.
+
+**Nothing was changed to make it faster, and the movement is accounted for rather than
+claimed.** Every stage but two wrote fewer rows, item 57's delete having removed the
+phantom sessions and the range end no longer repeating a date the ingest had not
+reached. C35 went the other way, 2.64 to 4.72 on fewer rows. **C11 wrote 5.5 million
+more rows in less time**, 21,324,558 to 26,834,277, which is coverage that had been
+missing rather than a speedup. **The done-when is still not met on either reading**,
+2.84 hours with C01 and 1.65 without, and it is recorded rather than adjusted.
+
+**The percentile store is complete over the window, which is phase 4's precondition.**
+`indicator_daily` 3,811,660 of 3,811,902 in-window rows carry a percentile, 99.99
+percent, over 1,462 of 1,462 dates. Sentiment covers 1,641,317 of the 1,644,015 rows
+carrying a value at all. Valuation covers 3,580,230 of the 4,682,518 carrying
+`fcf_yield`. Against item 50's opening 10,463 of 4,146,182.
+
+**The replay reproduced 2026-08-12 byte for byte, zero rows differing in either
+direction across all five compute tables**, percentile columns included. Method: snapshot
+every row for the date, run all six stages over it through the **nightly** path, diff with
+`EXCEPT` both ways on whole rows. `flow_daily` 0/0, `indicator_daily` 0/0,
+`market_context_daily` 0/0, `sentiment_derived_daily` 0/0, `valuation_daily` 0/0. The
+snapshot tables were dropped afterwards rather than left in the store, which already
+carries unexplained tables as an open item.
+
+**Two things the replay does not evidence, stated rather than left to be found.** It is
+the compute half and not the literal evening order: a full `run-night` would have C02
+reload twenty dates of bulk feed, giving 2026-08-13 to 2026-08-21 real bars, and item
+60's 5,729 stale rows on 2026-08-13 would then stand on an ordinary three-thousand-bar
+session instead of being identifiable by their thin date. A verification step that
+conceals a known defect is worse than one that skips a stage. And **it cannot exercise
+item 52's divergence class**, which needs a ticker with a long price hole that is also a
+member on the replayed date: `OBNK.US` has its last bar on 2026-02-05 and is not in the
+2026-08-12 population, and no row on that date carries a null `rs_change_21d`. So the
+asserted half of the replay line is evidenced and the not-claimed half is untested,
+which is what the amended line says it is for.
+
+**Four carried obligations were read off the store, each a query against a populated
+table rather than a measurement added to scope.** `fcf_yield` **4,682,518 of 13,683,278**
+valuation rows against phase 2's 464 of 3,897, which is the figure 0006 owed at 3.18.
+`ev_ebit_vs_own_5y` **3,168,835**, against phase 2 recording it computed for no name at
+all. `dist_52w_high_20d_change` **3,805,985 of 3,814,766**, likewise from none. The three
+sentiment metrics at **1,644,015** and **1,522,527** twice, against 453 of 2,841 names,
+with C35's own line accounting for the rest: 2,169,705 rows fall below the baseline
+floor's day count and are null on all three.
+
+**One discrepancy was run down rather than left.** C08 wrote 3,811,857 rows and
+`indicator_daily` holds 3,811,902 in-window. All 45 are on 2026-08-07, phase 2's blessed
+date, where the nightly path wrote 2,863 rows and 45 of those tickers are not active
+members under the current epoch, `UNCY.US` among them. The upsert conflicts on ticker and
+date, so a range run does not remove a row for a name the epoch dropped. Same shape as
+item 54's residue and not a new finding.
+
+**What the run did not do, and why, so the sign-off review does not have to re-derive
+it.** The five ingest sweeps were not run: their coverage is complete at the old range
+end and re-dispatching C03 and C05 against the corrected one costs about 440,000 units
+[item 62]. C01 was not run: `security_daily` already covers 292 evaluation dates to
+2026-08-09, so the compute layer has the membership it reads, and item 51 wanted C01 held
+until the `first_seen` decision is taken. Full method and figures at
+`docs/evidence/phase-3/compute-half-and-replay-20260822.txt`.
+
+---
 
 Found and not closed. Each names what triggers it. The pass narratives behind
 them are in `docs/archive/process-2026-08.md`.

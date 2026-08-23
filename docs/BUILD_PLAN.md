@@ -1,6 +1,6 @@
 # BUILD_PLAN.md
 
-Eleven phases in dependency order. A phase is not done because the code exists. It
+Twelve phases in dependency order. A phase is not done because the code exists. It
 is done when the stated proof passes, which in every case is something that can be
 run rather than something that can be argued.
 
@@ -311,6 +311,64 @@ decision exists to protect.
 **Invariants at risk:** 11, 12, 13. **1 and 10 are touched**: INVARIANT 1 because the
 price pool at 3.6 is a filter decision, and INVARIANT 10 because D-92 and D-95 each add
 a table whose writer is declared in `SCHEMA.md` in the same checkpoint as its migration.
+
+---
+
+## Phase 3.5 — The record for one name on one date
+
+**Runs between 3 and 4, because two of its four panels need a figure no store carries
+and both are cheaper to start recording now than after phase 4 writes
+`screen_score_daily` at roughly 280 MB per registered screen.**
+
+One screen. A ticker and a date in, and what the store holds for them with the source of
+each number beside it. The purpose is the question it answers rather than observability:
+*what does this system know about this name on that date, and where did each number come
+from*. Phase 4's first implausible name raises exactly that question, and building the
+answer first makes that phase debuggable from its first checkpoint rather than after its
+third report.
+
+Two rules hold before any checkpoint. **Nothing on the page computes anything**: every
+figure is read from a store, and where one would have to be derived the page shows the
+inputs and says so. Selecting, ordering and filtering rows is reading, including taking
+the most recent row at or before a date; arithmetic over stored values is computing, and
+so is a comparison whose answer the page then labels. **It declares its reads like any
+other reader**, through the same guarded route a stage uses and behind an empty write
+set, so an undeclared table and any write both throw before a connection opens.
+
+**It is a component rather than a view**, `C36 RecordInspector`, hosted in the Api and
+catalogued in §3, because that Reads column is what the conformance test reads and a
+reader outside the catalogue is a reader nothing checks. The full reasoning, the four
+panels and the owed authored items are in
+`prompts/BuildPlans/phase-3.5-record-inspector.md`.
+
+### Checkpoints
+
+| # | Scope |
+|---|---|
+| 3.5.1 | Membership, and the page that opens. The route, the ticker and date input, `C36 RecordInspector`'s declared read set and its conformance, `Universe.AsOf` moved to `Core` so one statement answers "in force on this date" for both the pipeline and the page, migration `0015` for `universe_rejection`, and C01 recording the criterion that rejected rather than counting six into a run log line. **The three pre-pass criteria are classified rather than filtered away, and the admitted set is unchanged by construction and asserted**, `MembershipAsync` consuming the statement as already filtered. Blocked on D-108 and D-109 |
+| 3.5.2 | Metrics, with the cell beside the percentile. Migration `0014` for `percentile_cell_daily` at date by size bucket by sector by metric, C11 writing the population it already computes and currently discards, the panel showing raw value, percentile and cell population together, and then the pass that populates the window. **The pass runs date-descending and records its coverage**, so a date it has not reached reads not populated rather than blank, which is a different state from a cell that does not exist. Blocked on D-107 |
+| 3.5.3 | Inputs. Recent bars, every filing readable on the date with its effective date and unknown reason, the sentiment days that carry a row, and the insider filings inside the window. The windows are the components' own keys resolved as of the viewed date, not new keys and not literals |
+| 3.5.4 | Market context. Breadth, regime label and the name's sector composite on one line, read out of `market_context_daily` by key |
+
+**Commits carry the fractional phase whole**, so `Phase 3.5 / 3.5.2 - what it did`. A
+churn commit is `Phase 3.5 / chore - what it was`.
+
+**Done when:** one route answers the question, on a real store, for a real name on a
+historical date and on the most recent one; every figure on the page is read from a
+store, held by the declared read set, the empty write set and the Api carrying no
+Pipeline dependency in its compiled closure; the metrics panel shows the cell population
+beside every percentile over a populated window, with the fallback visible where it
+fired; the membership panel names the criterion for a rejected name, for each of the
+nine criteria and exercised by a test per criterion; and the catalogue and the code agree
+about what this reader reads, in both directions, with the failure exercised against a
+fabricated reader.
+
+**Invariants at risk:** 10, 12 and 13. **10** because D-107 and D-108 each add a table
+whose writer is declared in `SCHEMA.md` in the same checkpoint as its migration. **12**
+because a viewer keying filings on `period_end` would teach every reader the wrong key
+while looking correct. **13** because a page resolving today's thresholds against a 2022
+date answers a different question and looks right doing it. **16 is asserted unchanged**,
+neither new table carrying a monetary column.
 
 ---
 

@@ -1,0 +1,200 @@
+@page "/record"
+@using System.Net.Http.Json
+@using System.Globalization
+@using StockResearcherLab.Api.Contracts
+@inject IHttpClientFactory Http
+
+@* U8. What the store holds for one name on one date, and where each number came
+   from [D-109].
+
+   Static server rendering and a plain GET form. The page has no state of its own:
+   the ticker and the date are in the URL, so a finding is a link somebody can paste
+   into a commit message rather than a set of keystrokes to describe.
+
+   Nothing here computes anything. Every figure is a stored value or an absence, and
+   where one would have to be derived the panel shows the inputs and says so. *@
+
+<PageTitle>Record</PageTitle>
+
+<h1>Record</h1>
+<p class="sub">What this system knows about one name on one date, and where each number came from.</p>
+
+<form method="get" class="ask">
+    <label>Ticker <input name="ticker" value="@Ticker" placeholder="AAPL.US" size="12" /></label>
+    <label>Date <input name="date" value="@DateText" placeholder="2026-08-12" size="12" /></label>
+    <button type="submit">Read</button>
+    <a href="/" class="sub">runs</a>
+</form>
+
+@if (Ticker is null || Date is null)
+{
+    <p class="empty">A ticker and a date, and this reads the record for them.</p>
+}
+else if (_error is not null)
+{
+    <p class="fail">Could not reach the API: @_error</p>
+}
+else if (_view is null)
+{
+    <p class="empty">Loading.</p>
+}
+else
+{
+    <h2>@_view.Ticker on @DateText</h2>
+
+    @* ------------------------------------------------------ membership --- *@
+    <section>
+        <h3>Membership</h3>
+
+        @{
+            var m = _view.Membership;
+            var row = m.InForce;
+        }
+
+        @if (m.Identity is null)
+        {
+            <p class="empty">
+                The store holds no <code>security</code> row for this ticker, so it has never been
+                admitted and has no identity here. That is absence, not rejection.
+            </p>
+        }
+        else
+        {
+            <table class="pairs">
+                <tbody>
+                    <tr><th>Name</th><td>@Absent(m.Identity.Name)</td></tr>
+                    <tr>
+                        <th>First bar held</th>
+                        <td>
+                            @Absent(m.Identity.FirstSeen)
+                            <span class="sub">earliest bar retained, not first listed</span>
+                        </td>
+                    </tr>
+                    <tr><th>Last bar held</th><td>@Absent(m.Identity.LastSeen)</td></tr>
+                    <tr><th>Delisted</th><td>@Absent(m.Identity.DelistedDate)</td></tr>
+                </tbody>
+            </table>
+        }
+
+        @if (row is not null && row.IsActive)
+        {
+            <p class="ok">A member on this date.</p>
+            <table class="pairs">
+                <tbody>
+                    <tr>
+                        <th>Evaluated</th>
+                        <td>
+                            @row.EvaluationDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                            <span class="sub">C01 runs weekly, so this is the row in force rather than a row for the date asked</span>
+                        </td>
+                    </tr>
+                    <tr><th>Size bucket</th><td>@Absent(row.SizeBucket)</td></tr>
+                    <tr><th>Sector</th><td>@Absent(row.Sector)</td></tr>
+                    <tr><th>Market cap</th><td class="num">@Money(row.MarketCap)</td></tr>
+                </tbody>
+            </table>
+        }
+        else if (row is not null)
+        {
+            <p class="fail">
+                Not a member on this date. The row in force is the departure C01 wrote on
+                @row.EvaluationDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                which ended a membership rather than recording an absence.
+            </p>
+        }
+        else
+        {
+            <p class="empty">No <code>security_daily</code> row had been written for this ticker by this date.</p>
+        }
+
+        @if (m.Rejection is not null)
+        {
+            <p class="fail">
+                Rejected on <b>@m.Rejection.Criterion</b>, evaluated
+                @m.Rejection.EvaluationDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture).
+            </p>
+            <p class="sub">
+                That is the criterion the evaluation stopped on, not the only one this name failed.
+                D-4 is a conjunction tested in a fixed order.
+            </p>
+        }
+        else if (row is null || !row.IsActive)
+        {
+            <p class="empty">
+                No rejection row either, so this name was not among those C01 evaluated on that date.
+                The inputs panel is where an absence of bars shows.
+            </p>
+        }
+
+        <h4>Criteria in force on @DateText</h4>
+        <table>
+            <thead><tr><th>Key</th><th>Value</th><th>Version</th><th>Set on</th></tr></thead>
+            <tbody>
+                @foreach (var t in m.Thresholds)
+                {
+                    <tr>
+                        <td><code>@t.Key</code></td>
+                        <td class="num">@Absent(t.Value)</td>
+                        <td class="num">@Absent(t.Version?.ToString(CultureInfo.InvariantCulture))</td>
+                        <td>@Absent(t.SetOn)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <p class="sub">
+            Resolved as of the date being viewed, never as of now. A version absent here means the
+            key had not come into force yet on that date.
+        </p>
+    </section>
+}
+
+@code {
+    [SupplyParameterFromQuery] public string? Ticker { get; set; }
+
+    [SupplyParameterFromQuery] public string? Date { get; set; }
+
+    private RecordView? _view;
+    private string? _error;
+
+    private string DateText => Date ?? "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _view = null;
+        _error = null;
+
+        if (string.IsNullOrWhiteSpace(Ticker) || string.IsNullOrWhiteSpace(Date))
+        {
+            return;
+        }
+
+        if (!DateOnly.TryParseExact(Date, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var date))
+        {
+            _error = $"'{Date}' is not a date in yyyy-MM-dd form.";
+            return;
+        }
+
+        try
+        {
+            var client = Http.CreateClient("api");
+            _view = await client.GetFromJsonAsync<RecordView>(
+                $"/api/record/{Uri.EscapeDataString(Ticker)}/{date:yyyy-MM-dd}");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    // Absent is shown as absent and never as blank or zero. A blank cell reads as a
+    // rendering gap and a zero is a real value carrying meaning [CLAUDE.md section 6].
+    private static string Absent(string? value)
+        => string.IsNullOrEmpty(value) ? "absent" : value;
+
+    private static string Absent(DateOnly? value)
+        => value?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "absent";
+
+    private static string Money(decimal? value)
+        => value?.ToString("N0", CultureInfo.InvariantCulture) ?? "absent";
+}

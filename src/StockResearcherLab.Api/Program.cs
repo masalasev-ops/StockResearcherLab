@@ -1,3 +1,4 @@
+using StockResearcherLab.Api;
 using StockResearcherLab.Api.Contracts;
 using StockResearcherLab.Data;
 
@@ -20,10 +21,19 @@ if (string.IsNullOrWhiteSpace(connectionString))
 }
 
 builder.Services.AddSingleton(new RunLog(connectionString));
+builder.Services.AddSingleton(new RecordInspector(connectionString));
 
 var app = builder.Build();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
+
+// C36's surface [D-109]. One name, one date, and the panels the store can answer.
+//
+// The inspector holds its own guarded data route rather than taking one from here, so
+// the empty write set is its own statement and no composition choice can widen it.
+app.MapGet("/api/record/{ticker}/{date}", async (
+    RecordInspector inspector, string ticker, DateOnly date, CancellationToken ct) =>
+    Results.Ok(await inspector.ReadAsync(ticker, date, ct).ConfigureAwait(false)));
 
 // The bare run viewer's only source [0.6]. Stages, durations, row counts.
 app.MapGet("/api/runs", async (RunLog runLog, int? limit, CancellationToken ct) =>

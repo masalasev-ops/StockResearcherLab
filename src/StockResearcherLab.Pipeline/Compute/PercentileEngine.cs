@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using StockResearcherLab.Core;
 using StockResearcherLab.Core.Stages;
 
 namespace StockResearcherLab.Pipeline.Compute;

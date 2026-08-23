@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace StockResearcherLab.Pipeline;
+namespace StockResearcherLab.Core;
 
 /// <summary>
 /// "The universe on a date", stated once [D-92, 3.12].

@@ -1,3 +1,4 @@
+using StockResearcherLab.Api;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Pipeline;
 using StockResearcherLab.Tests.Corpus;
@@ -36,11 +37,12 @@ public sealed class ReadDeclarationConformanceTests
     private const int ExpectedStages = 13;
 
     /// <summary>
-    /// Section 3 catalogues thirty-four components. Asserted rather than assumed,
+    /// Section 3 catalogues thirty-six components, C36 RecordInspector having joined at
+    /// 3.5.1 [D-109]. Asserted rather than assumed,
     /// because a parser that stopped matching returns an empty map, and an empty map
     /// makes the catalogue-to-code direction below pass over nothing.
     /// </summary>
-    private const int CataloguedComponents = 35;
+    private const int CataloguedComponents = 36;
 
     /// <summary>
     /// Deviations between the catalogue and the code, recorded rather than silently
@@ -119,10 +121,37 @@ public sealed class ReadDeclarationConformanceTests
         }
     }
 
+    /// <summary>
+    /// Read owners that are not stages, which is C36 alone [D-109].
+    ///
+    /// **Stated for the reason <see cref="ExpectedStages"/> is stated.** A composition
+    /// that returned nothing would make both directions pass over an empty set, and
+    /// neither pass would look like a failure.
+    /// </summary>
+    private const int ExpectedReaders = 1;
+
+    [Fact]
+    public void EveryRegisteredReaderIsUnderTest()
+    {
+        var readers = Readers();
+
+        Assert.True(readers.Count == ExpectedReaders,
+            $"{readers.Count} reader(s) registered against the {ExpectedReaders} this test states. " +
+            "The count moves deliberately when a phase adds one.");
+
+        Assert.True(readers.ContainsKey("RecordInspector"),
+            "RecordInspector is the first reader that owns no write, and D-109 exists so that " +
+            "such a reader is held to its Reads cell rather than sitting outside the check.");
+
+        // Enumerating the readers opens nothing, exactly as building the registry makes
+        // no provider call. Asserted by the connection string being a fiction.
+        Assert.NotEmpty(readers["RecordInspector"]);
+    }
+
     [Fact]
     public void EveryTableAStageDeclaresIsNamedInItsReadsCell()
     {
-        var wrong = Undeclared(Stages(), ArchitectureDocument.ReadTablesByComponent());
+        var wrong = Undeclared(Declared(), ArchitectureDocument.ReadTablesByComponent());
 
         Assert.True(wrong.Count == 0,
             "Stage(s) reading a table ARCHITECTURE.html section 3 does not name in their Reads cell: " +
@@ -134,7 +163,7 @@ public sealed class ReadDeclarationConformanceTests
     [Fact]
     public void EveryTableAReadsCellNamesIsDeclaredByItsStage()
     {
-        var wrong = Unread(Stages(), ArchitectureDocument.ReadTablesByComponent())
+        var wrong = Unread(Declared(), ArchitectureDocument.ReadTablesByComponent())
             .Except(RecordedDeviations.Select(d => $"{d.Component} -> {d.Table}"), StringComparer.Ordinal)
             .OrderBy(s => s, StringComparer.Ordinal)
             .ToList();
@@ -154,7 +183,7 @@ public sealed class ReadDeclarationConformanceTests
     [Fact]
     public void EveryRecordedDeviationIsStillADeviation()
     {
-        var stages = Stages();
+        var stages = Declared();
         var catalogue = ArchitectureDocument.ReadTablesByComponent();
 
         foreach (var (component, table) in RecordedDeviations)
@@ -200,12 +229,102 @@ public sealed class ReadDeclarationConformanceTests
         Assert.Empty(Undeclared(declaresNothing, catalogue));
     }
 
+    /// <summary>
+    /// The same fixture for a reader that is not a stage, because the merge is new and
+    /// a merged map that silently dropped one source would make C36's declaration
+    /// unchecked while every assertion stayed green [D-109].
+    ///
+    /// `RecordInspector` is used as the name deliberately: it is the component the
+    /// mechanism was built for, so the fixture fails on the case it exists to catch
+    /// rather than on an invented one.
+    /// </summary>
+    [Fact]
+    public void BothDirectionsFailOnAReaderThatDisagreesWithTheCatalogue()
+    {
+        var catalogue = ArchitectureDocument.ReadTablesByComponent();
+
+        // Reads a table its cell does not name. C36's cell is the membership three.
+        var reachesTooFar = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            ["RecordInspector"] = ["security", "security_daily", "universe_rejection", "proposal"],
+        };
+
+        Assert.Equal(["RecordInspector -> proposal"], Undeclared(reachesTooFar, catalogue));
+        Assert.Empty(Unread(reachesTooFar, catalogue));
+
+        // Declares none of what its cell names.
+        var declaresNothing = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            ["RecordInspector"] = [],
+        };
+
+        Assert.Equal(
+            ["RecordInspector -> security", "RecordInspector -> security_daily",
+             "RecordInspector -> universe_rejection"],
+            Unread(declaresNothing, catalogue));
+        Assert.Empty(Undeclared(declaresNothing, catalogue));
+    }
+
+    /// <summary>
+    /// The merge carries both sources. A `Declared` that returned only the stages would
+    /// leave C36 unchecked and every assertion in this class green, which is the exact
+    /// failure the two-project split makes easy to write.
+    /// </summary>
+    [Fact]
+    public void TheMergedMapCarriesStagesAndReadersBoth()
+    {
+        var declared = Declared();
+
+        Assert.Equal(ExpectedStages + ExpectedReaders, declared.Count);
+        Assert.Contains("PercentileEngine", declared.Keys);
+        Assert.Contains("RecordInspector", declared.Keys);
+    }
+
     // ---------------------------------------------------------------- helpers ---
 
+    /// <summary>
+    /// Every declared reader, stages and read-only components together.
+    ///
+    /// **Two sources rather than one, because the two live in projects that cannot see
+    /// each other.** The Api never references Pipeline, which is what structurally stops
+    /// a page invoking a stage [`CLAUDE.md` §4], so no single registry can hold both.
+    /// The test project references both and is where they meet, which costs no new
+    /// reference in either direction [D-109].
+    /// </summary>
     private static IReadOnlyDictionary<string, IReadOnlyList<string>> Stages()
         => PipelineComposition.AllOwnersForConformance(TestDatabase.ConnectionString)
             .OfType<IStage>()
             .ToDictionary(s => s.Name, s => s.ReadSet, StringComparer.Ordinal);
+
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> Readers()
+        => ApiComposition.AllReadOwnersForConformance(TestDatabase.ConnectionString)
+            .ToDictionary(r => r.Name, r => r.ReadSet, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Every declared reader, stages and read-only components together, which is what
+    /// the two directions below are asserted over.
+    ///
+    /// **Two sources rather than one, because the two live in projects that cannot see
+    /// each other.** The Api never references Pipeline, which is what structurally stops
+    /// a page invoking a stage [`CLAUDE.md` §4], so no single registry can hold both.
+    /// The test project references both and is where they meet, which costs no new
+    /// reference in either direction [D-109].
+    /// </summary>
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> Declared()
+    {
+        var merged = new Dictionary<string, IReadOnlyList<string>>(Stages(), StringComparer.Ordinal);
+
+        foreach (var (name, tables) in Readers())
+        {
+            Assert.False(merged.ContainsKey(name),
+                $"{name} is both a registered stage and a registered reader, so one of the two " +
+                "declarations is unreachable and the catalogue cannot say which.");
+
+            merged[name] = tables;
+        }
+
+        return merged;
+    }
 
     /// <summary>Declared in code, absent from the Reads cell.</summary>
     private static IReadOnlyList<string> Undeclared(

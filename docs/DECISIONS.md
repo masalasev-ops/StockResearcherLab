@@ -2111,6 +2111,148 @@ One alone is satisfied by a component that writes neither.
 
 ---
 
+## Inspection
+
+Authored 2026-08-23 at phase 3's sign-off, from the plan drafted in
+`prompts/BuildPlans/phase-3.5-record-inspector.md` §4. Authored before any phase 3.5
+code, because each blocks a checkpoint that cannot be built without it [`CLAUDE.md`
+§13]. Entered verbatim from that plan on the operator's explicit authorisation, the
+operator remaining the decider of record.
+
+Two of the three add a store, and neither rests on a measurement: both record a figure
+the system already computes and discards, so what they change is what survives rather
+than what is calculated [`CLAUDE.md` §11].
+
+**D-107 The population a percentile was ranked against is stored per cell, not
+recomputed and not discarded.** `ACTIVE`
+C11 computes each metric's non-null population in its `(size_bucket, sector)` cell and
+in its bucket inside one window function, uses both to pick a scope, writes the
+percentile and keeps neither count. What survives is one run log line per date
+aggregating every cell into a total.
+
+A percentile without the size of the population behind it is unreadable. One over three
+members and one over eighty are the same number on the page, and the fifteen-member
+fallback is theoretical rather than visible. This is D-92's argument arriving one table
+over and in its own words: a percentile computed over a cell nothing downstream can see
+is not inspectable afterwards.
+
+Recomputing it in a reader was weighed and is rejected. The count is not `count(*)` over
+the cell's members; it is the non-null count of that metric in that cell, under C11's
+null-sector rule, its `LEFT JOIN` and its `is_active` handling. A reader reproducing
+those four rules is a second implementation of the cell rule whose failure is a
+plausible number.
+
+`percentile_cell_daily` is date by size bucket by sector by metric, written by
+PercentileEngine. The grain is the cell, not the row: the population is a property of
+the cell and one row per member per metric would restate it thousands of times over on
+the two largest tables in the store.
+
+Each row carries `cell_members`, `bucket_members`, `min_members` as the floor in force
+on that date, and `ranked_scope` over `cell`, `bucket` and `none`. `bucket_members`
+repeats across the sectors of a bucket, which is a redundancy accepted so that a reader
+takes one row per metric rather than two. `ranked_scope` is stored rather than derived
+so no reader compares a count against a floor and labels the result.
+
+A name whose sector is null forms no cell and goes straight to the bucket fallback
+[`METRICS.md` §6.4], so it needs a row with no sector.
+
+Metric names are distinct across the four source tables today, which is what makes
+`metric` sufficient in the key without the table beside it. `source_table` is carried as
+a column so a reader knows where to look, and a future collision is a failed key rather
+than a silent overwrite.
+
+The pass that populates history records the range it has covered, so a reader
+distinguishes a date nothing has reached yet from a cell that does not exist. That is
+D-106's rule applied to a date-partitioned pass rather than a ticker-partitioned one:
+the marker records coverage, not the invocation. Running date-descending makes the
+covered set a contiguous suffix, so one covered-from date carries it.
+
+**D-108 C01 records the criterion that rejected a name, per ticker per evaluation
+date.** `ACTIVE`
+"Why is this obvious company not in my universe" is the question the membership panel
+exists for, and it is the half that currently takes a query. The admitted case is the
+one whose answer is already known.
+
+C01 counts six rejections into a run log line and writes no per-ticker row, so the
+answer for one name is not recoverable from the record at all. Three further criteria,
+minimum price, minimum median dollar volume and minimum history, are applied together
+inside one SQL filter in `LiquidAsync`, so a name failing any of them is absent from the
+counted loop and absent from the counts.
+
+Reconstructing it later does not work and the reason is D-92's. The clean gap count is
+computed as of the date and never stored [M.1], market capitalisation is computed from a
+share count readable on that date and is stored only for members, and instrument type
+comes from a provider symbol list that is stored nowhere. Three of the nine criteria
+have no persisted input at all.
+
+`universe_rejection` is ticker by evaluation date, written by UniverseBuilder, one
+column: `criterion`, `NOT NULL` with a `CHECK` over the enumerated values. The
+constraint is in the database for the same reason `regime_label`'s is: this column
+segments every count taken off it, and a drifted value would land in its own bucket in
+every segmentation without ever erroring.
+
+One criterion per row, being the one that rejected, not every criterion the name would
+have failed. D-4 is a conjunction and a name fails on the first criterion it fails;
+recording all nine would suggest an independent evaluation the code does not perform.
+What the column therefore means is the criterion the evaluation stopped on, which is a
+property of C01's order rather than of D-4, and that is stated in `SCHEMA.md` so a later
+reader does not read it as the only criterion the name failed.
+
+The three pre-pass criteria are projected rather than filtered, so the statement
+classifies instead of dropping. That widens what `LiquidAsync` returns, and
+`MembershipAsync` consumes its result as already filtered: the loop applies six further
+criteria and admits whatever survives them, never re-testing price, dollar volume or
+history. Projected without a corresponding first test, the loop would therefore admit
+names D-4 excludes, which is a change to C01's membership rather than an addition beside
+it. So the pre-pass verdict travels with each row and the loop rejects on it before
+every other criterion, and the admitted set is unchanged by construction rather than by
+inspection.
+
+The containment is exact and is stated rather than assumed. `LiquidAsync` is private
+with one caller, `MembershipAsync`, which has two of its own, the nightly path and the
+range path, and both take the same `Day`. Nothing else in the codebase reads the
+statement. `universe.min_price`, `universe.min_adv_20d` and `universe.min_history_days`
+each carry FundamentalsIngestor as a second consumer, and that is C03's own pool
+statement rather than a call into this one, which is what D-102 means by the two pool
+statements: C03 is untouched here.
+
+The population is bounded by `backfill.window_start`, the key C01 already resolves and
+already bounds `ListingAsync` by, for the reason stated there: a name that stopped
+trading before the window can never be a member on any evaluated date. One population
+rule rather than two, so the store and the listing cannot drift apart. What that
+inherits is stated: if the window start moves, the store's population moves with it,
+which is correct, a date outside the window not being one C01 evaluates. The unbounded
+alternative is every ticker with a bar at or before the date, roughly 50,785 names
+across 260 weekly evaluation dates and about 13 million rows to record that a ticker has
+not traded since 2019. A tighter alternative is a new trailing-recency key, which is
+smaller again and introduces a second population rule and a key whose only consumer is
+this write; it is rejected on that rather than on size.
+
+**D-109 A component that reads stores and writes nothing declares its read set as data,
+and the catalogue conformance holds it in both directions.** `ACTIVE`
+Write ownership has been enforced through the registry since 0.4 and read declarations
+since D-74, and both mechanisms see only components the pipeline registry holds. Every
+reader in this system has so far also been a writer, so nothing has needed the
+distinction. RecordInspector is the first reader that is not, and the read-only query
+surface is where more of them will appear.
+
+`IWriteOwner` exists because a writer the registry cannot see is a writer INVARIANT 10
+is not enforced against. The same sentence holds with reader substituted, and this
+decision states the reader half rather than leaving the first one outside the net.
+
+So a read owner declares `Name` and `ReadSet`, is named in `ARCHITECTURE.html` §3 like
+every other component, and reaches data through `IStageData` behind a `DeclaredAccess`
+built from that read set and an empty write set. The empty write set is the read-only
+guarantee made structural: any write at all throws as undeclared before a connection
+opens, which is the same guard rather than a second one.
+
+It is hosted in the Api project and the Api still never references Pipeline
+[`CLAUDE.md` §4], so no page can invoke a stage. The test project already references the
+Api, so the conformance test sees the declaration without any new project reference and
+without the Api gaining one.
+
+---
+
 ## Open
 
 **D-53 Whether the local digest model stays local once measured.** `OPEN`

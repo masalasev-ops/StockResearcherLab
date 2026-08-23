@@ -1,3 +1,4 @@
+using StockResearcherLab.Core;
 using StockResearcherLab.Pipeline;
 using StockResearcherLab.Pipeline.Compute;
 using Xunit;

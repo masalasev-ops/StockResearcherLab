@@ -1,4 +1,5 @@
 ﻿using Npgsql;
+using StockResearcherLab.Core;
 using StockResearcherLab.Pipeline;
 using StockResearcherLab.Pipeline.Ingest;
 using StockResearcherLab.Tests.Corpus;

@@ -208,4 +208,27 @@ public interface IConfigStore
     /// falling back to a literal.
     /// </summary>
     Task<int> RequireVersionAsync(DateOnly asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// Every key beginning with <paramref name="prefix"/>, each at the version in force
+    /// on <paramref name="asOf"/>, ordered by key.
+    ///
+    /// **This exists so the set of screens can be discovered from config rather than
+    /// from a list in code** [`CLAUDE.md` §5, 4.3]. A screen is a row, so a sixth screen
+    /// is an insert and not a deployment, and nothing can enumerate screens without
+    /// enumerating keys.
+    ///
+    /// **The default throws rather than returning nothing, and that is the whole reason
+    /// it has a default.** Twelve test stubs implement this interface and none of them
+    /// can enumerate. Returning an empty list there would give ScreenEngine a universe
+    /// of zero screens, which writes no rows, reports `ok` and is indistinguishable on
+    /// the page from a night where nothing cleared a floor. A stub that cannot answer
+    /// says so [`CLAUDE.md` §1, §6].
+    /// </summary>
+    Task<IReadOnlyList<ConfigRow>> ResolveByPrefixAsync(
+        string prefix, DateOnly asOf, CancellationToken ct = default)
+        => throw new NotSupportedException(
+            $"This {GetType().Name} cannot enumerate config keys, and '{prefix}' was asked for. " +
+            "Returning an empty list would make the caller's set silently empty rather than " +
+            "failing, which is the failure mode this system is arranged against.");
 }

@@ -70,7 +70,7 @@ public sealed class WriteOwnershipConformanceTests
     /// C08, C09, C10, C11 and C35, the last authored at D-78 after this comment
     /// was written and after C34 had already been built early with D-61's ingest.
     /// </summary>
-    private const int ExpectedOwners = 14;
+    private const int ExpectedOwners = 15;
 
     /// <summary>
     /// The assertion that keeps the rest of this file meaningful. A conformance test

@@ -32,9 +32,10 @@ public sealed class ReadDeclarationConformanceTests
     /// components are registered and eight of them are stages: RunLog owns a write
     /// without being runnable, so it has no read set to check.
     ///
-    /// It moves deliberately when a phase adds a stage.
+    /// It moves deliberately when a phase adds a stage. Fourteen at 4.4, which adds
+    /// C13 ScreenEngine.
     /// </summary>
-    private const int ExpectedStages = 13;
+    private const int ExpectedStages = 14;
 
     /// <summary>
     /// Section 3 catalogues thirty-six components, C36 RecordInspector having joined at

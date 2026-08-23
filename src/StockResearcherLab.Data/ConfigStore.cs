@@ -79,6 +79,37 @@ public sealed class ConfigStore : IConfigStore
 
         return rows;
     }
+
+    /// <summary>
+    /// Every key beginning with <paramref name="prefix"/>, at the version in force on
+    /// <paramref name="asOf"/>, ordered by key.
+    ///
+    /// **The whole store is read and filtered here rather than filtered in SQL**, which
+    /// is the same shape <see cref="ResolveVersionAsync"/> already uses. Resolution is
+    /// <see cref="ConfigResolution.Resolve"/>'s and not a second `MAX(version)` written
+    /// in a `WHERE` clause: one implementation of "in force on this date" is what makes
+    /// INVARIANT 13 checkable, and a prefix query with its own version pick would be a
+    /// second one that can disagree.
+    ///
+    /// Ordinal ordering, so two runs over one date enumerate screens identically
+    /// [`CLAUDE.md` §6].
+    /// </summary>
+    public async Task<IReadOnlyList<ConfigRow>> ResolveByPrefixAsync(
+        string prefix, DateOnly asOf, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
+
+        var all = await ReadAsync(null, ct).ConfigureAwait(false);
+
+        return [.. all
+            .Select(r => r.Key)
+            .Where(k => k.StartsWith(prefix, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(k => k, StringComparer.Ordinal)
+            .Select(k => ConfigResolution.Resolve(all, k, asOf))
+            .Where(r => r is not null)
+            .Select(r => r!)];
+    }
 }
 
 /// <summary>

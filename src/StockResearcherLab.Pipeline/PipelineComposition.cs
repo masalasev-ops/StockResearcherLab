@@ -3,6 +3,7 @@ using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data;
 using StockResearcherLab.Data.Eodhd;
 using StockResearcherLab.Pipeline.Compute;
+using StockResearcherLab.Pipeline.Select;
 using StockResearcherLab.Pipeline.Ingest;
 
 namespace StockResearcherLab.Pipeline;
@@ -61,6 +62,10 @@ public static class PipelineComposition
             new SentimentEngine(),
             new MarketContextEngine(),
             new PercentileEngine(),
+
+            // Layer 3. Selection derives from the percentile store and calls no
+            // provider either, so it registers on the same terms as layer 2.
+            new ScreenEngine(),
         };
 
         if (eodhd is not null)

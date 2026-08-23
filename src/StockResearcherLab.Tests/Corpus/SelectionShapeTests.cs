@@ -318,7 +318,11 @@ public sealed class SelectionShapeTests
         var ex = await Assert.ThrowsAsync<PostgresException>(
             async () => await guard.ExecuteNonQueryAsync(ct).ConfigureAwait(true)).ConfigureAwait(true);
 
-        Assert.Contains("holds 1 row(s)", ex.MessageText);
+        // The count is not asserted exactly. This transaction adds one row to whatever
+        // the table already holds, and pinning the total would make this test a
+        // statement about every other test's cleanup rather than about the guard.
+        Assert.StartsWith("screen_score_daily holds ", ex.MessageText, StringComparison.Ordinal);
+        Assert.Contains("row(s)", ex.MessageText, StringComparison.Ordinal);
 
         await tx.RollbackAsync(ct).ConfigureAwait(true);
     }

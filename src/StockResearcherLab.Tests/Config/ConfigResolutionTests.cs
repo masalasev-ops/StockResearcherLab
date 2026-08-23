@@ -320,7 +320,12 @@ public sealed class ConfigResolutionTests
         // literal for the reason section 8 gives: the two windows the same panel shows
         // are already owned elsewhere, and bars are the one thing it bounds that no
         // component does.
-        Assert.Equal(44, ConfigSeeder.Keys.Count);
+        //
+        // Seventy-four at 4.3, which adds thirty: four per screen for the five live
+        // screens, six for S5's two composites and their floors and quintiles, and four
+        // gate thresholds. The count is asserted rather than described because a key
+        // with nothing behind it is exactly what this catches [D-112 to D-120].
+        Assert.Equal(74, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)

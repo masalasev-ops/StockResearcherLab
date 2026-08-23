@@ -324,11 +324,36 @@ regime keys are verified at `MarketContextEngine.cs:56-57`.
 | `screens.<id>.slots` | 8 each at start | D-43 | CandidateAllocator | unverified |
 | `screens.<id>.state` | `live` for S1 to S5 | D-84, D-119 | ScreenEngine | unverified |
 | `screens.<id>.min_inputs` | S1 5, S2 4, S3 3, S4 2 | D-112 | ScreenEngine | unverified |
-| `screens.s5.quality_min_inputs` | 5 | D-112, D-120 | ScreenEngine | unverified |
-| `screens.s5.technical_min_inputs` | 3 | D-112, D-120 | ScreenEngine | unverified |
+| `screens.S5.quality_metrics` | S1's list, copied | D-120 | ScreenEngine | unverified |
+| `screens.S5.technical_metrics` | `dist_200dma`, `dist_52w_high`, `rs_change_63d`, each high | D-120 | ScreenEngine | unverified |
+| `screens.S5.quality_min_inputs` | 5 | D-112, D-120 | ScreenEngine | unverified |
+| `screens.S5.technical_min_inputs` | 3 | D-112, D-120 | ScreenEngine | unverified |
+| `screens.S5.quality_quintile_min` | 80 | D-120 | ScreenEngine | unverified |
+| `screens.S5.technical_quintile_max` | 20 | D-120 | ScreenEngine | unverified |
 
 Screen definitions are rows rather than code, so a sixth screen is an insert and not
 a deployment.
+
+**`screens.<id>.metrics` is an array of objects, each carrying the metric, the direction
+and the weight** [D-113]. A bonus entry carries `kind` and `points` instead of a
+direction and is applied after the weighted mean [D-114]:
+
+```
+[{"metric": "net_debt_ebitda", "direction": "low", "weight": 1},
+ {"metric": "base_breakout_flag", "kind": "bonus", "points": 10}]
+```
+
+Direction `low` is applied as 100 minus the stored percentile. An unrecognised direction
+or kind fails the stage closed rather than defaulting, because a default of `high` would
+invert three of S1's seven inputs and score plausibly.
+
+**The screen ids in these keys are uppercase, `screens.S5.quality_metrics` rather than
+`screens.s5.`** D-120 writes the composite keys lowercase and writes `screens.S1.metrics`
+uppercase in the same clause, so the decision is not internally consistent about the
+case. Uppercase is used because S1 to S5 is how every other document in this corpus names
+a screen, and because the facade compares the id in the key against the screen's own id.
+The four older `s5.*` keys below keep their existing names and are unchanged; the facade
+treats that form as screen-scoped too, so they are reachable by S5 and by nothing else.
 
 **`screens.quota_large`, `quota_mid` and `quota_small` are retired** [D-116]. D-89's
 proportion is the only quota arithmetic and nothing reads the three keys once it

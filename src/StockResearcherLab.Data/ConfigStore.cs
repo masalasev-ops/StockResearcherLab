@@ -340,6 +340,63 @@ public sealed class ConfigSeeder
         ("backfill.weight_form4_page", "10"),
         ("backfill.weight_splits", "1"),
         ("backfill.weight_dividends", "1"),
+
+        // Screens, as config rows. The set of screens is discovered from these keys
+        // and never from a list in code, which is what CLAUDE.md section 5 means by a
+        // screen being a row: a sixth screen is an insert, not a deployment.
+        //
+        // Direction lives here and no _inv column exists. Percentiles are ascending
+        // always, so the word says what the screen rewards rather than how anything
+        // sorts, and section 05's three _inv names are seeded as "low" [D-113].
+        //
+        // min_inputs was chosen against measured coverage rather than picked; the
+        // table and both dates it was read on are in CONFIG_REFERENCE.md [D-112].
+        // S1 Quality at a fair price. Seven ranked inputs, three of them read low.
+        ("screens.S1.metrics", """[{"metric":"fcf_yield","direction":"high","weight":1},{"metric":"ev_ebit_vs_own_5y","direction":"low","weight":1},{"metric":"roic_4q_change","direction":"high","weight":1},{"metric":"gross_margin_4q_change","direction":"high","weight":1},{"metric":"net_debt_ebitda","direction":"low","weight":1},{"metric":"accruals","direction":"low","weight":1},{"metric":"share_count_change","direction":"low","weight":1}]"""),
+        ("screens.S1.min_inputs", "5"),
+        ("screens.S1.state", "\"live\""),
+        ("screens.S1.slots", "8"),
+        // S2 Trend. Five ranked inputs plus base_breakout_flag as a bonus outside the mean [D-114].
+        ("screens.S2.metrics", """[{"metric":"rs_21d_63d_change","direction":"high","weight":1},{"metric":"dist_200dma","direction":"high","weight":1},{"metric":"adx14","direction":"high","weight":1},{"metric":"ma50_200_slope","direction":"high","weight":1},{"metric":"dist_52w_high_20d_change","direction":"high","weight":1},{"metric":"base_breakout_flag","kind":"bonus","points":10}]"""),
+        ("screens.S2.min_inputs", "4"),
+        ("screens.S2.state", "\"live\""),
+        ("screens.S2.slots", "8"),
+        // S3 Sentiment inflection.
+        ("screens.S3.metrics", """[{"metric":"article_count_z_own_90d","direction":"high","weight":1},{"metric":"sentiment_delta_7v30","direction":"high","weight":1},{"metric":"sentiment_7d_level","direction":"high","weight":1}]"""),
+        ("screens.S3.min_inputs", "3"),
+        ("screens.S3.state", "\"live\""),
+        ("screens.S3.slots", "8"),
+        // S4 Flow. Two inputs: inst_ownership_change is not a ranking input [D-118].
+        ("screens.S4.metrics", """[{"metric":"insider_net_90d_usd","direction":"high","weight":1},{"metric":"distinct_buyer_count","direction":"high","weight":1}]"""),
+        ("screens.S4.min_inputs", "2"),
+        ("screens.S4.state", "\"live\""),
+        ("screens.S4.slots", "8"),
+        // S5 Mean reversion. Ranks on distance below the 200-day average [D-120].
+        ("screens.S5.metrics", """[{"metric":"dist_200dma","direction":"low","weight":1}]"""),
+        ("screens.S5.min_inputs", "1"),
+        ("screens.S5.state", "\"live\""),
+        ("screens.S5.slots", "8"),
+
+        // S5's two composites, held as metric lists of S5's own. The quality list is
+        // the same content as S1's, copied, and the copy is deliberate: removing it is
+        // what INVARIANT 2 forbids. What holds it is the per-screen facade, which
+        // throws when asked for another screen's key [D-120].
+        ("screens.S5.quality_metrics", """[{"metric":"fcf_yield","direction":"high","weight":1},{"metric":"ev_ebit_vs_own_5y","direction":"low","weight":1},{"metric":"roic_4q_change","direction":"high","weight":1},{"metric":"gross_margin_4q_change","direction":"high","weight":1},{"metric":"net_debt_ebitda","direction":"low","weight":1},{"metric":"accruals","direction":"low","weight":1},{"metric":"share_count_change","direction":"low","weight":1}]"""),
+        ("screens.S5.technical_metrics", """[{"metric":"dist_200dma","direction":"high","weight":1},{"metric":"dist_52w_high","direction":"high","weight":1},{"metric":"rs_change_63d","direction":"high","weight":1}]"""),
+        ("screens.S5.quality_min_inputs", "5"),
+        ("screens.S5.technical_min_inputs", "3"),
+        ("screens.S5.quality_quintile_min", "80"),
+        ("screens.S5.technical_quintile_max", "20"),
+
+        // Gates. Every threshold is a key and no literal sits at a call site
+        // [D-117, CLAUDE.md section 8]. All four values are unconstrained by anything
+        // in the corpus and CONFIG_REFERENCE.md records that; only gap_pct fires over
+        // the backfill window, the other three reasons being structurally unevaluable
+        // until phase 7. Halt and already-held carry no key, being conditions.
+        ("gates.gap_pct", "8"),
+        ("gates.earnings_blackout_days_before", "5"),
+        ("gates.earnings_blackout_days_after", "2"),
+        ("gates.cooldown_days", "30"),
     ];
 
     private readonly string _connectionString;

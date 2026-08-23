@@ -504,8 +504,8 @@ public sealed class CandidateAllocatorTests
             """, ct, ("t", ticker), ("d", RunDate), ("sec", Sector), ("b", bucket));
 
         await ExecAsync("""
-            INSERT INTO gate_result (ticker, date, passed, reasons)
-            VALUES (@t, @d, TRUE, '{}')
+            INSERT INTO gate_result (ticker, date, passed, reasons, gate_state)
+            VALUES (@t, @d, TRUE, '{}', 'passed')
             ON CONFLICT (ticker, date) DO UPDATE SET passed = TRUE, reasons = '{}';
             """, ct, ("t", ticker), ("d", RunDate));
 
@@ -537,6 +537,11 @@ public sealed class CandidateAllocatorTests
     private static async Task ClearAsync(CancellationToken ct)
     {
         await ExecAsync("DELETE FROM candidate_set WHERE date = @d;", ct, ("d", RunDate));
+
+        // attribution too, from 4.10. Not cleaning it left nine rows behind and broke
+        // 4.1's zero-row assertion from a different file, which is the cross-test leak
+        // ScreenEngineTests already records twice.
+        await ExecAsync("DELETE FROM attribution WHERE date = @d;", ct, ("d", RunDate));
         await ExecAsync("DELETE FROM screen_score_daily WHERE date = @d;", ct, ("d", RunDate));
         await ExecAsync("DELETE FROM screen_history WHERE date = @d;", ct, ("d", RunDate));
         await ExecAsync("DELETE FROM gate_result WHERE date = @d;", ct, ("d", RunDate));

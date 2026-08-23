@@ -65,7 +65,8 @@ public sealed class GateEngine : IStage
         new("gate_result", WriteOperation.Insert, Columns),
     ];
 
-    public static readonly string[] Columns = ["ticker", "date", "passed", "reasons"];
+    public static readonly string[] Columns =
+        ["ticker", "date", "passed", "reasons", "gate_state"];
 
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
     {
@@ -77,12 +78,19 @@ public sealed class GateEngine : IStage
             BlackoutAfter: await IntAsync(context, "gates.earnings_blackout_days_after", ct).ConfigureAwait(false),
             CooldownDays: await IntAsync(context, "gates.cooldown_days", ct).ConfigureAwait(false));
 
+        var evaluable = await EvaluableAsync(context, thresholds, ct).ConfigureAwait(false);
+
         var written = await context.Data.WriteAsync(
             "gate_result", WriteOperation.Insert,
-            Sql(context.Date, thresholds), parameters: null, ct).ConfigureAwait(false);
+            Sql(context.Date, thresholds, evaluable), parameters: null, ct).ConfigureAwait(false);
+
+        var unevaluable = GateReasons.All.Where(r => !evaluable.Contains(r)).ToList();
 
         return new StageResult(written, "ok",
-            written.ToString(CultureInfo.InvariantCulture) + " members labelled");
+            written.ToString(CultureInfo.InvariantCulture) + " members labelled, " +
+            (unevaluable.Count == 0
+                ? "every reason evaluable"
+                : "unevaluable: " + string.Join(", ", unevaluable.Select(GateReasons.Name))));
     }
 
     /// <summary>The four thresholds, resolved as of the simulated date [INVARIANT 13].</summary>
@@ -98,21 +106,29 @@ public sealed class GateEngine : IStage
     /// reasons carries three entries in a fixed order" a property of the statement
     /// rather than of how Postgres happened to evaluate it [`CLAUDE.md` §6].
     /// </summary>
-    public static string Sql(DateOnly date, GateThresholds thresholds)
+    public static string Sql(
+        DateOnly date, GateThresholds thresholds, IReadOnlySet<GateReason> evaluable)
     {
+        ArgumentNullException.ThrowIfNull(evaluable);
+
         var d = Literal(date);
 
         var arms = string.Join(",\n                    ",
             GateReasons.All.Select(r =>
                 $"CASE WHEN {Condition(r, d, thresholds)} THEN '{GateReasons.Name(r)}' END"));
 
+        // Every reason evaluable is a plain pass; anything less is labelled, so a
+        // backfilled night cannot read identically to a live one [D-117].
+        var state = GateReasons.All.All(evaluable.Contains) ? "passed" : "passed_partial";
+
         return $"""
-            INSERT INTO gate_result (ticker, date, passed, reasons)
+            INSERT INTO gate_result (ticker, date, passed, reasons, gate_state)
             SELECT
                 u.ticker,
                 {d} AS date,
                 cardinality(g.reasons) = 0 AS passed,
-                g.reasons
+                g.reasons,
+                '{state}' AS gate_state
             FROM (SELECT m.ticker FROM {Universe.AsOf(d)} m WHERE m.is_active) u
             LEFT JOIN price_daily p ON p.ticker = u.ticker AND p.date = {d}
             LEFT JOIN LATERAL (
@@ -129,8 +145,64 @@ public sealed class GateEngine : IStage
             ) g
             ON CONFLICT (ticker, date) DO UPDATE SET
                 passed = EXCLUDED.passed,
-                reasons = EXCLUDED.reasons;
+                reasons = EXCLUDED.reasons,
+                gate_state = EXCLUDED.gate_state;
             """;
+    }
+
+    /// <summary>
+    /// Which reasons could have fired on this date at all [D-117].
+    ///
+    /// **A reason is evaluable when the store it reads holds something that bears on the
+    /// date, and not when a name happens to carry it.** Those are different facts and
+    /// conflating them is what <c>gate_state</c> exists to prevent: on a quiet night no
+    /// name is in an earnings blackout, and on a historical night no name could be,
+    /// earnings being deliberately not backfilled. A row that read the same in both cases
+    /// would put a backfilled night into the record looking identical to a live one.
+    ///
+    /// **Per date and not per ticker**, which is D-117's own wording: a reason is
+    /// "structurally unevaluable on that date".
+    ///
+    /// Gap and halt are always evaluable, <c>price_daily</c> being backfilled across the
+    /// whole window by construction of the universe, so they are not probed.
+    ///
+    /// **This reading is a design decision taken during the build.** D-117 says what
+    /// <c>gate_state</c> means and never says how evaluability is established. Reported
+    /// at 4.10 and reversible until 4.14 freezes the record.
+    /// </summary>
+    private static async Task<IReadOnlySet<GateReason>> EvaluableAsync(
+        StageContext context, GateThresholds t, CancellationToken ct)
+    {
+        var d = Literal(context.Date);
+
+        var evaluable = new HashSet<GateReason> { GateReason.Gap, GateReason.Halt };
+
+        var probes = new (GateReason Reason, string Table, string Sql)[]
+        {
+            (GateReason.EarningsBlackout, "events",
+             "SELECT EXISTS (SELECT 1 FROM events e WHERE e.event_type = 'earnings' " +
+             $"AND e.event_date BETWEEN {d} - {Int(t.BlackoutAfter)} AND {d} + {Int(t.BlackoutBefore)});"),
+
+            (GateReason.AlreadyHeld, "position",
+             "SELECT EXISTS (SELECT 1 FROM \"position\" pos " +
+             $"WHERE pos.opened_date <= {d} AND (pos.closed_date IS NULL OR pos.closed_date > {d}));"),
+
+            (GateReason.Cooldown, "trade_outcome",
+             "SELECT EXISTS (SELECT 1 FROM trade_outcome tout " +
+             $"WHERE tout.exit_date <= {d} AND tout.exit_date > {d} - {Int(t.CooldownDays)});"),
+        };
+
+        foreach (var probe in probes)
+        {
+            var rows = await context.Data.ReadAsync(probe.Table, probe.Sql, ct).ConfigureAwait(false);
+
+            if ((bool) rows[0][0]!)
+            {
+                evaluable.Add(probe.Reason);
+            }
+        }
+
+        return evaluable;
     }
 
     private static string Condition(GateReason reason, string d, GateThresholds t)

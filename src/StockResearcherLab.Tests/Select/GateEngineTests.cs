@@ -32,6 +32,9 @@ public sealed class GateEngineTests
 {
     private static readonly DateOnly RunDate = new(2021, 5, 3);
 
+    /// <summary>Every reason evaluable, for the statement-shape assertions.</summary>
+    private static readonly IReadOnlySet<GateReason> All = GateReasons.All.ToHashSet();
+
     private const string Bucket = "srltest-gates";
     private const string Sector = "srltest-gates";
 
@@ -330,8 +333,9 @@ public sealed class GateEngineTests
         await using var tx = await conn.BeginTransactionAsync(ct).ConfigureAwait(true);
 
         await using var cmd = new NpgsqlCommand(
-            "INSERT INTO gate_result (ticker, date, passed, reasons) " +
-            "VALUES ('SRLGATE.BOGUS', DATE '2021-05-03', FALSE, ARRAY['not_a_reason']);", conn, tx);
+            "INSERT INTO gate_result (ticker, date, passed, reasons, gate_state) " +
+            "VALUES ('SRLGATE.BOGUS', DATE '2021-05-03', FALSE, ARRAY['not_a_reason'], 'passed');",
+            conn, tx);
 
         var thrown = await Assert.ThrowsAsync<PostgresException>(
             () => cmd.ExecuteNonQueryAsync(ct));
@@ -428,7 +432,7 @@ public sealed class GateEngineTests
             Assert.Equal(await MemberCountAsync(ct), await RowCountAsync(ct));
 
             var thresholds = new GateEngine.GateThresholds(8, 5, 2, 30);
-            Assert.Equal(GateEngine.Sql(RunDate, thresholds), GateEngine.Sql(RunDate, thresholds));
+            Assert.Equal(GateEngine.Sql(RunDate, thresholds, All), GateEngine.Sql(RunDate, thresholds, All));
         }
         finally
         {
@@ -445,7 +449,7 @@ public sealed class GateEngineTests
     [Fact]
     public void TheStatementReadsNoScreenStore()
     {
-        var sql = GateEngine.Sql(RunDate, new GateEngine.GateThresholds(8, 5, 2, 30));
+        var sql = GateEngine.Sql(RunDate, new GateEngine.GateThresholds(8, 5, 2, 30), All);
 
         Assert.DoesNotContain("screen_score_daily", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("screen_history", sql, StringComparison.Ordinal);

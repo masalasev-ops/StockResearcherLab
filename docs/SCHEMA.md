@@ -678,7 +678,7 @@ individually under "Columns that are not money".
 ### gate_result
 Grain: ticker by day. **Writer: GateEngine.**
 
-`ticker`, `date`, `passed`, `reasons`.
+`ticker`, `date`, `passed`, `reasons`, `gate_state`.
 
 Records every failing reason, not the first.
 
@@ -691,6 +691,17 @@ whatever wrote it.
 
 **`passed` is `cardinality(reasons) = 0` and is written in the same statement**, so the
 flag and the array cannot disagree.
+
+**`gate_state` is `passed` or `passed_partial` and never `gated`, and it is a property of
+the date rather than of the name** [D-117]. `passed_partial` means at least one gate
+reason was structurally unevaluable on that date: `position` and `trade_outcome` hold no
+rows until phase 7 and earnings are deliberately not backfilled, so over the backfill
+window three of the five reasons cannot fire at all. It is what stops a backfilled night
+reading identically to a live one. C14 carries the value onto the `attribution` row, so
+the component that reads the three stores is the component that records what it found;
+the column arrives with migration `0019` at checkpoint 4.10 and is `text NOT NULL` with a
+CHECK and no `DEFAULT`. `gated` is absent from the vocabulary because a gated name has no
+attribution row to carry a state.
 
 ### screen_score_daily
 Grain: ticker by screen by day. **Writer: ScreenEngine.**

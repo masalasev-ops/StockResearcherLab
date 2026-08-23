@@ -71,17 +71,43 @@ public sealed class CandidateAllocator : IStage
     [
         new("candidate_set", WriteOperation.Delete, Columns),
         new("candidate_set", WriteOperation.Insert, Columns),
+
+        // **Insert and nothing else.** ForwardReturnFiller owns the update and only of
+        // the nine return columns; neither component may perform the other's operation
+        // and no third writes here at all [INVARIANT 10 as amended, SCHEMA.md]. The
+        // absence of Update here is what makes an allocator that tried one throw through
+        // DeclaredAccess before a connection opens rather than at a later review.
+        //
+        // No Delete either, unlike candidate_set. These rows are written at shortlist
+        // time and never reconstructed: a re-run would apply today's screen definitions
+        // to a past date [INVARIANT 4, D-40].
+        new("attribution", WriteOperation.Insert, AttributionColumns),
     ];
 
     public static readonly string[] Columns =
         ["ticker", "date", "screens_surfacing", "size_bucket", "slot_filled"];
 
+    /// <summary>
+    /// Everything but the nine return columns, which start empty and are C21's
+    /// [`SCHEMA.md`].
+    /// </summary>
+    public static readonly string[] AttributionColumns =
+    [
+        "ticker", "date", "screens_surfacing", "score_per_screen", "surfaced_as",
+        "size_bucket", "sector", "regime", "gate_state", "config_version",
+    ];
+
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var live = await ScreenRegistry
-            .LoadLiveAsync(context.Config, context.Date, ct).ConfigureAwait(false);
+        // Every scored screen, live and shadow. The live ones fill candidate_set; both
+        // reach attribution, which is what lets a shadow accumulate the same record by
+        // the same code as a live screen [D-85].
+        var scored = await ScreenRegistry
+            .LoadScoredAsync(context.Config, context.Date, ct).ConfigureAwait(false);
+
+        var live = scored.Where(s => s.State == ScreenState.Live).ToList();
 
         var floor = (int) ConfigValue.Long(
             await context.Config.RequireAsync("tuner.slot_floor", context.Date, ct).ConfigureAwait(false));
@@ -94,12 +120,22 @@ public sealed class CandidateAllocator : IStage
             .OrderBy(x => x.ScreenId, StringComparer.Ordinal)
             .ToList();
 
-        if (quotas.Count == 0)
+        // **A shadow is recorded to tuner.slot_cap under the same proportion**, not to
+        // its own slot count [`ARCHITECTURE.html` §03, `SCREEN_LIFECYCLE.md` §6.5]. It
+        // holds no slots, so what is recorded is what it would have surfaced at the
+        // largest count a promotion could ever give it.
+        var shadowQuotas = scored
+            .Where(s => s.State == ScreenState.Shadow)
+            .Select(s => (s.ScreenId, Quota: SlotQuota.For(cap)))
+            .OrderBy(x => x.ScreenId, StringComparer.Ordinal)
+            .ToList();
+
+        if (quotas.Count == 0 && shadowQuotas.Count == 0)
         {
-            // Not a silent zero. A night with no live screen produces no candidate, and
-            // that must not read like a night where nothing cleared a floor
+            // Not a silent zero. A night with no registered screen produces no candidate,
+            // and that must not read like a night where nothing cleared a floor
             // [CLAUDE.md section 1].
-            return new StageResult(0, "ok", "no live screen is registered on this date");
+            return new StageResult(0, "ok", "no live or shadow screen is registered on this date");
         }
 
         await EnsureGateHasRunAsync(context, ct).ConfigureAwait(false);
@@ -110,12 +146,32 @@ public sealed class CandidateAllocator : IStage
             "candidate_set", WriteOperation.Delete,
             ClearSql(context.Date), parameters: null, ct).ConfigureAwait(false);
 
-        var written = await context.Data.WriteAsync(
-            "candidate_set", WriteOperation.Insert,
-            Sql(quotas, context.Date), parameters: null, ct).ConfigureAwait(false);
+        var written = quotas.Count == 0
+            ? 0
+            : await context.Data.WriteAsync(
+                "candidate_set", WriteOperation.Insert,
+                Sql(quotas, context.Date), parameters: null, ct).ConfigureAwait(false);
 
-        var detail = string.Join(", ", quotas.Select(q => $"{q.ScreenId} {q.Quota}"))
-            + "; " + written.ToString(CultureInfo.InvariantCulture) + " candidates";
+        var attributed = await context.Data.WriteAsync(
+            "attribution", WriteOperation.Insert,
+            AttributionSql(quotas, shadowQuotas, context.Date, context.ConfigVersion),
+            parameters: null, ct).ConfigureAwait(false);
+
+        var standing = await StandingAttributionAsync(context, ct).ConfigureAwait(false);
+
+        var detail = string.Join(", ",
+                quotas.Concat(shadowQuotas).Select(q => $"{q.ScreenId} {q.Quota}"))
+            + "; " + written.ToString(CultureInfo.InvariantCulture) + " candidates, "
+            + attributed.ToString(CultureInfo.InvariantCulture) + " attribution rows written";
+
+        if (standing > attributed)
+        {
+            // Not silent. A row already standing for this date was left as it was, which
+            // is INVARIANT 4 working rather than a partial write, and the difference is
+            // stated so the two cannot be confused in the run log.
+            detail += ", " + (standing - attributed).ToString(CultureInfo.InvariantCulture)
+                + " already standing and left untouched [INVARIANT 4]";
+        }
 
         return new StageResult(written, "ok", detail);
     }
@@ -237,6 +293,112 @@ public sealed class CandidateAllocator : IStage
                 screens_surfacing = EXCLUDED.screens_surfacing,
                 size_bucket = EXCLUDED.size_bucket,
                 slot_filled = EXCLUDED.slot_filled;
+            """;
+    }
+
+    /// <summary>How many attribution rows stand for this date after the write.</summary>
+    private static async Task<long> StandingAttributionAsync(StageContext context, CancellationToken ct)
+    {
+        var rows = await context.Data.ReadAsync(
+            "attribution",
+            $"SELECT count(*)::bigint FROM attribution WHERE date = {Literal(context.Date)};",
+            ct).ConfigureAwait(false);
+
+        return Convert.ToInt64(rows[0][0], CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// One row per name any registered screen surfaced, with the scores and ranks frozen
+    /// as they stand tonight [§06, INVARIANT 4, D-40].
+    ///
+    /// **A candidate row can carry a shadow screen's id in <c>screens_surfacing</c>, and
+    /// that is the ordinary case** [`SCREEN_LIFECYCLE.md` §4.6]. Two filters do different
+    /// work: <c>surfaced_as</c> selects the population a reader means, and filtering the
+    /// screen ids selects the grouping a per-screen report means. Conflating them is the
+    /// trap that section names.
+    ///
+    /// **A gated name has no row here at all**, which is why <c>gate_state</c> carries
+    /// <c>passed</c> or <c>passed_partial</c> and never <c>gated</c> [D-117].
+    ///
+    /// **<c>ON CONFLICT DO NOTHING</c>, so a row once written is never rewritten.**
+    /// INVARIANT 4 is that these rows are written at shortlist time and never
+    /// reconstructed, because screen definitions and slot allocations drift and a
+    /// reconstruction applies today's definitions to a past date. The caller reports the
+    /// difference between what it wrote and what stands, so a skipped row is visible
+    /// rather than silent.
+    /// </summary>
+    public static string AttributionSql(
+        IReadOnlyList<(string ScreenId, SlotQuota Quota)> liveQuotas,
+        IReadOnlyList<(string ScreenId, SlotQuota Quota)> shadowQuotas,
+        DateOnly date,
+        int configVersion)
+    {
+        ArgumentNullException.ThrowIfNull(liveQuotas);
+        ArgumentNullException.ThrowIfNull(shadowQuotas);
+
+        var d = Literal(date);
+
+        var seats = string.Join(",\n                    ",
+            liveQuotas.Select(q => (q.ScreenId, q.Quota, Live: true))
+                .Concat(shadowQuotas.Select(q => (q.ScreenId, q.Quota, Live: false)))
+                .OrderBy(x => x.ScreenId, StringComparer.Ordinal)
+                .SelectMany(x => SlotQuota.Buckets.Select(b =>
+                    $"({Quote(x.ScreenId)}, {Quote(b)}, {Int(x.Quota.Seats(b))}, {(x.Live ? "TRUE" : "FALSE")})")));
+
+        return $"""
+            INSERT INTO attribution (
+                ticker, date, screens_surfacing, score_per_screen, surfaced_as,
+                size_bucket, sector, regime, gate_state, config_version)
+            WITH quota (screen_id, size_bucket, seats, is_live) AS (
+                VALUES
+                    {seats}
+            ),
+            member AS (
+                SELECT m.ticker, m.size_bucket, m.sector
+                FROM {Universe.AsOf(d)} m
+                WHERE m.is_active AND m.size_bucket IS NOT NULL
+            ),
+            eligible AS (
+                SELECT s.screen_id, s.ticker, s.score, s.rank_within_screen,
+                       member.size_bucket, member.sector, g.gate_state
+                FROM screen_score_daily s
+                JOIN member ON member.ticker = s.ticker
+                JOIN gate_result g ON g.ticker = s.ticker AND g.date = {d} AND g.passed
+                WHERE s.date = {d} AND s.rank_within_screen IS NOT NULL
+            ),
+            seated AS (
+                SELECT e.*,
+                       row_number() OVER (
+                           PARTITION BY e.screen_id, e.size_bucket
+                           ORDER BY e.rank_within_screen ASC, e.ticker ASC
+                       ) AS seat
+                FROM eligible e
+            ),
+            taken AS (
+                SELECT seated.ticker, seated.screen_id, seated.score, seated.rank_within_screen,
+                       seated.size_bucket, seated.sector, seated.gate_state, q.is_live
+                FROM seated
+                JOIN quota q
+                  ON q.screen_id = seated.screen_id AND q.size_bucket = seated.size_bucket
+                WHERE seated.seat <= q.seats
+            )
+            SELECT
+                taken.ticker,
+                {d} AS date,
+                array_agg(DISTINCT taken.screen_id COLLATE "C") AS screens_surfacing,
+                jsonb_object_agg(
+                    taken.screen_id,
+                    jsonb_build_object('score', taken.score, 'rank', taken.rank_within_screen)
+                ) AS score_per_screen,
+                CASE WHEN bool_or(taken.is_live) THEN 'candidate' ELSE 'shadow' END AS surfaced_as,
+                min(taken.size_bucket) AS size_bucket,
+                min(taken.sector) AS sector,
+                (SELECT c.regime_label FROM market_context_daily c WHERE c.date = {d}) AS regime,
+                min(taken.gate_state) AS gate_state,
+                {Int(configVersion)} AS config_version
+            FROM taken
+            GROUP BY taken.ticker
+            ON CONFLICT (ticker, date) DO NOTHING;
             """;
     }
 

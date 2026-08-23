@@ -1,0 +1,117 @@
+PHANTOM-SESSION COMPUTED ROWS, DELETED 2026-08-22
+Items 57 and 54, closed together under one predicate. Authorised by the operator.
+
+Predicate: the compute row stands on a date `price_daily` holds no bar for, at all.
+One predicate over five tables and no date list. A date with no bar cannot have
+produced the row standing on it, so this is not a judgement about which dates
+deserve to survive.
+
+WHY IT MATTERED, so a later session does not recreate them: phase 4 counts forward
+returns in trading days, and a row standing on a non-session date makes that count
+wrong while erroring on nothing.
+
+WHY IT CANNOT RECUR from the range path: `TradingCalendar.SessionsAsync` takes the
+dates a range evaluates from `price_daily` itself, so a date with zero bars is not
+in the session list and no compute stage is handed it. The cause was the twelve
+`SRLFRGA.US` to `SRLROTF.US` synthetic tickers and `SRLSNTIN.US` putting bars on
+weekend dates; the prune removed them, and weekend dates carrying bars went 140 to
+0 at that point.
+
+The before figures below reproduce `phantom-session-rows-20260821.txt` exactly and
+reconcile against item 57's 1,823,849 plus item 54's 5,929 plus the 122
+`market_context_daily` rows item 57's enumeration does not name: 1,829,900.
+
+The 55 in-window dates carrying one to eighteen bars are deliberately outside this
+predicate and remain item 42's.
+
+--- psql transcript, one transaction ---
+Pager usage is off.
+Timing is on.
+PHANTOM-SESSION COMPUTED ROWS, DELETED
+Predicate: the compute row stands on a date price_daily holds no bar for, at all.
+One predicate over four tables. A date with no bar cannot have produced the row
+standing on it, so this is not a judgement about which dates deserve to survive
+and no date list is needed. Items 57 and 54 are both this set.
+
+WHY IT MATTERS: phase 4 counts forward returns in trading days, and a row on a
+non-session date makes that count wrong while erroring on nothing.
+
+BEGIN
+Time: 0.182 ms
+--- counts per table, before ---
+            t            | phantom_rows | phantom_dates 
+-------------------------+--------------+---------------
+ indicator_daily         |       332688 |           122
+ market_context_daily    |          122 |           122
+ sentiment_derived_daily |       334257 |           122
+ valuation_daily         |      1162833 |           123
+(4 rows)
+
+Time: 19112.957 ms (00:19.113)
+--- total table sizes, before ---
+            t            |   rows   
+-------------------------+----------
+ flow_daily              |  5538965
+ indicator_daily         |  4147454
+ market_context_daily    |     1585
+ sentiment_derived_daily |  4149023
+ valuation_daily         | 14846111
+(5 rows)
+
+Time: 874.130 ms
+
+--- the delete, one statement per table, same predicate ---
+DELETE 332688
+Time: 18832.845 ms (00:18.833)
+DELETE 1162833
+Time: 15317.286 ms (00:15.317)
+DELETE 334257
+Time: 4218.204 ms (00:04.218)
+DELETE 122
+Time: 5960.961 ms (00:05.961)
+DELETE 0
+Time: 2551.406 ms (00:02.551)
+
+--- counts per table, after: the predicate must return no rows at all ---
+ t | phantom_rows | phantom_dates 
+---+--------------+---------------
+(0 rows)
+
+Time: 17446.374 ms (00:17.446)
+--- total table sizes, after ---
+            t            |   rows   
+-------------------------+----------
+ flow_daily              |  5538965
+ indicator_daily         |  3814766
+ market_context_daily    |     1463
+ sentiment_derived_daily |  3814766
+ valuation_daily         | 13683278
+(5 rows)
+
+Time: 812.594 ms
+--- distinct dates per table, after ---
+            t            | dates 
+-------------------------+-------
+ flow_daily              |  1464
+ indicator_daily         |  1458
+ market_context_daily    |  1463
+ sentiment_derived_daily |  1458
+ valuation_daily         |  1462
+(5 rows)
+
+Time: 58305.689 ms (00:58.306)
+COMMIT
+Time: 0.994 ms
+
+--- reconciliation, per table ---
+                          before      deleted        after
+indicator_daily          4147454       332688      3814766
+valuation_daily         14846111      1162833     13683278
+sentiment_derived_daily  4149023       334257      3814766
+market_context_daily        1585          122         1463
+flow_daily               5538965            0      5538965
+                                     ---------
+                                       1829900   = 1823849 + 5929 + 122
+
+Every after figure is its before minus its deleted count, and the predicate
+re-run inside the same transaction returned no rows in any table.

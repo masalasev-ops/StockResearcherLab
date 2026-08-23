@@ -1,4 +1,4 @@
-# DECISIONS.md
+﻿# DECISIONS.md
 
 The register. One entry per decision, each with the reason it was made. Reasons
 are the point: they are what stops a later session re-litigating something already
@@ -782,19 +782,58 @@ one to read. A reader parsing live text from dead text on every visit is paying 
 cost the register was built to remove, and a session skimming can take struck text
 for live.
 
-In documents read to know the current state, a removal is a clean edit:
+~~In documents read to know the current state, a removal is a clean edit:
 `ARCHITECTURE.html`, `SCHEMA.md`, `CONFIG_REFERENCE.md`, `RUNBOOK.md`. Delete the
 superseded text, keep the decision citation at the point of change, and record the
-prior value in `CHANGELOG.md`.
+prior value in `CHANGELOG.md`.~~
 
-In documents that are the record, strikes stay. `DECISIONS.md`, because a
+~~In documents that are the record, strikes stay. `DECISIONS.md`, because a
 superseded entry must keep the reasoning its successor replaced. `PROGRESS.md`,
-because a log's corrections are its content. Runtime prompt files remain clean
-deletions, unchanged from before.
+because a log's corrections are its content.~~ [amended, the four and the two were
+written as the definition where they had to be examples of a test]
 
-Existing strikes in the four spec documents are cleaned under this decision, one
-condition: no strike is removed until its decision names what it removed. Where a
-decision does not, `CHANGELOG.md` records the text before the deletion.
+**The rule is a test on what a document is read for, and it is stated in the two
+sentences below. Neither names a document, deliberately, so a document written later
+classifies itself instead of waiting to be added to a list.**
+
+A document read to know the current state takes clean edits.
+
+A document that is the record keeps its strikes, because a superseded decision must
+keep the reasoning its successor replaced, and because a log's corrections are its
+content.
+
+**The mechanism for a clean edit**, which is not part of the test: delete the
+superseded text, keep the decision citation at the point of change, and record the
+prior wording in `CHANGELOG.md`.
+
+**Examples of the test rather than the definition of it.** Reading it as a definition
+is what left three documents unclassified and one carrying both conventions.
+`ARCHITECTURE.html`, `SCHEMA.md`, `CONFIG_REFERENCE.md` and `RUNBOOK.md` are read to
+know the current state and take clean edits. `DECISIONS.md` and `PROGRESS.md` are the
+record and keep their strikes. Runtime prompt files remain clean deletions, unchanged
+from before and for a different reason: the model reads them at execution time and
+cannot tell struck text from live.
+
+**`BUILD_PLAN.md` is a spec under the test.** Its checkpoint tables, done-when lines
+and carried obligations are all read to know what is currently owed, so it takes clean
+edits from here.
+
+**Its existing strikes stay for now, and that is a sweep rather than part of this
+amendment.** Removing one requires confirming that its decision names what it removed,
+which is the condition below, and the file carries several from phases P, 0 and 1. So
+the file is mid-convention: earlier supersessions are struck in place and phase 3's
+fourth done-when line is a clean edit. Recorded in `PROGRESS.md` as an outstanding
+finding rather than left for the next editor to rediscover.
+
+`METRICS.md` and `SCREEN_LIFECYCLE.md` were the other two the list did not reach.
+Each classifies itself under the test at its next edit rather than here, since
+neither has a strike to resolve today.
+
+Existing strikes in ~~the four spec documents~~ [amended with the test] **any document
+the test makes a spec** are cleaned under this decision, one condition: no strike is
+removed until its decision names what it removed. Where a decision does not,
+`CHANGELOG.md` records the text before the deletion. That condition is why
+`BUILD_PLAN.md`'s existing strikes are a sweep rather than an edit taken here.
 
 `CHANGELOG.md` is reopened for that purpose. D-67 closed it because corpus
 versioning had stopped catching anything, and that reason still holds: no version
@@ -1342,6 +1381,734 @@ and is untouched, the two stages sharing no selection code. It is carried in
 
 ---
 
+## Backfill
+
+Authored 2026-08-11 at phase 2's sign-off, from the plan drafted in
+`prompts/BuildPlans/phase-3-backfill.md` §3. Authored before any phase 3 code, because
+each blocks a checkpoint that cannot be built without it [`CLAUDE.md` §13].
+
+No entry below rests on a measurement and none exists to rest on: the backfill has not
+run, and D-92 and D-94 are what decide what it will produce [`CLAUDE.md` §11]. The four
+numbers run in the order the decisions were drafted rather than in the order the plan
+presents them, and nothing is missing between them.
+
+**D-92 Universe membership, size bucket, market cap and sector are stored per date in
+`security_daily`. `security` keeps identity alone.** `ACTIVE`
+C11 ranks inside size-bucket-by-sector cells [D-10] and `security` carries one row per
+ticker, so a backfilled 2021 date would rank every name in its 2026 cell. The cell is
+the population D-10 defines, and a percentile computed over a slightly wrong cell is not
+inspectable afterwards: nothing downstream can see it or correct it.
+
+Deriving it at read time was weighed and does not work. The bucket itself derives, being
+a comparison of one name's market cap against two absolute config floors
+[`UniverseBuilder.Bucket`], but C11's cell is `(size_bucket, sector)` and the
+fifteen-member test counts the non-null population in that cell on that date, so ranking
+one row needs every other row's bucket and sector on the same date. Market cap as-of
+needs `shares_outstanding` readable on `filing_date_effective <= date`, and sector is a
+provider call with no history from this source at all. The derivation is therefore the
+whole store recomputed per date, which is a store.
+
+A month-end grain was weighed and rejected for the reason the derivation was rejected
+against: it puts an approximation underneath cell membership rather than beside it.
+
+`security_daily` is ticker by date, written by UniverseBuilder, carrying `sector`,
+`size_bucket`, `market_cap` and `is_active`. `security` keeps `ticker`, `name`,
+`first_seen`, `last_seen` and `delisted_date`, which is identity and lifespan. Every
+reader meaning "the universe on a date" reads `security_daily`; a reader meaning "this
+ticker" reads `security`.
+
+This subsumes the `is_active` obligation rather than sitting beside it. C01 having no
+path that deactivates a name was a phase 1 finding [`PROGRESS.md`, 2026-08-09] and it
+stops mattering for any read, because membership is reconstructable per date by
+construction rather than by a flag someone has to remember to clear.
+
+Sector is the one column that is not point-in-time, and that is stated rather than
+hidden. This provider carries no sector history, so a ticker's sector is fetched once and
+carried across the window. A reclassification inside the window is invisible, which is a
+bounded distortion of cell membership and is recorded in `PROGRESS.md` rather than
+proxied.
+
+**C01's cadence does not change and that is deliberate.** `ARCHITECTURE.html` §3 runs it
+weekly on Sunday. The backfill evaluates membership on the same weekly cadence and C11
+reads the most recent `security_daily` row at or before the date, so backfilled cells sit
+on the identical population rule as live ones. That is D-58's principle applied to
+membership: a floor drawn from a population the live system does not share is not a
+floor.
+
+**D-93 A backfill is the registered components executed over a range. No component exists
+that a night does not run.** `ACTIVE`
+`SCHEMA.md` names PriceIngestor as `price_daily`'s writer and IndicatorEngine as
+`indicator_daily`'s, and the conformance test asserts no two components claim the same
+component-table-operation triple [INVARIANT 10]. A `HistoricalPriceIngestor` would be a
+second claim on the same triple, and `ARCHITECTURE.html` §3 would not name it, which
+`RegistryNameTests` catches. Neither is an accident of the machinery: a loader with its
+own arithmetic is a second implementation of every formula, and the reference fixtures at
+2.5 to 2.8 would then cover half of what runs.
+
+So the range mode is a second entry point on the same class.
+`IBackfillStage.ExecuteRangeAsync(from, to)` beside `IStage.ExecuteAsync(date)`.
+`WriteSet`, `ReadSet`, the registry and §3 are all unchanged.
+
+Config resolves per date being computed, not once for the range [D-43, INVARIANT 13]. A
+window key resolved at the range end would give a backfilled date a different answer from
+a nightly re-run of the same date, which is exactly the equality phase 3's fourth
+done-when line asserts.
+
+Idempotence rather than a transaction is what makes an interrupted backfill resumable,
+which D-68 already states in as many words: one transaction spanning twelve million rows
+is its own failure mode.
+
+**D-94 The backfill window start is a stored date, and the compute window is the only
+bound on how deep the price load goes.** `ACTIVE`
+`eod/{t}` costs one unit for five years or twenty, so the load depth is a disk decision
+rather than a unit one and the loader takes whatever the call returns. What is bounded is
+the range compute runs over, and it is bounded by a date rather than by a count of years.
+
+A count of years resolved against the run date moves the window on every re-run, so two
+backfills over one store would compute different date sets and phase 3's fourth done-when
+line could not be tested at all. A stored date resolves as-of by the same rule as every
+other key and gives the same window whenever it is read [D-43, INVARIANT 13]. It is also
+the D-83 case: a bound stated as a number of years is a claim about what a later phase
+will need, where the compute window is a bound someone can check.
+
+There is a floor underneath it that the key does not show. `ConfigSeeder.SeedInstant` is
+2020-01-01 and `RequireVersionAsync` fails for any earlier date [D-72], so no stage
+resolves config before it whatever `price_daily` holds. `price_daily` reaching further
+back than the pipeline can compute for is the intended state rather than a defect: the
+extra history costs bytes now and cannot be re-fetched cheaply once it is the deep past.
+
+**D-95 FlowIngestor orders on its own attempt record, and the two rotations share their
+ordering rule rather than a table.** `ACTIVE`
+`FlowIngestor.SelectionFor` carries C03's defect unchanged: never-fetched first, then
+ticker ordinal, so it freezes on the alphabetical head once the pool is covered, and the
+14 of 250 that answer `404 Symbol not found` stay never-fetched and are re-asked on every
+run [D-91, which names this as not closed by it].
+
+`flow_fetch_attempt`, one row per ticker, four columns, written for every selected ticker
+whether or not the fetch yielded rows, read strictly before the run date. That is D-91's
+shape applied to the component it explicitly left open, and its three reasons carry over
+unchanged: the record is of the attempt, attempts are read strictly before the run date,
+and universe membership is a tiebreak rather than a tier.
+
+A shared table was rejected: two components writing one table is two claims on one triple
+[INVARIANT 10]. What is shared is the ordering function, so the two rotations cannot
+drift apart the way the code and the catalogue did.
+
+**D-96 The earnings history is captured on the sweep that pays for it.** `ACTIVE`
+`Earnings::History` sits in the `fundamentals/{t}` payload, which 3.7 fetches once for
+the whole pool. Capturing it there costs nothing; capturing it afterwards costs the
+sweep again at 10 units a ticker.
+
+**Capture is not use.** D-90 is open and this prefers no fork. What decides the timing
+is the asymmetry: a capture taken during a sweep already happening is cheap and
+reversible, and one taken after it is a re-sweep. Recording that here is what stops a
+later reader taking this as X-PEAD having been quietly favoured.
+
+**The store.** `earnings_history`, grain ticker by fiscal period, writer
+`FundamentalsIngestor`. Columns: `ticker`, `period_end`, `report_date`,
+`before_after_market`, `eps_actual`, `eps_estimate`, and the provider's own surprise.
+
+`period_end` with `ticker` is a natural key, so no surrogate and no `NULLS NOT
+DISTINCT` case arises.
+
+**The read rule.** Every read is keyed on `report_date <= date`, the analogue of
+`filing_date_effective` [INVARIANT 12]. A row whose `report_date` is null is stored and
+is unreadable, exactly as an undated fundamental row is, and the null count is recorded
+at 3.7 so coverage is a measured figure rather than an assumption: 3.1 saw three
+populated entries on one ticker out of fifty spanning 2014.
+
+That rule is not lookahead and the reason should be stated, because it looks like it
+might be. The nightly run executes after the close, so a result released after the close
+of the date being computed was public before the run began. A backfilled date inherits
+the same property, `report_date` being when the result actually landed.
+
+**`before_after_market` is load-bearing rather than descriptive.** A result released
+after the close of day D is reacted to on D+1, and one released before the open of D is
+reacted to on D. A drift screen that computes its reaction window without reading this
+column uses the wrong session for roughly half of all announcements, and the error is
+systematic rather than noisy.
+
+**The surprise column stores a fraction, not a percent** [`METRICS.md`, one rule for
+every ratio]. The provider sends a percent; it is divided on the way in and the column
+is named for what it holds.
+
+It is stored rather than derived because it may not be derivable: the provider's figure
+may rest on an estimate other than the one it reports. Whether it agrees with
+`(eps_actual - eps_estimate) / abs(eps_estimate)` is measurable once the store is
+loaded, and if it always agrees the column is a third statement of a derivable fact and
+can go. That is the question 3.7's own output answers.
+
+**D-97 Sector is stored per filing, and C01 reads it there.** `ACTIVE`
+Completes the sector move the phase 3 plan makes at 3.7.
+
+C01's per-member sector call buys at 10 units what `fundamentals/{t}` already carries
+for nothing, and 3.11 has C01 reading sector from `fundamental_snapshot`, where no such
+column exists.
+
+**The column goes on `fundamental_snapshot`**, written by C03 from `General::Sector` on
+the call it already makes. C01 reads the most recent filing at or before the date being
+built, and remains the sole writer of `security` and `security_daily`.
+
+**Not on `security`, for three reasons and the first is enough.** It would make C03 a
+second writer on the table C01 owns, requiring a split declaration [INVARIANT 10, D-77],
+where the column route needs none. It would carry one sector per ticker, which is
+today's sector applied to every historical date, the exact defect `security_daily` was
+created to remove. And it would put a weekly stage's read behind a nightly stage's
+write.
+
+**The limitation is recorded rather than proxied.** Sector as of a filing is not sector
+as of a date: a company that reclassifies between filings reads as its former sector
+until the next one lands. That is closer to point-in-time than a single current value
+and is not the same thing, and the percentile cells inherit it.
+
+A ticker with no fundamental rows has no sector, which resolves to the existing
+bucket-only fallback rather than to a new case.
+
+**D-98 The institutional holdings block is captured by C03 and C05 keeps form4 alone.**
+`ACTIVE`
+`FlowIngestor` calls `fundamentals/{t}` with `filter=Holders::Institutions`. C03 calls
+the same endpoint unfiltered since 3.7, so the filter is a projection of a document C03
+already receives, bought a second time at 10 units a ticker: 2,500 a night at
+`flow.max_tickers_per_run` 250, about 912,500 a year, and 28,410 for a universe pass.
+
+**That the two blocks agree is measured rather than inferred**, and the distinction
+matters because the first draft of this decision asserted it "by construction". 3.1
+confirmed the block is present in the unfiltered payload and 1.9 measured twenty entries
+in the filtered form; neither confirmed the unfiltered one carries all twenty rather
+than a truncated head, which providers do. Measured 2026-08-12 over CCS.US and NVDA.US,
+two calls each: twenty entries both ways on both tickers, agreeing row for row on name,
+date, total shares, current shares and change
+[`docs/evidence/phase-3/holders-filtered-vs-unfiltered-20260812.txt`].
+
+**Freshness improves rather than degrades.** C05's rotation covers 250 of 2,841 in 11.4
+days; C03's covers 500 of about 4,800 in 9.6. The block is a top-20 snapshot at one or
+two report dates and those move quarterly [D-69], so both cadences are far finer than
+the data changes.
+
+`institutional_holding`'s writer becomes `FundamentalsIngestor` and C05 keeps
+`insider_transaction` and `flow_fetch_attempt`. One writer rather than a split, so no
+D-77 declaration arises. §3's C03 and C05 cells move with it.
+
+**There is no deadline on this and the reasoning that suggested one does not transfer.**
+D-96 put the earnings capture inside the sweep because that history has fifty back
+periods: miss the sweep and they cost a re-sweep. Holders is a current snapshot with no
+series behind it, which is this decision's own argument for keeping it out of 3.9, so
+missing 3.7's sweep costs about ten days of C03's rotation filling it at no additional
+units. What decides the timing is that 3.9 is next and its scope depends on this, and
+that a scope written right is better than one amended afterwards. A decision resting on
+a reason that does not survive inspection gets reversed for a reason that does not
+either.
+
+**The population widens from the universe to the candidate pool**, about 4,800 names
+against 2,841. That is storage rather than correctness and is the same case as C09's
+over-write, recorded rather than narrowed.
+
+**What this couples, which is the cost side of the freshness gain.** Holders now ride
+C03's rotation, so one rotation feeds two screens' inputs. That rotation froze silently
+once and nothing in the row counts said so; `OldestAttemptInSelection` is the observable
+D-91 added to catch it, and it now covers two tables rather than one. The rotation
+health figure matters more after this than before.
+
+**3.9 does not sweep holders under any reading.** The block has no series, so a universe
+pass re-fetches a current snapshot 2,841 times for 28,410 units where the nightly
+rotation covers the universe in days. 3.9's scope is form4 alone.
+
+D-69 is not a blocker: its own text keeps this table usable as a static feature under
+either outcome, so the ingest stands whichever way `inst_ownership_change` goes.
+
+**D-99 A ticker-partitioned backfill resumes by attempt record, not by position.**
+`ACTIVE`
+Supersedes the resume-position reasoning recorded under open item 22.
+
+**A recorded position only survives a throw inside the tracked region.** A command
+timeout, a process kill and an out-of-memory record nothing, the log write being the last
+thing a run does. Three failures in one day produced two full restarts.
+
+**Each restart re-wrote rows that already existed, which is not free work.** In MVCC an
+update is a new tuple, a dead one behind it and an index entry in every index that is not
+a heap-only update: 27 million dead tuples, and an upsert that had crossed its 300-second
+command timeout by the third pass over the same rows. The claim that re-work is safe
+because every write is idempotent is true for correctness and false for cost.
+
+**So a sweep asks what is left rather than remembering where it stopped.** The remaining
+set is the pool minus the tickers carrying an attempt record for that range. A hard kill
+and a clean halt resume identically because neither is consulted.
+
+**The stamp differs between C02 and C03 and the reason is not arbitrary.** For C03 the
+nightly call and the sweep call are the same call, `fundamentals/{t}` returning full
+history either way, so a ticker attempted by the nightly rotation is as complete as one
+attempted by the sweep and skipping it is correct. Its attempt stamps the range end,
+which also keeps `last_attempted_date` honest as the rotation's freshness ordering. For
+C02 the two calls differ in depth: the nightly reload takes a twenty-date window and the
+sweep takes whole history, so the sweep's marker has to be one no nightly run can
+produce, which is the range start.
+
+That is recorded because the two look inconsistent side by side and the next reader will
+try to harmonise them. They are the same rule applied to two endpoints that differ in
+what a nightly call already achieves.
+
+**One column serves two purposes on C03**, the rotation's freshness ordering and the
+attempt marker, and that is why the asymmetry exists at all. **This is the thing to split
+if it ever bites, and it is not split now.** A second column would let the sweep stamp
+what it likes without moving the rotation, at the cost of a schema change and a second
+write for a conflict that has not arisen. What would make it bite is a sweep whose range
+end is a date the rotation should not treat as fresh.
+
+**D-100 A transient fault is decided by its error code, and one rule decides it at
+every layer.** `ACTIVE`
+Closes open items 28 and 29, which are one question asked twice.
+
+**The distinction is in `SocketErrorCode`, not in the exception type.** The database
+layer retried `NpgsqlException and not PostgresException` or `TimeoutException`, which
+named types. A connect-phase `SocketException` is neither, so the commonest transient
+database fault was not retried at all, while a `HostNotFound` wrapped in an
+`NpgsqlException` was retried three times for an answer that cannot change. One fault
+reaches a caller in three shapes depending on where in the handshake it lands, and a
+predicate reading the outermost type treats one fault as three.
+
+**Retryable: `TimedOut`, `ConnectionReset`, `ConnectionRefused`, `HostUnreachable`,
+`NetworkUnreachable`, `TryAgain`.** Everything else fails on the first attempt,
+`HostNotFound` included. `HostNotFound` is a connection string that is wrong, not a
+network that is briefly unwell, and retrying it spends the attempts and the backoff on
+something that will never succeed while the run learns at the third failure what it knew
+at the first. `TryAgain` is the resolver saying it could not answer this time rather than
+that there is nothing to answer, which is the one DNS failure that is transient.
+
+**The socket error decides wherever it sits in the exception chain**, because that is
+what makes the rule independent of which layer wrapped it.
+
+**The provider client takes the same rule with its own vocabulary.** `EodhdClient`
+retried nothing, and one reset socket in roughly 50,000 requests ended a 128-minute sweep
+on the free gate read. Its transient set is those socket codes plus `429`, `502`, `503`
+and `504`. **`402` stays fatal**: an exhausted allowance persists for the provider's day,
+so a retry spends the wall clock against a wall that will not move and the stage has to
+fail rather than complete over a partial load. **`404` stays "not carried"**, being a
+fact about the ticker rather than a fault, and the callers that tolerate it record zero
+rows.
+
+**One decision rather than two, and that is the point rather than tidiness.** Two
+separately reasoned rules for one distinction drift, and each drifts toward whichever
+failure its own layer saw last. The retryable codes are named in one place in code as
+well, `TransientFault`, cited at both call sites.
+
+**A retry at the client can cost a unit and that is accepted.** A request that reached
+the provider and then lost its connection may already have been billed, so two units can
+be spent for one series. Against that, the fault it exists for cost a sweep and about
+13,500 tickers' work. The allowance gate's reserve absorbs the difference many times
+over.
+
+**What is not retried anywhere: a statement on an open connection.** That reasoning is
+unchanged and is `RUNBOOK.md`'s. A failed write is a lost write for data already fetched
+and paid for, and tolerating one reports a completed sweep over a partial load. Only the
+establishment of a connection and the issuing of a request retry, both being asks that
+left nothing behind when they failed.
+
+---
+
+**D-101 Every backfill ingest pool that can reach delisted names does, and they all mean
+the same thing.** `ACTIVE`
+Closes open item 16.
+
+**The pool is the live pool plus every admitted delisted common stock carrying at least
+one bar inside the window**, which is 16,862 names measured 2026-08-13. C03 was amended
+to it at 3.7; C04 and C06 take the same definition from here. C05 cannot and that is
+open item 12's finding rather than an exception carved here: `sec-filings` returns 404
+for delisted names against ticker strings the price and fundamentals endpoints answer
+for in the same run.
+
+**The sentiment half is not optional, because the absence is not a gap.** A delisted
+name in a reconstructed 2021 universe with no sentiment rows does not arrive as unknown.
+`article_count` zero-fills, so `article_count_z_own_90d` is computed against a baseline
+of zeros while `sentiment_score` stays null. That is a degenerate value that ranks, not
+an absence that abstains, and it ranks in the same direction for every name that later
+failed. Null means unknown is the rule [`CLAUDE.md` §6]; a zero that arrives by
+construction rather than by measurement defeats it silently.
+
+**Both of the two anti-megacap screens were on course to have survivor-only backfilled
+history, and that is what makes this urgent rather than tidy.** §20 names the sentiment
+and flow screens as "the two that structurally tilt small and the two doing the most to
+keep this system off megacaps". S4's bias is irreducible at open item 12. S3's is not,
+the endpoint answering for delisted names, so leaving it would have meant the tuner
+reading both anti-megacap screens off survivors alone at exactly the moment D-42's
+reasoning says a tuner cutting those two dismantles the design.
+
+**C06 widens whether or not its rows have a reader for delisted names.** Three ingest
+pools with two definitions is the shape that has produced every silent hole this phase
+has found, the fundamentals pool and the price pool being the other two. Consistency is
+what is bought here, and a pool rule that has to be looked up per component is one a
+later session gets wrong.
+
+**The earnings half was checked for being free and it is not in the phase at all.** The
+mechanism is as supposed: `calendar/earnings` is one global bulk call at weight 1 for
+any range, and the universe narrowing happens in `ParseEarnings` after the response
+arrives rather than in the request, so widening the set passed in would cost nothing.
+It does not apply, because 3.10 deliberately loads no earnings: the payload carries no
+date on which a schedule became public, so `announced_date` is null and loading it would
+put a lookahead of unknown size under C12 and C15 [phase 3 plan, 3.10]. There is
+therefore no free half to collect and none priced. **The blackout consequence is uniform
+rather than asymmetric**: C12's earnings blackout never fires on any backfilled date for
+any name, survivor or not, so this is not a survivorship defect and the widening does
+not address it. Whether `earnings_history`, which C03 now populates over the widened
+pool [D-96], can serve that gate is a separate question and phase 5's.
+
+**The marginal cost is 118,034 units**, being 84,310 for sentiment at 5 a ticker and
+33,724 for splits and dividends at 1 each. The phase total is repriced from the measured
+D in the phase plan's §2 and comes to ~647,376, inside the 376,685 to 702,795 bracket
+that section stated before D was known.
+
+---
+
+**D-102 The whole-table pass under both pool statements is not removable by an access
+path, and every form that looked like it was has been measured and rejected.** `ACTIVE`
+Narrows open item 32 and open item 25 rather than closing them. What is still owed is at
+the foot of this entry.
+
+C03's `BootstrapPoolAsync` and C01's `LiquidAsync` derive a candidate set from
+`price_daily`, now 109,787,541 rows and 18 GB. Both open by asking for every distinct
+ticker, which the planner answers with a parallel sequential scan of the whole heap:
+1,146,298 buffers and 9.2 GB read to produce 88,341 values. **That pass stands.** Four
+forms were tried against it and all four are rejected on measurement.
+
+**What changed instead is `LiquidAsync`'s shape, which is a separate defect in the same
+statement.** It windowed every row of the table, materialised 109,787,541 rows into a
+5.4 GB on-disk CTE, sorted them externally at about 4.5 GB across three workers, and
+scanned the table a second time for `count`, `min` and `max`: 2,292,676 shared pages and
+2,369,378 temp pages written, roughly 19 GB of temporary I/O to return 8,610 rows. It
+now takes each ticker's twenty most recent bars through a LATERAL bounded by `LIMIT`,
+and asks the history question last of the few thousand names that already cleared price
+and liquidity. **Proved set-identical at 8,610 tickers, 0 missing and 0 extra**, against
+the shipped statement extracted from source rather than transcribed. C03's statement is
+unchanged by this decision, having had that fix at item 24.
+
+**Rejected, each with the measurement that rejected it.**
+
+**A recursive loose index scan.** The form that looked best and the one this decision
+was first written to adopt. Measured alone it is decisively cheaper: **436,340 buffers
+against the plain form's 1,146,298**, `Index Searches: 88341` and `Heap Fetches: 0`,
+which is exactly one descent per distinct ticker and no heap access at all. Measured
+**inside `LiquidAsync` it took 18,557.6 seconds against the plain form's 1,063.9s, a
+regression of about seventeen times**, returning the identical set both ways. **A
+recursive CTE reports a fixed estimate of 100 rows whatever the data**, so every node
+above it is costed for a hundred tickers when 88,341 arrive, and the planner picks joins
+that are right for a hundred rows and catastrophic for eighty-eight thousand. **A form
+measured in isolation and adopted on that measurement is the failure this entry exists
+to record**: the isolated number was real, it was simply not the number that decides.
+
+**The index path, forced.** Available and more expensive: 1,783,610 buffers against
+1,146,298, and `Index Searches: 1`, one full pass over all 109,787,541 index entries.
+**Postgres does not do a loose index scan for `DISTINCT`**, which is measured here rather
+than assumed, so the planner was picking the cheaper of the two paths it had rather than
+mis-costing a third.
+
+**A larger `shared_buffers`.** The warming fix restated. It dies on a restart, the
+sweep's own writes evict it, and a 610-second warming pass immediately before a run
+failed to hold it. Measured incidentally at the 128MB default, which is a fact about
+this server rather than an argument.
+
+**Partitioning.** Both statements need the newest bars per ticker and a bounded walk of
+each ticker's whole history. A date-leading key scatters every per-ticker seek across
+every partition; a ticker-leading one needs tens of thousands of partitions. Any key
+helps one half and hurts the other.
+
+**Pinning `n_distinct`.** Tried first because it was the cheapest form available: a
+per-column attribute option, persistent, no new table and nothing asked of C02.
+`pg_stats` gave 20,800 against a true 88,341, an underestimate of 4.2x, **which is the
+opposite direction from the one that would explain the plan**: the planner already
+believed a per-value descent cheaper than it is and took the sequential scan anyway.
+Pinned to the true value and re-measured: **the plan did not change**, the same parallel
+sequential scan over the same 1,145,742 pages, cost moving 1,832,512 to 1,832,094. The
+34x wall-clock improvement across that pair is the OS page cache and not the pin, which
+the identical buffer counts settle. Rejected as an access-path fix and not carried.
+
+**A per-ticker summary table.** Not tried, and it is what remains. It is the only option
+that removes the whole-table pass rather than re-routing it, and its boundary is why it
+is not taken here in one step: it serves as-of-now for the nightly path and a fixed range
+for a backfill pool, and it does not serve a per-date historical universe. **C03's two
+call sites are both inside that boundary. C01's is not**, `LiquidAsync` running per
+weekly evaluation date at 3.11, so a summary of current state cannot answer for a 2021
+date and applying it there would stamp today's universe on history, which is the
+survivorship failure `security_daily` exists to prevent.
+
+**The 3.1-second precedent is a different statement and nothing regressed with growth.**
+Item 32 records `SELECT DISTINCT ticker FROM price_daily WHERE date >= '2021-01-04'` at
+3.1s off 0007's `(date, ticker)` index. That is a bounded range on that index's leading
+column. The pool asks `date <= asOf`, which matches every row and gives the same index
+nothing to narrow, so the two were never the same plan.
+
+**`count(*)` reads every row and `EXISTS ... OFFSET` stops, and that is worth recording
+because a later session will reach for the first.** "Has at least 250 bars" written as
+`count(*) >= 250` inside a LATERAL reads every bar a ticker has; written as
+`EXISTS (... OFFSET 249 LIMIT 1)` it stops at the 250th index entry. The first
+`LiquidAsync` rewrite used `count(*)` and measured 948.7s against C03's 474.7s, which is
+the same shape and the same data differing only in that one clause. `min(date)` and
+`max(date)` are the exception and stay as aggregates, Postgres answering each as a
+one-row seek on the same index.
+
+**The visibility map is a precondition and not a fix.** `relallvisible` stood at 818,328
+of 1,132,553 pages, so C03's history test reported `Heap Fetches: 6,328,244` inside a
+scan the plan calls index-only. `VACUUM (ANALYZE)` took it to 100 percent and that node
+from 5,399,262 buffers to 510,352, a 90.6 percent cut, with `Heap Fetches: 0`. Autovacuum
+fell behind during this sweep exactly as item 27 measured it falling behind during the
+last, so the same 28 percent returns on the next one. When a vacuum runs is item 27's
+question and stays open.
+
+**What is still owed, so this entry is not read as closing more than it does.** Both
+statements still make one whole-heap pass each time they run, C03's pool build measuring
+between 46s warm and 531s cold across this phase. The per-ticker summary is the remaining
+option for C03 and is not built. `LiquidAsync` is improved and proved and is still not
+fast, and what 3.11 needs from it is recorded in `PROGRESS.md` as a finding about that
+checkpoint's shape rather than folded in here.
+
+---
+
+**D-103 A failure-mode test triggers the failure through the system, not through the
+environment.** `ACTIVE`
+Closes open item 29, which D-100 closed as an instance and this closes as a class.
+
+Two tests pinned a connection failure by arranging a condition the environment happened
+to provide rather than one the system guarantees.
+
+`ARefusedLoginIsNotRetried` set a wrong password and asserted the refusal. CI's Postgres
+runs `POSTGRES_HOST_AUTH_METHOD: trust`, so no login is refusable there, the read
+succeeded and the assertion failed. It passed on every developer machine, which asks for
+a password, and was red on every CI run from the moment it was written: 23 consecutive
+runs from 2026-08-13T02:07Z to 2026-08-16T05:27Z, checked one at a time rather than
+sampled, one line at the end of 372 green ones.
+
+The earlier instance dialled an unresolvable host with a one-second timeout and asserted
+a timeout. The resolver returned `NXDOMAIN` in 206 milliseconds, so the timeout never
+ran. It passed only while the network was saturated enough for the lookup to take longer
+than a second.
+
+**The two were red together and only one was seen.** The first two of those 23 runs fail
+on both names at once, which is the register's evidence that this is one defect with two
+instances rather than two tests that each went wrong. D-100 read the pair as one question
+asked twice at the layer of the retry predicate, and fixed the predicate for both; the
+trigger it repaired in one instance it left standing in the other.
+
+**The rule.** A test that pins a failure mode triggers it through a condition the system
+guarantees. An unroutable address always fails to connect. A database that cannot exist
+always raises `invalid_catalog_name` during startup, whatever the authentication method.
+Neither depends on how a machine is configured.
+
+**The check.** Would this test behave identically on a machine configured differently
+from the one it was written on? If the answer needs a fact about DNS, about an auth
+method, about network speed or about what else is running, the trigger is wrong even when
+the assertion is right.
+
+**This matters immediately rather than in principle.** D-100 names six socket error codes
+as transient, being `TimedOut`, `ConnectionReset`, `ConnectionRefused`, `HostUnreachable`,
+`NetworkUnreachable` and `TryAgain`, so six more tests of this shape are due, and each has
+an environment-dependent trigger available alongside a guaranteed one.
+
+**Name what the test pins.** Both of these were named for the environmental trigger rather
+than the property. A test called after its trigger drifts when the trigger changes; one
+called after the property does not. **The two D-100 tests were renamed on this clause
+although their triggers were sound**, because D-100 classifies six socket error codes as
+transient, so six more tests of this shape are due, and naming them after the
+classification makes them a set that references the rule rather than six names referencing
+six mechanisms. The trigger moves into a doc comment on each, with the line that says why
+it is guaranteed rather than convenient: the name says what is pinned and the body says
+how it is reached.
+
+**The `ci.ps1` gap goes alongside and is not closed here.** `ci.ps1` mirrors `ci.yml`'s
+steps and asserts that it does. It does not mirror the environment those steps run in, so
+its green is evidence about this machine's database. **Do not replicate CI's environment
+locally.** Trust authentication is precisely the property this test needed absent, and
+copying it would destroy on the developer machine what it just fixed in CI. What is
+recorded instead is that `ci.ps1` reads `ci.yml`'s `services` and `env` blocks and reports
+what differs, so its green carries its own scope, which is the same discipline as stating
+an expected count before a sweep. That is open item 37 and it is not built while the
+backfill is running.
+
+---
+
+**D-104 The benchmark is a reference series: fetched into `price_daily`, admitted to
+nothing.** `ACTIVE`
+Two compute components measure against a benchmark and for most of the backfill window
+neither could, because nothing had ever fetched one. C02's sweep pool is every admitted
+common stock, live and delisted [D-4, INVARIANT 1], and the benchmark is an ETF, which D-2
+puts out of scope. So the sweep never asked for it, and nothing errored.
+
+**What a reference series is.** A price series a component reads as a comparison, held in
+`price_daily` beside every other series and admitted to nothing else. It is never written
+to `security` or to `security_daily`, so it is a member of no universe on any date, is
+never a candidate, is never ranked inside a cell, and can never become a position. **D-2 is
+untouched by this.** D-2 says which instruments can be selected, and a reference series is
+not selectable. The exception is to C02's fetch list and not to the universe definition,
+which is where absolute filters live and stay [INVARIANT 1]. Nothing downstream narrows,
+because nothing downstream gains a member.
+
+**Which components read it.** `IndicatorEngine` for `rs_change_21d`, `rs_change_63d`,
+`rs_21d_63d_change` and `rs_20d_slope`, which are the ticker's return over the benchmark's
+[`METRICS.md` §2]. `MarketContextEngine` for the regime label's sign test, which is whether
+the benchmark closed above its own `market.breadth_ma_days` average [D-80]. **Breadth is
+not one of them**: it is counted off `indicator_daily.dist_200dma` over that date's
+universe and reads no benchmark at all. The sector composites read none either, being built
+from the universe's own members, which is the reason the peer benchmark needs no ETF
+[D-42].
+
+**The measurement that forced it,** taken 2026-08-18 with C08 and C10 having run the whole
+window. **`SPY.US` held 265 bars in `price_daily`, first 2025-07-22, and zero rows in
+`price_fetch_attempt`.** The 265 are what the unfiltered nightly bulk feed had accumulated
+since July 2025. The empty attempt table is the sweep saying it never asked, which is the
+distinction an absent row is there to make [0010].
+
+**What it cost, which is why this is a decision and not a defect note.** **2,690,981 of
+4,143,273 `indicator_daily` rows carried null `rs_change_21d`, `rs_change_63d` and
+`rs_20d_slope`**, being every row before the benchmark's history began. **1,497 of 1,584
+`market_context_daily` rows were labelled `mixed` and none was `risk_off`**, against 192
+dates whose breadth was at or below the 0.40 floor and 925 at or above the 0.60 ceiling,
+with all 87 `risk_on` in 2026. Both components were behaving exactly as written:
+`BenchmarkAboveItsAverageAsync` returns null below `market.breadth_ma_days` bars rather
+than averaging over whatever is stored, and `Regime` returns `mixed` on a null. Breadth
+itself was right throughout, 2022 averaging 0.376. Nothing errored, both runs completed,
+and both reported plausible counts. That is `CLAUDE.md` §1 arriving as a measurement rather
+than as a warning.
+
+**What the reasoning had been, so this is a replacement rather than an addition.**
+`METRICS.md` §2 and `IndicatorEngine.Benchmark` both record that C02 writes every row the
+bulk feed returns with no universe filter, so the series is present. That is true of the
+nightly feed's retained window and was read as covering history. It does not, because the
+backfill loads history through `eod/{t}` per ticker and that path takes a pool. **A series
+a component depends on is loaded by something that names it, not by something that happens
+to sweep past it.**
+
+**How a second one is added.** `ReferenceSeries.All` is the set, stated once, and C02's
+pool is the admitted common stock union that set. An index, a sector proxy or a second
+benchmark is one string in that list and no other change: the pool picks it up, the sweep
+fetches its whole history at one unit, and the component that wants it names it. A
+component reading a series absent from that list is reading something no sweep guarantees,
+which is the state this decision was written out of.
+
+**Stated in code rather than as a config key, and that is the point rather than an
+omission.** Config resolves as of the simulated date [INVARIANT 13], so a benchmark held as
+a key would resolve per date, and a change to it would leave one relative-strength column
+computed against two different series with nothing in the row saying which. Changing a
+benchmark splits history into halves that cannot be pooled [`CLAUDE.md` §12], and a change
+that splits history is a code change carrying a decision, not a config row.
+
+**The load is a re-run of C02 over the same range and costs about three units.** The sweep
+resumes by attempt record [D-99, 0010], so every ticker already carrying an attempt at the
+range start is not dispatched and the remaining set is the reference series alone. Two
+symbol-list calls build the pool and one `eod/{t}` call fetches the series. **Then C08 and
+C10 are re-run**, because their rows were written against a benchmark that was not there.
+
+**D-105 A compute range refuses a range end past the ingest frontier.** `ACTIVE`
+Closes open item 60.
+
+**The frontier is the newest date in `price_daily` carrying a real bar count, not the
+newest date present.** That distinction is the finding rather than a detail of it.
+Measured 2026-08-21: the store held 3,024 bars on 2026-08-12 and exactly one on each of
+2026-08-13, 2026-08-14 and 2026-08-17, all three `SPY.US`, D-104's benchmark load having
+run forward past where the equity sweep stopped. A driver reading the newest date present
+gets 2026-08-17; a driver reading a real bar count gets 2026-08-12. **The backfill read
+neither, because it never read the frontier at all and took its range end as given.**
+
+**It refuses rather than clamps.** A range end the store cannot cover is an operator
+error, and silently narrowing a five-year range is the class of failure this system exists
+to catch [`CLAUDE.md` §1]. Clamping would put the same silence one step further along: the
+run would complete, the numbers would look plausible, and the window analysed would not be
+the window asked for. The three exit codes already distinguish a refusal from a halt, so
+nothing had to be invented to tell an operator error from the allowance gate working.
+
+**C07 performs this check nightly and the backfill had no equivalent.** That is the same
+shape as the pool precondition and the seeding race: a guard present on one path and
+absent on the other. So the rule is C07's settledness read through C07's own keys,
+`freshness.settled_window_days` and `freshness.settled_fraction`, walking newest-first and
+taking the first date at or above that fraction of the trailing median. A key of its own
+would have been the same defect one level down, the two paths free to drift on what a real
+bar count is. It does not take C07's two absolute floors:
+`freshness.row_count_abort_below` is 40,000, sized for the bulk feed's whole-exchange row
+count against about 3,000 bars a session here, and applying it would refuse every range
+ever issued. Recency is not taken either, being a provider call and a question about
+currency rather than about what the store holds.
+
+**What it produced before it existed, recorded so the cost is a figure rather than a
+worry.** The compute range end was 2026-08-13, a date carrying one bar. `indicator_daily`
+took 2,864 rows on it and `sentiment_derived_daily` 2,864, with one `market_context_daily`
+row: **5,729 rows that were a byte-repeat of the day before.** Against 2026-08-12 they
+were 2,864 of 2,864 identical on `dist_200dma`, `adx14` and `atr_pct`, and breadth read
+0.70810056 on both against 0.7126397 on 2026-08-11. **A trailing-window stage cannot fail
+on a missing bar**, which is why nothing said so: the window ending on the unreached date
+holds the same bars as the window ending on the frontier, so the stage computes a correct
+answer to the wrong question. Those rows are indistinguishable from real ones except by
+the thinness of their date, and they stand: 2026-08-13 carries one bar rather than none,
+so item 57's no-bar predicate cannot reach them.
+
+**Where the check sits, because the placement is load-bearing and could have gone wrong
+silently.** It binds the trading calendar, in the session source the driver composes, and
+not the top of the range run. A range end past the frontier is an operator error for a
+compute stage and the ordinary case for an ingest one, since fetching the dates the store
+does not hold yet is how the frontier moves at all. A check on the run would have made the
+backfill unable to extend the store, and every test of the refusal would still have
+passed. The six calendar consumers are exactly the six the wrong end harms.
+
+
+**D-106 A sweep marker records the coverage a sweep reached, not the invocation that
+reached it.** `ACTIVE`
+Closes open item 44, which item 62 was merged into.
+
+**One column carried both the sweep marker and the rotation's freshness ordering**, on
+`fundamental_fetch_attempt` and `flow_fetch_attempt`, the only two tables a nightly path
+and a range path both write. D-99 named the split and deferred it in its own words:
+"This is the thing to split if it ever bites, and it is not split now." D-105 then
+refused the only range end C03 and C05 were stamped for, so the next sequence backfill
+would have re-dispatched both pools whole.
+
+**The split gives the sweep its own column.** `swept_through_date` is the sweep's, and
+the rotation keeps `last_attempted_date` as the freshness ordering it was always for.
+Each reader now answers its own question and neither can undo the other's work: a range
+stamp cannot make a ticker look freshly attempted to the night, and a nightly attempt
+cannot satisfy a sweep.
+
+**The marker is read as "swept through at least this date", never as equality, and that
+is the rule this decision exists to state.** A marker compared by equality records which
+invocation happened. A marker compared by coverage records what the store holds, which is
+the only one of the two a later run has any use for. The difference is not academic:
+equality re-dispatches a completed pool the moment a range end moves by a day, and a
+range end moves whenever a frontier correction finds one, which is item 44's third
+trigger and the general case D-99 did not foresee. **Nothing would fail while it did so.**
+The pool would be re-fetched, every row would be rewritten with the same values, every
+stage would report `ok`, and the only visible trace would be the bill. That is why the
+reading rule is the decision rather than a detail of the migration.
+
+**A column split alone does not give this.** Splitting the column and keeping the
+equality test leaves a marker of 2026-08-13 against a corrected end of 2026-08-12,
+matching nothing and re-dispatching exactly as before. Both halves are required and the
+second is the one that generalises.
+
+**The evidence is the fall-through rather than an illustration of it.** The first
+sequence run after the split, over 2021-01-04..2026-08-12:
+
+```
+FundamentalsIngestor   covered   0 of 4,156
+FlowIngestor           covered   0 of 2,864
+EventsIngestor         covered   0 of 4,117
+SentimentIngestor      covered   0 of 4,117
+```
+
+Roughly **440,000 provider units and 4.9 provider days became 36 units and 20 seconds**.
+
+**The 36 is not a rounding of zero and it says something about what `covered` means.**
+C02 reported `ok`, dispatching 35 of 50,615 admitted names plus the reference series
+[D-104], those being names the symbol list has admitted since the sweep ran and which
+therefore carry no marker at all. The pool rebuilds itself live from the provider on
+every run, so `covered` is a statement about a pool that moves rather than about a fixed
+list. A marker read as coverage is what lets a moving pool report `covered` for the part
+of itself that has not moved.
+
+**The stamp is unchanged and stays the range end on both tables.** D-99's asymmetry is
+deliberate and per stage: C03's and C05's nightly and sweep calls are the same call,
+where C02's, C04's and C06's differ in depth, which is why those three key on the range
+start. What was wrong was the shared column and the reading, not the choice of stamp, so
+that decision is not reopened.
+
+Migration `0013_attempt_sweep_marker.sql`, `FundamentalsIngestor` C03 and `FlowIngestor`
+C05. Both halves are asserted: a range run stamps the marker and leaves the ordering
+untouched, and a nightly attempt moves the ordering and leaves the marker untouched.
+One alone is satisfied by a component that writes neither.
+
 ---
 
 ## Open
@@ -1397,6 +2164,16 @@ input that is not insider-derived. Keep all three and accept that S4's floor is
 drawn from a two-input distribution during backfill and a three-input one
 live, which D-58 rejected. Or source ownership from SEC EDGAR 13F, free and
 complete, at the cost of a second provider and a real ingest.
+
+**The two insider inputs are backfillable and are not clean, measured at 3.1.**
+`sec-filings/{t}` and `sec-filings/{t}/form4` return `404 Symbol not found` for every
+delisted name tested, against the same ticker strings `eod/{t}` and `splits/{t}`
+answered for in the same run. So the sentence above, that
+`insider_net_90d_usd` and `distinct_buyer_count` are unaffected, holds only for names
+that still exist. Whichever option is taken here is taken on evidence measured over
+survivors, and the direction of that bias is toward keeping S4 rather than cutting it
+[`PROGRESS.md` open item 12, which carries the reasoning and the
+shadow-comparison consequence].
 
 The timeboxed check A12 asked for was run and is in the same transcript. The
 subscription exposes no dated or market-wide institutional feed. It does expose

@@ -1,5 +1,7 @@
-using System.Globalization;
+﻿using System.Globalization;
+using System.Net;
 using System.Text.Json;
+using StockResearcherLab.Core.Config;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data.Eodhd;
 
@@ -22,12 +24,12 @@ namespace StockResearcherLab.Pipeline.Ingest;
 /// `events` is built at 1.8. Until then the rotation is staleness-ordered only, and
 /// that is a gap rather than a decision.
 /// </summary>
-public sealed class FundamentalsIngestor : IStage
+public sealed class FundamentalsIngestor : IBackfillStage
 {
     public static readonly string[] Columns =
     [
         "ticker", "period_end", "period_type", "filing_date", "filing_date_effective",
-        "filing_date_unknown_reason", "filing_date_source",
+        "filing_date_unknown_reason", "filing_date_source", "sector",
         "total_assets", "total_liab", "total_stockholder_equity", "cash",
         "cash_and_equivalents", "short_term_investments", "net_debt",
         "short_long_term_debt_total", "long_term_debt", "inventory", "net_receivables",
@@ -49,8 +51,306 @@ public sealed class FundamentalsIngestor : IStage
     /// or not the fetch yielded rows, which is the distinction the old ordering could
     /// not make.
     /// </summary>
+    /// <remarks>
+    /// **The nightly set. It does not carry the sweep marker** [0013, item 44]. A
+    /// nightly attempt says nothing about what a sweep has covered, and writing the
+    /// two together is the defect 0013 closed: the upsert updates exactly the columns
+    /// it is handed, so leaving `swept_through_date` out of this list is what makes a
+    /// nightly run unable to satisfy a sweep.
+    /// </remarks>
     public static readonly string[] AttemptColumns =
         ["ticker", "last_attempted_date", "last_yield_date", "rows_last_attempt"];
+
+    /// <summary>
+    /// The sweep's set, and the mirror of the rule above: a range run stamps how far
+    /// it has swept and leaves the rotation's ordering exactly where it was [0013,
+    /// item 44]. The two lists differ in one column and that column is the whole
+    /// split.
+    /// </summary>
+    public static readonly string[] SweepAttemptColumns =
+        ["ticker", "swept_through_date", "last_yield_date", "rows_last_attempt"];
+
+    /// <summary>
+    /// The union, which is what the write set declares. `EnsureColumnsDeclared` asks
+    /// that what a write supplies is a subset of what the component declared, so one
+    /// declaration covers both shapes; declaring either alone would fail the other at
+    /// the point the connection opens [INVARIANT 10].
+    /// </summary>
+    public static readonly string[] AttemptDeclaredColumns =
+    [
+        "ticker", "last_attempted_date", "swept_through_date",
+        "last_yield_date", "rows_last_attempt"
+    ];
+
+    // ------------------------------------------------------- range mode [3.7] ---
+
+    /// <summary>
+    /// One full pool sweep, the rotation cap lifted [D-93].
+    ///
+    /// **The cap is a rate limit and not a filter** [INVARIANT 1], so lifting it for a
+    /// sweep is the cap doing what it is for rather than an exception to it: every name
+    /// passes through it eventually and this is the run where they all do at once.
+    ///
+    /// **The pool is the live candidate pool plus every delisted common stock with a
+    /// bar inside the window**, which is the amendment before this checkpoint. C03's
+    /// pool derives from current price, liquidity and history, so it holds no name that
+    /// has since delisted; a name liquid in 2021 and delisted in 2023 would carry prices
+    /// from 3.6 and no fundamental rows, compute zero clean gaps, fail D-62's floor, and
+    /// be absent from `security_daily` on every historical date. The reconstruction
+    /// would be survivorship-clean on price and not on membership.
+    ///
+    /// 3.6 is what makes the second half computable: the symbol list carries no
+    /// delisting date, so the last bar is the only date there is.
+    ///
+    /// Config resolves as of the range end for the same reason C02's does: this sweep is
+    /// ticker-partitioned, there is no date being computed, and the keys it reads are
+    /// operational.
+    /// </summary>
+    public async Task<BackfillResult> ExecuteRangeAsync(BackfillContext context, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var settings = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
+
+        var weight = ConfigValue.Long(await settings.Config
+            .RequireAsync("backfill.weight_fundamentals", settings.Date, ct).ConfigureAwait(false));
+        var reserve = ConfigValue.Long(await settings.Config
+            .RequireAsync("backfill.unit_reserve", settings.Date, ct).ConfigureAwait(false));
+        var allowance = ConfigValue.Long(await settings.Config
+            .RequireAsync("backfill.daily_unit_allowance", settings.Date, ct).ConfigureAwait(false));
+        var windowStart = ConfigValue.Date(await settings.Config
+            .RequireAsync("backfill.window_start", settings.Date, ct).ConfigureAwait(false));
+
+        var minPrice = await DecimalAsync(settings, "universe.min_price", ct).ConfigureAwait(false);
+        var minAdv = await DecimalAsync(settings, "universe.min_adv_20d", ct).ConfigureAwait(false);
+        var minHistory = (int) await LongAsync(settings, "universe.min_history_days", ct).ConfigureAwait(false);
+
+        var pool = await RangePoolAsync(settings, minPrice, minAdv, minHistory, windowStart, ct)
+            .ConfigureAwait(false);
+
+        // **Resumption is a set difference against this stage's own attempt record**,
+        // which replaced the ticker position the run log used to carry [0010]. The
+        // sweep stamps `swept_through_date` with `settings.Date`, being the range end,
+        // so the remaining set is the pool minus the tickers already swept through it.
+        //
+        // **The marker is the sweep's own column since 0013, and it reads as coverage
+        // through a date rather than as equality with one** [item 44]. Both halves
+        // matter and neither is decoration. Its own column, because this used to be
+        // `last_attempted_date`, which the nightly rotation also orders on: a sweep
+        // stamp then sorted ahead of any later nightly date and the rotation preferred
+        // the names the sweep had just paid for, while a night's stamp knocked a swept
+        // ticker back into this remaining set to be bought twice. Coverage rather than
+        // equality, because D-105 refuses a range end past the ingest frontier and the
+        // stamps in this table were written against an end it now refuses; under an
+        // equality test every one of them matches nothing and the whole pool
+        // re-dispatches at ten units a ticker, and that recurs on any later frontier
+        // correction that moves an end. A ticker swept through a later date is covered
+        // for an earlier one, which is what `>=` says.
+        //
+        // **The range end here, where C02 keys on the range start**, and that
+        // asymmetry is unchanged by the split [D-99]. This stage's nightly and sweep
+        // calls are the same call, where C02's differ in depth.
+        var already = await AttemptedOnAsync(settings, ct).ConfigureAwait(false);
+        var remaining = pool.Where(t => !already.Contains(t)).ToList();
+
+        long rows = 0;
+        long holdingRows = 0;
+        var holdingCollisions = 0;
+        var dispatched = 0;
+        var collisions = 0;
+        var halted = false;
+        string? haltDetail = null;
+
+        // One at a time. Each call is 10 units against C02's 1, so the gate is asked per
+        // ticker here rather than per chunk: the overshoot a chunk would allow is eighty
+        // units rather than eight, and this sweep is the one that meets the wall on any
+        // day it shares with another [phase 3 plan, 3.7].
+        foreach (var ticker in remaining)
+        {
+            var decision = await context.NextUnitAsync(weight, reserve, allowance, ct).ConfigureAwait(false);
+
+            if (!decision.Fits)
+            {
+                halted = true;
+                haltDetail = decision.Detail;
+                break;
+            }
+
+            var resolved = await LoadAsync(settings, ticker, ct).ConfigureAwait(false);
+            var written = resolved?.Written ?? 0;
+
+            rows += written;
+            collisions += resolved?.EarningsCollisions ?? 0;
+            holdingRows += resolved?.HoldingRows ?? 0;
+            holdingCollisions += resolved?.HoldingCollisions ?? 0;
+            dispatched++;
+
+            // **Written per ticker rather than batched to the end** [0010]. Written for
+            // every ticker the sweep reached, yield or not, exactly as the nightly path
+            // does: a name that returns nothing still has to move down the rotation
+            // [0006]. What changed is when it lands. A batch held to the end is lost
+            // entirely to a killed process, and this is now the only record of what the
+            // sweep did, so it is committed as it goes. One small upsert against a
+            // ten-unit call is not a cost worth optimising.
+            await RecordSweepAttemptsAsync(
+                settings,
+                [new Attempt(ticker, settings.Date, written > 0 ? settings.Date : null, written)],
+                ct).ConfigureAwait(false);
+        }
+
+        var detail = string.Format(
+            CultureInfo.InvariantCulture,
+            "{0:N0} row(s) over {1:N0} of {2:N0} pool member(s), the rotation cap lifted. {3:N0} " +
+            "earnings entr(ies) dropped as duplicates [D-96]. {4:N0} institutional holding row(s) " +
+            "off the same payloads and {5:N0} holder entr(ies) dropped as duplicates [D-98]. {6:N0} " +
+            "carried an attempt for this sweep already and were not dispatched [0010].",
+            rows, dispatched, pool.Count, collisions, holdingRows, holdingCollisions,
+            pool.Count - remaining.Count);
+
+        // An empty remaining set is `covered` rather than `ok` with a zero, which is the
+        // distinction the sequence driver's zero-row halt rests on [3.16].
+        if (halted)
+        {
+            return BackfillResult.Halted(rows, context.To, detail + " " + haltDetail);
+        }
+
+        return remaining.Count == 0
+            ? BackfillResult.Covered(context.To, detail)
+            : BackfillResult.Completed(rows, context.To, detail);
+    }
+
+    /// <summary>
+    /// The pool members already carrying an attempt at this sweep's date, which are the
+    /// ones it does not dispatch again [0010].
+    ///
+    /// **At the date rather than strictly before it**, which is the opposite of the
+    /// rotation's read and is the point. The rotation asks what happened on earlier
+    /// dates so that a re-run of one date selects the same names; a sweep asks what
+    /// this run has already done so that it does not pay for it twice.
+    /// </summary>
+    private static async Task<HashSet<string>> AttemptedOnAsync(
+        StageContext context, CancellationToken ct)
+    {
+        var asOf = context.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        var rows = await context.Data.ReadAsync(
+            "fundamental_fetch_attempt",
+            $"""
+             SELECT ticker
+             FROM fundamental_fetch_attempt
+             WHERE swept_through_date >= DATE '{asOf}'
+             ORDER BY ticker;
+             """,
+            ct).ConfigureAwait(false);
+
+        return rows.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// The sweep's pool: the live candidate pool, plus every delisted common stock
+    /// carrying a `price_daily` bar at or after the window start.
+    ///
+    /// The second half is what stops the reconstructed universe being survivorship
+    /// filtered. Names that stopped trading before the window are excluded and cost
+    /// nothing.
+    ///
+    /// **Both statements here carry the pool bound, not one of them** [D-102]. This one
+    /// was left on the connection string's `Command Timeout` when the other was given
+    /// its own, and restoring that global from 1800 to 300 then failed the sweep here
+    /// rather than at the statement the bound was written for. Item 32 measured this
+    /// read at 3.1s against a 78 million row store; it is a whole-index pass over a
+    /// date range that now matches most of 109.8 million, so it belongs under the same
+    /// bound as its neighbour and never belonged under the default.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> RangePoolAsync(
+        StageContext context, decimal minPrice, decimal minAdv, int minHistory,
+        DateOnly windowStart, CancellationToken ct = default)
+    {
+        var statementTimeout =
+            (int) await LongAsync(context, "universe.pool_statement_timeout_seconds", ct).ConfigureAwait(false);
+
+        var live = await BootstrapPoolAsync(context, minPrice, minAdv, minHistory, ct).ConfigureAwait(false);
+
+        var delisted = await SymbolList.AdmittedDelistedAsync(_client, ct).ConfigureAwait(false);
+
+        var from = windowStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        var traded = await context.Data.ReadAsync(
+            "price_daily",
+            $"""
+             SELECT DISTINCT ticker FROM price_daily
+             WHERE date >= DATE '{from}'
+             ORDER BY ticker;
+             """,
+            ct, statementTimeout).ConfigureAwait(false);
+
+        var inWindow = traded.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
+
+        var pool = new SortedSet<string>(live, StringComparer.Ordinal);
+        pool.UnionWith(delisted.Keys.Where(inWindow.Contains));
+
+        return pool.ToList();
+    }
+
+    /// <summary>
+    /// Tickers that have reported earnings inside the backward window, which jump the
+    /// rotation queue [D-74, the `1 → 3` carried obligation].
+    ///
+    /// **This closes the one deviation `ReadDeclarationConformanceTests` records.**
+    /// §3 has given C03 `events` in its Reads cell since the catalogue was written and
+    /// the code did not read it, so earnings never jumped the queue. `events` has been
+    /// built since 1.8 and the deviation was carried, failing the moment it stopped
+    /// being the only one.
+    ///
+    /// The window is `events.earnings_backward_days`, which is the same key C06 fills
+    /// the table with, so the rotation cannot prefer a name whose event the ingest did
+    /// not load.
+    /// </summary>
+    private static async Task<IReadOnlySet<string>> JustReportedAsync(
+        StageContext context, CancellationToken ct)
+    {
+        var backward = await LongAsync(context, "events.earnings_backward_days", ct).ConfigureAwait(false);
+
+        var from = context.Date.AddDays(-(int) backward).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var asOf = context.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        var rows = await context.Data.ReadAsync(
+            "events",
+            $"""
+             SELECT DISTINCT ticker FROM events
+             WHERE event_type = 'earnings'
+               AND event_date >= DATE '{from}' AND event_date <= DATE '{asOf}'
+             ORDER BY ticker;
+             """,
+            ct).ConfigureAwait(false);
+
+        return rows.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// `General::Sector` off the unfiltered payload [D-97].
+    ///
+    /// Null where the block is absent rather than a guess. A ticker with no sector
+    /// resolves to the percentile engine's existing bucket-only fallback, which is not
+    /// a new case.
+    /// </summary>
+    private static string? Sector(JsonElement root)
+        => root.ValueKind == JsonValueKind.Object
+           && root.TryGetProperty("General", out var general)
+           && general.ValueKind == JsonValueKind.Object
+           && general.TryGetProperty("Sector", out var sector)
+           && sector.ValueKind == JsonValueKind.String
+            ? sector.GetString()
+            : null;
+
+    /// <summary>The earnings history captured on the sweep that pays for it [D-96].</summary>
+    public static readonly string[] EarningsColumns =
+    [
+        "ticker", "period_end", "report_date", "before_after_market",
+        "eps_actual", "eps_estimate", "surprise_fraction",
+    ];
+
+    private static readonly string[] EarningsConflictTarget = ["ticker", "period_end"];
 
     private static readonly string[] AttemptConflictTarget = ["ticker"];
 
@@ -64,12 +364,17 @@ public sealed class FundamentalsIngestor : IStage
     // stage may read what it writes, which is what `DeclaredAccess.CanRead` says and
     // what `fundamental_snapshot` has always relied on: the rotation reads both back
     // to decide what to fetch next.
-    public IReadOnlyList<string> ReadSet { get; } = ["price_daily", "security"];
+    public IReadOnlyList<string> ReadSet { get; } = ["price_daily", "security_daily", "events"];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
     [
         new TableWrite("fundamental_snapshot", WriteOperation.Insert, Columns),
-        new TableWrite("fundamental_fetch_attempt", WriteOperation.Insert, AttemptColumns),
+        new TableWrite("fundamental_fetch_attempt", WriteOperation.Insert, AttemptDeclaredColumns),
+        new TableWrite("earnings_history", WriteOperation.Insert, EarningsColumns),
+
+        // C05's until D-98. It bought the same block a second time at 10 units a
+        // ticker, filtered out of the payload this component already receives whole.
+        new TableWrite("institutional_holding", WriteOperation.Insert, InstitutionalHolders.Columns),
     ];
 
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
@@ -89,6 +394,15 @@ public sealed class FundamentalsIngestor : IStage
         long periods = 0;
         long substituted = 0;
         var wideFilers = new List<string>();
+
+        // Counted across the run rather than per ticker, so a condition currently
+        // assumed rare is measured [D-96].
+        var earningsCollisions = 0;
+
+        // The observable C05's run-log line used to carry, and the count that says
+        // whether the duplicate guard beside it was the right guard [D-98].
+        long holdingRows = 0;
+        var holdingCollisions = 0;
 
         // One entry per selected ticker, written below whether or not the fetch
         // yielded anything. A ticker that returns nothing still has to move down the
@@ -117,6 +431,9 @@ public sealed class FundamentalsIngestor : IStage
             periods += resolved.Value.Periods.Count;
             substituted += resolved.Value.SubstitutedCount;
             rows += resolved.Value.Written;
+            earningsCollisions += resolved.Value.EarningsCollisions;
+            holdingRows += resolved.Value.HoldingRows;
+            holdingCollisions += resolved.Value.HoldingCollisions;
 
             if (resolved.Value.WidestCleanGapDays is int w && w > widestAlertDays)
             {
@@ -169,12 +486,17 @@ public sealed class FundamentalsIngestor : IStage
             CultureInfo.InvariantCulture,
             "{0:N0} row(s) over {1:N0} ticker(s). Candidate pool {2:N0}, of which {3:N0} have never " +
             "been attempted; this run's selection was {4:N0} new and {5:N0} refreshed, the oldest " +
-            "attempt in it dated {6}",
+            "attempt in it dated {6}. {7:N0} earnings entr(ies) were dropped as duplicates of a " +
+            "period end already seen [D-96]. {8:N0} institutional holding row(s) off the same " +
+            "payloads, which C05 no longer buys separately, and {9:N0} holder entr(ies) dropped as " +
+            "duplicates of one already seen at that report date [D-98]. Holdings are a top-20 " +
+            "snapshot rather than a series, so inst_ownership_change accumulates forward only [D-69]",
             rows, tickers.Count, selection.PoolSize, selection.NeverAttempted,
             selection.NewInSelection, selection.RefreshedInSelection,
             selection.OldestAttemptInSelection is DateOnly d
                 ? d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
-                : "none");
+                : "none",
+            earningsCollisions, holdingRows, holdingCollisions);
 
         notes.Insert(0, coverage);
 
@@ -204,8 +526,25 @@ public sealed class FundamentalsIngestor : IStage
     /// table and an unsorted enumeration is not a deterministic output
     /// [`CLAUDE.md` §6].
     /// </summary>
-    private static async Task RecordAttemptsAsync(
+    private static Task RecordAttemptsAsync(
         StageContext context, List<Attempt> attempts, CancellationToken ct)
+        => WriteAttemptsAsync(context, attempts, AttemptColumns, ct);
+
+    /// <summary>
+    /// The same rows into the sweep's column instead of the rotation's [0013, item 44].
+    ///
+    /// **The only difference is the column list, and that is deliberate.** The upsert
+    /// updates exactly the columns it is handed, so handing it `SweepAttemptColumns`
+    /// writes `swept_through_date` and leaves `last_attempted_date` at whatever the
+    /// nightly rotation last put there, including null for a ticker the night has
+    /// never attempted. One statement, one difference, nothing else to keep in step.
+    /// </summary>
+    private static Task RecordSweepAttemptsAsync(
+        StageContext context, List<Attempt> attempts, CancellationToken ct)
+        => WriteAttemptsAsync(context, attempts, SweepAttemptColumns, ct);
+
+    private static async Task WriteAttemptsAsync(
+        StageContext context, List<Attempt> attempts, string[] columns, CancellationToken ct)
     {
         if (attempts.Count == 0)
         {
@@ -215,7 +554,7 @@ public sealed class FundamentalsIngestor : IStage
         attempts.Sort((a, b) => string.CompareOrdinal(a.Ticker, b.Ticker));
 
         await context.Data.BulkUpsertAsync(
-            "fundamental_fetch_attempt", AttemptColumns, AttemptConflictTarget,
+            "fundamental_fetch_attempt", columns, AttemptConflictTarget,
             async (w, c) =>
             {
                 foreach (var a in attempts)
@@ -229,34 +568,90 @@ public sealed class FundamentalsIngestor : IStage
             }, ct).ConfigureAwait(false);
     }
 
+    /// <param name="Written">
+    /// `fundamental_snapshot` rows alone, which is what the attempt record's yield
+    /// means and what the stage's row count reports. The earnings capture has ridden
+    /// this call since D-96 without being counted into it, and the holdings capture
+    /// joins it on the same terms [D-98]: a ticker that returns holders and no
+    /// financials has not yielded a fundamental, and folding either in would move the
+    /// rotation on a name whose fundamentals are still missing.
+    /// </param>
+    /// <param name="HoldingRows">
+    /// Reported separately, because C05's run-log line carried this count and that line
+    /// is gone. Without it nothing observes that the table is still being written, and
+    /// a rotation that froze would look exactly like one that had nothing to write
+    /// [D-91, D-98].
+    /// </param>
+    /// <param name="HoldingCollisions">
+    /// Holder entries dropped as duplicates of one already seen at that report date.
+    /// The guard was chosen against zero observations, so the count is what says
+    /// whether it was the right one [D-98].
+    /// </param>
     private readonly record struct Loaded(
-        IReadOnlyList<ResolvedPeriod> Periods, int? WidestCleanGapDays, int SubstitutedCount, long Written);
+        IReadOnlyList<ResolvedPeriod> Periods, int? WidestCleanGapDays, int SubstitutedCount, long Written,
+        int EarningsCollisions, long HoldingRows, int HoldingCollisions);
 
     private async Task<Loaded?> LoadAsync(StageContext context, string ticker, CancellationToken ct)
     {
         JsonDocument doc;
         try
         {
-            doc = await _client.GetAsync(
-                "fundamentals/" + ticker,
-                [("filter", "Financials")],
-                ct).ConfigureAwait(false);
+            // **Unfiltered, and it costs the same** [3.1, measured]. One call now
+            // carries `Financials`, `Earnings::History` and `General::Sector` where the
+            // filtered form carried the first alone, so the capture D-96 and D-97 need
+            // rides the sweep already being paid for [D-96].
+            doc = await _client.GetAsync("fundamentals/" + ticker, [], ct).ConfigureAwait(false);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
-            // A ticker the fundamentals endpoint does not carry is the ordinary
-            // case for an index or a fund, and the universe excludes those anyway.
-            // It is not a reason to fail the night.
+            // **A 404 alone** [3.6, open item 18]. A ticker the fundamentals endpoint
+            // does not carry is the ordinary case for an index or a fund, and the
+            // universe excludes those anyway. Everything else is rethrown: a 402 is the
+            // allowance wall reached in flight and it persists for the day, so
+            // swallowed it would write nothing for this ticker and nothing for any
+            // ticker after it, and the sweep would report a complete pass over a
+            // partial load.
             return null;
         }
 
         using (doc)
         {
-            var statements = Statements.Parse(doc.RootElement);
+            // The payload is whole now, so the statements are one level down where the
+            // filtered form put them at the root.
+            //
+            // **The ValueKind guard is not defensive padding.** This endpoint answers a
+            // ticker it carries no financials for with a bare JSON string, and
+            // `TryGetProperty` throws on anything that is not an object rather than
+            // returning false. The 0006 fixture for that shape is what caught it.
+            var financials = doc.RootElement.ValueKind == JsonValueKind.Object
+                             && doc.RootElement.TryGetProperty("Financials", out var f)
+                ? f
+                : doc.RootElement;
+
+            var statements = Statements.Parse(financials);
             if (statements.Count == 0)
             {
                 return null;
             }
+
+            // General::Sector off the same call [D-97]. C01's per-member call bought at
+            // 10 units what this payload carries for nothing.
+            var sector = Sector(doc.RootElement);
+
+            var earnings = EarningsHistory.Parse(doc.RootElement, ticker, out var collisions);
+            await WriteEarningsAsync(context, earnings, ct).ConfigureAwait(false);
+
+            // `Holders::Institutions` off the same payload [D-98]. C05 bought this
+            // block at 10 units a ticker with `filter=Holders::Institutions`, which is
+            // a projection of the document this call already carries.
+            //
+            // **It sits after the statements guard and inherits it**, so a ticker the
+            // endpoint carries holders but no financials for writes neither. The bare
+            // JSON string is the no-financials shape the provider was observed to send
+            // and it carries no `Holders` either, so the two are the same population on
+            // everything measured [0006 fixture].
+            var holdings = InstitutionalHolders.Parse(doc.RootElement, ticker, out var holdingCollisions);
+            var holdingRows = await WriteHoldingsAsync(context, holdings, ct).ConfigureAwait(false);
 
             var resolved = FilingDateRule.Resolve(
                 statements.Select(s => new RawPeriod(s.PeriodEnd, s.FilingDate)).ToList());
@@ -270,17 +665,88 @@ public sealed class FundamentalsIngestor : IStage
                     foreach (var p in resolved.Periods)
                     {
                         var s = byPeriod[p.PeriodEnd];
-                        await WriteRowAsync(w, ticker, p, s, c).ConfigureAwait(false);
+                        await WriteRowAsync(w, ticker, p, s, sector, c).ConfigureAwait(false);
                     }
                 }, ct).ConfigureAwait(false);
 
             return new Loaded(
-                resolved.Periods, resolved.WidestCleanGapDays, resolved.SubstitutedCount, written);
+                resolved.Periods, resolved.WidestCleanGapDays, resolved.SubstitutedCount, written,
+                collisions, holdingRows, holdingCollisions);
         }
     }
 
+    /// <summary>
+    /// The institutional holdings for one ticker [D-98].
+    ///
+    /// Sorted by the parse before it gets here, because COPY order reaches the table
+    /// [`CLAUDE.md` §6].
+    ///
+    /// **Deduplicated by the parse before it gets here**, exactly as the earnings
+    /// capture is, so the rows carry distinct holder-and-report-date pairs and the
+    /// upsert's conflict target cannot be hit twice in one statement. Unguarded, two
+    /// entries naming one institution at one report date would raise `ON CONFLICT DO
+    /// UPDATE command cannot affect row a second time` mid-sweep, after the units for
+    /// everything before them are spent.
+    /// </summary>
+    private static async Task<long> WriteHoldingsAsync(
+        StageContext context, IReadOnlyList<HoldingRow> holdings, CancellationToken ct)
+    {
+        if (holdings.Count == 0)
+        {
+            return 0;
+        }
+
+        return await context.Data.BulkUpsertAsync(
+            "institutional_holding", InstitutionalHolders.Columns, InstitutionalHolders.Key,
+            async (w, c) =>
+            {
+                foreach (var h in holdings)
+                {
+                    await w.StartRowAsync(c).ConfigureAwait(false);
+                    await w.WriteAsync(h.Ticker, c).ConfigureAwait(false);
+                    await w.WriteAsync(h.ReportDate, c).ConfigureAwait(false);
+                    await w.WriteAsync(h.HolderName, c).ConfigureAwait(false);
+                    await w.WriteAsync(h.Shares, c).ConfigureAwait(false);
+                    await w.WriteAsync(h.Change, c).ConfigureAwait(false);
+                    await w.WriteAsync(h.ChangePct, c).ConfigureAwait(false);
+                }
+            }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The earnings history for one ticker [D-96].
+    ///
+    /// Deduped by the parse before it gets here, so the rows carry distinct period ends
+    /// and the upsert's conflict target cannot be hit twice in one statement.
+    /// </summary>
+    private static async Task WriteEarningsAsync(
+        StageContext context, IReadOnlyList<EarningsPeriod> periods, CancellationToken ct)
+    {
+        if (periods.Count == 0)
+        {
+            return;
+        }
+
+        await context.Data.BulkUpsertAsync(
+            "earnings_history", EarningsColumns, EarningsConflictTarget,
+            async (w, c) =>
+            {
+                foreach (var p in periods)
+                {
+                    await w.StartRowAsync(c).ConfigureAwait(false);
+                    await w.WriteAsync(p.Ticker, c).ConfigureAwait(false);
+                    await w.WriteAsync(p.PeriodEnd, c).ConfigureAwait(false);
+                    await w.WriteAsync(p.ReportDate, c).ConfigureAwait(false);
+                    await w.WriteAsync(p.BeforeAfterMarket, c).ConfigureAwait(false);
+                    await w.WriteAsync(p.EpsActual, c).ConfigureAwait(false);
+                    await w.WriteAsync(p.EpsEstimate, c).ConfigureAwait(false);
+                    await w.WriteAsync(p.SurpriseFraction, c).ConfigureAwait(false);
+                }
+            }, ct).ConfigureAwait(false);
+    }
+
     private static async Task WriteRowAsync(
-        IBulkWriter w, string ticker, ResolvedPeriod p, Statement s, CancellationToken ct)
+        IBulkWriter w, string ticker, ResolvedPeriod p, Statement s, string? sector, CancellationToken ct)
     {
         await w.StartRowAsync(ct).ConfigureAwait(false);
         await w.WriteAsync(ticker, ct).ConfigureAwait(false);
@@ -290,8 +756,9 @@ public sealed class FundamentalsIngestor : IStage
         await w.WriteAsync(p.Effective, ct).ConfigureAwait(false);
         await w.WriteAsync(p.Reason, ct).ConfigureAwait(false);
         await w.WriteAsync(s.FilingDateSource, ct).ConfigureAwait(false);
+        await w.WriteAsync(sector, ct).ConfigureAwait(false);
 
-        foreach (var name in Columns.Skip(7))
+        foreach (var name in Columns.Skip(8))
         {
             await w.WriteAsync(s.Value(name), ct).ConfigureAwait(false);
         }
@@ -348,7 +815,7 @@ public sealed class FundamentalsIngestor : IStage
         }
 
         var fromSecurity = await context.Data.ReadAsync(
-            "security", "SELECT ticker FROM security WHERE is_active ORDER BY ticker;", ct)
+            "security_daily", Universe.MembersAsOf(context.Date), ct)
             .ConfigureAwait(false);
 
         var inUniverse = fromSecurity.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
@@ -366,44 +833,22 @@ public sealed class FundamentalsIngestor : IStage
         // `security` still decides order and no longer decides membership.
         var pool = await BootstrapPoolAsync(context, minPrice, minAdv, minHistory, ct).ConfigureAwait(false);
 
-        // Never attempted first, then oldest attempt first, then universe members,
-        // then ordinal. That is what makes this a rotation and keeps it one after
-        // coverage completes.
-        //
-        // **Attempted, not fetched, and the difference is the whole defect** [0006].
-        // The previous ordering asked whether a ticker had a row in
-        // `fundamental_snapshot`. Once the pool was covered that group was empty, so
-        // every subsequent run re-selected the same alphabetically-first names for
-        // ever, and a ticker whose fetch returned nothing was never distinguishable
-        // from one nobody had asked about.
-        //
-        // Coverage before freshness while coverage is incomplete, because a name
-        // absent from the store cannot be screened at all where a name whose figures
-        // are a few days old still can.
-        //
-        // **The universe tier is a tiebreak and not a tier.** Ranking it above
-        // freshness would starve every pool member outside `security` permanently,
-        // which is this same defect in another dress: the universe is refreshed every
-        // run and is therefore never exhausted. Among names of equal staleness a
-        // universe member goes first, which is the preference the old tier was
-        // reaching for without the starvation.
-        var selected = pool
-            .OrderBy(t => attempted.ContainsKey(t) ? 1 : 0)
-            .ThenBy(t => attempted.TryGetValue(t, out var d) ? d : DateOnly.MinValue)
-            .ThenBy(t => inUniverse.Contains(t) ? 0 : 1)
-            .ThenBy(t => t, StringComparer.Ordinal)
-            .Take(maxPerRun)
-            .ToList();
+        // The ordering moved to RotationSelection at 3.5, unchanged, so C05 can share
+        // the rule rather than a copy of it [D-95]. It was copied by hand once
+        // already and then kept this component's defect after this component was
+        // fixed, which is the drift a shared function removes. The reasoning behind
+        // each tier is there rather than restated here.
+        var justReported = await JustReportedAsync(context, ct).ConfigureAwait(false);
 
-        var refreshed = selected.Where(attempted.ContainsKey).ToList();
+        var rotation = RotationSelection.For(pool, attempted, inUniverse, maxPerRun, justReported);
 
         return new Selection(
-            selected,
-            pool.Count,
-            pool.Count(t => !attempted.ContainsKey(t)),
-            selected.Count - refreshed.Count,
-            refreshed.Count,
-            refreshed.Count == 0 ? null : refreshed.Min(t => attempted[t]),
+            rotation.Selected,
+            rotation.PoolSize,
+            rotation.NeverAttempted,
+            rotation.NewInSelection,
+            rotation.RefreshedInSelection,
+            rotation.OldestAttemptInSelection,
             priorYield);
     }
 
@@ -430,36 +875,84 @@ public sealed class FundamentalsIngestor : IStage
         // still has absolute filters living only in the universe definition. C01
         // applies every one of these again and remains the only component that
         // decides membership [D-5, INVARIANT 1].
+        // **Rewritten at item 24 and D-4's criteria are unchanged.** The pool is the
+        // same set; what changed is how it is derived. Measured against the 78,087,416
+        // row store the 3.6 sweep left: the old statement took 193.1s and this takes
+        // 9.7s, both returning the same 7,320 tickers, compared set against set rather
+        // than by count [`PROGRESS.md`, 2026-08-12].
+        //
+        // **The old shape windowed the whole table.** `row_number() OVER (PARTITION BY
+        // ticker ORDER BY date DESC)` across every row matching the date bound, then a
+        // second full scan to count each ticker's bars. At ten million rows that was
+        // ordinary; at seventy-eight it sorts and spills and does not finish inside the
+        // command timeout, which is the component that consumes the backfill being
+        // stopped by it.
+        //
+        // **There is no trailing date slice here, and the obvious one is wrong.**
+        // Bounding the scan to the last sixty calendar days before windowing looks
+        // sufficient, twenty trading days fitting inside it comfortably, and it is not:
+        // it silently drops every ticker whose most recent bar is older than the slice.
+        // Measured, that is 2,486 of 7,320, all of them delisted names the backfill
+        // loaded, and it was no faster either. A pool that quietly loses a third of
+        // itself is a redefinition rather than a rewrite.
+        //
+        // **What replaces it is a seek per ticker rather than a scan.** The distinct
+        // tickers come off the `(ticker, date)` primary key, then a LATERAL takes each
+        // ticker's twenty most recent bars by index, however far back they are, which
+        // is exactly what `rn <= 20` meant. The history depth is asked last, of the few
+        // thousand names that already cleared price and liquidity rather than of all
+        // 78,806, because the criteria are a conjunction and that ordering is what took
+        // it from 51s to under 10.
+        //
+        // `count(*) >= min_history_days` is preserved as an offset rather than replaced
+        // by a calendar test: "has at least N bars" and "has a bar N days ago" are
+        // different questions and the second admits a ticker with ten bars spread over
+        // a year.
         var sql = $"""
-            WITH bars AS (
-                SELECT ticker, date, close, volume,
-                       row_number() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
-                FROM price_daily
-                WHERE date <= DATE '{asOf}'
+            WITH tickers AS (
+                SELECT DISTINCT ticker FROM price_daily WHERE date <= DATE '{asOf}'
             ),
-            latest AS (SELECT ticker, close FROM bars WHERE rn = 1),
+            recent AS (
+                SELECT t.ticker, b.close, b.volume, b.rn
+                FROM tickers t
+                CROSS JOIN LATERAL (
+                    SELECT close, volume, row_number() OVER (ORDER BY date DESC) AS rn
+                    FROM price_daily p
+                    WHERE p.ticker = t.ticker AND p.date <= DATE '{asOf}'
+                    ORDER BY p.date DESC
+                    LIMIT 20
+                ) b
+            ),
+            latest AS (SELECT ticker, close FROM recent WHERE rn = 1),
             mdv AS (
                 SELECT ticker,
                        percentile_cont(0.5) WITHIN GROUP (ORDER BY close * volume) AS median_dollar_volume
-                FROM bars WHERE rn <= 20 AND close IS NOT NULL AND volume IS NOT NULL
+                FROM recent WHERE close IS NOT NULL AND volume IS NOT NULL
                 GROUP BY ticker
             ),
-            span AS (
-                SELECT ticker, count(*) AS days
-                FROM price_daily WHERE date <= DATE '{asOf}' GROUP BY ticker
+            liquid AS (
+                SELECT l.ticker
+                FROM latest l
+                JOIN mdv m ON m.ticker = l.ticker
+                WHERE l.close >= {minPrice.ToString(CultureInfo.InvariantCulture)}
+                  AND m.median_dollar_volume >= {minAdv.ToString(CultureInfo.InvariantCulture)}
+                  AND l.ticker NOT LIKE '^%'
             )
-            SELECT l.ticker
-            FROM latest l
-            JOIN mdv m ON m.ticker = l.ticker
-            JOIN span s ON s.ticker = l.ticker
-            WHERE l.close >= {minPrice.ToString(CultureInfo.InvariantCulture)}
-              AND m.median_dollar_volume >= {minAdv.ToString(CultureInfo.InvariantCulture)}
-              AND s.days >= {minHistory.ToString(CultureInfo.InvariantCulture)}
-              AND l.ticker NOT LIKE '^%'
-            ORDER BY l.ticker;
+            SELECT q.ticker
+            FROM liquid q
+            WHERE EXISTS (
+                SELECT 1 FROM price_daily h
+                WHERE h.ticker = q.ticker AND h.date <= DATE '{asOf}'
+                OFFSET {(minHistory - 1).ToString(CultureInfo.InvariantCulture)} LIMIT 1
+            )
+            ORDER BY q.ticker;
             """;
 
-        var rows = await context.Data.ReadAsync("price_daily", sql, ct).ConfigureAwait(false);
+        var statementTimeout =
+            (int) await LongAsync(context, "universe.pool_statement_timeout_seconds", ct).ConfigureAwait(false);
+
+        var rows = await context.Data
+            .ReadAsync("price_daily", sql, ct, statementTimeout).ConfigureAwait(false);
 
         // Restricted to the instruments D-4 admits before a single per-ticker call
         // is spent. Without it the pool is 39,711 names at the price floor, almost

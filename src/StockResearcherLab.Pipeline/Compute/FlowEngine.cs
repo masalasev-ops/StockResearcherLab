@@ -18,7 +18,7 @@ namespace StockResearcherLab.Pipeline.Compute;
 /// apart. Absence of a row means unknown; a zero in a row means measured and zero
 /// [CLAUDE.md section 6].
 /// </summary>
-public sealed class FlowEngine : IStage
+public sealed class FlowEngine : IStage, IBackfillStage
 {
     public static readonly string[] FlowColumns =
         ["ticker", "date", "insider_net_90d_usd", "distinct_buyer_count", "inst_ownership_change"];
@@ -64,6 +64,109 @@ public sealed class FlowEngine : IStage
             written, context.Date, WindowDays, unknown.Unpriced, unknown.WithTwoReports);
 
         return new StageResult(written, "ok", detail);
+    }
+
+    // ------------------------------------------------- range mode [3.14] ---
+
+    /// <summary>
+    /// The same work as <see cref="ExecuteAsync"/> over a range, one date at a time.
+    ///
+    /// **The statement is reissued per date rather than generalised across the range,
+    /// and that is a decision rather than the easy path.** <see cref="Sql"/> is one
+    /// derivation with two point-in-time filters, a ninety-day trailing window and a
+    /// two-report lookback, and every one of those is expressed relative to `@d`. Widening
+    /// it to a range means cross joining each of those CTEs against a date set, which is a
+    /// rewrite of the arithmetic rather than a rewrite of its bounds. This phase's whole
+    /// position is that the arithmetic is not reimplemented for the backfill, because that
+    /// is what keeps 2.6's reference fixtures covering both paths rather than one
+    /// [D-93, C08 and C09's precedent].
+    ///
+    /// **What that costs is one statement per date instead of one per range**, and the
+    /// per-date statement is the one already indexed for the nightly path. The checkpoint
+    /// asks for the two shapes measured against each other over one month and the faster
+    /// taken; that measurement needs a populated `insider_transaction`, which 3.9's sweep
+    /// has not yet produced, so it is recorded as owed rather than guessed at.
+    ///
+    /// **Config resolves per date and not once**, because `flow.institutional_report_lag_days`
+    /// decides which 13F is readable on a backfilled date and is therefore parametric
+    /// rather than operational [INVARIANT 13, D-43].
+    /// </summary>
+    public async Task<BackfillResult> ExecuteRangeAsync(
+        BackfillContext context, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        // Everything that is not the date loop, named [item 43]. Here that is the
+        // calendar read alone, the writes being inside the loop.
+        var phases = new PhaseTimer();
+
+        var atEnd = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
+
+        var dates = await context.SessionsAsync(ct).ConfigureAwait(false);
+        phases.Mark("calendar");
+
+        if (dates.Count == 0)
+        {
+            return BackfillResult.Completed(
+                0, context.To, "no trading date in the range carries a price_daily bar, so nothing is computed");
+        }
+
+        long written = 0;
+        var datesWithRows = 0;
+
+        // Keyed on the resolved version, so a range whose config never moved reads the
+        // key once and one that moved reads it again at the boundary.
+        var byVersion = new Dictionary<int, int>();
+
+        // The unit is a date, this loop being date-partitioned, and it covers the write
+        // as well as the compute: the statement is one INSERT per date [3.17].
+        var elapsed = new List<long>();
+
+        foreach (var date in dates)
+        {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+
+            var stage = await context.ForDateAsync(date, ct).ConfigureAwait(false);
+
+            if (!byVersion.TryGetValue(stage.ConfigVersion, out var lagDays))
+            {
+                lagDays = (int) await LongAsync(stage, "flow.institutional_report_lag_days", ct)
+                    .ConfigureAwait(false);
+                byVersion[stage.ConfigVersion] = lagDays;
+            }
+
+            var rows = await stage.Data.WriteAsync(
+                "flow_daily", WriteOperation.Insert, Sql,
+                new Dictionary<string, object?>
+                {
+                    ["d"] = date,
+                    ["window_days"] = WindowDays,
+                    ["lag_days"] = lagDays,
+                },
+                ct).ConfigureAwait(false);
+
+            written += rows;
+
+            if (rows > 0)
+            {
+                datesWithRows++;
+            }
+
+            elapsed.Add((long) System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        }
+
+        return BackfillResult.Completed(
+            written, context.To,
+            string.Format(
+                CultureInfo.InvariantCulture,
+                "{0:N0} flow_daily row(s) over {1:N0} trading date(s), of which {2:N0} carried at least " +
+                "one row. A date with none is a date no ticker had a visible filing for, which is an " +
+                "ordinary early-window fact rather than a gap. The {3:N0} day insider window and the " +
+                "institutional lag are applied per date, so a backfilled row reads only what was public " +
+                "on it [INVARIANT 12's shape]. {4} {5}",
+                written, dates.Count, datesWithRows, WindowDays,
+                RangeTiming.Describe("date", elapsed),
+                phases.Describe()));
     }
 
     /// <summary>

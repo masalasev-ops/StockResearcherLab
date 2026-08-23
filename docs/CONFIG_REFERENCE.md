@@ -26,6 +26,7 @@ Verified column values: `unverified`, `verified <date>`, or `NOT BOUND`.
 | `universe.min_price` | 5 | D-4 | UniverseBuilder, FundamentalsIngestor | verified 2026-08-09 |
 | `universe.min_adv_20d` | 2000000 | D-4 | UniverseBuilder, FundamentalsIngestor | verified 2026-08-09 |
 | `universe.min_history_days` | 250 | D-4 | UniverseBuilder, FundamentalsIngestor | verified 2026-08-09 |
+| `universe.pool_statement_timeout_seconds` | 1800 | D-102 | `UniverseBuilder` C01 `LiquidAsync`, `FundamentalsIngestor` C03 `BootstrapPoolAsync` and `RangePoolAsync` | verified 2026-08-15 |
 | `universe.bucket_large_floor` | 10000000000 | D-4 | UniverseBuilder | verified 2026-08-09 |
 | `universe.bucket_mid_floor` | 2000000000 | D-4 | UniverseBuilder | verified 2026-08-09 |
 
@@ -125,6 +126,81 @@ the two sentiment keys at `SentimentIngestor.cs:51-52`, the two flow keys at
 `FlowIngestor.cs:59-60`, the lag at `FlowEngine.cs:44`, and the two events windows
 at `EventsIngestor.cs:59-60`. Line numbers go stale; the file and the stage do not,
 and both are given so the next reader can find it either way.
+
+All ten backfill keys were confirmed the same way, at `PriceIngestor.cs:108-111` and
+`FundamentalsIngestor.cs:88-94` for the range stages, and `Program.cs:175` for the
+driver's read of `backfill.window_start`. The four sweep weights that read NOT BOUND
+while their checkpoints were unbuilt were bound as each landed and are stamped in the
+table below [corrected 2026-08-22; prior wording in `CHANGELOG.md`].
+
+## Backfill
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `backfill.window_start` | "2021-01-04" | D-94, 3.3 | `FundamentalsIngestor` C03, `UniverseBuilder` C01 [3.11], `Worker` backfill driver | verified 2026-08-19 |
+| `backfill.ticker_concurrency` | 8 | 3.3 | `PriceIngestor` C02 alone. C05 is serial by design and the other three chunk without it | verified 2026-08-19 |
+| `backfill.daily_unit_allowance` | 100000 | 3.1, 3.3 | Every sweep that spends: `PriceIngestor` C02, `FundamentalsIngestor` C03, `SentimentIngestor` C04, `FlowIngestor` C05, `EventsIngestor` C06 [corrected 3.18; prior wording in `CHANGELOG.md`] | verified 2026-08-19 |
+| `backfill.unit_reserve` | 50000 | 3.3 | Every sweep that spends: `PriceIngestor` C02, `FundamentalsIngestor` C03, `SentimentIngestor` C04, `FlowIngestor` C05, `EventsIngestor` C06 [corrected 3.18; prior wording in `CHANGELOG.md`] | verified 2026-08-19 |
+| `backfill.weight_eod` | 1 | 3.1, 3.3 | `PriceIngestor` C02 | verified 2026-08-19 |
+| `backfill.weight_fundamentals` | 10 | 3.1, 3.3 | `FundamentalsIngestor` C03 | verified 2026-08-19 |
+| `backfill.weight_sentiments_per_ticker` | 5 | 3.1, 3.3 | `SentimentIngestor` C04, `ExecuteRangeAsync` | verified 2026-08-19 |
+| `backfill.weight_form4_page` | 10 | 3.1, 3.3 | `FlowIngestor` C05, `ExecuteRangeAsync` | verified 2026-08-19 |
+| `backfill.weight_splits` | 1 | 3.1, 3.3 | `EventsIngestor` C06, `ExecuteRangeAsync` | verified 2026-08-19 |
+| `backfill.weight_dividends` | 1 | 3.1, 3.3 | `EventsIngestor` C06, `ExecuteRangeAsync` | verified 2026-08-19 |
+
+**Every Consumer here read `NOT BOUND` after 3.4 and every one is now bound and
+stamped** [corrected 2026-08-22; prior wording in `CHANGELOG.md`]. The keys are seeded
+before anything resolves them, and 3.4 built the gate they are passed to rather than
+the sweep that resolves them: `AllowanceRule.Decide` takes the
+reserve, the weight and the configured allowance as arguments, and each sweep resolves
+its own three for the date it is working on. So the column named the checkpoint that
+would fill it rather than a component nothing had confirmed, and each was filled as
+its sweep landed. An unverified entry is worse than an absent one, and a guessed one
+is worse than both.
+
+**The reserve is a parameter rather than resolved inside the gate, deliberately.**
+Resolving it once inside `BackfillContext` would bind the key in one place, and it
+would also mean resolving it as of something other than the date being computed, which
+is what INVARIANT 13 rules out. The gate mechanism is stated once; the resolve is one
+line per sweep and is not the duplication D-76, D-77 and D-83 removed.
+
+**`backfill.window_start` is the only date-valued key in the store and the only one
+that is not a number** [D-94]. `config_rows.value` is `jsonb`, so it is stored quoted
+and read through `ConfigValue.Date`, which parses the JSON rather than the raw text. A
+count of years would have needed no quoting and is what the decision rejects: resolved
+against the run date it moves the window on every re-run, so two backfills over one
+store would compute different date sets and the phase's fourth done-when line could not
+be tested at all.
+
+The value is the first session of 2021. It sits after `ConfigSeeder.SeedInstant`, which
+is what makes every date in the range resolvable at all [D-72], and it opens the window
+before the 2021 advance rather than inside it, because the window has to contain a real
+drawdown and a drawdown needs the peak it fell from [`ARCHITECTURE.html` §05].
+
+**The six weights are measurements and the gate never decides with them.** Each was
+measured by bracketing one call between two `/api/user` reads, on 2026-08-09 and again
+at 3.1, and every one came back the same. They project whether the next unit of work
+fits; what decides is the reading itself, and a drift between the projection and the
+reading is recorded rather than smoothed over. They are keys rather than literals
+because a weight at a call site is the magic number §8 rules out, and because a
+provider that re-prices makes every one of them wrong at once.
+
+**`backfill.unit_reserve` is what a sweep may not eat into**, so a backfill day still
+leaves the nightly run an allowance. A measured night is 45,518 units and the rest is
+headroom for C04's universe-sized pass moving with the universe. C01's weekly rebuild
+at 28,401 is deliberately not in it: 3.7 moves the sector call to C03 and takes that
+number to about one. Until 3.7 lands, a sweep sharing a Sunday with a C01 rebuild has
+less margin than this number says, which is recorded rather than padded, since padding
+it would shrink every ordinary day's sweep for a case that stops existing.
+
+**`backfill.ticker_concurrency` is not a provider bound.** `EodhdRateLimiter` already
+holds the 1,000-requests-a-minute limit and a sweep of 50,785 names at one unit each is
+nowhere near it. This bounds how many Npgsql binary COPY streams and sockets are open
+at once, which is the resource that runs out first.
+
+**Neither the allowance nor the reserve is tunable by the system** [INVARIANT 14]. They
+are operator configuration in the same sense as the risk caps: the tuner moves screen
+slots and touches nothing else.
 
 ## Percentiles
 
@@ -310,8 +386,8 @@ value, but changing it to `vs_spy` is a defect and not a tuning option [INVARIAN
 | `cost.annual_budget` | 100 | — | CostLedger | unverified |
 | `freshness.row_count_abort_below` | 40000 | D-59 | FreshnessGuard | verified 2026-08-09 |
 | `freshness.row_count_alert_below` | 45000 | D-59 | FreshnessGuard | verified 2026-08-09 |
-| `freshness.settled_fraction` | 0.95 | D-70 | FreshnessGuard | verified 2026-08-09 |
-| `freshness.settled_window_days` | 20 | D-70 | FreshnessGuard | verified 2026-08-09 |
+| `freshness.settled_fraction` | 0.95 | D-70 | FreshnessGuard, PriceFrontier | verified 2026-08-09; second consumer verified 2026-08-22 |
+| `freshness.settled_window_days` | 20 | D-70 | FreshnessGuard, PriceFrontier | verified 2026-08-09; second consumer verified 2026-08-22 |
 | `price.reload_window_days` | 20 | A10 | PriceIngestor | verified 2026-08-09 |
 
 Phase P measured the bulk end-of-day row count [D-59]: about 50,000 rows on a settled
@@ -329,6 +405,16 @@ count is at or above `settled_fraction` of the median of the last
 `settled_window_days` dates before it, computed from `price_daily` alone [D-70].
 Recency still has no key, because it reads the exchange calendar for the most
 recent completed session and compares dates rather than crossing a bound.
+
+**`freshness.settled_*` has a second consumer and it is the same question asked of the
+other path** [item 60]. `PriceFrontier` is what the backfill driver uses to decide the
+newest date `price_daily` holds a real session for, and it refuses a range end past it.
+It reads these two keys rather than keys of its own so that the nightly path and the
+range path cannot drift on what a real bar count is. It deliberately does not read
+`freshness.row_count_*`: those floors are sized for the bulk feed's whole-exchange row
+count of about 50,000, and this store holds about 3,000 bars a session, so applying them
+to a range would refuse every range ever issued. Read at `BackfillRun.cs`, where the
+driver composes the check into the session source it hands the context.
 
 The two values and their reasoning are in D-64's closure rather than here,
 including why 0.95 sits six points above the measured part-settled ceiling rather

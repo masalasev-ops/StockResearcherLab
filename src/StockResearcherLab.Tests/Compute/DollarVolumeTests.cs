@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Npgsql;
 using StockResearcherLab.Core;
 using StockResearcherLab.Core.Config;
@@ -155,9 +155,11 @@ public sealed class DollarVolumeTests
 
         await using (var cmd = new NpgsqlCommand(
             """
-            INSERT INTO security (ticker, sector, size_bucket, market_cap, is_active)
-            VALUES (@t, 'SRLTEST-MDV', 'SRLTEST-MDV', 1000000000, true)
-            ON CONFLICT (ticker) DO UPDATE SET is_active = true;
+            -- `security_daily` from 3.12, dated before any fixture date because the
+            -- membership read takes the most recent row at or before it [D-92].
+            INSERT INTO security_daily (ticker, date, sector, size_bucket, market_cap, is_active)
+            VALUES (@t, DATE '2000-01-01', 'SRLTEST-MDV', 'SRLTEST-MDV', 1000000000, true)
+            ON CONFLICT (ticker, date) DO UPDATE SET is_active = true;
             """, conn))
         {
             cmd.Parameters.AddWithValue("t", Ticker);
@@ -187,7 +189,7 @@ public sealed class DollarVolumeTests
                  {
                      "DELETE FROM indicator_daily WHERE ticker = @t;",
                      "DELETE FROM price_daily WHERE ticker = @t;",
-                     "DELETE FROM security WHERE ticker = @t;",
+                     "DELETE FROM security_daily WHERE ticker = @t;",
                  })
         {
             await using var cmd = new NpgsqlCommand(sql, conn);

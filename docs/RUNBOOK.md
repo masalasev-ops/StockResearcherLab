@@ -92,6 +92,123 @@ past date, which is lookahead bias arriving through the back door.
 
 ## Backfill
 
+### Running an ingest sweep
+
+`Worker backfill <stage> [from] [to]`, one stage at a time.
+
+**Pass both dates, and keep both constant across the days a sweep spans.** A sweep's
+attempt rows are stamped with one end of its range and which end it is differs by
+component [D-99]. C02, C04 and C06 stamp the range start. **C03 and C05 stamp the range
+end**, because that column is also what the nightly rotation orders on, so an attempt
+stamped with a 2021 window start would put every swept ticker back at the head of the
+rotation. `from` defaults to `backfill.window_start`, which is a stored date and does not
+move, so that end is safe on the standard window; a sweep over anything else states its
+start every time. **`to` defaults to today and today moves at midnight**, so those two
+re-invoked the next morning on a defaulted `to` see an empty attempt set and fetch their
+whole pool again. For a sweep that spans days that is the ordinary case rather than an
+edge, and it is why the sources-in-order form refuses to run without both dates [3.16].
+
+**A halt is the mechanism working.** The allowance gate stops the sweep when the next
+unit will not fit above `backfill.unit_reserve`, keeps everything written, and exits 2.
+Run the same command again after the provider's day rolls over. Exit 0 is a completed
+range and exit 1 is a failure.
+
+**Every exit resumes the same way, including a killed process** [D-99]. What a sweep has
+done is in its attempt record, written as it goes, so a clean halt, a command timeout and
+a `kill -9` are the same thing to the next run: it dispatches the pool members carrying
+no attempt row at this sweep's stamped date, which is the range start for three of the
+five and the range end for the other two [D-99]. A re-invocation of a finished sweep
+fetches nothing.
+A failure costs at most the chunk in flight, whose rows were never recorded.
+
+**The provider's day rolls lazily, on the first billable call.** After the UTC boundary
+the counter still reads the previous date until something spends a unit, and the gate
+refuses to spend against a stale reading, so a backfill run alone can sit in front of a
+day it is entitled to. A nightly run clears it. `/api/user` is free and never will.
+
+**The run log reports and decides nothing.** The pre-run line names the last range run's
+status, date and row id so an operator can see what happened before spending another
+day. Deleting those rows loses the account and changes no behaviour.
+
+**Establishing a connection retries twice; nothing else retries.** The count is in every
+range run's line, including its zero. A count that is regularly non-zero is not the
+retry working, it is the database or the pool needing attention.
+
+**Vacuum after a bulk load, deliberately.** `VACUUM price_daily`, never `FULL`. A sweep
+re-fetching ground it has already covered turns every write into an `ON CONFLICT DO
+UPDATE`, and at this size autovacuum does not trigger until roughly 15.6 million dead
+tuples and then scans the whole table while the sweep is still writing. Left alone it
+falls behind: 2026-08-13 measured 27 million dead tuples against 77 million live, the
+upsert crossing its 300 second command timeout on the third pass over the same rows
+after clearing the first two. Plain vacuum makes the dead space reusable and the
+remaining inserts consume it. `FULL` rewrites 16 GB under an exclusive lock to shrink a
+file the sweep then refills.
+
+### Running the whole backfill
+
+`Worker backfill <from> <to>`, every source in order [3.16]. No stage name, and both
+dates required. The order is C02, C03, C05, C06, C04, then C01, then the six compute
+stages ending at C11, each finishing before the next begins.
+
+**Both dates are required here and the reason is a bill.** `to` would otherwise default
+to today and today moves at midnight. C02, C04 and C06 stamp their attempt rows with the
+range start and do not care what `to` is; **C03 and C05 stamp the range end**, in
+`swept_through_date`, which is their own marker and not the column the nightly rotation
+orders on [0013, item 44]. That marker is read as coverage rather than as equality, so
+the two directions differ and only one of them costs:
+
+- **A `to` one day EARLIER is already covered** and both sweeps fall through in seconds.
+  This is the direction that matters in practice, because D-105 refuses a range end past
+  the ingest frontier and the frontier moves back whenever a correction finds it. Before
+  0013 this direction re-swept both pools whole, measured at about 440,000 units.
+- **A `to` one day LATER is more than either sweep covered**, so both sweep their whole
+  pool again. That is correct rather than a cost: the extra day is coverage nobody has
+  bought. A rebuild spans days by construction, so re-issue the *identical* command.
+
+**Re-issuing the identical command is how a rebuild is resumed.** Every source resumes
+on its own attempt record, so a source that has already finished dispatches nothing,
+reports `covered`, and falls through in seconds. That status exists for this: a source
+that writes no row stops the sequence, because the ones after it derive from what it
+wrote, and a finished sweep writing no row is the one case where that zero is a
+completed state rather than a short table.
+
+**A halt stops the sequence and it is not a failure.** The gate stopped that source part
+way through its pool, so everything after it would derive from a store missing rows the
+next run will fetch. Exit 2 and run the same command again after the provider's day
+rolls over. Exit 1 is a source that threw, a source that wrote nothing, or a source the
+registry does not have; the last of those is a registry built without a provider token.
+
+**Sources not reached are named in the output rather than absent from it.** A source
+missing from a report and a source that ran and did nothing read the same way at a
+glance, and over twelve of them that is how a short backfill gets read as a complete one.
+
+**The pre-run report reads `run_log` and decides nothing.** It names each source's last
+range run so an operator can see what happened before spending another day. `run_log` is
+an account rather than a mechanism: deleting those rows changes no behaviour, and a row
+left behind by a test fixture is a row this report will show.
+
+### Why a per-ticker write failure is not tolerated
+
+Two per-ticker failures are tolerated and they are enumerated above in the failure
+table: a provider 404, and a D-71 short page. **There is deliberately no third, and a
+write failure is the one that keeps being proposed.**
+
+A 404 is a fact about the world. The provider does not carry that ticker, and recording
+zero rows is the true answer, so the sweep continues having lost nothing.
+
+A write failure is not a fact about the world. The data was fetched and the units were
+paid, and the write is what was lost, so continuing past it reports `Completed` over a
+partial load. That is the same shape as the swallowed 402 this phase already fixed
+once: a stage that returns success while the store is short is the failure mode nothing
+downstream can detect.
+
+It also fails worst exactly when it matters most. A database unavailable for ten minutes
+would burn hundreds of tickers as tolerated failures, spend their units, write nothing,
+and exit zero. The attempt record above is the answer instead: the run fails, loudly,
+and the chunk in flight recorded no attempts, so it costs one chunk to re-do.
+
+### The two-pass screen build
+
 Run in two passes. Pass one computes raw screen scores for every ticker on every
 date, fully date-parallel with no cross-date dependency. Pass two computes floors and
 applies them in a single window function over the completed table.

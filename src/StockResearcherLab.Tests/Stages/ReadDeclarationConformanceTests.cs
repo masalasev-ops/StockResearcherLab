@@ -43,28 +43,26 @@ public sealed class ReadDeclarationConformanceTests
     private const int CataloguedComponents = 35;
 
     /// <summary>
-    /// The one place the catalogue and the code disagree, recorded rather than
-    /// silently permitted, and asserted below to still be a disagreement.
+    /// Deviations between the catalogue and the code, recorded rather than silently
+    /// permitted, and asserted below to still be deviations.
     ///
-    /// **C03's Reads cell names `events` and `FundamentalsIngestor` does not declare
-    /// it.** The catalogue is right and the code is incomplete: section 3 says
-    /// earnings jump the rotation queue, which needs the earnings calendar, and the
-    /// rotation is staleness-ordered only. `events` has been built since 1.8, so
-    /// nothing blocks closing it.
+    /// **Empty since 3.7.** The one entry was C03's Reads cell naming `events` where
+    /// `FundamentalsIngestor` did not declare it: §3 says earnings jump the rotation
+    /// queue, which needs the earnings calendar, and the rotation was staleness-ordered
+    /// only. 3.7 closed it by reading `events` for the names that reported inside
+    /// `events.earnings_backward_days` and ranking them above staleness, so the
+    /// declaration now means what it says.
     ///
-    /// **Declaring `events` to make this green would be the wrong fix.** A read set
-    /// wider than what the stage reads is a declaration that means nothing, and the
-    /// test would then report agreement about behaviour that still does not exist.
-    /// Removing `events` from the catalogue would be worse: it is editing an authored
-    /// document to match what was built [`CLAUDE.md` section 13].
+    /// **The closure was found by this test rather than remembered.** It fails when a
+    /// recorded deviation stops being one, which is the opposite of how a suppression
+    /// list usually behaves, and that is what made the entry safe to record in the
+    /// first place. The `1 → 3` carried obligation in `BUILD_PLAN.md` goes with it.
     ///
-    /// Carried in `BUILD_PLAN.md` from phase 1 to phase 3, so the planning for that
-    /// work meets it rather than only a reader of this file [`CLAUDE.md` section 7].
+    /// Declaring a table a stage does not read would have made this green and meant
+    /// nothing; removing `events` from the catalogue would have been editing an
+    /// authored document to match what was built [`CLAUDE.md` §13]. Neither was done.
     /// </summary>
-    private static readonly (string Component, string Table)[] RecordedDeviations =
-    [
-        ("FundamentalsIngestor", "events"),
-    ];
+    private static readonly (string Component, string Table)[] RecordedDeviations = [];
 
     [Fact]
     public void TheReadsCellParseFindsTablesRatherThanNothing()
@@ -76,8 +74,10 @@ public sealed class ReadDeclarationConformanceTests
         // Discrimination, not just a non-empty answer. A parse that returned every
         // component with an empty set would satisfy a count and prove nothing, and a
         // parse that returned every word in the cell would name `order` for C03.
+        // `security_daily` joined this cell at 3.12, which is what lets the nightly path
+        // measure a departure against the membership in force before it.
         Assert.Equal(
-            ["fundamental_snapshot", "price_daily"],
+            ["fundamental_snapshot", "price_daily", "security_daily"],
             catalogue["UniverseBuilder"].OrderBy(t => t, StringComparer.Ordinal));
 
         Assert.Equal(
@@ -88,9 +88,11 @@ public sealed class ReadDeclarationConformanceTests
         // endpoint name does not become a table.
         Assert.Empty(catalogue["PriceIngestor"]);
 
-        // C03 says "for rotation order" and does not mean the `order` table.
+        // C03 says "for rotation order" and does not mean the `order` table. The clause
+        // it qualifies became `security_daily` at 3.12 and the qualifier is unchanged,
+        // which is the point of substituting rather than replacing the cell.
         Assert.DoesNotContain("order", catalogue["FundamentalsIngestor"]);
-        Assert.Contains("security", catalogue["FundamentalsIngestor"]);
+        Assert.Contains("security_daily", catalogue["FundamentalsIngestor"]);
         Assert.Contains("price_daily", catalogue["FundamentalsIngestor"]);
 
         // `digest_provider` is configuration rather than a declared table, so the

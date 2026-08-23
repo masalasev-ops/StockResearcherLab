@@ -32,7 +32,7 @@ namespace StockResearcherLab.Pipeline.Compute;
 /// The cell rule, the fallback order and the population being ranked are in
 /// `METRICS.md` §6.
 /// </summary>
-public sealed class PercentileEngine : IStage
+public sealed class PercentileEngine : IStage, IBackfillStage
 {
     /// <summary>
     /// One source table and the metrics ranked on it. Thirty columns over four
@@ -103,7 +103,7 @@ public sealed class PercentileEngine : IStage
     public IReadOnlyList<string> ReadSet { get; } =
     [
         "indicator_daily", "valuation_daily", "flow_daily", "sentiment_derived_daily",
-        "security",
+        "security_daily",
     ];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
@@ -138,6 +138,134 @@ public sealed class PercentileEngine : IStage
         }
 
         return new StageResult(written, "ok", Detail(report, minMembers));
+    }
+
+    // ------------------------------------------------- range mode [3.15] ---
+
+    /// <summary>
+    /// The same work as <see cref="ExecuteAsync"/> over a range, one date at a time.
+    ///
+    /// **Date-partitioned, and this is the component the partition rule was written
+    /// for** [`CLAUDE.md` §5]. A percentile on a day needs every name in the cell on
+    /// that day, so there is no ticker to partition by and nothing to hoist out of the
+    /// loop: each date's ranking is a closed question over that date's rows.
+    ///
+    /// **The statement is reissued per date rather than widened across the range, and
+    /// here that is not only the arithmetic argument.** <see cref="UpdateSql"/> ranks
+    /// within `(size_bucket, sector)` on one date; ranking across a range means adding
+    /// the date to every partition clause, which is the same statement only if nothing
+    /// else changes, and it is a different statement the first time a cell's membership
+    /// moves. The nightly form is also the one 2.10's reference fixtures cover, and this
+    /// phase does not reimplement arithmetic for the backfill [D-93].
+    ///
+    /// **What this costs is stated rather than estimated.** It is one UPDATE per source
+    /// table per date, which over this phase's window is four statements times the
+    /// trading dates in the range. `BUILD_PLAN.md` calls 3.15 the checkpoint that decides
+    /// whether the phase meets its timing line, and the figure that decides it is the
+    /// wall clock of a real range run rather than anything assertable here; migration
+    /// `0007` already names partitioning as what that finding would recommend.
+    ///
+    /// **The fallback counts are summed across the range rather than reported per date.**
+    /// A per-date line over 1,260 dates is not a run log line anybody reads, and the
+    /// question §6.6 asks is which metrics fell back and how often, which sums.
+    /// </summary>
+    public async Task<BackfillResult> ExecuteRangeAsync(
+        BackfillContext context, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        // Everything that is not the date loop, named [item 43]. Here that is the
+        // calendar read alone, the ranking UPDATEs being inside the loop.
+        var phases = new PhaseTimer();
+
+        var dates = await context.SessionsAsync(ct).ConfigureAwait(false);
+        phases.Mark("calendar");
+
+        if (dates.Count == 0)
+        {
+            return BackfillResult.Completed(
+                0, context.To, "no trading date in the range carries a price_daily bar, so nothing is ranked");
+        }
+
+        long written = 0;
+
+        // Keyed on the resolved version, so a range whose config never moved reads the
+        // key once and one that moved reads it again at the boundary [C08's precedent].
+        var byVersion = new Dictionary<int, int>();
+
+        // Summed across the range, per (table, metric), in the declared order rather than
+        // in the order a dictionary enumerates [CLAUDE.md section 6].
+        var totals = new Dictionary<(string Table, string Metric), Fallback>();
+
+        var floorSeen = 0;
+
+        // The unit is a date, this loop being date-partitioned, and it covers the ranking
+        // UPDATE per source table plus the fallback count that follows it [3.17]. This is
+        // the checkpoint `BUILD_PLAN.md` calls the one deciding the phase's timing line,
+        // so the distribution rather than the total is what it is measured on [3.15].
+        var elapsed = new List<long>();
+
+        foreach (var date in dates)
+        {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+
+            var stage = await context.ForDateAsync(date, ct).ConfigureAwait(false);
+
+            if (!byVersion.TryGetValue(stage.ConfigVersion, out var minMembers))
+            {
+                minMembers = (int) await LongAsync(stage, "percentile.cell_min_members", ct)
+                    .ConfigureAwait(false);
+                byVersion[stage.ConfigVersion] = minMembers;
+            }
+
+            floorSeen = minMembers;
+
+            foreach (var source in Sources)
+            {
+                written += await stage.Data.WriteAsync(
+                    source.Table, WriteOperation.Update,
+                    UpdateSql(source, date, minMembers),
+                    parameters: null, ct).ConfigureAwait(false);
+
+                var counts = await FallbackCountsAsync(stage, source, minMembers, ct).ConfigureAwait(false);
+
+                foreach (var metric in source.Metrics)
+                {
+                    var c = counts.GetValueOrDefault(metric);
+                    var key = (source.Table, metric);
+
+                    totals[key] = totals.TryGetValue(key, out var running)
+                        ? new Fallback(
+                            running.InCell + c.InCell,
+                            running.InBucket + c.InBucket,
+                            running.Unranked + c.Unranked,
+                            running.ThinCells + c.ThinCells)
+                        : c;
+                }
+            }
+
+            elapsed.Add((long) System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        }
+
+        var report = new List<(MetricTable Source, string Metric, Fallback Counts)>();
+
+        foreach (var source in Sources)
+        {
+            foreach (var metric in source.Metrics)
+            {
+                report.Add((source, metric, totals.GetValueOrDefault((source.Table, metric))));
+            }
+        }
+
+        return BackfillResult.Completed(
+            written, context.To,
+            string.Format(
+                CultureInfo.InvariantCulture,
+                "{0:N0} trading date(s). {1} The counts are summed over the range rather than " +
+                "per date, so a metric that fell back on one date in twelve hundred is visible " +
+                "as a number rather than lost in a line nobody reads [METRICS.md 6.6]. {2} {3}",
+                dates.Count, Detail(report, floorSeen), RangeTiming.Describe("date", elapsed),
+                phases.Describe()));
     }
 
     /// <summary>
@@ -247,7 +375,7 @@ public sealed class PercentileEngine : IStage
             SELECT m.ticker, s.size_bucket, s.sector,
                        {terms}
                     FROM {source.Table} m
-                    LEFT JOIN security s ON s.ticker = m.ticker AND s.is_active
+                    LEFT JOIN {Universe.AsOf(dateLiteral)} s ON s.ticker = m.ticker AND s.is_active
                     WHERE m.date = {dateLiteral}
             """;
     }

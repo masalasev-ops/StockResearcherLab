@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data.Eodhd;
@@ -29,11 +29,21 @@ namespace StockResearcherLab.Pipeline.Ingest;
 /// rather than assuming. Live verification is owed and is blocked on the provider
 /// allowance.
 /// </summary>
-public sealed class SentimentIngestor : IStage
+public sealed class SentimentIngestor : IStage, IBackfillStage
 {
     public static readonly string[] Columns = ["ticker", "date", "article_count", "sentiment_score"];
 
+    /// <summary>
+    /// The attempt record [D-99, 0011]. Written for every ticker a dispatched batch
+    /// named, whether or not it came back with days, because on this endpoint yielding
+    /// nothing is the ordinary case rather than the exception.
+    /// </summary>
+    public static readonly string[] AttemptColumns =
+        ["ticker", "last_attempted_date", "last_yield_date", "rows_last_attempt"];
+
     private static readonly string[] ConflictTarget = ["ticker", "date"];
+
+    private static readonly string[] AttemptConflictTarget = ["ticker"];
 
     private readonly EodhdClient _client;
 
@@ -41,10 +51,16 @@ public sealed class SentimentIngestor : IStage
 
     public string Name => "SentimentIngestor";
 
-    public IReadOnlyList<string> ReadSet { get; } = ["security"];
+    // `price_daily` is read by the sweep alone, for the in-window delisted names D-101
+    // widened the pool to. `sentiment_fetch_attempt` is in neither list twice: a stage
+    // may read what it writes, which is what `DeclaredAccess.CanRead` says.
+    public IReadOnlyList<string> ReadSet { get; } = ["security_daily", "price_daily"];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
-        [new TableWrite("sentiment_daily", WriteOperation.Insert, Columns)];
+    [
+        new TableWrite("sentiment_daily", WriteOperation.Insert, Columns),
+        new TableWrite("sentiment_fetch_attempt", WriteOperation.Insert, AttemptColumns),
+    ];
 
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
     {
@@ -74,19 +90,7 @@ public sealed class SentimentIngestor : IStage
 
             covered += rows.Select(r => r.Ticker).Distinct(StringComparer.Ordinal).Count();
 
-            written += await context.Data.BulkUpsertAsync(
-                "sentiment_daily", Columns, ConflictTarget,
-                async (w, c) =>
-                {
-                    foreach (var r in rows)
-                    {
-                        await w.StartRowAsync(c).ConfigureAwait(false);
-                        await w.WriteAsync(r.Ticker, c).ConfigureAwait(false);
-                        await w.WriteAsync(r.Date, c).ConfigureAwait(false);
-                        await w.WriteAsync(r.ArticleCount, c).ConfigureAwait(false);
-                        await w.WriteAsync(r.Score, c).ConfigureAwait(false);
-                    }
-                }, ct).ConfigureAwait(false);
+            written += await WriteDaysAsync(context, rows, ct).ConfigureAwait(false);
         }
 
         var detail = string.Format(
@@ -98,6 +102,208 @@ public sealed class SentimentIngestor : IStage
         return new StageResult(written, "ok", detail);
     }
 
+    // ------------------------------------------------------- range mode [3.8] ---
+
+    /// <summary>
+    /// One pass at window width, <c>from</c> at the window start [D-93].
+    ///
+    /// **The pool is the live universe plus every in-window delisted name** [D-101],
+    /// and the second half is not optional. Without it a delisted name admitted to a
+    /// reconstructed 2021 universe has no sentiment rows at all, so `article_count`
+    /// zero-fills and its z-score is computed against a baseline of zeros while
+    /// `sentiment_score` stays null. That is a degenerate value that ranks rather than
+    /// an absence that abstains, and it ranks the same way for every name that later
+    /// failed. S3 is one of the two screens §20 names as doing the most to keep this
+    /// system off megacaps, and S4's survivorship is irreducible [open item 12], so
+    /// leaving this half out puts both of them on survivors alone.
+    ///
+    /// **The attempt stamps the range start**, which is C02's half of D-99's asymmetry.
+    /// The nightly call asks from `context.Date - sentiment.lookback_days` and this
+    /// asks from the window start, so the two differ in depth and a ticker the nightly
+    /// run touched is not as complete as one this touched. C03 and C05 stamp the range
+    /// end because for them the two calls are the same call.
+    ///
+    /// **Config resolves as of the range end and that is not the case D-93 governs.**
+    /// This sweep is ticker-partitioned: no date is being computed and no configured
+    /// value reaches a row it writes, the days being the provider's own.
+    /// </summary>
+    public async Task<BackfillResult> ExecuteRangeAsync(BackfillContext context, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var settings = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
+
+        var perCall = (int) await LongAsync(settings, "sentiment.tickers_per_call", ct).ConfigureAwait(false);
+        var weight = await LongAsync(settings, "backfill.weight_sentiments_per_ticker", ct).ConfigureAwait(false);
+        var reserve = await LongAsync(settings, "backfill.unit_reserve", ct).ConfigureAwait(false);
+        var allowance = await LongAsync(settings, "backfill.daily_unit_allowance", ct).ConfigureAwait(false);
+
+        var pool = await RangePoolAsync(settings, context.From, ct).ConfigureAwait(false);
+        var already = await AttemptedOnAsync(settings, context.From, ct).ConfigureAwait(false);
+        var remaining = pool.Where(t => !already.Contains(t)).ToList();
+
+        long written = 0;
+        var dispatched = 0;
+        var yielded = 0;
+        var halted = false;
+        string? haltDetail = null;
+
+        foreach (var batch in Batch(remaining, perCall))
+        {
+            // **The projection is the batch's own size times the per-ticker weight**,
+            // because the endpoint meters flat per ticker whatever the batching
+            // [1.6, 3.1]. A batch is the unit of work and a ticker is the unit of
+            // billing, so the gate is asked about the first and priced on the second.
+            var decision = await context.NextUnitAsync(batch.Count * weight, reserve, allowance, ct)
+                .ConfigureAwait(false);
+
+            if (!decision.Fits)
+            {
+                halted = true;
+                haltDetail = decision.Detail;
+                break;
+            }
+
+            var rows = await FetchAsync(batch, context.From, context.To, ct).ConfigureAwait(false);
+
+            written += await WriteDaysAsync(settings, rows, ct).ConfigureAwait(false);
+
+            var perTicker = rows
+                .GroupBy(r => r.Ticker, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => (long) g.Count(), StringComparer.Ordinal);
+
+            // **Every member of the batch gains a row, not every member that answered.**
+            // A ticker nobody wrote about across five years returns nothing and would
+            // otherwise be re-asked on every run for the life of the sweep, and those
+            // are exactly the thinly covered names the sentiment screen exists to find
+            // [D-12, §20].
+            await RecordAttemptsAsync(settings, batch, perTicker, context.From, ct).ConfigureAwait(false);
+
+            dispatched += batch.Count;
+            yielded += perTicker.Count;
+        }
+
+        var detail = string.Format(
+            CultureInfo.InvariantCulture,
+            "{0:N0} ticker-day(s) over {1:N0} of {2:N0} pool member(s), of which {3:N0} returned at least " +
+            "one day and {4:N0} returned none, which is a name nobody wrote about rather than zero " +
+            "attention [D-12]. {5:N0} carried an attempt for this range already and were not dispatched " +
+            "[D-99]. The pool is the universe plus the in-window delisted names [D-101].",
+            written, dispatched, pool.Count, yielded, dispatched - yielded,
+            pool.Count - remaining.Count);
+
+        // An empty remaining set is `covered` rather than `ok` with a zero, which is the
+        // distinction the sequence driver's zero-row halt rests on [3.16].
+        if (halted)
+        {
+            return BackfillResult.Halted(written, context.To, detail + " " + haltDetail);
+        }
+
+        return remaining.Count == 0
+            ? BackfillResult.Covered(context.To, detail)
+            : BackfillResult.Completed(written, context.To, detail);
+    }
+
+    /// <summary>
+    /// The sweep's pool: the live universe, plus every admitted delisted common stock
+    /// carrying a bar at or after the window start [D-101].
+    /// </summary>
+    private async Task<IReadOnlyList<string>> RangePoolAsync(
+        StageContext context, DateOnly windowStart, CancellationToken ct)
+    {
+        // Before the live half is read rather than after it comes back empty, and before
+        // the delisted half is fetched, so an unfilled universe costs no provider call
+        // [BackfillPool.RequireUniverseCoverageAsync].
+        await BackfillPool.RequireUniverseCoverageAsync(context, windowStart, context.Date, ct)
+            .ConfigureAwait(false);
+
+        var live = await UniverseAsync(context, ct).ConfigureAwait(false);
+
+        var delisted = await BackfillPool.DelistedWithBarsInWindowAsync(
+            _client, context, windowStart, ct).ConfigureAwait(false);
+
+        var pool = new SortedSet<string>(live, StringComparer.Ordinal);
+        pool.UnionWith(delisted);
+
+        return pool.ToList();
+    }
+
+    /// <summary>
+    /// Tickers already carrying an attempt at this range's start, which are the ones
+    /// the sweep does not ask for again [D-99].
+    /// </summary>
+    private static async Task<IReadOnlySet<string>> AttemptedOnAsync(
+        StageContext context, DateOnly rangeStart, CancellationToken ct)
+    {
+        var rows = await context.Data.ReadAsync(
+            "sentiment_fetch_attempt",
+            $"""
+             SELECT ticker
+             FROM sentiment_fetch_attempt
+             WHERE last_attempted_date = DATE '{rangeStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}'
+             ORDER BY ticker;
+             """,
+            ct).ConfigureAwait(false);
+
+        return rows.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// One attempt row per dispatched ticker, upserted on `ticker` so a second run over
+    /// the same range writes what the first wrote [D-68].
+    /// </summary>
+    private static async Task RecordAttemptsAsync(
+        StageContext context, IReadOnlyList<string> dispatched,
+        IReadOnlyDictionary<string, long> yields, DateOnly rangeStart, CancellationToken ct)
+    {
+        if (dispatched.Count == 0)
+        {
+            return;
+        }
+
+        var ordered = dispatched.Order(StringComparer.Ordinal).ToList();
+
+        await context.Data.BulkUpsertAsync(
+            "sentiment_fetch_attempt", AttemptColumns, AttemptConflictTarget,
+            async (w, c) =>
+            {
+                foreach (var ticker in ordered)
+                {
+                    var rows = yields.GetValueOrDefault(ticker);
+
+                    await w.StartRowAsync(c).ConfigureAwait(false);
+                    await w.WriteAsync(ticker, c).ConfigureAwait(false);
+                    await w.WriteAsync(rangeStart, c).ConfigureAwait(false);
+                    await w.WriteAsync(rows > 0 ? rangeStart : (DateOnly?) null, c).ConfigureAwait(false);
+                    await w.WriteAsync(rows, c).ConfigureAwait(false);
+                }
+            }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The day rows write, shared by both entry points.</summary>
+    private static async Task<long> WriteDaysAsync(
+        StageContext context, IReadOnlyList<Row> rows, CancellationToken ct)
+    {
+        if (rows.Count == 0)
+        {
+            return 0;
+        }
+
+        return await context.Data.BulkUpsertAsync(
+            "sentiment_daily", Columns, ConflictTarget,
+            async (w, c) =>
+            {
+                foreach (var r in rows)
+                {
+                    await w.StartRowAsync(c).ConfigureAwait(false);
+                    await w.WriteAsync(r.Ticker, c).ConfigureAwait(false);
+                    await w.WriteAsync(r.Date, c).ConfigureAwait(false);
+                    await w.WriteAsync(r.ArticleCount, c).ConfigureAwait(false);
+                    await w.WriteAsync(r.Score, c).ConfigureAwait(false);
+                }
+            }, ct).ConfigureAwait(false);
+    }
+
     /// <summary>
     /// The universe, whole. No ordering by anything that could become a rank, and no
     /// limit: narrowing here is the failure this component is named in
@@ -106,7 +312,7 @@ public sealed class SentimentIngestor : IStage
     private static async Task<IReadOnlyList<string>> UniverseAsync(StageContext context, CancellationToken ct)
     {
         var rows = await context.Data.ReadAsync(
-            "security", "SELECT ticker FROM security WHERE is_active ORDER BY ticker;", ct)
+            "security_daily", Universe.MembersAsOf(context.Date), ct)
             .ConfigureAwait(false);
 
         return rows.Select(r => (string) r[0]!).ToList();

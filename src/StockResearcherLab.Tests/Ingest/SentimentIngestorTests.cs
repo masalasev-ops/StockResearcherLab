@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Text.Json;
 using Npgsql;
@@ -177,12 +177,24 @@ public sealed class SentimentIngestorTests
 
         Assert.Contains("SentimentIngestor", ArchitectureDocument.ComponentNames());
 
-        var write = Assert.Single(stage.WriteSet);
-        Assert.Equal("sentiment_daily", write.Table);
+        // Two writes since 3.8, where this asserted one. `sentiment_fetch_attempt` is
+        // what the sweep resumes on [D-99, 0011], and the two are named rather than
+        // counted: a count would pass on any second write and this test is about which
+        // ones there are.
+        var write = Assert.Single(
+            stage.WriteSet, w => string.Equals(w.Table, "sentiment_daily", StringComparison.Ordinal));
         Assert.Equal(SentimentIngestor.Columns, write.Columns);
 
-        // Reads the universe and nothing else. It must not read a score.
-        Assert.Equal(["security"], stage.ReadSet);
+        var attempt = Assert.Single(
+            stage.WriteSet, w => string.Equals(w.Table, "sentiment_fetch_attempt", StringComparison.Ordinal));
+        Assert.Equal(SentimentIngestor.AttemptColumns, attempt.Columns);
+
+        Assert.Equal(2, stage.WriteSet.Count);
+
+        // The universe, and `price_daily` since 3.8 for the in-window delisted names
+        // [D-101], read by the range pass alone. **It must still not read a score**,
+        // which is the property this line was written for.
+        Assert.Equal(["security_daily", "price_daily"], stage.ReadSet);
     }
 
     // --------------------------------------------------------------- helpers ---
@@ -198,7 +210,7 @@ public sealed class SentimentIngestorTests
     {
         await using var conn = new NpgsqlConnection(TestDatabase.ConnectionString);
         await conn.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = new NpgsqlCommand("SELECT count(*) FROM security WHERE is_active;", conn);
+        await using var cmd = new NpgsqlCommand("SELECT count(DISTINCT ticker) FROM security_daily WHERE is_active;", conn);
         return (int)(long)(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false))!;
     }
 
@@ -210,7 +222,13 @@ public sealed class SentimentIngestorTests
         foreach (var t in tickers)
         {
             await using var cmd = new NpgsqlCommand(
-                "INSERT INTO security (ticker, is_active) VALUES (@t, true) ON CONFLICT (ticker) DO NOTHING;", conn);
+                // `security_daily` from 3.12, dated before any fixture date because the
+                // read takes the most recent row at or before it [D-92].
+                """
+                INSERT INTO security_daily (ticker, date, is_active)
+                VALUES (@t, DATE '2000-01-01', true)
+                ON CONFLICT (ticker, date) DO NOTHING;
+                """, conn);
             cmd.Parameters.AddWithValue("t", t);
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         }
@@ -224,7 +242,7 @@ public sealed class SentimentIngestorTests
         foreach (var sql in new[]
                  {
                      "DELETE FROM sentiment_daily WHERE ticker LIKE @p;",
-                     "DELETE FROM security WHERE ticker LIKE @p;",
+                     "DELETE FROM security_daily WHERE ticker LIKE @p;",
                  })
         {
             await using var cmd = new NpgsqlCommand(sql, conn);

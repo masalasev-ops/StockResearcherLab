@@ -1,4 +1,4 @@
-# StockResearcherLab
+﻿# StockResearcherLab
 
 A personal paper-trading research lab. It asks one question: **does an AI researcher
 add selection judgment beyond mechanical screens?**
@@ -25,9 +25,13 @@ nobody wins on market exposure. SPY is a reference line, not a portfolio.
 
 ## Documents
 
-`PROGRESS.md` carries the present build state. `CHANGELOG.md` is a closed record
-of corpus versioning, which stopped at D-67. This file states no version, and
-there is no longer one to state.
+`PROGRESS.md` carries the present build state. **`CHANGELOG.md` is open and is
+appended to on every clean edit.** Corpus *versioning* stopped at D-67, and this file
+states no version because there is no longer one to state; the document itself did not
+stop. Since D-73 it is where the prior wording of a superseded passage goes whenever a
+document read to know the current state is edited cleanly, which is `ARCHITECTURE.html`,
+`SCHEMA.md`, `CONFIG_REFERENCE.md` and `RUNBOOK.md`. `DECISIONS.md` and `PROGRESS.md`
+keep their strikes instead, because a log's corrections are its content.
 
 Read these three, in order, to understand the lab:
 
@@ -45,17 +49,21 @@ Read these when you need them:
 | `docs/SCHEMA.md` | Tables, grain, and write ownership per operation | Human only |
 | `docs/CONFIG_REFERENCE.md` | Every config key and its verified consumer | Mixed |
 | `docs/GLOSSARY.md` | Terms with a specific meaning here | Human only |
+| `docs/METRICS.md` | Every computed metric: formula, window, warm-up and null rule | Human only |
+| `docs/SCREEN_LIFECYCLE.md` | Shadow screens, promotion and retirement [D-84 to D-90] | Human only |
 | `docs/FIXTURES.md` | The single registry of test fixtures | Mixed |
 | `docs/RUNBOOK.md` | How to run it and what failures mean | Mixed |
 | `prompts/` | Rubrics, prefix, candidate block, digest instruction | Human only |
+| `prompts/BuildPlans/` | The phase plans, updated when a decision changes an unrun checkpoint | Human only |
 | `prompts/spent/` | Every prompt issued, archived verbatim | Never edited |
+| `docs/evidence/` | Transcripts and figures a decision cites, kept because nothing is checkable without them | Appended |
 
 These track state and are appended to, never rewritten:
 
 | File | What it is |
 |---|---|
 | `docs/PROGRESS.md` | What has actually been built |
-| `docs/CHANGELOG.md` | Corpus versions, a closed record since D-67 |
+| `docs/CHANGELOG.md` | The prior wording of every clean edit, and corpus versions up to D-67 |
 
 The architecture and the invariants exist to constrain the code. If the code
 disagrees with them, the code is wrong.
@@ -69,6 +77,8 @@ thing rather than a list of exceptions.
 Code lives in `src/`. Runtime prompts and spent prompts live in
 `prompts/`, which has its own README explaining why those two things sit side by
 side under opposite rules. Neither is a document and neither belongs in `docs/`.
+**`prompts/BuildPlans/` is a third thing that README does not yet describe**, and that
+gap is a carried obligation in `BUILD_PLAN.md` rather than an oversight here.
 
 ## Stack
 

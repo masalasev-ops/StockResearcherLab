@@ -1,0 +1,73 @@
+Benchmark load and re-run evidence, 2026-08-18, against the developer store [D-104].
+
+=== C02 re-run, the load ===
+  ok, 64,373 row(s) over 62 of 50,608 admitted common stocks plus 1 reference series.
+  50,546 carried an attempt for this range already and were not dispatched.
+
+=== the benchmark, checked before anything computed on it ===
+  whole series      8,444 bars, 1993-01-29 .. 2026-08-17
+  in the window     1,409 bars, 2021-01-04 .. 2026-08-13
+  null adj_close    0        non-positive adj_close  0
+  admitted to       security 0 rows, security_daily 0 rows, price_daily 8,444
+  calendar          1,585 dates; benchmark dates outside it 0
+  calendar dates with no benchmark bar   176 = 122 weekend + 54 weekday
+  the 54 weekdays are US market holidays: 2021-01-18, 2021-02-15, 2021-04-02,
+  2021-05-31, 2021-07-05, 2021-09-06, 2021-11-25, 2021-12-24, 2022-01-17,
+  2022-02-21, 2022-05-30, 2022-06-20, ... which is 9.6 a year
+
+=== C08 re-run ===
+  ok, 4,146,137 row(s), reached 2026-08-13
+  1,585 trading date(s) over 292 membership epoch(s), 4,290 ticker(s) a member on at least one, in 22 chunk(s) of 200. The composite is rebuilt per epoch rather than per date, which is exact because it enters the output only as a ratio. Per chunk of 200 ticker(s): first 144,695 ms, median 36,967 ms, last 19,223 ms, total 905,188 ms over 22 unit(s). Outside the work loop: calendar 48 ms, epochs 1,378 ms, settings 607 ms, benchmark 7 ms, members and composites 379,551 ms; 381,591 ms in all.
+
+=== C10 re-run ===
+  ok, 1,585 row(s), reached 2026-08-13
+  1,585 market_context_daily row(s) over 1,585 trading date(s). 6 carry an unknown breadth and are therefore labelled mixed, which is a date `indicator_daily` has no `dist_200dma` for rather than a date with no trend. 925 risk_on, 177 risk_off, 483 mixed. vix is null on every one of them, the bulk feed carrying equities and not the index [D-80, open item 30]. Per date, compute only: first 49 ms, median 530 ms, last 854 ms, total 922,982 ms over 1,585 unit(s). Outside the work loop: calendar 50 ms, write 103 ms; 153 ms in all.
+
+=== run_log, newest first ===
+  run_date     stage                 status  rows       duration_ms  minutes
+  2026-08-13   MarketContextEngine   ok      1585       923969       15.40
+  2026-08-13   IndicatorEngine       ok      4146137    1286834      21.45
+  2026-08-13   MarketContextEngine   ok      1584       23507797     391.80   (replaced)
+  2026-08-13   ValuationEngine       ok      14844295   1941347      32.36
+  2026-08-13   IndicatorEngine       ok      4143273    2043579      34.06    (replaced)
+
+=== market_context_daily, re-run against the 1,584 rows it replaced ===
+  breadth moved                    0 of 1,584
+  sector_relative_strength moved   0 of 1,584
+  vix moved                        0 of 1,584
+  regime_label moved               1,014   (837 mixed -> risk_on, 177 mixed -> risk_off)
+  date only in the new run          2026-08-13, the range's own end
+
+=== the two coverage queries ===
+----- relative strength coverage by year, inside the window -----
+  yr | rows | rs21 | rs63 | rs21_63 | slope | vs_sector | dist200 | rs21_pct
+  2021 | 689532 | 689156 | 689082 | 689070 | 688889 | 677954 | 689532 | 99.9
+  2022 | 669550 | 669272 | 669273 | 669262 | 669132 | 659043 | 669550 | 100.0
+  2023 | 658445 | 658151 | 658149 | 658131 | 657887 | 650083 | 658445 | 100.0
+  2024 | 673454 | 673186 | 673186 | 673165 | 672702 | 666057 | 673454 | 100.0
+  2025 | 833475 | 833324 | 833303 | 833238 | 832242 | 823704 | 833475 | 100.0
+  2026 | 621726 | 621607 | 621617 | 621570 | 620808 | 614129 | 621726 | 100.0
+
+----- relative strength coverage, whole window -----
+  rows | rs21_null | rs63_null | slope_null
+  4146182 | 1486 | 1572 | 4522
+
+----- the regime label against the breadth floor and ceiling -----
+  regime_label | dates | at_or_below_floor | at_or_above_ceiling | breadth_unknown | min_breadth | max_breadth
+  mixed | 483 | 15 | 1 | 6 | 0.314 | 0.605
+  risk_off | 177 | 177 | 0 | 0 | 0.153 | 0.400
+  risk_on | 925 | 0 | 925 | 0 | 0.600 | 0.942
+
+----- the label by year, so a regime that never turns is visible -----
+  yr | risk_on | risk_off | mixed | mean_breadth
+  2021 | 222 | 0 | 46 | 0.766
+  2022 | 2 | 142 | 115 | 0.376
+  2023 | 103 | 5 | 152 | 0.563
+  2024 | 250 | 0 | 12 | 0.683
+  2025 | 168 | 30 | 115 | 0.570
+  2026 | 180 | 0 | 43 | 0.642
+
+----- what D-80's rule says the label should be, against what it is -----
+  floor_and_risk_off | floor_but_not_risk_off | ceiling_and_risk_on | ceiling_but_not_risk_on
+  177 | 15 | 925 | 1
+

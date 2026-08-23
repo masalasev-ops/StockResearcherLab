@@ -37,6 +37,19 @@ section{margin-top:58px;border-top:1px solid var(--rule);padding-top:26px}
 .row{display:flex;gap:14px;align-items:stretch;justify-content:center;flex-wrap:wrap}
 .arrow{color:var(--ink3);font-size:15px;line-height:1;padding:7px 0;font-family:var(--mono)}
 .harrow{display:flex;align-items:center;color:var(--ink3);font-family:var(--mono);padding:0 4px}
+.group{display:flex;flex-direction:column;align-items:center;
+  border:1px solid var(--rule);border-radius:9px;background:var(--surface-2);
+  padding:28px 16px 16px;position:relative;width:100%;box-sizing:border-box}
+.glabel{position:absolute;top:9px;left:14px;font-family:var(--mono);font-size:9.5px;
+  font-weight:600;letter-spacing:.1em;color:var(--ink3);text-transform:uppercase}
+.group .arrow{padding:9px 0}
+.g-ingest{border-left:3px solid var(--ingest)}
+.g-compute{border-left:3px solid var(--compute)}
+.g-select{border-left:3px solid var(--select)}
+.g-decide{border-left:3px solid var(--decide)}
+.g-execute{border-left:3px solid var(--execute)}
+.g-hot{border-left:3px solid var(--hot);background:#FDF7F6}
+.flow{width:100%}
 .node{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--ink3);
   border-radius:6px;padding:9px 13px;min-width:190px;max-width:300px;text-align:left}
 .node .id{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.08em;color:var(--ink3)}
@@ -176,7 +189,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 </tbody>
 </table>
 
-<p class="muted" style="font-size:13.5px">Around 2,000 names live, and roughly 2,500 distinct tickers across the five-year backfill once delisted names are included. Size buckets: large and above at $10B or more, mid from $2B to $10B, small from $300M to $2B.</p>
+<p class="muted" style="font-size:13.5px">Around 2,000 names live. The delisted addition across the backfill is bounded above by the <b>16,862</b> admitted delisted names carrying at least one bar inside the window, measured 2026-08-13 once 3.6 had loaded <span class="rmv">3.6</span>. How many of those clear the criteria above on any given date is what C01 decides and is not measured yet, so the distinct-ticker count over the backfill sits between the live count and that bound rather than at a figure this document can state. Size buckets: large and above at $10B or more, mid from $2B to $10B, small from $300M to $2B.</p>
 </section>
 
 <section>
@@ -184,22 +197,22 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 <table>
 <thead><tr><th class="mono">ID</th><th>Component</th><th>Runs</th><th>Reads</th><th>Writes</th></tr></thead>
 <tbody>
-<tr><td class="mono"><b>C01</b></td><td>UniverseBuilder <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Applies section 2, assigns size buckets. The clean filing-gap exclusion is applied here with the other absolute criteria, counting the qualifying rows in <code>fundamental_snapshot</code> as of the date being built rather than reading a stored total [D-62, M.1]</span></td><td>Weekly, Sun</td><td>Symbol list, <code>price_daily</code>, <code>fundamental_snapshot</code></td><td class="mono">security</td></tr>
-<tr><td class="mono"><b>C02</b></td><td>PriceIngestor<br><span class="muted" style="font-size:12.5px">One bulk call, entire US market</span></td><td>Daily 17:30</td><td>Bulk EOD endpoint</td><td class="mono">price_daily</td></tr>
-<tr><td class="mono"><b>C03</b></td><td>FundamentalsIngestor <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Rolling rotation, earnings jump the queue. Keyed on <code>filing_date_effective</code>, never period end and never the raw filing date <span class="rmv">D-62</span></span></td><td>Daily 17:45</td><td>Fundamentals endpoint, <code>events</code>, <code>price_daily</code> for the candidate pool, <code>security</code> for rotation order <span class="rmv">D-74</span></td><td class="mono">fundamental_snapshot, fundamental_fetch_attempt <span class="rmv">D-91</span></td></tr>
-<tr><td class="mono"><b>C04</b></td><td>SentimentIngestor <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Whole universe, no pre-selection. Feeds the sentiment screen's ranking</span></td><td>Daily 18:00</td><td>Sentiment endpoint, <code>security</code> for the universe it iterates <span class="rmv">D-74</span></td><td class="mono">sentiment_daily</td></tr>
-<tr><td class="mono"><b>C05</b></td><td>FlowIngestor<br><span class="muted" style="font-size:12.5px">Insider transactions and institutional ownership. Short interest is not ingested <span class="rmv">D-58</span></span></td><td>Daily 17:45 <span class="rmv">D-75</span></td><td>Insider, ownership <span class="rmv">D-58</span>, <code>security</code> for the universe it iterates <span class="rmv">D-74</span></td><td class="mono">insider_transaction, institutional_holding <span class="rmv">D-61</span></td></tr>
-<tr><td class="mono"><b>C06</b></td><td>EventsIngestor</td><td>Daily 17:45</td><td>Calendar, splits, dividends, <code>security</code> for the universe it iterates <span class="rmv">D-74</span></td><td class="mono">events</td></tr>
+<tr><td class="mono"><b>C01</b></td><td>UniverseBuilder <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Applies section 2, assigns size buckets. The clean filing-gap exclusion is applied here with the other absolute criteria, counting the qualifying rows in <code>fundamental_snapshot</code> as of the date being built rather than reading a stored total [D-62, M.1]</span></td><td>Weekly, Sun</td><td>Symbol list, <code>price_daily</code>, <code>fundamental_snapshot</code>, <code>security_daily</code> for the membership a departure is measured against <span class="rmv">3.12</span></td><td class="mono">security, security_daily <span class="rmv">D-92</span></td></tr>
+<tr><td class="mono"><b>C02</b></td><td>PriceIngestor<br><span class="muted" style="font-size:12.5px">One bulk call, entire US market</span></td><td>Daily 17:30</td><td>Bulk EOD endpoint</td><td class="mono">price_daily, price_fetch_attempt <span class="rmv">D-99</span></td></tr>
+<tr><td class="mono"><b>C03</b></td><td>FundamentalsIngestor <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Rolling rotation, earnings jump the queue. Keyed on <code>filing_date_effective</code>, never period end and never the raw filing date <span class="rmv">D-62</span></span></td><td>Daily 17:45</td><td>Fundamentals endpoint, <code>events</code>, <code>price_daily</code> for the candidate pool, <code>security_daily</code> for rotation order <span class="rmv">D-74</span></td><td class="mono">fundamental_snapshot, fundamental_fetch_attempt <span class="rmv">D-91</span>, earnings_history <span class="rmv">D-96</span>, institutional_holding <span class="rmv">D-98</span></td></tr>
+<tr><td class="mono"><b>C04</b></td><td>SentimentIngestor <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Whole universe, no pre-selection. Feeds the sentiment screen's ranking</span></td><td>Daily 18:00</td><td>Sentiment endpoint, <code>security_daily</code> for the universe it iterates <span class="rmv">D-74</span>, <code>price_daily</code> for the in-window delisted names <span class="rmv">D-101</span></td><td class="mono">sentiment_daily</td></tr>
+<tr><td class="mono"><b>C05</b></td><td>FlowIngestor<br><span class="muted" style="font-size:12.5px">Insider transactions and institutional ownership. Short interest is not ingested <span class="rmv">D-58</span></span></td><td>Daily 17:45 <span class="rmv">D-75</span></td><td>Insider <span class="rmv">D-58, D-98</span>, <code>security_daily</code> for the universe it iterates <span class="rmv">D-74</span></td><td class="mono">insider_transaction <span class="rmv">D-61, D-98</span>, flow_fetch_attempt <span class="rmv">D-95</span></td></tr>
+<tr><td class="mono"><b>C06</b></td><td>EventsIngestor</td><td>Daily 17:45</td><td>Calendar, splits, dividends, <code>security_daily</code> for the universe it iterates <span class="rmv">D-74</span>, <code>price_daily</code> for the in-window delisted names <span class="rmv">D-101</span></td><td class="mono">events</td></tr>
 <tr><td class="mono"><b>C07</b></td><td>FreshnessGuard <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Recency, completeness and settledness, which are three checks rather than one <span class="rmv">D-65</span>. Aborts the run rather than trading stale bars on the first two. Settledness re-reads on a later run instead, the date being incomplete rather than wrong. Emits through the run log rather than writing it, so <code>run_log</code> keeps one writer [INVARIANT 10]</span></td><td>Daily 17:40</td><td><code>price_daily</code>, <code>run_log</code>, exchange calendar</td><td class="mono"><span class="rmv">N.3</span> via C27</td></tr>
 <tr><td class="mono"><b>C29</b></td><td>HeadlineIngestor <span class="tag new">NEW</span><br><span class="muted" style="font-size:12.5px">Headline strings for the ~28 candidates only. Runs inside the select layer because candidates do not exist until then</span></td><td>Daily 18:32</td><td>News endpoint, <code>candidate_set</code></td><td class="mono">headline</td></tr>
 <tr><td class="mono"><b>C33</b></td><td>NewsDigester <span class="tag new">NEW</span><br><span class="muted" style="font-size:12.5px">Condenses each candidate's recent articles into ~150 tokens. Owns the ordered provider chain and the nightly rotation. Transforms evidence, never judges</span></td><td>Daily 18:33</td><td><code>headline</code>, <code>candidate_set</code>, <code>digest_provider</code></td><td class="mono">news_digest</td></tr>
 <tr><td class="mono"><b>C32</b></td><td>LocalModelClient <span class="tag new">NEW</span><br><span class="muted" style="font-size:12.5px">OpenAI-compatible client for the local inference server. Health, loaded model name, latency. Emits through the run log rather than writing it, so <code>run_log</code> keeps one writer [INVARIANT 10]</span></td><td>On demand</td><td><code>local_model_config</code></td><td class="mono"><span class="rmv">N.3</span> via C27</td></tr>
-<tr><td class="mono"><b>C08</b></td><td>IndicatorEngine<br><span class="muted" style="font-size:12.5px">All technicals computed locally, never bought</span></td><td>Daily 18:05</td><td><code>price_daily</code>, <code>security</code></td><td class="mono">indicator_daily</td></tr>
-<tr><td class="mono"><b>C09</b></td><td>ValuationEngine<br><span class="muted" style="font-size:12.5px">Recomputed daily because price moves</span></td><td>Daily 18:05</td><td><code>price_daily</code>, <code>fundamental_snapshot</code></td><td class="mono">valuation_daily</td></tr>
-<tr><td class="mono"><b>C10</b></td><td>MarketContextEngine<br><span class="muted" style="font-size:12.5px">Breadth, VIX, regime label, sector relative strength</span></td><td>Daily 18:05</td><td><code>price_daily</code> for the benchmark and the sector composites, <code>security</code> for the members it aggregates <span class="rmv">D-74</span>, <code>indicator_daily</code> for breadth</td><td class="mono">market_context_daily</td></tr>
+<tr><td class="mono"><b>C08</b></td><td>IndicatorEngine<br><span class="muted" style="font-size:12.5px">All technicals computed locally, never bought</span></td><td>Daily 18:05</td><td><code>price_daily</code>, <code>security_daily</code></td><td class="mono">indicator_daily</td></tr>
+<tr><td class="mono"><b>C09</b></td><td>ValuationEngine<br><span class="muted" style="font-size:12.5px">Recomputed daily because price moves</span></td><td>Daily 18:05</td><td><code>price_daily</code>, <code>fundamental_snapshot</code>, <code>earnings_history</code> for <code>last_two_earnings_surprises</code> <span class="rmv">D-96</span></td><td class="mono">valuation_daily</td></tr>
+<tr><td class="mono"><b>C10</b></td><td>MarketContextEngine<br><span class="muted" style="font-size:12.5px">Breadth, VIX, regime label, sector relative strength</span></td><td>Daily 18:05</td><td><code>price_daily</code> for the benchmark and the sector composites, <code>security_daily</code> for the members it aggregates <span class="rmv">D-74</span>, <code>indicator_daily</code> for breadth</td><td class="mono">market_context_daily</td></tr>
 <tr><td class="mono"><b>C34</b></td><td>FlowEngine <span class="tag new">NEW</span><br><span class="muted" style="font-size:12.5px">Derives <code>insider_net_90d_usd</code>, <code>distinct_buyer_count</code> and <code>inst_ownership_change</code> from the two flow source tables into <code>flow_daily</code> at ticker-by-day. Ingest grain follows the source, consumption grain follows the screen [D-61]</span></td><td>Daily 18:05</td><td><code>insider_transaction</code>, <code>institutional_holding</code></td><td class="mono">flow_daily</td></tr>
-<tr><td class="mono"><b>C35</b></td><td>SentimentEngine <span class="tag new">NEW</span><br><span class="muted" style="font-size:12.5px">Derives <code>article_count_z_own_90d</code>, <code>sentiment_delta_7v30</code> and <code>sentiment_7d_level</code> from <code>sentiment_daily</code> into <code>sentiment_derived_daily</code> at ticker-by-day. What the provider sends is the article count and the tone; what the screens rank on is derived from it [D-78]</span></td><td>Daily 18:05</td><td><code>sentiment_daily</code>, <code>security</code> for the universe it iterates <span class="rmv">D-74</span></td><td class="mono">sentiment_derived_daily</td></tr>
-<tr><td class="mono"><b>C11</b></td><td>PercentileEngine<br><span class="muted" style="font-size:12.5px">Ranks inside size bucket by sector cells, falling back to size bucket alone when a cell carries fewer than 15 non-null values for the metric being ranked <span class="rmv">D-10</span></span></td><td>Daily 18:15</td><td><code>indicator_daily</code>, <code>valuation_daily</code>, <code>flow_daily</code>, <code>sentiment_derived_daily</code>, <code>security</code> for the size bucket and sector that define a cell <span class="rmv">D-74</span></td><td class="mono">indicator_daily, valuation_daily, flow_daily, sentiment_derived_daily</td></tr>
+<tr><td class="mono"><b>C35</b></td><td>SentimentEngine <span class="tag new">NEW</span><br><span class="muted" style="font-size:12.5px">Derives <code>article_count_z_own_90d</code>, <code>sentiment_delta_7v30</code> and <code>sentiment_7d_level</code> from <code>sentiment_daily</code> into <code>sentiment_derived_daily</code> at ticker-by-day. What the provider sends is the article count and the tone; what the screens rank on is derived from it [D-78]</span></td><td>Daily 18:05</td><td><code>sentiment_daily</code>, <code>security_daily</code> for the universe it iterates <span class="rmv">D-74</span></td><td class="mono">sentiment_derived_daily</td></tr>
+<tr><td class="mono"><b>C11</b></td><td>PercentileEngine<br><span class="muted" style="font-size:12.5px">Ranks inside size bucket by sector cells, falling back to size bucket alone when a cell carries fewer than 15 non-null values for the metric being ranked <span class="rmv">D-10</span></span></td><td>Daily 18:15</td><td><code>indicator_daily</code>, <code>valuation_daily</code>, <code>flow_daily</code>, <code>sentiment_derived_daily</code>, <code>security_daily</code> for the size bucket and sector that define a cell <span class="rmv">D-74</span></td><td class="mono">indicator_daily, valuation_daily, flow_daily, sentiment_derived_daily</td></tr>
 <tr><td class="mono"><b>C12</b></td><td>GateEngine<br><span class="muted" style="font-size:12.5px">Earnings blackout, gap, halt, already held, cooldown</span></td><td>Daily 18:20</td><td><code>events</code>, <code>price_daily</code>, <code>position</code>, <code>trade_outcome</code></td><td class="mono">gate_result</td></tr>
 <tr><td class="mono"><b>C13</b></td><td>ScreenEngine <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Runs every screen whose state is live or shadow, from config <span class="rmv">D-84</span>. Maintains each screen's trailing 250-day distribution for its floor</span></td><td>Daily 18:25</td><td>Percentiles, <code>config_rows</code>, <code>screen_history</code></td><td class="mono">screen_score_daily, screen_history</td></tr>
 <tr><td class="mono"><b>C14</b></td><td>CandidateAllocator <span class="tag new">CHANGED</span><br><span class="muted" style="font-size:12.5px">Size quota per screen, no backfill, dedup across screens <span class="rmv">D-84, D-85</span>. Writes <code>candidate_set</code> from the live screens only, and one <code>attribution</code> row per name any registered screen surfaced, labelled candidate or shadow. A shadow is recorded to <code>tuner.slot_cap</code> under the same quota</span></td><td>Daily 18:30</td><td><code>screen_score_daily</code>, <code>gate_result</code></td><td class="mono">candidate_set, attribution</td></tr>
@@ -230,43 +243,56 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 <div class="board">
 <p class="cap">Figure 2 — evening pipeline, ingest through order</p>
 <div class="flow">
-  <div class="row">
-    <div class="node n-ingest"><span class="id">C02 · 17:30</span><div class="nm">PriceIngestor</div><div class="rl">Bulk EOD, whole US market</div></div>
-    <div class="node n-ingest"><span class="id">C03 C05 C06 · 17:45</span><div class="nm">Fundamentals · Flow · Events</div><div class="rl">Rotation plus event triggers</div></div>
-    <div class="node n-ingest"><span class="id">C04 · 18:00</span><div class="nm">SentimentIngestor</div><div class="rl">Whole universe, no pre-selection</div></div>
+  <div class="group g-ingest"><span class="glabel">Ingest · 17:30–18:00</span>
+    <div class="row">
+      <div class="node n-ingest"><span class="id">C02 · 17:30</span><div class="nm">PriceIngestor</div><div class="rl">Bulk EOD, whole US market</div></div>
+      <div class="node n-ingest"><span class="id">C03 C05 C06 · 17:45</span><div class="nm">Fundamentals · Flow · Events</div><div class="rl">Rotation plus event triggers</div></div>
+      <div class="node n-ingest"><span class="id">C04 · 18:00</span><div class="nm">SentimentIngestor</div><div class="rl">Whole universe, no pre-selection</div></div>
+    </div>
   </div>
   <div class="arrow">↓</div>
-  <div class="node n-hot" style="max-width:460px"><span class="id">C07 · 17:40</span><div class="nm">FreshnessGuard</div><div class="rl"><span class="rmv">D-65</span> Three checks, and they are three different things. <b>Recency</b>: the newest date in <code>price_daily</code> is not older than the most recent completed trading session. <b>Completeness</b>: the row count is at or above the abort floor. <b>Settledness</b>: the date's row count is at or above a configured fraction of the median count of the dates before it, computed from <code>price_daily</code> alone. Ingest loads the newest date passing all three. Recency or completeness failing aborts the run and produces no orders; settledness failing walks back to the newest date that passes, because the date is incomplete rather than wrong.</div></div>
-  <div class="arrow">↓</div>
-  <div class="row">
-    <div class="node n-compute"><span class="id">C08</span><div class="nm">IndicatorEngine</div><div class="rl"><span class="rmv">D-83</span> The technical columns, which are those with a named consumer. <code>SCHEMA.md</code>'s <code>indicator_daily</code> section carries the list.</div></div>
-    <div class="node n-compute"><span class="id">C09</span><div class="nm">ValuationEngine</div><div class="rl">Ratios against sector and own history</div></div>
-    <div class="node n-compute"><span class="id">C10</span><div class="nm">MarketContextEngine</div><div class="rl">Breadth, VIX, regime, sector strength</div></div>
-    <div class="node n-compute"><span class="id">C34</span><div class="nm">FlowEngine</div><div class="rl">Two source tables at their own grain become three daily metrics</div></div>
+  <div class="group g-hot"><span class="glabel">Guard · 17:40</span>
+    <div class="node n-hot" style="max-width:460px"><span class="id">C07 · 17:40</span><div class="nm">FreshnessGuard</div><div class="rl"><span class="rmv">D-65</span> Three checks, and they are three different things. <b>Recency</b>: the newest date in <code>price_daily</code> is not older than the most recent completed trading session. <b>Completeness</b>: the row count is at or above the abort floor. <b>Settledness</b>: the date's row count is at or above a configured fraction of the median count of the dates before it, computed from <code>price_daily</code> alone. Ingest loads the newest date passing all three. Recency or completeness failing aborts the run and produces no orders; settledness failing walks back to the newest date that passes, because the date is incomplete rather than wrong.</div></div>
   </div>
   <div class="arrow">↓</div>
-  <div class="node n-compute" style="max-width:460px"><span class="id">C11 · 18:15</span><div class="nm">PercentileEngine</div><div class="rl">Every metric becomes a percentile inside its size and sector cell. Each screen then draws whichever columns it needs.</div></div>
-  <div class="arrow">↓</div>
-  <div class="row">
-    <div class="node n-select"><span class="id">C12 · 18:20</span><div class="nm">GateEngine</div><div class="rl">Earnings blackout, gap, halt, held, cooldown</div></div>
-    <div class="node n-select"><span class="id">C13 · 18:25</span><div class="nm">ScreenEngine</div><div class="rl">Every registered screen, each with its own ranking and its own floor <span class="rmv">D-84</span></div></div>
+  <div class="group g-compute"><span class="glabel">Compute · 18:05–18:15</span>
+    <div class="row">
+      <div class="node n-compute"><span class="id">C08 · 18:05</span><div class="nm">IndicatorEngine</div><div class="rl"><span class="rmv">D-83</span> The technical columns, which are those with a named consumer. <code>SCHEMA.md</code>'s <code>indicator_daily</code> section carries the list.</div></div>
+      <div class="node n-compute"><span class="id">C09 · 18:05</span><div class="nm">ValuationEngine</div><div class="rl">Ratios against sector and own history</div></div>
+      <div class="node n-compute"><span class="id">C10 · 18:05</span><div class="nm">MarketContextEngine</div><div class="rl">Breadth, VIX, regime, sector strength. Reads <code>indicator_daily</code> for breadth, so it runs after C08; that is the one ordering constraint inside this group and the other four have no dependency on each other.</div></div>
+      <div class="node n-compute"><span class="id">C34 · 18:05</span><div class="nm">FlowEngine</div><div class="rl">Two source tables at their own grain become three daily metrics</div></div>
+      <div class="node n-compute"><span class="id">C35 · 18:05</span><div class="nm">SentimentEngine</div><div class="rl">The article count and the tone become the three metrics the screens actually rank on <span class="rmv">D-78</span></div></div>
+    </div>
+    <div class="arrow">↓</div>
+    <div class="node n-compute" style="max-width:460px"><span class="id">C11 · 18:15</span><div class="nm">PercentileEngine</div><div class="rl">Every metric becomes a percentile inside its size and sector cell. Each screen then draws whichever columns it needs.</div></div>
   </div>
   <div class="arrow">↓</div>
-  <div class="node n-select" style="max-width:460px"><span class="id">C14 · 18:30</span><div class="nm">CandidateAllocator</div><div class="rl">Up to 8 per screen under a 2/3/3 size quota, deduplicated. Typically 26 to 30 names. Writes one attribution row per candidate with scores frozen as they stand tonight.</div></div>
-  <div class="arrow">↓</div>
-  <div class="node n-ingest" style="max-width:460px"><span class="id">C29 · 18:32</span><div class="nm">HeadlineIngestor</div><div class="rl">The one ingest step that runs inside the select layer, because the candidates it fetches for do not exist until the allocator has run.</div></div>
-  <div class="arrow">↓</div>
-  <div class="node n-select" style="max-width:460px"><span class="id">C33 · 18:33 · LOCAL MODEL</span><div class="nm">NewsDigester</div><div class="rl">Each candidate's recent articles condensed to ~150 tokens on the local GPU. Free at the margin, so full article text never reaches Opus. Records which local model produced each digest.</div></div>
-  <div class="arrow">↓</div>
-  <div class="node n-select" style="max-width:460px"><span class="id">C15 · 18:35</span><div class="nm">DossierBuilder</div><div class="rl">Shared prefix of ~4,600 tokens carrying all five rubrics, lessons, calibration and market context, plus one ~800 token block per candidate.</div></div>
-  <div class="arrow">↓</div>
-  <div class="row">
-    <div class="node n-decide"><span class="id">C16 · 18:40</span><div class="nm">ResearcherClient</div><div class="rl">~29 calls, prefix cached after the first</div></div>
-    <div class="harrow">→</div>
-    <div class="node n-decide"><span class="id">C17 · 18:45</span><div class="nm">ProposalValidator</div><div class="rl">Schema, then every figure checked back against the dossier</div></div>
+  <div class="group g-select"><span class="glabel">Select · 18:20–18:35</span>
+    <div class="row">
+      <div class="node n-select"><span class="id">C12 · 18:20</span><div class="nm">GateEngine</div><div class="rl">Earnings blackout, gap, halt, held, cooldown</div></div>
+      <div class="node n-select"><span class="id">C13 · 18:25</span><div class="nm">ScreenEngine</div><div class="rl">Every registered screen, each with its own ranking and its own floor <span class="rmv">D-84</span></div></div>
+    </div>
+    <div class="arrow">↓</div>
+    <div class="node n-select" style="max-width:460px"><span class="id">C14 · 18:30</span><div class="nm">CandidateAllocator</div><div class="rl">Up to 8 per screen under a 2/3/3 size quota, deduplicated. Typically 26 to 30 names. Writes one attribution row per candidate with scores frozen as they stand tonight.</div></div>
+    <div class="arrow">↓</div>
+    <div class="node n-ingest" style="max-width:460px"><span class="id">C29 · 18:32</span><div class="nm">HeadlineIngestor</div><div class="rl">The one ingest step that runs inside the select layer, because the candidates it fetches for do not exist until the allocator has run.</div></div>
+    <div class="arrow">↓</div>
+    <div class="node n-select" style="max-width:460px"><span class="id">C33 · 18:33 · LOCAL MODEL</span><div class="nm">NewsDigester</div><div class="rl">Each candidate's recent articles condensed to ~150 tokens on the local GPU. Free at the margin, so full article text never reaches Opus. Records which local model produced each digest.</div></div>
+    <div class="arrow">↓</div>
+    <div class="node n-select" style="max-width:460px"><span class="id">C15 · 18:35</span><div class="nm">DossierBuilder</div><div class="rl">Shared prefix of ~4,600 tokens carrying all five rubrics, lessons, calibration and market context, plus one ~800 token block per candidate.</div></div>
   </div>
   <div class="arrow">↓</div>
-  <div class="node n-execute" style="max-width:460px"><span class="id">C18 C25 · 18:50</span><div class="nm">RiskGate and PortfolioRunner</div><div class="rl">Arbitration in the two research lanes, then sizing and caps applied identically to all four. Entry count matched.</div></div>
+  <div class="group g-decide"><span class="glabel">Decide · 18:40–18:45</span>
+    <div class="row">
+      <div class="node n-decide"><span class="id">C16 · 18:40</span><div class="nm">ResearcherClient</div><div class="rl">~29 calls, prefix cached after the first</div></div>
+      <div class="harrow">→</div>
+      <div class="node n-decide"><span class="id">C17 · 18:45</span><div class="nm">ProposalValidator</div><div class="rl">Schema, then every figure checked back against the dossier</div></div>
+    </div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="group g-execute"><span class="glabel">Execute · 18:50</span>
+    <div class="node n-execute" style="max-width:460px"><span class="id">C18 C25 · 18:50</span><div class="nm">RiskGate and PortfolioRunner</div><div class="rl">Arbitration in the two research lanes, then sizing and caps applied identically to all four. Entry count matched.</div></div>
+  </div>
   <div class="arrow">↓</div>
   <div class="row">
     <div class="store"><b>order</b>queued for tomorrow's open</div>
@@ -292,8 +318,9 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
     <div class="node n-select" style="min-width:176px;max-width:186px"><span class="id">S4</span><div class="nm">Flow</div><div class="rl">Insider net buying, distinct buyers <span class="rmv">D-58</span>, institutional ownership change</div></div>
     <div class="node n-select" style="min-width:176px;max-width:186px"><span class="id">S5</span><div class="nm">Mean reversion</div><div class="rl">Quality names beaten down, now with a stabilisation gate</div></div>
   </div>
+  <div class="count">the five live screens today · a screen is live because its config row says so <span class="rmv">D-84</span></div>
   <div class="arrow">↓</div>
-  <div class="node n-select" style="max-width:470px"><span class="id">FLOOR, APPLIED PER SCREEN</span><div class="nm">98th percentile of that screen's own trailing 250-day score distribution</div><div class="rl">Self-referential rather than fixed, so it adapts to dispersion instead of going dark in a quiet market. A screen returns nothing when nothing clears it, which is expected rather than an error.</div></div>
+  <div class="node n-select" style="max-width:470px"><span class="id">FLOOR, APPLIED PER SCREEN</span><div class="nm">98th percentile of that screen's own trailing 250-day score distribution</div><div class="rl">Self-referential rather than fixed, so it adapts to dispersion instead of going dark in a quiet market. A screen returns nothing when nothing clears it, which is expected rather than an error. <b>Every registered screen is scored here and maintains its own distribution, shadows included; only the live ones are allocated slots</b> <span class="rmv">D-84, D-85</span>.</div></div>
   <div class="arrow">↓</div>
   <div class="store"><b>screen_score_daily</b>ticker × screen × day</div>
 </div>
@@ -332,7 +359,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 <div class="board">
 <p class="cap">Figure 4 — slot allocation, quota and deduplication</p>
 <div class="flow">
-  <div class="store" style="min-width:340px"><b>screen_score_daily</b>five ranked lists, floors already applied</div>
+  <div class="store" style="min-width:340px"><b>screen_score_daily</b>one ranked list per registered screen, floors already applied <span class="rmv">D-84</span></div>
   <div class="arrow">↓</div>
   <div class="node n-select" style="max-width:460px"><span class="id">CEILING</span><div class="nm">8 slots per screen</div><div class="rl">A ceiling, never a target. If only three names clear a screen's floor, that screen returns three.</div></div>
   <div class="arrow">↓</div>
@@ -560,7 +587,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
     </div>
     <div class="lane" style="min-width:210px">
       <div class="lanehd">SCREENS</div>
-      <div class="step"><b>Fixed rotation</b><span>Each screen's top-ranked name, rotating so all five get equal turns</span></div>
+      <div class="step"><b>Fixed rotation</b><span>Each live screen's top-ranked name, rotating so they take equal turns. Shadows are excluded, a control rotating over screens that surface nothing being a corrupted control rather than a lost one <span class="rmv">D-39, D-85</span></span></div>
       <div class="count">↓ order already fixed</div>
       <div class="step" style="border-style:dashed"><span class="muted">Nothing to arbitrate</span></div>
       <div class="count">↓ 2 chosen</div>
@@ -707,6 +734,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
   <div class="arrow">↓</div>
   <div class="row">
     <div class="store"><b>config_rows</b>→ C13, C14</div>
+    <div class="store"><b>screen_evaluation</b>→ C22 itself next month, for the consecutive-fail count the nomination rule reads rather than recomputes, and U4 <span class="rmv">D-87</span></div>
     <div class="store"><b>researcher_memory</b>→ C15</div>
     <div class="store"><b>calibration</b>→ C15</div>
   </div>
@@ -819,21 +847,27 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 <thead><tr><th class="mono">Store</th><th>Grain</th><th class="mono">After backfill</th></tr></thead>
 <tbody>
 <tr><td class="mono"><b>security</b></td><td>one per ticker</td><td class="mono">2 MB</td></tr>
+<tr><td class="mono"><b>security_daily</b> <span class="tag new">NEW</span></td><td>ticker × date <span class="rmv">D-92</span></td><td class="mono">100 MB</td></tr>
 <tr><td class="mono"><b>price_daily</b></td><td>ticker × day</td><td class="mono">400 MB</td></tr>
+<tr><td class="mono"><b>price_fetch_attempt</b> <span class="tag new">NEW</span></td><td>one per ticker <span class="rmv">D-99</span></td><td class="mono">tiny</td></tr>
 <tr><td class="mono"><b>fundamental_snapshot</b></td><td>ticker × quarter</td><td class="mono">60 MB</td></tr>
+<tr><td class="mono"><b>fundamental_fetch_attempt</b> <span class="tag new">NEW</span></td><td>one per ticker <span class="rmv">D-91</span></td><td class="mono">tiny</td></tr>
+<tr><td class="mono"><b>earnings_history</b> <span class="tag new">NEW</span></td><td>ticker × fiscal period <span class="rmv">D-96</span></td><td class="mono">30 MB</td></tr>
 <tr><td class="mono"><b>indicator_daily</b></td><td>ticker × day</td><td class="mono">1.2 GB</td></tr>
 <tr><td class="mono"><b>valuation_daily</b></td><td>ticker × day</td><td class="mono">540 MB</td></tr>
 <tr><td class="mono"><b>sentiment_daily</b></td><td>ticker × day</td><td class="mono">380 MB</td></tr>
+<tr><td class="mono"><b>sentiment_derived_daily</b> <span class="tag new">NEW</span></td><td>ticker × day <span class="rmv">D-78</span></td><td class="mono">200 MB</td></tr>
 <tr><td class="mono"><b>headline</b> <span class="tag new">NEW</span></td><td>candidate × day</td><td class="mono">small</td></tr>
 <tr><td class="mono"><b>insider_transaction</b> <span class="tag new">NEW</span></td><td>ticker × filing × transaction</td><td class="mono">small</td></tr>
 <tr><td class="mono"><b>institutional_holding</b> <span class="tag new">NEW</span></td><td>ticker × holder × report date</td><td class="mono">small</td></tr>
+<tr><td class="mono"><b>flow_fetch_attempt</b> <span class="tag new">NEW</span></td><td>one per ticker <span class="rmv">D-95</span></td><td class="mono">tiny</td></tr>
 <tr><td class="mono"><b>flow_daily</b></td><td>ticker × day <span class="rmv">D-61</span></td><td class="mono">52 MB</td></tr>
 <tr><td class="mono"><b>events</b></td><td>ticker × event</td><td class="mono">small</td></tr>
 <tr><td class="mono"><b>market_context_daily</b></td><td>one per day</td><td class="mono">small</td></tr>
 <tr><td class="mono"><b>gate_result</b></td><td>ticker × day</td><td class="mono">120 MB</td></tr>
 <tr><td class="mono"><b>screen_score_daily</b></td><td>ticker × registered screen × day</td><td class="mono"><b>~280 MB per registered screen</b> <span class="rmv">D-84</span></td></tr>
 <tr><td class="mono"><b>screen_history</b></td><td>screen × day</td><td class="mono">small</td></tr>
-<tr><td class="mono"><b>screen_evaluation</b> <span class="tag new">NEW</span></td><td>screen × evaluation date</td><td class="mono">tiny</td></tr>
+<tr><td class="mono"><b>screen_evaluation</b> <span class="tag new">NEW</span> <span class="tag">NOT YET IN SCHEMA</span></td><td>screen × evaluation date</td><td class="mono">tiny</td></tr>
 <tr><td class="mono"><b>config_rows</b></td><td>key by version</td><td class="mono">tiny</td></tr>
 <tr><td class="mono"><b>news_digest</b> <span class="tag new">NEW</span></td><td>ticker × day</td><td class="mono">grows 10 MB/yr</td></tr>
 <tr><td class="mono"><b>calibration</b></td><td>model × screen × report</td><td class="mono">small</td></tr>
@@ -849,11 +883,17 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
 <tr><td class="mono"><b>researcher_memory</b></td><td>per revision</td><td class="mono">small</td></tr>
 <tr><td class="mono"><b>alert</b> <span class="tag new">NEW</span></td><td>per alert</td><td class="mono">small</td></tr>
 <tr><td class="mono"><b>cost_ledger / run_log</b></td><td>per call / per stage</td><td class="mono">small</td></tr>
+<tr><td class="mono"><b>sentiment_fetch_attempt</b> <span class="tag new">NEW</span></td><td>one per ticker <span class="rmv">D-99, 0011</span></td><td class="mono">tiny</td></tr>
+<tr><td class="mono"><b>event_fetch_attempt</b> <span class="tag new">NEW</span></td><td>one per ticker <span class="rmv">D-99, 0012</span></td><td class="mono">tiny</td></tr>
 </tbody>
 <tfoot><tr><td>Total</td><td>Roughly 5 GB after a five-year backfill at five registered screens, growing about 700 MB a year. Each further registered screen adds roughly 280 MB to the backfill and 56 MB a year <span class="rmv">D-84</span></td><td class="mono">~5 GB</td></tr></tfoot>
 </table>
 
 <p class="muted" style="font-size:13.5px">This table states grain and size and nothing about access. Who writes a store is in section 3's Writes column and in <code>SCHEMA.md</code>'s writer declaration for that table, which a test holds against each other; who reads it is in section 3's Reads column. Stating either a third time here is what drifted <span class="rmv">D-76</span></p>
+
+<p class="muted" style="font-size:13.5px"><b>The store list is held against <code>SCHEMA.md</code> in both directions by a test.</b> D-76 removed the writer and reader columns from this table on the grounds that the conformance test holds section 3 and <code>SCHEMA.md</code> together, and left the store list itself checked by nothing. Four stores drifted out of it before anyone noticed: <code>sentiment_derived_daily</code>, <code>fundamental_fetch_attempt</code>, <code>security_daily</code> and <code>flow_fetch_attempt</code>, every one of them already in a migration and in <code>SCHEMA.md</code>.</p>
+
+<p class="muted" style="font-size:13.5px"><b>A store marked <span class="tag">NOT YET IN SCHEMA</span> is designed here and not declared there yet</b>, and the test reads that marker rather than carrying a list of its own [D-83, D-76]. The marker cannot be used to silence a real drift: the test also fails when a store carrying it <i>is</i> declared in <code>SCHEMA.md</code>, so it has to be removed at the moment the store lands rather than left behind. One row carries it today, <code>screen_evaluation</code>, whose migration is phase 4's.</p>
 
 <div class="note"><b>The screen score table is the sleeper, and it is larger than the price data it derives from.</b> Every ticker is scored by every registered screen every day, because the floor is the 98th percentile of that screen's own trailing distribution and you cannot know the distribution without scoring everyone <span class="rmv">D-84</span>. That is one row per ticker per day per registered screen rather than one, and a shadow screen costs the same as a live one. Persisting only the names that clear some lower threshold would cut it to a few hundred megabytes, but keeping everything is the right call, because the point of the project is being able to ask questions of history later and a gigabyte is a poor reason to close off questions you have not thought of yet. Storing indicator columns as 32-bit rather than 64-bit floats halves the largest table and costs nothing, since no technical indicator needs fifteen significant figures.</div>
 </section>

@@ -1,0 +1,41 @@
+Set-identity proof for item 41, run 2026-08-18 against the developer store.
+Both statements extracted mechanically from source, the old one from 'git show 3c13357:'.
+The probe itself was a scratchpad file-based app and is not in this repository.
+Old ran first, so any cache it warmed flatters the new form; the new form's own
+measurement is taken in place from the C08 run and is not this number.
+
+=== OLD, extracted from TradingCalendar.old.cs ===
+SELECT DISTINCT date FROM price_daily
+WHERE date BETWEEN DATE '2021-01-04' AND DATE '2026-08-13'
+ORDER BY date;
+
+=== NEW, extracted from TradingCalendar.new.cs ===
+WITH RECURSIVE sessions AS (
+    SELECT min(date) AS date
+    FROM price_daily
+    WHERE date BETWEEN DATE '2021-01-04' AND DATE '2026-08-13'
+
+    UNION ALL
+
+    SELECT (SELECT min(p.date)
+            FROM price_daily p
+            WHERE p.date > s.date AND p.date <= DATE '2026-08-13')
+    FROM sessions s
+    WHERE s.date IS NOT NULL
+)
+SELECT date FROM sessions WHERE date IS NOT NULL ORDER BY date;
+
+  OLD returned 1,584 row(s) in 308,762 ms
+  NEW returned 1,584 row(s) in 5,836 ms
+
+=== SET IDENTITY ===
+  old count      1,584   distinct 1,584
+  new count      1,584   distinct 1,584
+  missing (in old, not new)  0
+  extra   (in new, not old)  0
+  new form ascending          True
+  first / last                2021-01-04 / 2026-08-12
+
+  VERDICT  SET IDENTICAL
+  old 308,762 ms, new 5,836 ms  (old ran first, so the new form is the warm one)
+EXIT=0

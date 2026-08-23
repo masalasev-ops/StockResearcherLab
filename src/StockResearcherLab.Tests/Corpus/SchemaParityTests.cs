@@ -116,10 +116,11 @@ public sealed class SchemaParityTests
             " [INVARIANT 16].");
 
         // It moved at 2.2, when fundamental_snapshot.capital_expenditures arrived
-        // and matched through "cap" [D-79], and it moves whenever a monetary column
+        // and matched through "cap" [D-79], and again at 3.2 for
+        // security_daily.market_cap [D-92], and it moves whenever a monetary column
         // does. guards.ps1 states its own against the migrations; this one is
         // against the live database. The value itself is stated once, below [D-83].
-        Assert.Equal(18, monetary.Count(c => c.Type.StartsWith("numeric", StringComparison.Ordinal)));
+        Assert.Equal(19, monetary.Count(c => c.Type.StartsWith("numeric", StringComparison.Ordinal)));
     }
 
     /// <summary>`real` and `double precision`, as `table.column`.</summary>

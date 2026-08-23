@@ -1,4 +1,5 @@
-using System.Globalization;
+﻿using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data.Eodhd;
@@ -22,7 +23,7 @@ namespace StockResearcherLab.Pipeline.Ingest;
 /// sessions would cost 252,000. Same split as C02's, and for the same reason
 /// [ARCHITECTURE section 19].
 /// </summary>
-public sealed class EventsIngestor : IStage
+public sealed class EventsIngestor : IStage, IBackfillStage
 {
     public static readonly string[] EventColumns =
         ["ticker", "event_type", "event_date", "announced_date"];
@@ -43,16 +44,32 @@ public sealed class EventsIngestor : IStage
     public const string Split = "split";
     public const string DividendEx = "dividend_ex";
 
+    /// <summary>
+    /// The attempt record [D-99, 0012]. Written for every dispatched ticker whether or
+    /// not it carried a distribution, because on these two endpoints an empty answer is
+    /// the ordinary case.
+    /// </summary>
+    public static readonly string[] AttemptColumns =
+        ["ticker", "last_attempted_date", "last_yield_date", "rows_last_attempt"];
+
+    private static readonly string[] AttemptConflictTarget = ["ticker"];
+
     private readonly EodhdClient _client;
 
     public EventsIngestor(EodhdClient client) => _client = client;
 
     public string Name => "EventsIngestor";
 
-    public IReadOnlyList<string> ReadSet { get; } = ["security"];
+    // `price_daily` is read by the sweep alone, for the in-window delisted names D-101
+    // widened the pool to. `event_fetch_attempt` is in neither list twice: a stage may
+    // read what it writes, which is what `DeclaredAccess.CanRead` says.
+    public IReadOnlyList<string> ReadSet { get; } = ["security_daily", "price_daily"];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
-        [new TableWrite("events", WriteOperation.Insert, EventColumns)];
+    [
+        new TableWrite("events", WriteOperation.Insert, EventColumns),
+        new TableWrite("event_fetch_attempt", WriteOperation.Insert, AttemptColumns),
+    ];
 
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
     {
@@ -122,10 +139,266 @@ public sealed class EventsIngestor : IStage
         return new StageResult(written, "ok", detail);
     }
 
+    // ------------------------------------------------------ range mode [3.10] ---
+
+    /// <summary>
+    /// Splits and dividends over history, per ticker. **Earnings deliberately not**
+    /// [D-93, phase 3 plan 3.10].
+    ///
+    /// **The endpoint reversal is the same one C02 made and for the same arithmetic.**
+    /// The nightly stage takes the bulk feed for one date at weight 100; `splits/{t}`
+    /// and `div/{t}` return whole history at 1 each, so a five-year load is two units a
+    /// ticker rather than 1,260 bulk days at a hundred.
+    ///
+    /// **No earnings row is written here and the absence is the decision.**
+    /// `calendar/earnings` sends no date on which a schedule became public, so
+    /// `announced_date` is null and a backfilled row is indistinguishable from a
+    /// live-accumulated one. Loading them would put a lookahead of unknown size under
+    /// C12's blackout and C15's `days_to_next_earnings` across the whole window, and
+    /// phase 5 could no longer separate it from the live rows. D-101 widened this
+    /// component's pool and does not reach that paragraph: the widening is about which
+    /// tickers are asked, not which event families.
+    ///
+    /// **The pool is the live universe plus every in-window delisted name** [D-101].
+    /// C06 widens on consistency rather than on a named reader for delisted
+    /// distributions: three ingest pools with two definitions is the shape behind every
+    /// silent hole this phase has found, and a pool rule that has to be looked up per
+    /// component is one a later session gets wrong.
+    /// </summary>
+    public async Task<BackfillResult> ExecuteRangeAsync(BackfillContext context, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var settings = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
+
+        var splitWeight = await LongAsync(settings, "backfill.weight_splits", ct).ConfigureAwait(false);
+        var dividendWeight = await LongAsync(settings, "backfill.weight_dividends", ct).ConfigureAwait(false);
+        var reserve = await LongAsync(settings, "backfill.unit_reserve", ct).ConfigureAwait(false);
+        var allowance = await LongAsync(settings, "backfill.daily_unit_allowance", ct).ConfigureAwait(false);
+
+        var pool = await RangePoolAsync(settings, context.From, ct).ConfigureAwait(false);
+        var already = await AttemptedOnAsync(settings, context.From, ct).ConfigureAwait(false);
+        var remaining = pool.Where(t => !already.Contains(t)).ToList();
+
+        long written = 0;
+        var dispatched = 0;
+        var yielded = 0;
+        var halted = false;
+        string? haltDetail = null;
+
+        foreach (var ticker in remaining)
+        {
+            // **Both calls or neither**, which is why the projection is their sum. A
+            // ticker whose splits landed and whose dividends did not would be a
+            // half-covered ticker behind a record saying it was covered.
+            var decision = await context.NextUnitAsync(
+                splitWeight + dividendWeight, reserve, allowance, ct).ConfigureAwait(false);
+
+            if (!decision.Fits)
+            {
+                halted = true;
+                haltDetail = decision.Detail;
+                break;
+            }
+
+            var rows = new List<EventRow>();
+            rows.AddRange(await PerTickerAsync(ticker, "splits", Split, ct).ConfigureAwait(false));
+            rows.AddRange(await PerTickerAsync(ticker, "div", DividendEx, ct).ConfigureAwait(false));
+
+            var count = await WriteEventsAsync(settings, rows, ct).ConfigureAwait(false);
+
+            await RecordAttemptAsync(settings, ticker, count, context.From, ct).ConfigureAwait(false);
+
+            written += count;
+            dispatched++;
+
+            if (count > 0)
+            {
+                yielded++;
+            }
+        }
+
+        var detail = string.Format(
+            CultureInfo.InvariantCulture,
+            "{0:N0} distribution row(s) over {1:N0} of {2:N0} pool member(s), of which {3:N0} carried at " +
+            "least one and {4:N0} carried none, which is an ordinary name rather than a gap [3.1 measured " +
+            "SPY.US itself at zero splits]. {5:N0} carried an attempt for this range already and were not " +
+            "dispatched [D-99]. The pool is the universe plus the in-window delisted names [D-101]. No " +
+            "earnings row is written by this pass and the absence is the decision rather than an omission.",
+            written, dispatched, pool.Count, yielded, dispatched - yielded,
+            pool.Count - remaining.Count);
+
+        // An empty remaining set is `covered` rather than `ok` with a zero, which is the
+        // distinction the sequence driver's zero-row halt rests on [3.16].
+        if (halted)
+        {
+            return BackfillResult.Halted(written, context.To, detail + " " + haltDetail);
+        }
+
+        return remaining.Count == 0
+            ? BackfillResult.Covered(context.To, detail)
+            : BackfillResult.Completed(written, context.To, detail);
+    }
+
+    /// <summary>
+    /// The sweep's pool: the live universe, plus every admitted delisted common stock
+    /// carrying a bar at or after the window start [D-101].
+    /// </summary>
+    private async Task<IReadOnlyList<string>> RangePoolAsync(
+        StageContext context, DateOnly windowStart, CancellationToken ct)
+    {
+        // The same precondition C04 carries, from the same helper, because C06's live half
+        // is the same read and 3.10 has not been run yet: this is the one range pool that
+        // can still meet the condition before it fires.
+        await BackfillPool.RequireUniverseCoverageAsync(context, windowStart, context.Date, ct)
+            .ConfigureAwait(false);
+
+        var live = await UniverseAsync(context, ct).ConfigureAwait(false);
+
+        var delisted = await BackfillPool.DelistedWithBarsInWindowAsync(
+            _client, context, windowStart, ct).ConfigureAwait(false);
+
+        var pool = new SortedSet<string>(live, StringComparer.Ordinal);
+        pool.UnionWith(delisted);
+
+        return pool.ToList();
+    }
+
+    /// <summary>
+    /// Tickers already carrying an attempt at this range's start [D-99].
+    /// </summary>
+    private static async Task<IReadOnlySet<string>> AttemptedOnAsync(
+        StageContext context, DateOnly rangeStart, CancellationToken ct)
+    {
+        var rows = await context.Data.ReadAsync(
+            "event_fetch_attempt",
+            $"""
+             SELECT ticker
+             FROM event_fetch_attempt
+             WHERE last_attempted_date = DATE '{rangeStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}'
+             ORDER BY ticker;
+             """,
+            ct).ConfigureAwait(false);
+
+        return rows.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static async Task RecordAttemptAsync(
+        StageContext context, string ticker, long rows, DateOnly rangeStart, CancellationToken ct)
+        => await context.Data.BulkUpsertAsync(
+            "event_fetch_attempt", AttemptColumns, AttemptConflictTarget,
+            async (w, c) =>
+            {
+                await w.StartRowAsync(c).ConfigureAwait(false);
+                await w.WriteAsync(ticker, c).ConfigureAwait(false);
+                await w.WriteAsync(rangeStart, c).ConfigureAwait(false);
+                await w.WriteAsync(rows > 0 ? rangeStart : (DateOnly?) null, c).ConfigureAwait(false);
+                await w.WriteAsync(rows, c).ConfigureAwait(false);
+            }, ct).ConfigureAwait(false);
+
+    /// <summary>
+    /// One ticker's whole history from <c>splits/{t}</c> or <c>div/{t}</c>.
+    ///
+    /// A 404 is a ticker the endpoint does not carry rather than a fault, and it still
+    /// takes an attempt row so the sweep does not offer it again [open item 18's rule,
+    /// one component further on].
+    /// </summary>
+    private async Task<IReadOnlyList<EventRow>> PerTickerAsync(
+        string ticker, string path, string eventType, CancellationToken ct)
+    {
+        try
+        {
+            using var doc = await _client.GetAsync(path + "/" + ticker, [], ct).ConfigureAwait(false);
+            return ParsePerTicker(doc.RootElement, ticker, eventType);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// The per-ticker form, which differs from the bulk feed in exactly one way that
+    /// matters: the ticker is not in the payload.
+    ///
+    /// The bulk feeds send `code` and `exchange` separately and this endpoint sends
+    /// neither, the ticker being what was asked for. Everything else is the shape 1.8's
+    /// fixture already covers, `div/SPY.US` having been measured at 3.1 returning
+    /// `date,declarationDate,recordDate,paymentDate,period,value,unadjustedValue,currency`.
+    ///
+    /// **A dividend keeps its ex-date and its declaration date and discards the other
+    /// two.** `recordDate` and `paymentDate` are the ones a reader reaches for by name
+    /// and neither is the event or its announcement.
+    /// </summary>
+    public static IReadOnlyList<EventRow> ParsePerTicker(JsonElement root, string ticker, string eventType)
+    {
+        var rows = new List<EventRow>();
+
+        if (root.ValueKind != JsonValueKind.Array)
+        {
+            return rows;
+        }
+
+        foreach (var e in root.EnumerateArray())
+        {
+            if (e.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var date = Date(e, "date");
+            if (date is null)
+            {
+                continue;
+            }
+
+            var announced = eventType == DividendEx ? Date(e, "declarationDate") : null;
+
+            rows.Add(new EventRow(ticker, eventType, date.Value, announced));
+        }
+
+        return rows;
+    }
+
+    /// <summary>The event write, shared by both entry points.</summary>
+    private static async Task<long> WriteEventsAsync(
+        StageContext context, IReadOnlyList<EventRow> rows, CancellationToken ct)
+    {
+        if (rows.Count == 0)
+        {
+            return 0;
+        }
+
+        // Ordered by the key and distinct on it, exactly as the nightly path does: two
+        // staging rows with the same key make the upsert's own ON CONFLICT arbitrary,
+        // and the per-ticker feeds can repeat a date across their own boundaries.
+        var ordered = rows
+            .GroupBy(r => (r.Ticker, r.EventType, r.EventDate))
+            .Select(g => g.First())
+            .OrderBy(r => r.Ticker, StringComparer.Ordinal)
+            .ThenBy(r => r.EventType, StringComparer.Ordinal)
+            .ThenBy(r => r.EventDate)
+            .ToList();
+
+        return await context.Data.BulkUpsertAsync(
+            "events", EventColumns, EventKey,
+            async (w, c) =>
+            {
+                foreach (var r in ordered)
+                {
+                    await w.StartRowAsync(c).ConfigureAwait(false);
+                    await w.WriteAsync(r.Ticker, c).ConfigureAwait(false);
+                    await w.WriteAsync(r.EventType, c).ConfigureAwait(false);
+                    await w.WriteAsync(r.EventDate, c).ConfigureAwait(false);
+                    await w.WriteAsync(r.AnnouncedDate, c).ConfigureAwait(false);
+                }
+            }, ct).ConfigureAwait(false);
+    }
+
     private static async Task<HashSet<string>> UniverseAsync(StageContext context, CancellationToken ct)
     {
         var rows = await context.Data.ReadAsync(
-            "security", "SELECT ticker FROM security WHERE is_active;", ct).ConfigureAwait(false);
+            "security_daily", Universe.MembersAsOf(context.Date), ct).ConfigureAwait(false);
 
         return rows.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
     }

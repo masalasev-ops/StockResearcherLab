@@ -1,4 +1,5 @@
-using System.Globalization;
+﻿using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data.Eodhd;
@@ -6,23 +7,23 @@ using StockResearcherLab.Data.Eodhd;
 namespace StockResearcherLab.Pipeline.Ingest;
 
 /// <summary>
-/// C05. Two source tables at their own natural grain, which the compute layer
-/// derives <c>flow_daily</c> from [D-61].
+/// C05. Form 4, at its own natural grain, which the compute layer derives
+/// <c>flow_daily</c> from together with the holdings C03 ingests [D-61].
 ///
-/// **The two halves do not promise the same thing** [D-69, 1.9]. Form 4 pages
-/// properly and is fully backfillable: <c>meta.total</c> matched the filings index
-/// on every ticker checked. <c>Holders::Institutions</c> is a top-20 snapshot at one
-/// or two report dates with no 13f endpoint behind it, so
-/// <c>inst_ownership_change</c> has no history to compute over and accumulates
-/// forward only. The table still ingests, because a current top-20 holder list is a
-/// usable static feature; it is the change metric that has no series.
+/// **The institutional half left at D-98** and <see cref="InstitutionalHolders"/> now
+/// carries it. It was a second call to <c>fundamentals/{t}</c>, filtered, and the
+/// filter is a projection of the document C03 receives unfiltered in a call already
+/// paid for. Form 4 stays here because <c>sec-filings/{t}/form4</c> is a different
+/// endpoint and the only one of the two that pages: <c>meta.total</c> matched the
+/// filings index on every ticker checked, so it is fully backfillable where the
+/// holdings block has no series at all [D-69, 1.9].
 ///
 /// **Never the legacy `insider-transactions` endpoint.** It returned zero over 90
 /// days for all seven probe names including the control, and market-wide it is stale
 /// by about three months and carries US Congress member trades, which are not Form 4
 /// insider filings.
 /// </summary>
-public sealed class FlowIngestor : IStage
+public sealed class FlowIngestor : IStage, IBackfillStage
 {
     public static readonly string[] InsiderColumns =
     [
@@ -32,13 +33,39 @@ public sealed class FlowIngestor : IStage
         "total_value", "shares_owned_after", "acquired_or_disposed",
     ];
 
-    public static readonly string[] HoldingColumns =
-    ["ticker", "report_date", "holder_name", "shares", "change", "change_pct"];
+    /// <summary>
+    /// The attempt record [D-95, 0008]. Written for every ticker the run selected,
+    /// whether or not the fetch yielded rows, which is the distinction the old
+    /// ordering could not make. Same four columns as C03's, because it is the same
+    /// record of the same kind of act.
+    /// </summary>
+    public static readonly string[] AttemptColumns =
+        ["ticker", "last_attempted_date", "last_yield_date", "rows_last_attempt"];
+
+    /// <summary>
+    /// The sweep's set [0013, item 44]. One column different from the nightly list
+    /// above, and that column is the whole split: the upsert updates exactly what it
+    /// is handed, so a range run stamps how far it has swept and leaves the rotation's
+    /// ordering where it was.
+    /// </summary>
+    public static readonly string[] SweepAttemptColumns =
+        ["ticker", "swept_through_date", "last_yield_date", "rows_last_attempt"];
+
+    /// <summary>
+    /// The union, which is what the write set declares. `EnsureColumnsDeclared` asks
+    /// that a write supply a subset of what was declared, so one declaration covers
+    /// both shapes and either alone would fail the other [INVARIANT 10].
+    /// </summary>
+    public static readonly string[] AttemptDeclaredColumns =
+    [
+        "ticker", "last_attempted_date", "swept_through_date",
+        "last_yield_date", "rows_last_attempt"
+    ];
 
     private static readonly string[] InsiderKey =
         ["ticker", "accession_number", "transaction_side", "transaction_ordinal"];
 
-    private static readonly string[] HoldingKey = ["ticker", "report_date", "holder_name"];
+    private static readonly string[] AttemptConflictTarget = ["ticker"];
 
     private readonly EodhdClient _client;
 
@@ -46,12 +73,15 @@ public sealed class FlowIngestor : IStage
 
     public string Name => "FlowIngestor";
 
-    public IReadOnlyList<string> ReadSet { get; } = ["security"];
+    // `flow_fetch_attempt` is not here and belongs in neither list twice. A stage may
+    // read what it writes, which is what `DeclaredAccess.CanRead` says: the rotation
+    // reads it back to decide what to fetch next [0008].
+    public IReadOnlyList<string> ReadSet { get; } = ["security_daily"];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
     [
         new TableWrite("insider_transaction", WriteOperation.Insert, InsiderColumns),
-        new TableWrite("institutional_holding", WriteOperation.Insert, HoldingColumns),
+        new TableWrite("flow_fetch_attempt", WriteOperation.Insert, AttemptDeclaredColumns),
     ];
 
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
@@ -63,40 +93,424 @@ public sealed class FlowIngestor : IStage
         var tickers = selection.Tickers;
 
         long insiderRows = 0;
-        long holdingRows = 0;
 
         // Per affected ticker, because a count alone cannot say whether the missing
         // rows can reach a trailing window [D-71]. Sorted before rendering, since
         // the tickers are walked in a fixed order but the list still reaches output.
         var shortfalls = new List<Shortfall>();
 
+        // One entry per selected ticker, written below whether or not the fetch
+        // yielded anything. A ticker that returns nothing still has to move down the
+        // rotation, or it sits at the head of it for ever [D-95]. The 14 of 250 that
+        // answer 404 are exactly that case, and 3.1 measured a 404 at 10 units.
+        var attempts = new List<Attempt>(tickers.Count);
+
         foreach (var ticker in tickers)
         {
-            insiderRows += await LoadInsiderAsync(context, ticker, pageSize, shortfalls, ct).ConfigureAwait(false);
-            holdingRows += await LoadHoldersAsync(context, ticker, ct).ConfigureAwait(false);
+            // One call a ticker since D-98, where it was two. The second was a filtered
+            // read of the payload C03 fetches whole, so what it bought at 10 units a
+            // ticker was a projection rather than a source.
+            var written = await LoadInsiderAsync(context, ticker, pageSize, shortfalls, ct)
+                .ConfigureAwait(false);
+
+            insiderRows += written;
+
+            // A run that yields nothing must not erase the date a previous one did,
+            // or the two absences collapse back into each other.
+            DateOnly? lastYield = written > 0
+                ? context.Date
+                : selection.PriorYield.TryGetValue(ticker, out var prior) ? prior : null;
+
+            attempts.Add(new Attempt(ticker, context.Date, lastYield, written));
         }
+
+        await RecordAttemptsAsync(context, attempts, ct).ConfigureAwait(false);
 
         // Coverage first, exactly as C03 reports it. A run that re-walks the same
         // 250 names and one that reaches 250 new ones look identical from a row
         // count, which is how the truncation below went unseen until sign-off.
+        //
+        // The oldest attempt in the selection is the number that says the rotation is
+        // still moving once coverage completes: it advances run by run, where every
+        // count above it stops moving [D-95].
         var detail = string.Format(
             CultureInfo.InvariantCulture,
-            "{0:N0} insider transaction row(s) and {1:N0} institutional holding row(s) over {2:N0} " +
-            "ticker(s). Candidate pool {3:N0}, of which {4:N0} have never been fetched; {5:N0} of this " +
-            "run's selection were new. Holdings are a top-20 snapshot rather than a series, so " +
-            "inst_ownership_change accumulates forward only [D-69]. {6}",
-            insiderRows, holdingRows, tickers.Count,
-            selection.PoolSize, selection.NeverFetched, selection.NewInSelection,
+            "{0:N0} insider transaction row(s) over {1:N0} ticker(s). Candidate pool {2:N0}, of which " +
+            "{3:N0} have never been attempted; {4:N0} of this run's selection were new and {5:N0} were " +
+            "refreshed, the oldest attempt among them dated {6}. Institutional holdings are C03's " +
+            "since D-98 and are reported there. {7}",
+            insiderRows, tickers.Count,
+            selection.PoolSize, selection.NeverAttempted, selection.NewInSelection,
+            selection.RefreshedInSelection,
+            selection.OldestAttemptInSelection?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "none",
             DescribeShortfalls(shortfalls));
 
-        return new StageResult(insiderRows + holdingRows, "ok", detail);
+        return new StageResult(insiderRows, "ok", detail);
+    }
+
+    // ------------------------------------------------------- range mode [3.9] ---
+
+    /// <summary>
+    /// One universe pass over <c>form4</c>, whole history per ticker [D-93].
+    ///
+    /// **The pool is the live universe and it does not widen, which is the one place
+    /// D-101 does not reach.** Every other ingest pool in this phase gained the
+    /// in-window delisted names; this one cannot, because `sec-filings` answers 404
+    /// for a delisted ticker against the same string `eod/{t}` and `fundamentals/{t}`
+    /// return series for [open item 12]. The bias is therefore a fact about the
+    /// provider rather than a choice made here, and it is recorded against S4 rather
+    /// than worked around.
+    ///
+    /// **The attempt stamps the range end, which is C03's half of D-99's asymmetry.**
+    /// The nightly call and the sweep call are the same call: both walk `form4` to the
+    /// end and neither takes a depth parameter, so a ticker the rotation covered is as
+    /// complete as one this sweep covered and skipping it is correct. That is the
+    /// condition D-99 names, and C02's range-start stamp exists only because its two
+    /// calls differ in depth. The column carries the rotation's freshness ordering as
+    /// well, which is the same one-column-two-purposes D-99 flagged on C03 and did not
+    /// split.
+    ///
+    /// **This is the sweep the allowance gate exists for** [3.9]. About 258,000 units
+    /// across three days, so it halts twice in the ordinary course and a halt is the
+    /// mechanism working rather than a failure.
+    /// </summary>
+    public async Task<BackfillResult> ExecuteRangeAsync(BackfillContext context, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var settings = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
+
+        var pageSize = (int) await LongAsync(settings, "flow.form4_page_size", ct).ConfigureAwait(false);
+        var weight = await LongAsync(settings, "backfill.weight_form4_page", ct).ConfigureAwait(false);
+        var reserve = await LongAsync(settings, "backfill.unit_reserve", ct).ConfigureAwait(false);
+        var allowance = await LongAsync(settings, "backfill.daily_unit_allowance", ct).ConfigureAwait(false);
+
+        var pool = await RangePoolAsync(settings, ct).ConfigureAwait(false);
+        var already = await AttemptedOnAsync(settings, context.To, ct).ConfigureAwait(false);
+        var remaining = pool.Where(t => !already.Contains(t)).ToList();
+
+        long insiderRows = 0;
+        var walked = 0;
+        var shortfalls = new List<Shortfall>();
+
+        string? haltedOn = null;
+
+        // **What the gate said, kept rather than reduced to a bool** [item 47].
+        // `AllowanceVerdict` has three values because an exhausted allowance and an
+        // unusable reading are different observations, and the two call for different
+        // actions: `Exhausted` means wait for tomorrow, `Stale` means make one billable
+        // call. This sweep threw the verdict away at the lambda below and its halt line
+        // named only the ticker, so the halt of 2026-08-19 at 00:40Z could not be told
+        // apart from an exhausted one without reading `/api/user` by hand and applying
+        // the rule on paper. The other four sweeps keep `decision.Detail`.
+        //
+        // A captured local rather than a changed signature on `GetAllPagesAsync`, whose
+        // gate is a predicate shared with every other pager. Safe to capture because
+        // this loop is serial by design, stated above: one walk asks the gate at a time.
+        AllowanceDecision? refusal = null;
+
+        // **Serial rather than parallel, and that is the paging.** C02 and C03 fan out
+        // because one ticker is one call; here one ticker is a walk whose length is
+        // discovered as it runs, so a bounded worker pool would have several walks
+        // asking the gate about the same remaining allowance and each answer would be
+        // stale by however many pages the others fetched meanwhile.
+        foreach (var ticker in remaining)
+        {
+            // **The gate is asked per page, not per ticker** [3.9]. A ticker's walk is
+            // ten units a page over an unknown page count, so a per-ticker projection
+            // would either overstate and stop early or understate and overshoot. The
+            // cost is a `/api/user` read per page, which spends no units.
+            var read = await WalkAsync(
+                ticker, pageSize,
+                async token =>
+                {
+                    var decision = await context
+                        .NextUnitAsync(weight, reserve, allowance, token).ConfigureAwait(false);
+
+                    if (!decision.Fits)
+                    {
+                        refusal = decision;
+                    }
+
+                    return decision.Fits;
+                },
+                ct).ConfigureAwait(false);
+
+            if (read is null)
+            {
+                // 404, being a ticker the filings index does not carry. An ordinary
+                // fact rather than a fault, and it still takes an attempt row so the
+                // sweep does not offer it again.
+                await RecordSweepAttemptAsync(
+                    settings, new Attempt(ticker, context.To, null, 0), ct).ConfigureAwait(false);
+                walked++;
+                continue;
+            }
+
+            var written = await WriteFilingsAsync(settings, ticker, read.Value.Rows, ct).ConfigureAwait(false);
+            insiderRows += written;
+
+            if (read.Value.StoppedByGate)
+            {
+                // **No attempt row, deliberately.** The rows collected are kept, every
+                // write being idempotent per grain [D-68], and the ticker stays in the
+                // remaining set so the next run walks it whole. Stamping it here would
+                // freeze a partial history behind a record saying it was covered, which
+                // is the one outcome the attempt record exists to prevent.
+                haltedOn = ticker;
+                break;
+            }
+
+            if (read.Value.Shortfall > 0)
+            {
+                shortfalls.Add(new Shortfall(ticker, read.Value.Shortfall, read.Value.Position));
+            }
+
+            await RecordSweepAttemptAsync(
+                settings,
+                new Attempt(ticker, context.To, written > 0 ? context.To : null, written),
+                ct).ConfigureAwait(false);
+            walked++;
+        }
+
+        var detail = string.Format(
+            CultureInfo.InvariantCulture,
+            "{0:N0} insider transaction row(s) over {1:N0} of {2:N0} universe member(s). {3:N0} carried " +
+            "an attempt for this sweep already and were not walked [D-99]. The pool is live names only " +
+            "and cannot widen [open item 12]. {4}",
+            insiderRows, walked, pool.Count, pool.Count - remaining.Count,
+            DescribeShortfalls(shortfalls));
+
+        if (haltedOn is null)
+        {
+            // An empty remaining set is `covered` rather than `ok` with a zero, which is
+            // the distinction the sequence driver's zero-row halt rests on [3.16].
+            return remaining.Count == 0
+                ? BackfillResult.Covered(context.To, detail)
+                : BackfillResult.Completed(insiderRows, context.To, detail);
+        }
+
+        return BackfillResult.Halted(insiderRows, context.To, detail + " " + DescribeGatedHalt(haltedOn, refusal));
+    }
+
+    /// <summary>
+    /// The gated halt's own sentence, kept out of the shortfall line [3.9].
+    ///
+    /// **A gated stop and a D-71 short page are two different observations and the run
+    /// log has to be readable as two.** One is this system declining to spend and the
+    /// other is the provider withholding rows it claimed to have; they are one absorbed
+    /// observation apart, and a sweep that rendered the first as the second would put a
+    /// spending decision into the record as a provider defect while leaving a short
+    /// history unremarked.
+    ///
+    /// Public so the distinction is asserted directly. C05's sweep pool is the universe,
+    /// which on the developer database the suite used to run against was the live one, so
+    /// an end-to-end range test would stamp an attempt row for every real ticker. The
+    /// suite now prepares its own store [item 26, 3.13] and the end-to-end test is owed
+    /// rather than refused, but the distinction stays asserted here as well as there.
+    ///
+    /// **And the gate's own reason, which this line did not carry** [item 47]. `Exhausted`
+    /// and `Stale` are the same sentence to a reader and opposite instructions to an
+    /// operator: the first means wait for tomorrow, the second means make one billable
+    /// call, `/api/user` being free and therefore unable to roll the provider's counter.
+    /// The halt of 2026-08-19 at 00:40Z was `Stale` against an allowance 98 percent
+    /// unspent, and telling it apart took a hand-written read and the rule applied on
+    /// paper. `AllowanceDecision.Detail` already says which and carries the remaining
+    /// figure and any drift between the provider's limit and the configured one.
+    ///
+    /// **Null is a halt whose reason was lost rather than a halt with no reason**, and it
+    /// says so rather than rendering an empty string. A gate that refused always produced
+    /// a decision, so a null here is this component failing to keep it.
+    /// </summary>
+    public static string DescribeGatedHalt(string ticker, AllowanceDecision? refusal = null) => string.Format(
+        CultureInfo.InvariantCulture,
+        "HALTED on the allowance gate at {0}, mid-walk. That ticker carries no attempt row and is " +
+        "walked again from its first page by the next run, so no partial history is recorded as " +
+        "complete. This is not a D-71 shortfall and is not counted as one. The gate said: {1}",
+        ticker,
+        refusal is { } d
+            ? $"{d.Verdict}. {d.Detail}"
+            : "nothing was kept, which is this component losing the verdict rather than the gate " +
+              "not giving one [item 47].");
+
+    /// <summary>
+    /// The sweep's pool, which is the live universe in ticker order.
+    ///
+    /// No rotation and no cap: the sweep's job is one pass over everything, where the
+    /// nightly stage's job is to move a bounded number of names along [D-95].
+    /// </summary>
+    private static async Task<IReadOnlyList<string>> RangePoolAsync(
+        StageContext context, CancellationToken ct)
+    {
+        var rows = await context.Data.ReadAsync(
+            "security_daily", Universe.MembersAsOf(context.Date), ct)
+            .ConfigureAwait(false);
+
+        return rows.Select(r => (string) r[0]!).ToList();
+    }
+
+    /// <summary>
+    /// Tickers already swept through this range's end, which are the ones it does not
+    /// walk again [D-99, 0013].
+    ///
+    /// **`swept_through_date`, and read as coverage rather than as equality** [item
+    /// 44]. Its own column since 0013, because this was `last_attempted_date`, which
+    /// the nightly rotation also orders on: a sweep stamp sorted ahead of any later
+    /// nightly date, so the rotation preferred the very names the sweep had just paid
+    /// for, and a night's stamp knocked a swept ticker back into the remaining set to
+    /// be bought again. Read with `&gt;=` rather than `=`, because D-105 refuses a
+    /// range end past the ingest frontier and these rows were stamped against an end
+    /// it now refuses; under equality every row matches nothing and the whole universe
+    /// re-dispatches at roughly 83.5 units a member, and that recurs on any later
+    /// frontier correction. A ticker swept through a later date is covered for an
+    /// earlier one.
+    /// </summary>
+    private static async Task<IReadOnlySet<string>> AttemptedOnAsync(
+        StageContext context, DateOnly asOf, CancellationToken ct)
+    {
+        var rows = await context.Data.ReadAsync(
+            "flow_fetch_attempt",
+            $"""
+             SELECT ticker
+             FROM flow_fetch_attempt
+             WHERE swept_through_date >= DATE '{asOf.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}'
+             ORDER BY ticker;
+             """,
+            ct).ConfigureAwait(false);
+
+        return rows.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// One ticker's <c>form4</c> walk, or null where the filings index does not carry
+    /// the ticker.
+    /// </summary>
+    private async Task<PagedRead?> WalkAsync(
+        string ticker, int pageSize, Func<CancellationToken, Task<bool>>? gate, CancellationToken ct)
+    {
+        try
+        {
+            return await _client.GetAllPagesAsync(
+                "sec-filings/" + ticker + "/form4", [], pageSize, ct, gate).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The parse and the write, shared by both entry points.</summary>
+    private static async Task<long> WriteFilingsAsync(
+        StageContext context, string ticker, IReadOnlyList<JsonElement> raw, CancellationToken ct)
+    {
+        var rows = ParseFilings(ticker, raw);
+        if (rows.Count == 0)
+        {
+            return 0;
+        }
+
+        return await context.Data.BulkUpsertAsync(
+            "insider_transaction", InsiderColumns, InsiderKey,
+            async (w, c) =>
+            {
+                foreach (var r in rows)
+                {
+                    await WriteInsiderRowAsync(w, r, c).ConfigureAwait(false);
+                }
+            }, ct).ConfigureAwait(false);
     }
 
     /// <param name="PoolSize">The whole active universe, which is the pool here.</param>
-    /// <param name="NeverFetched">Pool members with no row in <c>insider_transaction</c> yet.</param>
+    /// <param name="NeverAttempted">Pool members with no row in <c>flow_fetch_attempt</c> yet.</param>
     /// <param name="NewInSelection">How many of this run's selection were among them.</param>
+    /// <param name="RefreshedInSelection">The rest, which have been attempted before.</param>
+    /// <param name="OldestAttemptInSelection">The oldest attempt date among those, or null.</param>
+    /// <param name="PriorYield">
+    /// The yield date each selected ticker already had, so a run that yields nothing
+    /// does not erase it.
+    /// </param>
     public readonly record struct Selection(
-        IReadOnlyList<string> Tickers, int PoolSize, int NeverFetched, int NewInSelection);
+        IReadOnlyList<string> Tickers,
+        int PoolSize,
+        int NeverAttempted,
+        int NewInSelection,
+        int RefreshedInSelection,
+        DateOnly? OldestAttemptInSelection,
+        IReadOnlyDictionary<string, DateOnly> PriorYield);
+
+    /// <summary>One attempt, written whether or not it yielded rows [D-95].</summary>
+    private readonly record struct Attempt(
+        string Ticker, DateOnly AttemptedOn, DateOnly? LastYield, long Rows);
+
+    /// <summary>
+    /// One ticker's attempt row, written the moment that ticker's walk finishes.
+    ///
+    /// **The range sweep writes as it goes rather than once after the loop**
+    /// [item 58]. Accumulating and flushing at the end records nothing at all when
+    /// the loop throws: 3.9's day four walked 443 members and committed their
+    /// filings, then the pager threw on a later ticker and every one of those
+    /// attempt rows was lost, so the next run would buy the same coverage again at
+    /// about 83.3 units a member. D-99 says the attempt record is what a sweep has
+    /// done, and that a clean halt, a command timeout and a `kill -9` are the same
+    /// thing to the next run. A record written only on the success path says none
+    /// of that, and this is what makes the claim true for this stage.
+    ///
+    /// **Ordering.** One row a call means the copy order is the pool's order rather
+    /// than a sort, which is still deterministic because the pool is
+    /// `Universe.MembersAsOf` over one date. Nothing reads this table by position:
+    /// `AttemptedOnAsync` reads it as a set.
+    ///
+    /// The nightly path keeps the batched form below, its selection being one
+    /// bounded rotation rather than a walk whose length is discovered as it runs.
+    /// </summary>
+    private static Task RecordAttemptAsync(
+        StageContext context, Attempt attempt, CancellationToken ct)
+        => WriteAttemptsAsync(context, new List<Attempt> { attempt }, AttemptColumns, ct);
+
+    /// <summary>
+    /// One swept ticker's row, into the sweep's column rather than the rotation's
+    /// [0013, item 44]. Same statement, same grain, one different column list.
+    /// </summary>
+    private static Task RecordSweepAttemptAsync(
+        StageContext context, Attempt attempt, CancellationToken ct)
+        => WriteAttemptsAsync(context, new List<Attempt> { attempt }, SweepAttemptColumns, ct);
+
+    /// <summary>
+    /// The attempt record for every ticker this run selected.
+    ///
+    /// One upsert on `ticker`, so a second run over the same date writes what the
+    /// first wrote [D-68]. Sorted before the copy, because COPY order reaches the
+    /// table and an unsorted enumeration is not a deterministic output
+    /// [`CLAUDE.md` §6].
+    /// </summary>
+    private static Task RecordAttemptsAsync(
+        StageContext context, List<Attempt> attempts, CancellationToken ct)
+        => WriteAttemptsAsync(context, attempts, AttemptColumns, ct);
+
+    private static async Task WriteAttemptsAsync(
+        StageContext context, List<Attempt> attempts, string[] columns, CancellationToken ct)
+    {
+        if (attempts.Count == 0)
+        {
+            return;
+        }
+
+        attempts.Sort((a, b) => string.CompareOrdinal(a.Ticker, b.Ticker));
+
+        await context.Data.BulkUpsertAsync(
+            "flow_fetch_attempt", columns, AttemptConflictTarget,
+            async (w, c) =>
+            {
+                foreach (var a in attempts)
+                {
+                    await w.StartRowAsync(c).ConfigureAwait(false);
+                    await w.WriteAsync(a.Ticker, c).ConfigureAwait(false);
+                    await w.WriteAsync(a.AttemptedOn, c).ConfigureAwait(false);
+                    await w.WriteAsync(a.LastYield, c).ConfigureAwait(false);
+                    await w.WriteAsync(a.Rows, c).ConfigureAwait(false);
+                }
+            }, ct).ConfigureAwait(false);
+    }
 
     /// <param name="Position">
     /// `interior` means at least one page before the last came back short, so the
@@ -156,59 +570,68 @@ public sealed class FlowIngestor : IStage
     /// a cap every name eventually passes through is a bound on a night's spend,
     /// which is what this now is.
     ///
-    /// The ordering is C03's, at `FundamentalsIngestor.CandidatesAsync`: never
-    /// fetched first, then the rest, then ticker ordinal. C03's middle group,
-    /// fetched-and-in-universe against fetched-and-outside-it, collapses here
-    /// because the pool is the universe.
+    /// **The ordering is `RotationSelection`, shared with C03 rather than copied from
+    /// it** [D-95]. It was copied by hand at 1.7 and then kept this component's
+    /// defect after C03's was fixed at D-91, which is the drift a shared function
+    /// removes. C03's universe tier is a tiebreak here too and simply never fires,
+    /// because this pool is the universe.
     /// </summary>
     private static async Task<Selection> UniverseAsync(
         StageContext context, int maxPerRun, CancellationToken ct)
     {
         var rows = await context.Data.ReadAsync(
-            "security", "SELECT ticker FROM security WHERE is_active ORDER BY ticker;", ct)
+            "security_daily", Universe.MembersAsOf(context.Date), ct)
             .ConfigureAwait(false);
 
         var pool = rows.Select(r => (string) r[0]!).ToList();
 
+        // **Strictly before the run date** [D-95]. A re-run of one date therefore sees
+        // the state the first run saw and selects the same names, so the stage stays a
+        // pure function of its date and config version; the rotation advances between
+        // dates rather than between runs [`CLAUDE.md` §6, INVARIANT 13].
+        //
         // Reading what it writes, which DeclaredAccess permits without a second
         // declaration: the read set would otherwise say this stage reads a table it
         // owns, which is not what a read set means.
-        var already = await context.Data.ReadAsync(
-            "insider_transaction", "SELECT DISTINCT ticker FROM insider_transaction;", ct)
-            .ConfigureAwait(false);
+        var asOf = context.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-        var fetched = already.Select(r => (string) r[0]!).ToHashSet(StringComparer.Ordinal);
+        var attemptRows = await context.Data.ReadAsync(
+            "flow_fetch_attempt",
+            $"""
+             SELECT ticker, last_attempted_date, last_yield_date
+             FROM flow_fetch_attempt
+             WHERE last_attempted_date < DATE '{asOf}'
+             ORDER BY ticker;
+             """,
+            ct).ConfigureAwait(false);
 
-        return SelectionFor(pool, fetched, maxPerRun);
-    }
+        var attempted = new Dictionary<string, DateOnly>(StringComparer.Ordinal);
+        var priorYield = new Dictionary<string, DateOnly>(StringComparer.Ordinal);
 
-    /// <summary>
-    /// The ordering, as a pure function so two consecutive passes can be asserted
-    /// without a provider or a database.
-    ///
-    /// **A name that returns no rows stays never-fetched and is offered again.** For
-    /// the 14 of 250 that answer `404 Symbol not found` that is a re-ask every run,
-    /// and it is the residue a high-water mark would close. Not built here: it is a
-    /// separate decision and its absence does not breach an invariant, because
-    /// coverage still advances by every name that does return rows.
-    /// </summary>
-    public static Selection SelectionFor(
-        IReadOnlyList<string> pool, IReadOnlySet<string> fetched, int maxPerRun)
-    {
-        ArgumentNullException.ThrowIfNull(pool);
-        ArgumentNullException.ThrowIfNull(fetched);
+        // `date` comes back as DateTime through the generic reader, which is the form
+        // every other stage in this project converts from.
+        foreach (var r in attemptRows)
+        {
+            var t = (string) r[0]!;
+            attempted[t] = DateOnly.FromDateTime((DateTime) r[1]!);
 
-        var selected = pool
-            .OrderBy(t => fetched.Contains(t) ? 1 : 0)
-            .ThenBy(t => t, StringComparer.Ordinal)
-            .Take(maxPerRun)
-            .ToList();
+            if (r[2] is DateTime y)
+            {
+                priorYield[t] = DateOnly.FromDateTime(y);
+            }
+        }
+
+        var inUniverse = pool.ToHashSet(StringComparer.Ordinal);
+        var rotation = RotationSelection.For(pool, attempted, inUniverse, maxPerRun);
 
         return new Selection(
-            selected,
-            pool.Count,
-            pool.Count(t => !fetched.Contains(t)),
-            selected.Count(t => !fetched.Contains(t)));
+            rotation.Selected,
+            rotation.PoolSize,
+            rotation.NeverAttempted,
+            rotation.NewInSelection,
+            rotation.RefreshedInSelection,
+            rotation.OldestAttemptInSelection,
+            priorYield);
     }
 
     /// <summary>
@@ -228,16 +651,16 @@ public sealed class FlowIngestor : IStage
         StageContext context, string ticker, int pageSize, List<Shortfall> shortfalls,
         CancellationToken ct)
     {
-        PagedRead read;
-        try
+        // **A 404 alone, narrowed at 3.9** [open item 18]. This caught
+        // `HttpRequestException` whole, so a 402 or a 429 reaching it was recorded as a
+        // ticker with no filings index: a night that hit the allowance wall in flight
+        // wrote nothing for that name and nothing for any name after it, and returned
+        // having completed over a partial load. The walk shares its catch with the
+        // sweep's, so there is one rule rather than two [D-100's reasoning, one layer
+        // up].
+        var read = await WalkAsync(ticker, pageSize, gate: null, ct).ConfigureAwait(false);
+        if (read is null)
         {
-            read = await _client.GetAllPagesAsync(
-                "sec-filings/" + ticker + "/form4", [], pageSize, ct).ConfigureAwait(false);
-        }
-        catch (HttpRequestException)
-        {
-            // A ticker with no filings index is the ordinary case for a recent
-            // listing. Not a reason to fail the night.
             return 0;
         }
 
@@ -245,41 +668,33 @@ public sealed class FlowIngestor : IStage
         // continued, because asking again cannot produce them and halting means a
         // universe pass never completes [D-71]. The client throws instead where the
         // loop stopped while a next link was still on offer.
-        if (read.Shortfall > 0)
+        if (read.Value.Shortfall > 0)
         {
-            shortfalls.Add(new Shortfall(ticker, read.Shortfall, read.Position));
+            shortfalls.Add(new Shortfall(ticker, read.Value.Shortfall, read.Value.Position));
         }
 
-        var rows = ParseFilings(ticker, read.Rows);
-        if (rows.Count == 0)
-        {
-            return 0;
-        }
+        return await WriteFilingsAsync(context, ticker, read.Value.Rows, ct).ConfigureAwait(false);
+    }
 
-        return await context.Data.BulkUpsertAsync(
-            "insider_transaction", InsiderColumns, InsiderKey,
-            async (w, c) =>
-            {
-                foreach (var r in rows)
-                {
-                    await w.StartRowAsync(c).ConfigureAwait(false);
-                    await w.WriteAsync(r.Ticker, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.Accession, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.Side, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.Ordinal, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.FiledAt, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.TransactionDate, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.OwnerCik, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.OwnerName, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.Code, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.SecurityTitle, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.Shares, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.Price, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.TotalValue, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.SharesOwnedAfter, c).ConfigureAwait(false);
-                    await w.WriteAsync(r.AcquiredOrDisposed, c).ConfigureAwait(false);
-                }
-            }, ct).ConfigureAwait(false);
+    /// <summary>One insider row into an open COPY stream. Column order is <see cref="InsiderColumns"/>.</summary>
+    private static async Task WriteInsiderRowAsync(IBulkWriter w, InsiderRow r, CancellationToken c)
+    {
+        await w.StartRowAsync(c).ConfigureAwait(false);
+        await w.WriteAsync(r.Ticker, c).ConfigureAwait(false);
+        await w.WriteAsync(r.Accession, c).ConfigureAwait(false);
+        await w.WriteAsync(r.Side, c).ConfigureAwait(false);
+        await w.WriteAsync(r.Ordinal, c).ConfigureAwait(false);
+        await w.WriteAsync(r.FiledAt, c).ConfigureAwait(false);
+        await w.WriteAsync(r.TransactionDate, c).ConfigureAwait(false);
+        await w.WriteAsync(r.OwnerCik, c).ConfigureAwait(false);
+        await w.WriteAsync(r.OwnerName, c).ConfigureAwait(false);
+        await w.WriteAsync(r.Code, c).ConfigureAwait(false);
+        await w.WriteAsync(r.SecurityTitle, c).ConfigureAwait(false);
+        await w.WriteAsync(r.Shares, c).ConfigureAwait(false);
+        await w.WriteAsync(r.Price, c).ConfigureAwait(false);
+        await w.WriteAsync(r.TotalValue, c).ConfigureAwait(false);
+        await w.WriteAsync(r.SharesOwnedAfter, c).ConfigureAwait(false);
+        await w.WriteAsync(r.AcquiredOrDisposed, c).ConfigureAwait(false);
     }
 
     /// <param name="Ordinal">
@@ -357,99 +772,6 @@ public sealed class FlowIngestor : IStage
         return rows;
     }
 
-    /// <summary>
-    /// The top-20 institutional holders, which is a snapshot and not a series
-    /// [D-69]. Ingested because a current holder list is a usable static feature.
-    /// </summary>
-    private async Task<long> LoadHoldersAsync(StageContext context, string ticker, CancellationToken ct)
-    {
-        JsonDocument doc;
-        try
-        {
-            doc = await _client.GetAsync(
-                "fundamentals/" + ticker,
-                [("filter", "Holders::Institutions")],
-                ct).ConfigureAwait(false);
-        }
-        catch (HttpRequestException)
-        {
-            return 0;
-        }
-
-        using (doc)
-        {
-            var rows = ParseHolders(ticker, doc.RootElement);
-            if (rows.Count == 0)
-            {
-                return 0;
-            }
-
-            return await context.Data.BulkUpsertAsync(
-                "institutional_holding", HoldingColumns, HoldingKey,
-                async (w, c) =>
-                {
-                    foreach (var h in rows)
-                    {
-                        await w.StartRowAsync(c).ConfigureAwait(false);
-                        await w.WriteAsync(h.Ticker, c).ConfigureAwait(false);
-                        await w.WriteAsync(h.ReportDate, c).ConfigureAwait(false);
-                        await w.WriteAsync(h.HolderName, c).ConfigureAwait(false);
-                        await w.WriteAsync(h.Shares, c).ConfigureAwait(false);
-                        await w.WriteAsync(h.Change, c).ConfigureAwait(false);
-                        await w.WriteAsync(h.ChangePct, c).ConfigureAwait(false);
-                    }
-                }, ct).ConfigureAwait(false);
-        }
-    }
-
-    public readonly record struct HoldingRow(
-        string Ticker, DateOnly ReportDate, string HolderName,
-        decimal? Shares, decimal? Change, float? ChangePct);
-
-    public static IReadOnlyList<HoldingRow> ParseHolders(string ticker, JsonElement root)
-    {
-        var rows = new List<HoldingRow>();
-
-        if (root.ValueKind != JsonValueKind.Object)
-        {
-            return rows;
-        }
-
-        // Keyed "0", "1", "2" rather than an array, which is why a caller expecting
-        // an array reads nothing rather than failing [1.9].
-        foreach (var entry in root.EnumerateObject())
-        {
-            if (entry.Value.ValueKind != JsonValueKind.Object)
-            {
-                continue;
-            }
-
-            var name = Text(entry.Value, "name");
-            var date = Date(entry.Value, "date");
-
-            // Both are key parts, so a row missing either cannot be written at the
-            // declared grain and is dropped rather than given a placeholder.
-            if (name is null || date is null)
-            {
-                continue;
-            }
-
-            rows.Add(new HoldingRow(
-                ticker, date.Value, name,
-                Money(entry.Value, "currentShares"),
-                Money(entry.Value, "change"),
-                Pct(entry.Value, "change_p")));
-        }
-
-        rows.Sort(static (a, b) =>
-        {
-            var t = a.ReportDate.CompareTo(b.ReportDate);
-            return t != 0 ? t : string.CompareOrdinal(a.HolderName, b.HolderName);
-        });
-
-        return rows;
-    }
-
     private static string? Text(JsonElement e, string name)
         => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String
            && !string.IsNullOrEmpty(v.GetString())
@@ -457,7 +779,7 @@ public sealed class FlowIngestor : IStage
             : null;
 
     /// <summary>
-    /// The provider sends transaction dates as ISO instants and report dates as
+    /// The provider sends transaction dates as ISO instants and filing dates as
     /// plain dates, so both forms are accepted. A trading date is a label rather
     /// than a timezone conversion, so the date part is taken as written.
     /// </summary>
@@ -502,12 +824,6 @@ public sealed class FlowIngestor : IStage
             _ => null,
         };
     }
-
-    private static float? Pct(JsonElement e, string name)
-        => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number
-           && v.TryGetSingle(out var f)
-            ? f
-            : null;
 
     private static async Task<long> LongAsync(StageContext context, string key, CancellationToken ct)
     {

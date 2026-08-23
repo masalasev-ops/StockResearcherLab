@@ -36,7 +36,7 @@ namespace StockResearcherLab.Pipeline.Compute;
 ///
 /// Formulas, windows and null rules for every column are in `METRICS.md` §3.
 /// </summary>
-public sealed class ValuationEngine : IStage
+public sealed class ValuationEngine : IStage, IBackfillStage
 {
     /// <summary>
     /// The columns this stage writes. The percentile columns on this table belong to
@@ -87,7 +87,13 @@ public sealed class ValuationEngine : IStage
 
     public string Name => "ValuationEngine";
 
-    public IReadOnlyList<string> ReadSet { get; } = ["price_daily", "fundamental_snapshot"];
+    // `earnings_history` is declared here from the moment §3's Reads cell names it
+    // [D-96]. The read itself arrives with `last_two_earnings_surprises`, which this
+    // stage has written null since 0001; declaring it early is what keeps the
+    // catalogue and the code agreeing, and `ReadDeclarationConformanceTests` is what
+    // caught them disagreeing for the length of one commit.
+    public IReadOnlyList<string> ReadSet { get; } =
+        ["price_daily", "fundamental_snapshot", "earnings_history"];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
         [new TableWrite("valuation_daily", WriteOperation.Insert, Columns)];
@@ -100,6 +106,7 @@ public sealed class ValuationEngine : IStage
         var filings = await FilingsAsync(context, ct).ConfigureAwait(false);
         var closes = await ClosesAsync(context, ct).ConfigureAwait(false);
         var monthEnds = await MonthEndClosesAsync(context, ct).ConfigureAwait(false);
+        var surprises = await SurprisesAsync(context, ct).ConfigureAwait(false);
 
         var rows = new List<Row>(filings.Count);
 
@@ -110,7 +117,8 @@ public sealed class ValuationEngine : IStage
                 periods,
                 closes.GetValueOrDefault(ticker),
                 monthEnds.GetValueOrDefault(ticker, []),
-                minPoints));
+                minPoints,
+                surprises.GetValueOrDefault(ticker)));
         }
 
         // Ordinal, and load-bearing rather than tidy: the loop above walks a
@@ -119,7 +127,21 @@ public sealed class ValuationEngine : IStage
         // section 6].
         rows.Sort(static (a, b) => string.CompareOrdinal(a.Ticker, b.Ticker));
 
-        var written = await context.Data.BulkUpsertAsync(
+        var written = await WriteAsync(context, rows, ct).ConfigureAwait(false);
+
+        return new StageResult(written, "ok", Detail(rows));
+    }
+
+    /// <summary>
+    /// The write, shared by the nightly path and the range path.
+    ///
+    /// **Extracted rather than copied at 3.13**, for the reason C08's is: two loops
+    /// writing fourteen columns in a fixed order drift silently, and a reordering in one
+    /// of them is caught by nothing at all.
+    /// </summary>
+    private static Task<long> WriteAsync(
+        StageContext context, IReadOnlyList<Row> rows, CancellationToken ct)
+        => context.Data.BulkUpsertAsync(
             "valuation_daily", Columns, ConflictTarget,
             async (w, c) =>
             {
@@ -145,11 +167,447 @@ public sealed class ValuationEngine : IStage
                     // document says where a surprise comes from. Null rather than a
                     // proxy, because the field is one of the five section 7 calls
                     // out as able to flip a verdict.
-                    await w.WriteAsync<float[]?>(null, c).ConfigureAwait(false);
+                    await w.WriteAsync(r.LastTwoEarningsSurprises, c).ConfigureAwait(false);
                 }
-            }, ct).ConfigureAwait(false);
+            }, ct);
 
-        return new StageResult(written, "ok", Detail(rows));
+    // ------------------------------------------------- range mode [3.13] ---
+
+    /// <summary>Tickers per pass, as C08's range mode uses.</summary>
+    private const int TickerChunk = 200;
+
+    /// <summary>
+    /// The same work as <see cref="ExecuteAsync"/> over a range, partitioned by ticker.
+    ///
+    /// **One read per chunk of each of the four inputs, then the existing public
+    /// <see cref="Compute"/> per date** [3.13, D-93]. The arithmetic is not
+    /// reimplemented; what is derived per date in C# is the *shaping* the nightly
+    /// statements do in SQL, and each is stated against the statement it reproduces so
+    /// the two can be read side by side.
+    ///
+    /// **This stage takes no `security_daily` precondition and that is not an
+    /// oversight.** C08's range mode throws when the universe is unfilled because its
+    /// pool *is* the universe. C09's pool is every ticker with a readable quarterly
+    /// filing, which is wider than the universe deliberately and is the phase 2 carried
+    /// obligation still awaiting an authored amendment. Adding the universe here would
+    /// mean declaring a table §3's Reads cell does not give this component, which
+    /// `ReadDeclarationConformanceTests` refuses in both directions and which is an
+    /// authored edit rather than a build decision [`CLAUDE.md` §13].
+    /// </summary>
+    public async Task<BackfillResult> ExecuteRangeAsync(
+        BackfillContext context, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        // Everything before the chunk loop, named [item 43].
+        var phases = new PhaseTimer();
+
+        var atEnd = await context.ForDateAsync(context.To, ct).ConfigureAwait(false);
+
+        var dates = await context.SessionsAsync(ct).ConfigureAwait(false);
+        phases.Mark("calendar");
+
+        if (dates.Count == 0)
+        {
+            return BackfillResult.Completed(
+                0, context.To, "no trading date in the range carries a price_daily bar, so nothing is computed");
+        }
+
+        var byVersion = new Dictionary<int, int>();
+        var minPointsOf = new Dictionary<DateOnly, int>();
+
+        foreach (var date in dates)
+        {
+            var stage = await context.ForDateAsync(date, ct).ConfigureAwait(false);
+
+            if (!byVersion.TryGetValue(stage.ConfigVersion, out var minPoints))
+            {
+                minPoints = (int) await LongAsync(stage, "valuation.own_history_min_points", ct)
+                    .ConfigureAwait(false);
+                byVersion[stage.ConfigVersion] = minPoints;
+            }
+
+            minPointsOf[date] = minPoints;
+        }
+
+        phases.Mark("settings");
+
+        var pool = await RangePoolAsync(atEnd, context.To, ct).ConfigureAwait(false);
+        phases.Mark("pool");
+
+        long written = 0;
+        var rowsWritten = 0;
+
+        // The unit is a chunk and not a date: this loop is ticker-outer, so one pass
+        // computes every date in the range for two hundred names [3.17, `CLAUDE.md` §5].
+        var elapsed = new List<long>();
+
+        foreach (var chunk in Chunks(pool, TickerChunk))
+        {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+
+            var filings = await RangeFilingsAsync(atEnd, chunk, context.From, context.To, ct)
+                .ConfigureAwait(false);
+            var bars = await RangeBarsAsync(atEnd, chunk, context.From, context.To, ct)
+                .ConfigureAwait(false);
+            var surprises = await RangeSurprisesAsync(atEnd, chunk, context.To, ct)
+                .ConfigureAwait(false);
+
+            var rows = new List<Row>();
+
+            foreach (var ticker in chunk)
+            {
+                if (!filings.TryGetValue(ticker, out var periods))
+                {
+                    continue;
+                }
+
+                var series = bars.GetValueOrDefault(ticker, []);
+                var monthEnds = MonthEnds.For(series);
+                var reported = surprises.GetValueOrDefault(ticker, []);
+
+                foreach (var date in dates)
+                {
+                    // Nightly narrows on `period_end` in SQL and then `Compute` applies
+                    // the point-in-time filter. Both halves are reproduced here rather
+                    // than one, because a period older than the seven-year window would
+                    // otherwise reach `Compute` on a backfilled date and not on a
+                    // nightly one.
+                    var inWindow = periods
+                        .Where(p => p.PeriodEnd > date.AddYears(-FilingHistoryYears)
+                                    && p.FilingDateEffective is { } f && f <= date)
+                        .ToList();
+
+                    if (inWindow.Count == 0)
+                    {
+                        // No readable filing, so the nightly path would not have this
+                        // ticker in its pool for this date and writes no row for it.
+                        continue;
+                    }
+
+                    rows.Add(Compute(
+                        ticker, date, inWindow,
+                        CloseOn(series, date),
+                        monthEnds.At(date, OwnHistoryYears),
+                        minPointsOf[date],
+                        LastTwo(reported, date)));
+                }
+            }
+
+            rows.Sort(static (a, b) =>
+            {
+                var byTicker = string.CompareOrdinal(a.Ticker, b.Ticker);
+                return byTicker != 0 ? byTicker : a.Date.CompareTo(b.Date);
+            });
+
+            rowsWritten += rows.Count;
+            written += await WriteAsync(atEnd, rows, ct).ConfigureAwait(false);
+
+            elapsed.Add((long) System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        }
+
+        return BackfillResult.Completed(
+            written, context.To,
+            string.Format(
+                CultureInfo.InvariantCulture,
+                "{0:N0} trading date(s) over a pool of {1:N0} ticker(s) with a readable quarterly filing, " +
+                "{2:N0} row(s) composed in {3:N0} chunk(s) of {4}. The pool is wider than the universe " +
+                "deliberately and that is the phase 2 obligation still open. {5} {6}",
+                dates.Count, pool.Count, rowsWritten,
+                (pool.Count + TickerChunk - 1) / TickerChunk, TickerChunk,
+                RangeTiming.Describe(
+                    string.Create(CultureInfo.InvariantCulture, $"chunk of {TickerChunk} ticker(s)"),
+                    elapsed),
+                phases.Describe()));
+    }
+
+    /// <summary>One priced session, which is all the range path needs from a bar.</summary>
+    private readonly record struct Priced(DateOnly Date, decimal Close);
+
+    /// <summary>
+    /// The month-end closes of one ticker, precomputed once and sliced per date.
+    ///
+    /// **This reproduces `MonthEndClosesAsync`'s statement and the correspondence is the
+    /// point.** That statement partitions by `(ticker, date_trunc('month', date))` and
+    /// takes `rn = 1` over `date &lt; asOf`, which for every month before the as-of
+    /// month is that month's own last session, and for the as-of month is the last
+    /// session before the date. Recomputing it per date would be a scan of the whole
+    /// series 1,260 times; precomputing the last-of-month positions once and adding the
+    /// as-of month's partial tail is the same answer in time proportional to the sixty
+    /// months read.
+    /// </summary>
+    private readonly struct MonthEnds
+    {
+        private readonly IReadOnlyList<Priced> _series;
+        private readonly IReadOnlyList<int> _lastOfMonth;
+
+        private MonthEnds(IReadOnlyList<Priced> series, IReadOnlyList<int> lastOfMonth)
+        {
+            _series = series;
+            _lastOfMonth = lastOfMonth;
+        }
+
+        public static MonthEnds For(IReadOnlyList<Priced> series)
+        {
+            var last = new List<int>();
+
+            for (var i = 0; i < series.Count; i++)
+            {
+                var isLast = i == series.Count - 1
+                             || series[i + 1].Date.Year != series[i].Date.Year
+                             || series[i + 1].Date.Month != series[i].Date.Month;
+
+                if (isLast)
+                {
+                    last.Add(i);
+                }
+            }
+
+            return new MonthEnds(series, last);
+        }
+
+        /// <summary>
+        /// Strictly before <paramref name="asOf"/> and no older than
+        /// <paramref name="years"/>, ascending, exactly as the statement orders them.
+        /// </summary>
+        public IReadOnlyList<(DateOnly Date, decimal Close)> At(DateOnly asOf, int years)
+        {
+            var floor = asOf.AddYears(-years);
+            var cut = 0;
+
+            while (cut < _series.Count && _series[cut].Date < asOf)
+            {
+                cut++;
+            }
+
+            if (cut == 0)
+            {
+                return [];
+            }
+
+            var taken = new List<(DateOnly, decimal)>();
+
+            foreach (var i in _lastOfMonth)
+            {
+                if (i >= cut)
+                {
+                    break;
+                }
+
+                if (_series[i].Date >= floor)
+                {
+                    taken.Add((_series[i].Date, _series[i].Close));
+                }
+            }
+
+            // The as-of month's own tail, which is a month end only from this date's
+            // point of view and is what `rn = 1` returns for the partition containing it.
+            var tail = cut - 1;
+
+            if ((_lastOfMonth.Count == 0 || _lastOfMonth[^1] != tail) &&
+                !_lastOfMonth.Contains(tail) && _series[tail].Date >= floor)
+            {
+                taken.Add((_series[tail].Date, _series[tail].Close));
+            }
+
+            return taken;
+        }
+    }
+
+    private static decimal? CloseOn(IReadOnlyList<Priced> series, DateOnly date)
+    {
+        foreach (var b in series)
+        {
+            if (b.Date == date)
+            {
+                return b.Close;
+            }
+
+            if (b.Date > date)
+            {
+                break;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The two newest surprises reported at or before the date, which is
+    /// `SurprisesAsync`'s `rn &lt;= 2` over the same ordering.
+    /// </summary>
+    private static IReadOnlyList<float>? LastTwo(
+        IReadOnlyList<(DateOnly Report, DateOnly PeriodEnd, float Value)> reported, DateOnly date)
+    {
+        var taken = new List<float>(2);
+
+        foreach (var r in reported)
+        {
+            if (r.Report > date)
+            {
+                continue;
+            }
+
+            taken.Add(r.Value);
+
+            if (taken.Count == 2)
+            {
+                break;
+            }
+        }
+
+        return taken.Count == 0 ? null : taken;
+    }
+
+    /// <summary>Every ticker with a quarterly filing readable by the range's end.</summary>
+    private static async Task<IReadOnlyList<string>> RangePoolAsync(
+        StageContext context, DateOnly to, CancellationToken ct)
+    {
+        var rows = await context.Data.ReadAsync(
+            "fundamental_snapshot",
+            $"""
+             SELECT DISTINCT ticker FROM fundamental_snapshot
+             WHERE period_type = 'quarterly'
+               AND filing_date_effective IS NOT NULL
+               AND filing_date_effective <= {Literal(to)}
+             ORDER BY ticker;
+             """,
+            ct).ConfigureAwait(false);
+
+        return rows.Select(r => (string) r[0]!).ToList();
+    }
+
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyList<Priced>>> RangeBarsAsync(
+        StageContext context, IReadOnlyList<string> tickers, DateOnly from, DateOnly to,
+        CancellationToken ct)
+    {
+        // `close > 0` is the month-end statement's filter and the close-on-the-date
+        // statement asks only for non-null. The stricter one is applied here because a
+        // non-positive close cannot be a valid price and the looser read exists to let a
+        // halted name carry null rather than to admit zero [`CLAUDE.md` §6].
+        var sql = $"""
+            WITH chunk(ticker) AS (VALUES {Values(tickers)})
+            SELECT p.ticker, p.date, p.close
+            FROM price_daily p
+            JOIN chunk c ON c.ticker = p.ticker
+            WHERE p.date >= {Literal(from.AddYears(-OwnHistoryYears))} AND p.date <= {Literal(to)}
+              AND p.close IS NOT NULL AND p.close > 0
+            ORDER BY p.ticker, p.date;
+            """;
+
+        var rows = await context.Data.ReadAsync("price_daily", sql, ct).ConfigureAwait(false);
+        var map = new Dictionary<string, IReadOnlyList<Priced>>(StringComparer.Ordinal);
+        var current = new List<Priced>();
+        string? ticker = null;
+
+        foreach (var r in rows)
+        {
+            var t = (string) r[0]!;
+
+            if (ticker is not null && !string.Equals(t, ticker, StringComparison.Ordinal))
+            {
+                map[ticker] = current;
+                current = [];
+            }
+
+            ticker = t;
+            current.Add(new Priced(DateOnly.FromDateTime((DateTime) r[1]!), (decimal) r[2]!));
+        }
+
+        if (ticker is not null)
+        {
+            map[ticker] = current;
+        }
+
+        return map;
+    }
+
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyList<(DateOnly, DateOnly, float)>>>
+        RangeSurprisesAsync(
+            StageContext context, IReadOnlyList<string> tickers, DateOnly to, CancellationToken ct)
+    {
+        var sql = $"""
+            WITH chunk(ticker) AS (VALUES {Values(tickers)})
+            SELECT e.ticker, e.report_date, e.period_end, e.surprise_fraction
+            FROM earnings_history e
+            JOIN chunk c ON c.ticker = e.ticker
+            WHERE e.report_date IS NOT NULL
+              AND e.report_date <= {Literal(to)}
+              AND e.eps_actual IS NOT NULL
+              AND e.surprise_fraction IS NOT NULL
+            ORDER BY e.ticker, e.report_date DESC, e.period_end DESC;
+            """;
+
+        var rows = await context.Data.ReadAsync("earnings_history", sql, ct).ConfigureAwait(false);
+        var map = new Dictionary<string, IReadOnlyList<(DateOnly, DateOnly, float)>>(StringComparer.Ordinal);
+        var current = new List<(DateOnly, DateOnly, float)>();
+        string? ticker = null;
+
+        foreach (var r in rows)
+        {
+            var t = (string) r[0]!;
+
+            if (ticker is not null && !string.Equals(t, ticker, StringComparison.Ordinal))
+            {
+                map[ticker] = current;
+                current = [];
+            }
+
+            ticker = t;
+
+            current.Add((
+                DateOnly.FromDateTime((DateTime) r[1]!),
+                DateOnly.FromDateTime((DateTime) r[2]!),
+                (float) Convert.ToDouble(r[3], CultureInfo.InvariantCulture)));
+        }
+
+        if (ticker is not null)
+        {
+            map[ticker] = current;
+        }
+
+        return map;
+    }
+
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyList<Period>>> RangeFilingsAsync(
+        StageContext context, IReadOnlyList<string> tickers, DateOnly from, DateOnly to,
+        CancellationToken ct)
+    {
+        var sql = $"""
+            WITH chunk(ticker) AS (VALUES {Values(tickers)})
+            SELECT f.ticker, f.period_end, f.filing_date_effective,
+                   f.total_assets, f.total_current_liabilities, f.goodwill, f.intangible_assets,
+                   f.cash, f.cash_and_equivalents, f.short_term_investments,
+                   f.net_debt, f.short_long_term_debt_total,
+                   f.total_revenue, f.cost_of_revenue, f.gross_profit,
+                   f.ebit, f.ebitda, f.net_income,
+                   f.income_before_tax, f.income_tax_expense,
+                   f.cash_from_operating, f.cash_from_investing, f.capital_expenditures,
+                   f.shares_outstanding
+            FROM fundamental_snapshot f
+            JOIN chunk c ON c.ticker = f.ticker
+            WHERE f.period_type = 'quarterly'
+              AND f.filing_date_effective IS NOT NULL
+              AND f.filing_date_effective <= {Literal(to)}
+              AND f.period_end > {Literal(from.AddYears(-FilingHistoryYears))}
+            ORDER BY f.ticker, f.period_end DESC;
+            """;
+
+        var rows = await context.Data.ReadAsync("fundamental_snapshot", sql, ct).ConfigureAwait(false);
+
+        return GroupPeriods(rows);
+    }
+
+    private static string Values(IReadOnlyList<string> items)
+        => string.Join(", ", items.Select(
+            i => $"('{i.Replace("'", "''", StringComparison.Ordinal)}')"));
+
+    private static IEnumerable<IReadOnlyList<string>> Chunks(IReadOnlyList<string> items, int size)
+    {
+        for (var i = 0; i < items.Count; i += size)
+        {
+            yield return items.Skip(i).Take(size).ToList();
+        }
     }
 
     /// <summary>
@@ -190,12 +648,65 @@ public sealed class ValuationEngine : IStage
     /// </param>
     /// <param name="close">The raw close on <paramref name="date"/>, or null if the name did not trade.</param>
     /// <param name="monthEnds">The last trading date of each month in the five years before <paramref name="date"/>, ascending.</param>
+    /// <summary>
+    /// The last two earnings surprises per ticker, newest first [D-96].
+    ///
+    /// **Keyed on `report_date &lt;= date`, never on `period_end`.** That is
+    /// `filing_date_effective`'s rule one table over: a period end is when the quarter
+    /// closed and a report date is when the figure became public, and reading on the
+    /// first hands a screen a surprise weeks before anyone had it [INVARIANT 12].
+    ///
+    /// A row with no `report_date` is unreadable by construction rather than by anyone
+    /// remembering to exclude it, and one with no `eps_actual` has not been reported at
+    /// all: the forward-dated entry the provider carries for the current quarter is
+    /// exactly that case.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyList<float>>> SurprisesAsync(
+        StageContext context, CancellationToken ct)
+    {
+        var asOf = context.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        var sql = $"""
+            SELECT ticker, surprise_fraction
+            FROM (
+                SELECT ticker, surprise_fraction,
+                       row_number() OVER (PARTITION BY ticker ORDER BY report_date DESC, period_end DESC) AS rn
+                FROM earnings_history
+                WHERE report_date IS NOT NULL
+                  AND report_date <= DATE '{asOf}'
+                  AND eps_actual IS NOT NULL
+                  AND surprise_fraction IS NOT NULL
+            ) ranked
+            WHERE rn <= 2
+            ORDER BY ticker, rn;
+            """;
+
+        var rows = await context.Data.ReadAsync("earnings_history", sql, ct).ConfigureAwait(false);
+
+        var map = new Dictionary<string, IReadOnlyList<float>>(StringComparer.Ordinal);
+
+        foreach (var r in rows)
+        {
+            var ticker = (string) r[0]!;
+            if (!map.TryGetValue(ticker, out var list))
+            {
+                list = new List<float>(2);
+                map[ticker] = list;
+            }
+
+            ((List<float>) list).Add((float) r[1]!);
+        }
+
+        return map;
+    }
+
     public static Row Compute(
         string ticker, DateOnly date,
         IReadOnlyList<Period> filings,
         decimal? close,
         IReadOnlyList<(DateOnly Date, decimal Close)> monthEnds,
-        int ownHistoryMinPoints)
+        int ownHistoryMinPoints,
+        IReadOnlyList<float>? lastTwoSurprises = null)
     {
         var readable = ReadableAt(filings, date);
 
@@ -225,7 +736,15 @@ public sealed class ValuationEngine : IStage
             ShareCountChange: (float?) ShareCountChange(latest, fourthBack),
             RevenueGrowth4QTrend: (float?) RevenueGrowthTrend(readable),
             CashOnHand: CashOnHand(latest),
-            QuarterlyBurnRate: QuarterlyBurnRate(latest));
+            QuarterlyBurnRate: QuarterlyBurnRate(latest),
+
+            // Null rather than an empty array where the ticker has no readable
+            // earnings, because absent and "reported nothing" are different facts and
+            // an empty array is a real value [CLAUDE.md section 6]. The caller has
+            // already filtered on report_date <= date [D-96, INVARIANT 12].
+            LastTwoEarningsSurprises: lastTwoSurprises is { Count: > 0 }
+                ? lastTwoSurprises.ToArray()
+                : null);
     }
 
     /// <summary>
@@ -652,6 +1171,21 @@ public sealed class ValuationEngine : IStage
 
         var rows = await context.Data.ReadAsync("fundamental_snapshot", sql, ct).ConfigureAwait(false);
 
+        return GroupPeriods(rows);
+    }
+
+    /// <summary>
+    /// Rows to periods, shared by the nightly read and the range read.
+    ///
+    /// **Twenty-four columns positionally, which is why this is one function and not
+    /// two.** The two statements select the same list in the same order and a
+    /// reader cannot check that by eye; a second copy of this mapping would let one
+    /// statement's column order drift and produce fully-populated rows with the wrong
+    /// number in each field.
+    /// </summary>
+    private static IReadOnlyDictionary<string, IReadOnlyList<Period>> GroupPeriods(
+        IReadOnlyList<IReadOnlyList<object?>> rows)
+    {
         var byTicker = new Dictionary<string, IReadOnlyList<Period>>(StringComparer.Ordinal);
         var current = new List<Period>();
         string? ticker = null;
@@ -844,5 +1378,6 @@ public sealed class ValuationEngine : IStage
         string Ticker, DateOnly Date,
         float? FcfYield, float? EvEbit, float? EvEbitVsOwn5Y, float? Roic, float? Roic4QChange,
         float? GrossMargin4QChange, float? NetDebtEbitda, float? Accruals, float? ShareCountChange,
-        float? RevenueGrowth4QTrend, decimal? CashOnHand, decimal? QuarterlyBurnRate);
+        float? RevenueGrowth4QTrend, decimal? CashOnHand, decimal? QuarterlyBurnRate,
+        float[]? LastTwoEarningsSurprises = null);
 }

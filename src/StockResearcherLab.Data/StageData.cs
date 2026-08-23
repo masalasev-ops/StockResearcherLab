@@ -17,20 +17,131 @@ public sealed class StageData : IStageData
     private readonly string _connectionString;
     private readonly DeclaredAccess _access;
 
+    private int _connectionRetries;
+
     public StageData(string connectionString, DeclaredAccess access)
     {
         _connectionString = connectionString;
         _access = access;
     }
 
+    /// <summary>
+    /// How many times establishing a connection had to be retried across this stage's
+    /// run. Reported in the run log beside the coverage figures, because a retry that
+    /// fires constantly is a pooling problem still present and a count nobody reports
+    /// is a symptom nobody sees.
+    /// </summary>
+    public int ConnectionRetries => Volatile.Read(ref _connectionRetries);
+
+    /// <summary>
+    /// Attempts at establishing a connection, this one included. Three, which is two
+    /// retries.
+    ///
+    /// **Only the establishment retries. Not the COPY, not the upsert, not a query.**
+    /// A failed write is a lost write for data already fetched and paid for, and
+    /// retrying one would eventually mean tolerating one, which reports a completed
+    /// sweep over a partial load [`RUNBOOK.md`]. A handshake that did not complete
+    /// wrote nothing and read nothing, so asking again is the same request rather than
+    /// a second attempt at a side effect.
+    ///
+    /// **Not a config key**, on the precedent the transport already sets: the rate
+    /// limiter's 1,000 a minute and the HTTP handler's pooled-connection lifetime are
+    /// constants in code, and config in this system is for values the experiment
+    /// turns on [`CLAUDE.md` §8]. This one is a property of the data layer.
+    /// </summary>
+    private const int OpenAttempts = 3;
+
+    private static readonly TimeSpan[] OpenBackoff =
+        [TimeSpan.FromMilliseconds(250), TimeSpan.FromSeconds(1)];
+
+    /// <summary>
+    /// An open connection, retrying the handshake and nothing else.
+    ///
+    /// **`PostgresException` is not retried**, being the server answering rather than
+    /// failing to: a bad password or a missing database says the same thing three times
+    /// and the delay is spent for nothing.
+    ///
+    /// **Two shapes are retried and the second was found by testing rather than by
+    /// reading** [item 23]. The 3.6 failure was an `NpgsqlException` wrapping a
+    /// `TimeoutException`, thrown while reading the server's reply inside
+    /// `AuthenticateSASL`. A timeout in the earlier connect phase is not wrapped at
+    /// all: it surfaces as a bare `TimeoutException` out of
+    /// `NpgsqlConnector.ConnectAsync`. A predicate naming only `NpgsqlException` would
+    /// have looked correct, matched the failure that prompted it, and missed the
+    /// commoner one.
+    ///
+    /// **A socket error decides on its code and overrides both shapes** [D-100]. The
+    /// predicate above named exception types, and a connect-phase `SocketException` is
+    /// neither of them, so the commonest transient database fault was not retried at
+    /// all while a wrapped `HostNotFound` was retried three times for nothing.
+    /// <see cref="TransientFault"/> names the retryable codes once for this layer and
+    /// for the provider client, because two separately reasoned rules for one
+    /// distinction drift.
+    /// </summary>
+    private async Task<NpgsqlConnection> OpenAsync(CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var conn = new NpgsqlConnection(_connectionString);
+
+            try
+            {
+                await conn.OpenAsync(ct).ConfigureAwait(false);
+                return conn;
+            }
+            catch (Exception ex) when (
+                ShouldRetryOpen(ex) && attempt < OpenAttempts && !ct.IsCancellationRequested)
+            {
+                await conn.DisposeAsync().ConfigureAwait(false);
+
+                Interlocked.Increment(ref _connectionRetries);
+
+                await Task.Delay(OpenBackoff[attempt - 1], ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                await conn.DisposeAsync().ConfigureAwait(false);
+                throw;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether a failed handshake is worth attempting again [D-100].
+    ///
+    /// **A socket error is decided on its code and nothing else looks at it.** That is
+    /// what stops `HostNotFound`, which is a connection string that is wrong, from
+    /// spending three attempts and the backoff on an answer that cannot change, and it
+    /// stops a bare `ConnectionReset` from failing a sweep on the first occurrence.
+    ///
+    /// **The type test only runs where there is no socket error to read.** Npgsql
+    /// raises timeouts of its own during the handshake with nothing underneath them,
+    /// and those stay retryable on the reasoning [item 23] established: a handshake
+    /// that did not complete wrote nothing and read nothing.
+    /// </summary>
+    private static bool ShouldRetryOpen(Exception ex)
+        => TransientFault.ClassifySocket(ex) switch
+        {
+            SocketVerdict.Transient => true,
+            SocketVerdict.Permanent => false,
+            _ => ex is NpgsqlException and not PostgresException || ex is TimeoutException,
+        };
+
     public async Task<IReadOnlyList<IReadOnlyList<object?>>> ReadAsync(
-        string table, string sql, CancellationToken ct = default)
+        string table, string sql, CancellationToken ct = default, int? commandTimeoutSeconds = null)
     {
         _access.EnsureCanRead(table);
 
-        await using var conn = new NpgsqlConnection(_connectionString);
-        await conn.OpenAsync(ct).ConfigureAwait(false);
+        await using var conn = await OpenAsync(ct).ConfigureAwait(false);
         await using var cmd = new NpgsqlCommand(sql, conn);
+
+        // Null leaves the connection string's value in force, which is what every
+        // statement but the two pool builds uses [D-102].
+        if (commandTimeoutSeconds is { } seconds)
+        {
+            cmd.CommandTimeout = seconds;
+        }
+
         await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
 
         var rows = new List<IReadOnlyList<object?>>();
@@ -56,8 +167,7 @@ public sealed class StageData : IStageData
     {
         _access.EnsureCanWrite(table, operation);
 
-        await using var conn = new NpgsqlConnection(_connectionString);
-        await conn.OpenAsync(ct).ConfigureAwait(false);
+        await using var conn = await OpenAsync(ct).ConfigureAwait(false);
         await using var cmd = new NpgsqlCommand(sql, conn);
 
         if (parameters is not null)
@@ -136,8 +246,7 @@ public sealed class StageData : IStageData
         // split across two [A24]. TEMP rather than a named UNLOGGED table because a
         // crashed run would leave a named one populated for the next run's insert
         // to pick up, and two stages loading at once would collide on the name.
-        await using var conn = new NpgsqlConnection(_connectionString);
-        await conn.OpenAsync(ct).ConfigureAwait(false);
+        await using var conn = await OpenAsync(ct).ConfigureAwait(false);
 
         // The statements are built in BulkUpsertSql so they can be asserted
         // verbatim without executing, which is the only way to test the quoting of

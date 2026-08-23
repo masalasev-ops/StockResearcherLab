@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Npgsql;
 using StockResearcherLab.Core;
 using StockResearcherLab.Core.Config;
@@ -272,7 +272,7 @@ public sealed class PercentileEngineTests
 
         await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
         await using var cmd = new NpgsqlCommand(
-            "SELECT count(*) FROM security WHERE is_active AND size_bucket IS NULL;", conn);
+            "SELECT count(*) FROM security_daily WHERE is_active AND size_bucket IS NULL;", conn);
 
         var withoutABucket = (long?) await cmd.ExecuteScalarAsync(ct).ConfigureAwait(true);
 
@@ -301,7 +301,7 @@ public sealed class PercentileEngineTests
 
         // The five the Reads cell names, and no more.
         Assert.Equal(
-            ["flow_daily", "indicator_daily", "security", "sentiment_derived_daily", "valuation_daily"],
+            ["flow_daily", "indicator_daily", "security_daily", "sentiment_derived_daily", "valuation_daily"],
             stage.ReadSet.OrderBy(t => t, StringComparer.Ordinal));
 
         // base_breakout_flag is the one column with a named reader that is not ranked.
@@ -443,9 +443,13 @@ public sealed class PercentileEngineTests
         {
             await using (var cmd = new NpgsqlCommand(
                 """
-                INSERT INTO security (ticker, sector, size_bucket, market_cap, is_active)
-                VALUES (@t, @s, @b, 1000000000, true)
-                ON CONFLICT (ticker) DO UPDATE SET
+                -- **`security_daily` from 3.12**, which is where C11 takes the cell now.
+                -- Dated well before any fixture date because the read is the most recent
+                -- row at or before the date being ranked [D-92], so one early row stands
+                -- for a membership that never changes across the fixture's window.
+                INSERT INTO security_daily (ticker, date, sector, size_bucket, market_cap, is_active)
+                VALUES (@t, DATE '2000-01-01', @s, @b, 1000000000, true)
+                ON CONFLICT (ticker, date) DO UPDATE SET
                     sector = EXCLUDED.sector, size_bucket = EXCLUDED.size_bucket,
                     is_active = EXCLUDED.is_active;
                 """, conn))
@@ -488,7 +492,7 @@ public sealed class PercentileEngineTests
         }
 
         await using (var cmd = new NpgsqlCommand(
-            "DELETE FROM security WHERE size_bucket = ANY(@b);", conn))
+            "DELETE FROM security_daily WHERE size_bucket = ANY(@b);", conn))
         {
             cmd.Parameters.AddWithValue("b", new[] { BucketA, BucketB, BucketC });
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);

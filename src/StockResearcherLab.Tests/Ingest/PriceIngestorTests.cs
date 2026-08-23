@@ -251,15 +251,33 @@ public sealed class PriceIngestorTests
             () => stage.ExecuteAsync(context, ct)).ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// **Two writes since 0010, and the read set is still empty.** `price_fetch_attempt`
+    /// is written by the range mode and read back by it, and a stage may read what it
+    /// writes without declaring it twice [`DeclaredAccess.CanRead`]. Asserted as the
+    /// whole set rather than as "contains price_daily", so a third write has to be
+    /// declared here before it is declared anywhere else.
+    /// </summary>
     [Fact]
-    public void TheDeclaredWriteSetNamesPriceDailyAndItsColumns()
+    public void TheDeclaredWriteSetNamesPriceDailyAndItsAttemptRecordWithTheirColumns()
     {
         var stage = StageFor(new BulkHandler(Prefix + "H"));
 
-        var write = Assert.Single(stage.WriteSet);
-        Assert.Equal("price_daily", write.Table);
-        Assert.Equal(WriteOperation.Insert, write.Operation);
-        Assert.Equal(PriceIngestor.Columns, write.Columns);
+        Assert.Collection(
+            stage.WriteSet,
+            write =>
+            {
+                Assert.Equal("price_daily", write.Table);
+                Assert.Equal(WriteOperation.Insert, write.Operation);
+                Assert.Equal(PriceIngestor.Columns, write.Columns);
+            },
+            write =>
+            {
+                Assert.Equal("price_fetch_attempt", write.Table);
+                Assert.Equal(WriteOperation.Insert, write.Operation);
+                Assert.Equal(PriceIngestor.AttemptColumns, write.Columns);
+            });
+
         Assert.Empty(stage.ReadSet);
     }
 

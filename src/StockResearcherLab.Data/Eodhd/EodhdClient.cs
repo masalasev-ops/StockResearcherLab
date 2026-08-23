@@ -1,4 +1,5 @@
-using System.Globalization;
+﻿using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using StockResearcherLab.Core;
 
@@ -94,8 +95,21 @@ public enum ShortfallPosition
 /// server ran out of pages first, because the other case throws [D-71].
 /// </param>
 /// <param name="Position">Where in the sequence the missing rows sat.</param>
+/// <param name="StoppedByGate">
+/// The caller's own gate refused the next page, so the walk stopped with pages still
+/// on offer [3.9].
+///
+/// **This is a third way to end short and it is not the other two.** A D-71 shortfall
+/// is the provider disagreeing with itself and a <see cref="PagedReadIncompleteException"/>
+/// is this client failing to ask; both are faults. A gated stop is the caller
+/// declining to spend, which is the allowance mechanism working. <see cref="Shortfall"/>
+/// is deliberately zero when this is set, because the rows that did not arrive were
+/// never asked for and counting them as withheld would put a spending decision into
+/// the record as a provider defect.
+/// </param>
 public readonly record struct PagedRead(
-    IReadOnlyList<JsonElement> Rows, int? ReportedTotal, int Shortfall, ShortfallPosition Position);
+    IReadOnlyList<JsonElement> Rows, int? ReportedTotal, int Shortfall, ShortfallPosition Position,
+    bool StoppedByGate = false);
 
 /// <summary>
 /// The typed client for the data provider. No maintained C# client exists, so a
@@ -166,7 +180,85 @@ public sealed class EodhdClient
         return await SendAsync(relative, path, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Attempts at one request, this one included. Three, which is two retries. The
+    /// same shape as the database layer's connection retry, because it is the same
+    /// rule [D-100].
+    /// </summary>
+    private const int SendAttempts = 3;
+
+    private static readonly TimeSpan[] SendBackoff =
+        [TimeSpan.FromMilliseconds(250), TimeSpan.FromSeconds(1)];
+
+    /// <summary>
+    /// The four statuses worth asking about again, this layer's own vocabulary on top
+    /// of D-100's socket codes.
+    ///
+    /// **402 is deliberately absent.** An exhausted allowance is not transient: it
+    /// persists for the provider's day, so a retry spends the wall clock against a wall
+    /// that will not move and the stage has to fail [3.4].
+    ///
+    /// **404 is absent for a different reason.** It is a fact about the ticker rather
+    /// than a fault, and the callers that tolerate it catch it and record zero rows
+    /// [3.6]. Retrying it would ask the same true question twice.
+    /// </summary>
+    private static readonly HttpStatusCode[] RetryableStatuses =
+    [
+        HttpStatusCode.TooManyRequests,
+        HttpStatusCode.BadGateway,
+        HttpStatusCode.ServiceUnavailable,
+        HttpStatusCode.GatewayTimeout,
+    ];
+
+    private int _transportRetries;
+
+    /// <summary>
+    /// How many times a request had to be asked again across this client's life, over
+    /// both a transient socket error and a retryable status.
+    ///
+    /// Reported for the same reason the database layer's is: a count that fires
+    /// constantly is a provider or a network problem still present, and one nobody
+    /// reports is a symptom nobody sees.
+    /// </summary>
+    public int TransportRetries => Volatile.Read(ref _transportRetries);
+
+    /// <summary>
+    /// One request, retried on a transient transport fault and on four statuses
+    /// [D-100].
+    ///
+    /// **The rate limiter is re-entered on every attempt**, so a retry is paced like any
+    /// other request rather than jumping the queue, and the backoff is not the only
+    /// spacing between the two.
+    ///
+    /// **A retry can cost a unit and that is accepted deliberately.** A request that
+    /// reached the provider and then lost its connection may already have been billed,
+    /// so two units can be spent for one series. Against that, run 1515 lost a
+    /// 128-minute sweep and about 13,500 tickers' work to one reset socket in roughly
+    /// 50,000 requests. Two units is the cheaper failure by three orders of magnitude,
+    /// and the allowance gate's reserve absorbs it.
+    /// </summary>
     private async Task<JsonDocument> SendAsync(string relative, string pathForErrors, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await SendOnceAsync(relative, pathForErrors, ct).ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex) when (
+                attempt < SendAttempts && !ct.IsCancellationRequested && (
+                    TransientFault.ClassifySocket(ex) == SocketVerdict.Transient
+                    || (ex.StatusCode is { } status && Array.IndexOf(RetryableStatuses, status) >= 0)))
+            {
+                Interlocked.Increment(ref _transportRetries);
+
+                await Task.Delay(SendBackoff[attempt - 1], ct).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async Task<JsonDocument> SendOnceAsync(
+        string relative, string pathForErrors, CancellationToken ct)
     {
         await _limiter.WaitAsync(ct).ConfigureAwait(false);
 
@@ -178,9 +270,20 @@ public sealed class EodhdClient
             // The path is named and the token is not. The body is included because
             // this provider says useful things in it, including naming the paging
             // form in a 422.
+            //
+            // **The status code is carried on the exception and not only in the
+            // message** [3.6]. Every caller that tolerates a missing ticker does so by
+            // catching this type, and without the code the only way to tell a 404 from
+            // a 402 is to parse the text. A sweep that catches both writes nothing for
+            // the ticker that hit the wall and then nothing for every ticker after it,
+            // because a 402 persists for the day, and returns having completed over a
+            // partial load. That is the failure D-71 and the allowance gate both exist
+            // to prevent, arriving one layer down in the caller's catch.
             throw new HttpRequestException(
                 $"'{pathForErrors}' returned {(int)response.StatusCode}. Body: " +
-                (body.Length > 400 ? body[..400] + "..." : body));
+                (body.Length > 400 ? body[..400] + "..." : body),
+                inner: null,
+                statusCode: response.StatusCode);
         }
 
         return JsonDocument.Parse(body);
@@ -218,10 +321,23 @@ public sealed class EodhdClient
     /// The distinction is which `break` ran, which is why it is structural rather
     /// than a judgement about how short is too short. No threshold appears here and
     /// none is to be added without evidence gathered after D-71 was written.
+    ///
+    /// **A third way to end exists and is the caller's rather than the endpoint's**
+    /// [3.9]. <paramref name="beforePage"/> is consulted before every page including
+    /// the first, and a refusal stops the walk with <see cref="PagedRead.StoppedByGate"/>
+    /// set and no shortfall recorded. A backfill sweep paging at ten units a page has
+    /// to be able to stop between pages rather than only between tickers, and the
+    /// result says which of the three endings happened rather than leaving the caller
+    /// to infer it from a row count.
     /// </summary>
+    /// <param name="beforePage">
+    /// Asked before each page is fetched. Returning false stops the walk cleanly.
+    /// Null means no gate, which is every nightly caller.
+    /// </param>
     public async Task<PagedRead> GetAllPagesAsync(
         string path, IEnumerable<(string Name, string Value)> query, int pageSize,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Func<CancellationToken, Task<bool>>? beforePage = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
 
@@ -239,6 +355,14 @@ public sealed class EodhdClient
 
         while (true)
         {
+            // Before the fetch rather than after it, so a refusal costs nothing. The
+            // first page is gated too: a sweep with no allowance left must not spend
+            // ten units discovering that.
+            if (beforePage is not null && !await beforePage(ct).ConfigureAwait(false))
+            {
+                return new PagedRead(all, total, 0, ShortfallPosition.None, StoppedByGate: true);
+            }
+
             var page = await GetPageAsync(path, materialised, offset, pageSize, ct).ConfigureAwait(false);
             total ??= page.Total;
             all.AddRange(page.Rows);
@@ -261,11 +385,33 @@ public sealed class EodhdClient
 
             offset += pageSize;
 
-            // A next link that yields nothing would otherwise spin. The endpoint
-            // has never done this; the loop does not depend on it not doing it.
-            // This is the client stopping while more was on offer, so it falls to
-            // the throw below rather than to the shortfall.
-            if (page.Rows.Count == 0)
+            // **An empty page is this window being empty, not the client failing to
+            // ask** [item 59, measured 2026-08-22]. `links.next` is `offset + limit <
+            // meta.total` arithmetic over a total this endpoint over-counts, so it
+            // carries no statement about whether rows remain. Walked by hand,
+            // `sec-filings/TT.US/form4` is served 0 rows at offset 600 of a claimed
+            // 653 and offered a successor anyway, because 650 is still below 653; at
+            // offset 650 it is served 0 rows and offered none. Breaking on the empty
+            // page ended that walk one page short of its own clean end and routed it
+            // to the fatal half of D-71, whose test is that asking again would fix
+            // it. Asking again ends the walk, so the break was in the wrong branch.
+            // The walk now reaches `serverRanOut` and records 523 of 653 as the
+            // shortfall D-71's recorded half was written for.
+            //
+            // **The spin that break prevented is prevented by the offset instead**,
+            // below. Nothing here is tolerated that was refused before: the throw is
+            // unchanged and still reachable, and no threshold is introduced [D-71
+            // says none is to be added].
+
+            // An offset at or past the reported total cannot address a row of a
+            // `total`-sized index, so the walk is at most `ceil(total / pageSize)`
+            // pages however many successors are offered. Against this endpoint's own
+            // arithmetic it never fires, `links.next` being absent once `offset +
+            // pageSize` reaches `total`; it fires only for an endpoint that offers a
+            // successor it cannot honour, which is the client stopping while more was
+            // on offer. That leaves `serverRanOut` false and falls to the throw,
+            // which is D-71's fatal half kept rather than widened.
+            if (total is int addressable && offset >= addressable)
             {
                 break;
             }

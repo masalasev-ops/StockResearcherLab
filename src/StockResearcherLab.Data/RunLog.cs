@@ -5,6 +5,32 @@ using StockResearcherLab.Core.Stages;
 
 namespace StockResearcherLab.Data;
 
+/// <summary>
+/// What a stage's last range execution did, for an operator to read before starting
+/// another [3.6].
+///
+/// **Nothing resumes from this.** A ticker-partitioned sweep resumes on its own attempt
+/// record and a date-partitioned one on `run_date`, so this row is reported and never
+/// consulted. It carried a parsed-out ticker position until 0010, and three real
+/// failures in one day produced that position once.
+/// </summary>
+/// <param name="LastDateCovered">
+/// `run_date` on the newest range row. A completed or halted execution records the
+/// date it reached; a failed one records its range start, being the only date it can
+/// prove.
+/// </param>
+/// <param name="Status">`ok`, `halted` or `failed`.</param>
+/// <param name="RunLogId">
+/// The row, so a message can name the thing the operator has to look at rather than
+/// describe it.
+/// </param>
+/// <param name="Detail">The line as recorded, which opens with the range it covered.</param>
+public sealed record RangeRunReport(
+    DateOnly LastDateCovered, string Status, long RunLogId, string? Detail)
+{
+    public bool WasHalted => string.Equals(Status, "halted", StringComparison.Ordinal);
+}
+
 /// <summary>One row of run_log, as SCHEMA.md declares the table.</summary>
 public sealed record RunLogEntry(
     long RunLogId,
@@ -67,6 +93,49 @@ public sealed class RunLog : IWriteOwner
 
         var id = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
         return Convert.ToInt64(id, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// What the last range execution of <paramref name="stage"/> did, or null where it
+    /// has never run one [3.6].
+    ///
+    /// **Reported, never consulted.** Resumption reads the stage's attempt record, so
+    /// this exists to let an operator see what happened last time before spending a day
+    /// of allowance, and nothing branches on it.
+    ///
+    /// **Highest `run_date`, tie-broken on `run_log_id` descending**, so two executions
+    /// ending on one date resolve to the later one rather than to whichever the planner
+    /// happened to emit first [`CLAUDE.md` §6].
+    ///
+    /// **A range row is one whose line opens `range `**, which `BackfillRun.Describe`
+    /// guarantees. `error` is the only free-text column this table has, so that prefix
+    /// is the only marker available without a schema change.
+    /// </summary>
+    public async Task<RangeRunReport?> LastRangeRunAsync(string stage, CancellationToken ct = default)
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(ct).ConfigureAwait(false);
+        await using var cmd = new NpgsqlCommand(
+            """
+            SELECT run_date, status, error, run_log_id
+            FROM run_log
+            WHERE stage = @stage AND error LIKE 'range %'
+            ORDER BY run_date DESC, run_log_id DESC
+            LIMIT 1;
+            """, conn);
+        cmd.Parameters.AddWithValue("stage", stage);
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        if (!await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        return new RangeRunReport(
+            DateOnly.FromDateTime(reader.GetDateTime(0)),
+            reader.GetString(1),
+            reader.GetInt64(3),
+            reader.IsDBNull(2) ? null : reader.GetString(2));
     }
 
     /// <summary>

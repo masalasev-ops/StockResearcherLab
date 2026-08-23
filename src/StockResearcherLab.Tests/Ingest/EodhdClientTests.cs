@@ -1,4 +1,5 @@
-using System.Net;
+﻿using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using StockResearcherLab.Core;
@@ -147,29 +148,82 @@ public sealed class EodhdClientTests
     }
 
     /// <summary>
-    /// D-71, the fatal half. The loop ends while <c>links.next</c> is still being
-    /// offered, which is this client failing to ask rather than the server running
-    /// out. What was missed is unknown and another call would fix it, so it throws
-    /// at exactly the strictness A20 set.
+    /// **This assertion changed direction at item 59 and it is the same fixture as
+    /// before**, which is the second time that has happened to this pair and for the
+    /// same reason: what used to be proof of a throw is now proof of a recorded
+    /// shortfall. D-71 is unchanged. What was wrong was which branch an empty page
+    /// belongs in.
     ///
-    /// The client only stops with a next link in hand when a page comes back empty,
-    /// so that is what the handler does: it offers a successor and then serves
-    /// nothing.
+    /// D-71's test for the fatal half is that asking again would fix it. Measured
+    /// against the provider on 2026-08-22, asking again fixes it: `links.next` is
+    /// `offset + limit &lt; meta.total` arithmetic over a total the endpoint
+    /// over-counts, so `sec-filings/TT.US/form4` is served nothing at offset 600 of
+    /// a claimed 653 and offered a successor anyway, and at offset 650 is served
+    /// nothing and offered none. The walk ends by itself one page later. This
+    /// handler is that shape: it offers a successor after the empty page, and then
+    /// stops offering once its own arithmetic runs out.
+    ///
+    /// So the client walks past the empty page, the server runs out, and the 50
+    /// rows nobody can account for come back as the shortfall for the stage to
+    /// record rather than halting the night.
     /// </summary>
     [Fact]
-    public async Task APagedReadThatStopsWhileTheEndpointStillOffersMoreFails()
+    public async Task AnEmptyPageInsideTheAddressableRangeIsWalkedPastRatherThanRefused()
     {
-        // Says 100, offers a next link throughout, serves nothing from page three.
+        // Says 100, serves nothing from page three, and keeps offering a successor
+        // only while its own offset arithmetic says one exists.
         var handler = new PagedHandler(total: 100, pageSize: 25, emptyFromPage: 3);
-        var client = Client(handler);
+
+        var read = await Client(handler).GetAllPagesAsync(
+            "sec-filings/CCS.US/form4", [], pageSize: 25,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.Equal(50, read.Rows.Count);
+        Assert.Equal(100, read.ReportedTotal);
+        Assert.Equal(50, read.Shortfall);
+
+        // The page after the empty one was asked for. That single call is the whole
+        // difference between this and a PagedReadIncompleteException, and it is what
+        // 3.9's day four failed for want of.
+        Assert.Equal(4, handler.Calls);
+        Assert.Contains(
+            "page%5Boffset%5D=75", handler.Requested[3], StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// D-71, the fatal half, which survives item 59 rather than being widened away.
+    ///
+    /// The client stops while the endpoint is still offering a successor **and still
+    /// yielding rows**. It stops because an offset at or past `meta.total` cannot
+    /// address a row of a `total`-sized index, so continuing would spin on a
+    /// successor the endpoint cannot honour. What was missed is unknown, another
+    /// call would not fix it because there is no addressable window left to ask
+    /// for, and the partial history must not be recorded as complete [A20].
+    ///
+    /// This shape has never been seen from the provider. It is here because the
+    /// bound that replaced the empty-page break needs the branch it falls to
+    /// exercised, and because an unreachable throw is decoration.
+    /// </summary>
+    [Fact]
+    public async Task APagedReadThatRunsOutOfAddressableOffsetsWhileStillYieldingFails()
+    {
+        // Says 100, serves 23 on page two where every other page serves 25, and
+        // offers a successor forever. The client walks offsets 0, 25, 50 and 75,
+        // collects 98, and stops because offset 100 addresses nothing.
+        var handler = new PagedHandler(
+            total: 100, pageSize: 25, shortInteriorPage: 2, alwaysOffersNext: true);
 
         var ex = await Assert.ThrowsAsync<PagedReadIncompleteException>(
-            () => client.GetAllPagesAsync(
+            () => Client(handler).GetAllPagesAsync(
                 "sec-filings/CCS.US/form4", [], pageSize: 25,
                 TestContext.Current.CancellationToken)).ConfigureAwait(true);
 
-        Assert.Equal(50, ex.Collected);
+        Assert.Equal(98, ex.Collected);
         Assert.Equal(100, ex.ReportedTotal);
+
+        // Bounded by ceil(total / pageSize) and not by a page budget, so the spin the
+        // old empty-page break existed to prevent is still prevented.
+        Assert.Equal(4, handler.Calls);
     }
 
     /// <summary>
@@ -284,6 +338,156 @@ public sealed class EodhdClientTests
         public void Advance(TimeSpan by) => _now = _now.Add(by);
     }
 
+    // ------------------------------------ the transport retry [D-100] ---
+    //
+    // Run 1515 lost a 128-minute sweep and about 13,500 tickers' work to one reset
+    // socket in roughly 50,000 requests, on the free gate read. This client asked once
+    // and threw on anything. What is retried is decided on the socket error code and on
+    // four statuses, and everything else still fails on the first attempt.
+
+    /// <summary>
+    /// A reset connection is the fault that ended run 1515. The second attempt is
+    /// allowed to be the one that works.
+    /// </summary>
+    [Fact]
+    public async Task AResetConnectionIsRetriedAndTheAttemptAfterItSucceeds()
+    {
+        var handler = new TransportFaultHandler(SocketError.ConnectionReset, failFor: 1);
+        var client = Client(handler);
+
+        using var doc = await client.GetAsync("eod/AAA.US", [], TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Equal(JsonValueKind.Array, doc.RootElement.ValueKind);
+        Assert.Equal(2, handler.Calls);
+        Assert.Equal(1, client.TransportRetries);
+    }
+
+    /// <summary>
+    /// **`HostNotFound` is a configuration error wearing a transport error's type.** It
+    /// answers the same way three times, so the attempts and the backoff buy nothing.
+    /// This is the case that makes the rule a code test rather than a type test.
+    /// </summary>
+    [Fact]
+    public async Task AHostThatDoesNotResolveIsNotRetried()
+    {
+        var handler = new TransportFaultHandler(SocketError.HostNotFound, failFor: int.MaxValue);
+        var client = Client(handler);
+
+        await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.GetAsync("eod/AAA.US", [], TestContext.Current.CancellationToken))
+            .ConfigureAwait(true);
+
+        Assert.Equal(1, handler.Calls);
+        Assert.Equal(0, client.TransportRetries);
+    }
+
+    /// <summary>
+    /// 429 is the provider asking for a moment, which the rate limiter is supposed to
+    /// prevent and does not guarantee. It is one of four statuses worth asking again on.
+    /// </summary>
+    [Fact]
+    public async Task AThrottledResponseIsRetried()
+    {
+        var handler = new StatusHandler(HttpStatusCode.TooManyRequests, failFor: 1);
+        var client = Client(handler);
+
+        using var doc = await client.GetAsync("eod/AAA.US", [], TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Equal(JsonValueKind.Array, doc.RootElement.ValueKind);
+        Assert.Equal(2, handler.Calls);
+        Assert.Equal(1, client.TransportRetries);
+    }
+
+    /// <summary>
+    /// **402 stays fatal on the first attempt.** An exhausted allowance persists for the
+    /// provider's day, so a retry spends the wall clock against a wall that will not
+    /// move, and the stage has to fail rather than complete over a partial load [3.4].
+    /// </summary>
+    [Fact]
+    public async Task AnExhaustedAllowanceIsNotRetried()
+    {
+        var handler = new StatusHandler(HttpStatusCode.PaymentRequired, failFor: int.MaxValue);
+        var client = Client(handler);
+
+        var thrown = await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.GetAsync("eod/AAA.US", [], TestContext.Current.CancellationToken))
+            .ConfigureAwait(true);
+
+        Assert.Equal(HttpStatusCode.PaymentRequired, thrown.StatusCode);
+        Assert.Equal(1, handler.Calls);
+        Assert.Equal(0, client.TransportRetries);
+    }
+
+    /// <summary>
+    /// **404 stays a fact about the ticker.** The callers that tolerate it catch it and
+    /// record zero rows, which `PriceBackfillTests` asserts end to end; asking again
+    /// would put the same true question twice.
+    /// </summary>
+    [Fact]
+    public async Task ATickerTheProviderDoesNotCarryIsNotRetried()
+    {
+        var handler = new StatusHandler(HttpStatusCode.NotFound, failFor: int.MaxValue);
+        var client = Client(handler);
+
+        var thrown = await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.GetAsync("eod/AAA.US", [], TestContext.Current.CancellationToken))
+            .ConfigureAwait(true);
+
+        Assert.Equal(HttpStatusCode.NotFound, thrown.StatusCode);
+        Assert.Equal(1, handler.Calls);
+        Assert.Equal(0, client.TransportRetries);
+    }
+
+    /// <summary>
+    /// A transport fault of the given socket code for the first <paramref name="failFor"/>
+    /// calls, then an empty array. Shaped the way <see cref="HttpClient"/> surfaces one,
+    /// which is an <see cref="HttpRequestException"/> with the socket error inside it and
+    /// no status code.
+    /// </summary>
+    private sealed class TransportFaultHandler(SocketError code, int failFor) : HttpMessageHandler
+    {
+        public int Calls { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Calls++;
+
+            if (Calls <= failFor)
+            {
+                throw new HttpRequestException(
+                    $"stub transport fault {code}", new SocketException((int) code));
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("[]", Encoding.UTF8, "application/json"),
+            });
+        }
+    }
+
+    /// <summary>The given status for the first <paramref name="failFor"/> calls, then an empty array.</summary>
+    private sealed class StatusHandler(HttpStatusCode status, int failFor) : HttpMessageHandler
+    {
+        public int Calls { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Calls++;
+
+            return Task.FromResult(Calls <= failFor
+                ? new HttpResponseMessage(status)
+                {
+                    Content = new StringContent("{\"message\":\"stub\"}", Encoding.UTF8, "application/json"),
+                }
+                : new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("[]", Encoding.UTF8, "application/json"),
+                });
+        }
+    }
+
     private sealed class NeverCalledHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -309,7 +513,8 @@ public sealed class EodhdClientTests
     /// <param name="shortInteriorPage">Serve two rows fewer on this page, which is not the last.</param>
     private sealed class PagedHandler(
         int total, int pageSize, int? stopAfterPages = null,
-        int? emptyFromPage = null, int? shortInteriorPage = null) : HttpMessageHandler
+        int? emptyFromPage = null, int? shortInteriorPage = null,
+        bool alwaysOffersNext = false) : HttpMessageHandler
     {
         private const string Path = "sec-filings/CCS.US/form4";
 
@@ -347,9 +552,15 @@ public sealed class EodhdClientTests
             // page eight returned 48 and page nine still began at offset 450.
             var served = offset + Math.Min(pageSize, Math.Max(0, total - offset));
 
-            var more = served < total
-                       && (stopAfterPages is null || Calls < stopAfterPages)
-                       && (emptyFromPage is null || Calls < emptyFromPage + 1);
+            // **`alwaysOffersNext` is an endpoint offering a successor it cannot
+            // honour**, which is the only remaining shape of D-71's fatal half now
+            // that an empty page inside the addressable range is walked past [item
+            // 59]. Every other setting here keeps `links.next` to the arithmetic the
+            // real endpoint uses, `served < total`.
+            var more = alwaysOffersNext
+                       || (served < total
+                           && (stopAfterPages is null || Calls < stopAfterPages)
+                           && (emptyFromPage is null || Calls < emptyFromPage + 1));
 
             // links.next is emitted in exactly the form the client should build for
             // the following page, so the test can compare the two [A22]. `served`

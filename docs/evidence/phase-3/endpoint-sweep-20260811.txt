@@ -1,0 +1,286 @@
+Checkpoint 3.1, the endpoint sweep.
+
+Run 2026-08-11 22:52 and 22:54 US Eastern, which is 2026-08-12 02:52 and 02:54 UTC,
+from a scratch file-based app outside the repository, as 1.9 and phase P's probe
+were. The file is named for the US Eastern date, which is the corpus convention for
+a trading date; every timestamp inside it is UTC, which is what the provider's
+counter is stamped in.
+
+The token is never printed. Every URL and every error body passes through a redactor
+before it reaches this file, and both passes were searched for the token and for its
+percent-encoded form before committing. Neither appears.
+
+Two passes. The first asks the seven questions the phase plan sets. The second
+re-asks Q5 against names delisted INSIDE the five-year window, the first pass having
+picked a name that delisted in 2003 and so proved nothing about delisted names in
+general, and re-asks Q6's depth against a name whose distribution history is long.
+Pass 2 also reads the allowance counter after the rollover the first pass fell
+across.
+
+The first pass opened against 90,518 units used on apiRequestsDate 2026-08-11 and
+its first billable call came back against a counter reading 1. That is the daily
+reset landing mid-sweep. It makes the first bracket in pass 1 print -90,517, which
+is the bracket arithmetic being wrong across a day boundary rather than a
+measurement, and it is the finding pass 0 was there to produce.
+====================================================================================================
+
+Checkpoint 3.1, the endpoint sweep.
+Run 2026-08-12 02:52 UTC from a scratch file-based app
+outside the repository, as 1.9 and phase P's probe were. The token is never printed.
+Seven questions, each bracketed between two /api/user reads. Two of them can stop the phase.
+
+----------------------------------------------------------------------------------------------------
+=== Pass 0. /api/user, which the allowance gate at 3.4 reads ===
+
+  apiRequests        90,518 then 90,518
+  cost of the read   0   (the bracket is only clean if this is 0)
+  dailyRateLimit     100,000
+  extraLimit         0
+  apiRequestsDate    2026-08-11
+  local UTC date     2026-08-12
+  remaining          9,482 before this sweep
+
+----------------------------------------------------------------------------------------------------
+=== Q1. exchange-symbol-list/US?delisted=1, which D-48 and VALIDITY section 6 rest on ===
+
+  exchange-symbol-list/US              200  1081 ms  [51,651]
+  [units] exchange-symbol-list/US: -90,517   running 1 of 100,000
+
+  exchange-symbol-list/US?delisted=1   200  567 ms  [59,183]
+  [units] exchange-symbol-list/US?delisted=1: 1   running 2 of 100,000
+
+  live list          51,651 distinct codes
+  delisted=1 list    59,183 distinct codes
+  in delisted only   59,183
+  in both            0
+  identical sets     no, the two lists differ
+  row keys           Code,Name,Country,Exchange,Currency,Type,Isin
+  first delisted-only row, verbatim:
+    Code             0P0000V6X4
+    Name             Vanguard Target Retire Trust Plus 2040
+    Country          USA
+    Exchange         NYSE
+    Currency         USD
+    Type             FUND
+    Isin             
+  Type distribution, delisted list:
+    Common Stock                   32,611
+    FUND                           18,863
+    Mutual Fund                    3,271
+    ETF                            2,846
+    Preferred Stock                1,228
+    Unit                           225
+    Notes                          85
+    Warrant                        44
+    BOND                           6
+    ETC                            3
+    (null)                         1
+  Type distribution, live list:
+    FUND                           20,970
+    Common Stock                   18,174
+    ETF                            5,885
+    Mutual Fund                    5,233
+    Preferred Stock                706
+    Warrant                        367
+    Unit                           171
+    Notes                          139
+    INDEX                          3
+    ETC                            2
+    BOND                           1
+
+  delisted common stocks: 32,611
+  Q2 sample, five spread across the ordinal range:
+    AAAB         Common Stock     NASDAQ   Admiralty Bancorp Inc
+    DGDM         Common Stock     PINK     Black Bird Biotech Inc
+    KEYHV        Common Stock     OTCGREY  KeyCorp
+    RCPT         Common Stock     NASDAQ   Receptos Inc
+    ZZZOD        Common Stock     PINK     Zinc One Resources Inc
+
+----------------------------------------------------------------------------------------------------
+=== Q2. eod/{t} on a delisted name, and how far back ===
+SPY.US is called first because C08's benchmark reads it from price_daily and 3.6 asserts it present.
+
+  eod/SPY.US         200  247 ms    8,440 bars  1993-01-29 .. 2026-08-11
+  [units] eod/SPY.US: 1   running 3 of 100,000
+
+  eod/AAAB.US        200  162 ms    1,023 bars  1999-01-04 .. 2003-01-29
+  [units] eod/AAAB.US: 1   running 4 of 100,000
+
+  eod/DGDM.US        200  155 ms    1,092 bars  2009-11-11 .. 2021-08-13
+  [units] eod/DGDM.US: 1   running 5 of 100,000
+
+  eod/KEYHV.US       200  139 ms       46 bars  2022-08-18 .. 2022-10-21
+  [units] eod/KEYHV.US: 1   running 6 of 100,000
+
+  eod/RCPT.US        200  155 ms      581 bars  2013-05-09 .. 2015-08-27
+  [units] eod/RCPT.US: 1   running 7 of 100,000
+
+  eod/ZZZOD.US       200  160 ms      979 bars  2017-09-18 .. 2021-08-06
+  [units] eod/ZZZOD.US: 1   running 8 of 100,000
+
+  last bar inside the five-year window is the practical delisting date, this source
+  carrying no delisting date field of its own:
+    AAAB.US        1,023 bars  1999-01-04 .. 2003-01-29   before the window
+    DGDM.US        1,092 bars  2009-11-11 .. 2021-08-13   INSIDE the window
+    KEYHV.US          46 bars  2022-08-18 .. 2022-10-21   INSIDE the window
+    RCPT.US          581 bars  2013-05-09 .. 2015-08-27   before the window
+    ZZZOD.US         979 bars  2017-09-18 .. 2021-08-06   before the window
+
+----------------------------------------------------------------------------------------------------
+=== Q3. sentiments, flat per ticker, a narrow range against a five-year one ===
+
+  sentiments narrow   200  164 ms  {1}  CCS.US rows 9
+    first row {"date":"2026-08-05","count":1,"normalized":0.998}
+  [units] sentiments CCS.US 2026-07-13..2026-08-12: 5   running 13 of 100,000
+
+  sentiments wide     200  1103 ms  {1}  CCS.US rows 603  2026-08-05 .. 2021-08-12
+  [units] sentiments CCS.US 2021-08-12..2026-08-12: 5   running 18 of 100,000
+
+  narrow 5 units, wide 5 units.
+  The flat per-ticker weight over a five-year range: HOLDS
+  3.8's ~14,200-unit estimate is sound
+
+----------------------------------------------------------------------------------------------------
+=== Q4. fundamentals/{t}, every period or a capped set ===
+=== Q7. and whether that same payload carries an EPS actual or estimate ===
+
+  fundamentals/CCS.US   200  144 ms  {12}  payload 367,892 bytes
+  top-level blocks      General,Highlights,Valuation,SharesStats,Technicals,SplitsDividends,AnalystRatings,Holders,InsiderTransactions,outstandingShares,Earnings,Financials
+
+  Financials period counts, which is the capped-or-not question:
+    Balance_Sheet    quarterly      55 periods   2012-12-31 .. 2026-06-30
+    Balance_Sheet    yearly         14 periods   2012-12-31 .. 2025-12-31
+    Income_Statement quarterly      58 periods   2012-03-31 .. 2026-06-30
+    Income_Statement yearly         14 periods   2012-12-31 .. 2025-12-31
+    Cash_Flow        quarterly      58 periods   2012-03-31 .. 2026-06-30
+    Cash_Flow        yearly         14 periods   2012-12-31 .. 2025-12-31
+    1.9 and phase P both read 55 quarterly balance-sheet periods for this name.
+
+  Q7. EPS actual and estimate in the payload C03 already pays for:
+    Earnings              {3}  History,Trend,Annual
+    Earnings::History          50 entries   2014-06-30 .. 2026-09-30
+    Earnings::Trend            40 entries   2017-06-30 .. 2027-12-31
+    Earnings::Annual           13 entries   2014-12-31 .. 2026-06-30
+    newest three History entries, verbatim:
+      2026-09-30  {"reportDate":"2026-10-21","date":"2026-09-30","beforeAfterMarket":"AfterMarket","currency":null,"epsActual":null,"epsEstimate":1.22,"epsDifference":0,"surprisePercent":null}
+      2026-06-30  {"reportDate":"2026-07-22","date":"2026-06-30","beforeAfterMarket":"AfterMarket","currency":"USD","epsActual":1.3,"epsEstimate":0.63,"epsDifference":0.67,"surprisePercent":106.3492}
+      2026-03-31  {"reportDate":"2026-04-22","date":"2026-03-31","beforeAfterMarket":"AfterMarket","currency":"USD","epsActual":0.88,"epsEstimate":0.61,"epsDifference":0.27,"surprisePercent":44.2623}
+  [units] fundamentals/CCS.US (whole): 10   running 28 of 100,000
+
+----------------------------------------------------------------------------------------------------
+=== Q5. form4 depth on a delisted name, and meta.total against the filings index ===
+
+  target AAAB.US (delisted, has bars)
+
+  sec-filings index    404  157 ms  Symbol not found
+  [units] sec-filings/AAAB.US (index): 10   running 38 of 100,000
+
+  form4 offset 0      404  167 ms  Symbol not found
+  [units] sec-filings/AAAB.US/form4, up to 4 pages at page[limit]=50: 10   running 48 of 100,000
+
+  pages walked 0, rows 0, meta.total -1, index count -1
+  filed range  - .. -
+  stopped on   http 404
+  index against meta.total: differ or unavailable
+
+----------------------------------------------------------------------------------------------------
+=== Q6. splits/{t} and div/{t} history depth ===
+
+  splits/AAAB.US      200  135 ms      0 rows  - .. -
+  [units] splits/AAAB.US: 1   running 49 of 100,000
+
+  div   /AAAB.US      200  140 ms      0 rows  - .. -
+  [units] div/AAAB.US: 1   running 50 of 100,000
+
+  splits/CCS.US       200  146 ms      0 rows  - .. -
+  [units] splits/CCS.US: 1   running 51 of 100,000
+
+  div   /CCS.US       200  144 ms     21 rows  2021-06-01 .. 2026-05-27
+    keys date,declarationDate,recordDate,paymentDate,period,value,unadjustedValue,currency
+  [units] div/CCS.US: 1   running 52 of 100,000
+
+----------------------------------------------------------------------------------------------------
+=== The sweep's own spend, measured rather than projected ===
+
+  opening apiRequests   90,518
+  closing apiRequests   52
+  spent                 -90,466   against ~150 projected in the phase plan
+  http calls made       54
+  remaining             99,948 of 100,000
+  elapsed               11.5 s
+
+
+====================================================================================================
+
+Checkpoint 3.1, second pass.
+Run 2026-08-12 02:54 UTC, same scratch app, token never printed.
+Three things the first pass left unanswered or answered against a confounded target.
+
+----------------------------------------------------------------------------------------------------
+=== A. The allowance rollover, which the gate at 3.4 subtracts across ===
+
+  apiRequests        52
+  apiRequestsDate    2026-08-12
+  local UTC now      2026-08-12 02:54
+  local US Eastern   2026-08-11 22:54
+  payload keys       name,email,subscriptionType,paymentMethod,apiRequests,apiRequestsDate,dailyRateLimit,extraLimit,inviteToken,inviteTokenClicked,subscriptionMode,canManageOrganizations
+
+  The first pass opened at 90,518 used against apiRequestsDate 2026-08-11 and the
+  next billable call came back against a counter reading 1. So the counter had
+  reset. What this read says now is which date it reset INTO, which decides
+  whether the provider's day is UTC or something else.
+
+----------------------------------------------------------------------------------------------------
+=== B. Q5 retried on names delisted inside the window ===
+AAAB.US delisted 2003-01-29, before electronic Form 4 was mandatory, so its 404 was
+not evidence about delisted names. DGDM.US last traded 2021-08-13 and KEYHV.US
+2022-10-21, both inside the five-year window.
+
+  sec-filings/DGDM.US    index   404  162 ms  Symbol not found
+  [units] sec-filings/DGDM.US (index): 10   running 62 of 100,000
+
+    form4 offset 0    404  165 ms  Symbol not found
+  [units] sec-filings/DGDM.US/form4, up to 4 pages at page[limit]=50: 10   running 72 of 100,000
+
+  DGDM.US: pages 0, rows 0, meta.total -1, index count -1
+  DGDM.US: filed - .. -, stopped on http 404
+  DGDM.US: index against meta.total differ or unavailable
+
+  sec-filings/KEYHV.US   index   404  188 ms  Symbol not found
+  [units] sec-filings/KEYHV.US (index): 10   running 82 of 100,000
+
+    form4 offset 0    404  184 ms  Symbol not found
+  [units] sec-filings/KEYHV.US/form4, up to 4 pages at page[limit]=50: 10   running 92 of 100,000
+
+  KEYHV.US: pages 0, rows 0, meta.total -1, index count -1
+  KEYHV.US: filed - .. -, stopped on http 404
+  KEYHV.US: index against meta.total differ or unavailable
+
+----------------------------------------------------------------------------------------------------
+=== C. Q6 depth on a name whose distribution history is long ===
+CCS.US pays dividends only since 2021, so its 21 rows were the company's history
+rather than the endpoint's. SPY.US has distributed since 1993 and DGDM.US is a
+delisted name, which is the other half of the question.
+
+  splits/SPY.US     200  137 ms      0 rows  - .. -
+  [units] splits/SPY.US: 1   running 93 of 100,000
+
+  div   /SPY.US     200  262 ms    135 rows  1993-03-19 .. 2026-06-18
+    first row {"date":"1993-03-19","declarationDate":null,"recordDate":"1993-03-25","paymentDate":"1993-04-30","period":"Other","value":0.21319,"unadjustedValue":0.21319,"currency":"USD"}
+  [units] div/SPY.US: 1   running 94 of 100,000
+
+  splits/DGDM.US    200  142 ms      1 rows  2009-06-29 .. 2009-06-29
+    first row {"date":"2009-06-29","split":"3.000000\/1.000000"}
+  [units] splits/DGDM.US: 1   running 95 of 100,000
+
+  div   /DGDM.US    200  136 ms      0 rows  - .. -
+  [units] div/DGDM.US: 1   running 96 of 100,000
+
+----------------------------------------------------------------------------------------------------
+=== The second pass's own spend ===
+
+  apiRequests now       96
+  apiRequestsDate       2026-08-12
+  http calls made       26
+  elapsed               4.7 s
+

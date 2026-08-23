@@ -36,6 +36,25 @@
     against: dropping that on every run would be hostile, and the property being
     proved is identical either way. Override with -Database or CI_DATABASE.
 
+    BOTH DATABASES ARE DROPPED, and the second one is the suite's rather than
+    migrate's. Since 3.13 the suite derives its own database by appending `_tests`
+    to the one it is handed, then creates, migrates and seeds it, so the tests run
+    against stockresearcherlab_ci_tests and not against the database dropped for
+    migrate. That one persists between runs unless it is dropped too, and what
+    survives in it is invisible: a fixture leaving rows behind is read by the next
+    run as data it wrote itself, and a migration edited after it was applied keeps
+    the hash recorded when it first ran.
+
+    Run rather than imagined. Corrupting one recorded hash in that database turns
+    the whole database-backed suite red on a config test whose name says nothing
+    about migrations, and dropping it makes the same run green. Without the second
+    drop, "passes on a clean schema" is proved of neither database: not of the one
+    migrate uses, because no test runs there, and not of the suite's, because it was
+    never emptied.
+
+    The suffix is TestDatabase.Suffix in the suite and is mirrored here. That is one
+    fact in two places and is stated so a change to either is known to need the other.
+
     Nothing here writes to the repository and nothing is left behind. The
     worktree is removed in the finally block whether the run passes or fails.
 #>
@@ -388,6 +407,11 @@ return 0;
 # ---------------------------------------------------------------- the run ---
 
 $cs = Resolve-ConnectionString
+
+# The suite's own database, derived the way TestDatabase derives it: the handed name
+# plus `_tests`, idempotent so a string already naming one is taken at its word.
+$testsDatabase = if ($Database -like '*_tests') { $Database } else { $Database + '_tests' }
+$testsCs = ($cs -replace 'Database\s*=[^;]*', "Database=$testsDatabase")
 # Named from the process id rather than a new guid. Nothing here reaches output,
 # so it is not an INVARIANT 6 question, but the repository's habit is that a
 # fresh guid never appears where a stable name will do [CLAUDE.md section 6].
@@ -399,6 +423,7 @@ Write-Host ""
 Write-Host "ci.ps1: .github/workflows/ci.yml, run locally" -ForegroundColor White
 Write-Host "  HEAD      $head"
 Write-Host "  database  $Database  (dropped first)"
+Write-Host "  suite db  $testsDatabase  (dropped first; the suite recreates it)"
 Write-Host "  worktree  $work"
 
 $previousConnection = $env:ConnectionStrings__Postgres
@@ -504,9 +529,13 @@ try {
     $results['no secrets file present'] = 'none found, as expected'
     Write-Host '      none, as expected'
 
-    # ---- Drop the database. CI's fresh service container. -----------------
-    Write-Step 'Drop the database (CI gets a fresh container; this is the local equivalent)'
+    # ---- Drop both databases. CI's fresh service container. ---------------
+    # The first is what migrate runs against and the second is what the tests run
+    # against, and dropping only the first proves the clean-schema property of a
+    # database no test touches.
+    Write-Step 'Drop both databases (CI gets a fresh container; this is the local equivalent)'
     Remove-CiDatabase -Cs $cs -WorkDir $work
+    Remove-CiDatabase -Cs $testsCs -WorkDir $work
 
     # ---- Migrate, from an empty server -----------------------------------
     Write-Step 'Migrate, from an empty server'

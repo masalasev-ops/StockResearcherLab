@@ -891,3 +891,1091 @@ after four deviations had gone unnoticed. Write ownership is asserted against
 `SCHEMA.md` rather than against the catalogue, so §03's Writes cells are checked by
 nobody, and this one drifted at the first opportunity it had. Recorded as a finding in
 `PROGRESS.md` rather than fixed here.
+
+---
+
+## 2026-08-11, D-92 to D-95
+
+Phase 3's four decisions authored from the plan at
+`prompts/BuildPlans/phase-3-backfill.md` §3, and `BUILD_PLAN.md` phase 3 gaining its
+eighteen checkpoints, an amended fourth done-when line and eleven carried-obligation
+landings. Human-directed transcription; the decisions were authored before the plan was
+built against [`CLAUDE.md` §13].
+
+**`BUILD_PLAN.md`'s fourth done-when line for phase 3, clean edit, prior wording verbatim
+below.** The line was conditionally unsatisfiable and did not say so. Byte identity holds
+for compute over a store whose ingest has not moved, and does not survive a re-ingest of
+fundamentals, because `filing_date_effective` is computed at ingest from the ticker's
+widest clean gap known at that moment and a widest gap only grows [D-62's stated
+limitation]. The replacement states both halves. Removed:
+
+> a replay of one historical date produces byte-identical output to the first run
+
+**Nothing else was removed.** The checkpoint table is new, and the eleven obligation rows
+gained a landing appended to text that is otherwise unchanged, so neither has a prior
+wording to quote.
+
+**`BUILD_PLAN.md` is not one of D-73's four clean-edit documents** and its existing
+supersessions are struck in place, so this file now carries both conventions. The clean
+edit was directed rather than derived, and the inconsistency is recorded here rather than
+resolved, because which convention `BUILD_PLAN.md` follows is authored and this entry is
+not the place to decide it.
+
+**No code and no schema.** D-92's `security_daily`, D-95's `flow_fetch_attempt` and
+D-93's `IBackfillStage` are all declared here and built at the checkpoints that name
+them, so `SCHEMA.md` gains nothing yet: a declaration ahead of its column fails a parity
+check for a column that is correctly absent.
+
+---
+
+## 2026-08-11, D-73 amended
+
+D-73 classified by name where it had to classify by role. Human-directed. Nothing was
+removed from a spec document, so there is no prior wording to quote here; the amendment
+is in `DECISIONS.md`, which is the record and keeps its strikes.
+
+**What was wrong.** `ARCHITECTURE.html`, `SCHEMA.md`, `CONFIG_REFERENCE.md` and
+`RUNBOOK.md` were named individually as the documents that take clean edits, and
+`DECISIONS.md` and `PROGRESS.md` as the two that keep strikes. `BUILD_PLAN.md`,
+`METRICS.md` and `SCREEN_LIFECYCLE.md` were in neither list, so every document written
+after the decision had to be classified by whoever next edited it, and one of them was
+classified twice: `BUILD_PLAN.md`'s earlier supersessions are struck in place and phase
+3's fourth done-when line is a clean edit.
+
+**What replaces it.** The rule is now a test on what a document is read for, stated in
+two sentences that name no document, so a document written later classifies itself. A
+document read to know the current state takes clean edits; a document that is the record
+keeps its strikes. The six names stay as examples of the test rather than as the
+definition of it, and runtime prompt files remain clean deletions for their own reason.
+
+**`BUILD_PLAN.md` is a spec under the test** and takes clean edits from here. Its eight
+existing strikes stay, because D-73's condition requires confirming that each strike's
+decision names what it removed before it can go, and three of the eight cite a
+correction pass rather than a decision. Recorded as open item 11 in `PROGRESS.md`.
+
+**This entry corrects the one above it.** The `D-92 to D-95` entry says "`BUILD_PLAN.md`
+is not one of D-73's four clean-edit documents" and closes by leaving the convention
+question open. Under the amended decision that sentence is false and the question is
+answered. The earlier entry is not edited, this file being appended to and never
+rewritten, and the correction lives here where a reader reaching the end finds it.
+
+**`CLAUDE.md` §13 carries the same list and now disagrees with the register.** It is
+human-edited only [`CLAUDE.md` §13], so it is reported rather than changed. Its
+"Supersede visibly, never silently" paragraph names the same four and the same two as
+the definition, and it needs the same amendment for the corpus to state one rule.
+
+---
+
+## 2026-08-11, checkpoint 3.2, `security_daily`
+
+`SCHEMA.md` is a spec under D-73, so `security`'s section takes a clean edit and the
+prior wording is recorded here. D-92 moves four columns to a new per-date table.
+
+**`SCHEMA.md` §Reference, `security`'s column list and the sentence under it.**
+Removed:
+
+> `ticker`, `name`, `sector`, `size_bucket`, `market_cap`, `first_seen`, `last_seen`,
+> `delisted_date`, `is_active`.
+>
+> Size buckets: large-and-above at $10B or more, mid $2B to $10B, small $300M to $2B.
+
+The list is replaced by `ticker`, `name`, `first_seen`, `last_seen`, `delisted_date`,
+which is identity and lifespan. The size-bucket sentence is not deleted but moved: it
+belongs to `size_bucket` and `size_bucket` is now a `security_daily` column, so it is
+restated verbatim in that section. The `delisted_date` sentence and the whole clean-gap
+paragraph are unchanged and stay where they were.
+
+**Nothing else was removed.** `security_daily`'s section is new, so it has no prior
+wording to quote.
+
+**The four columns are still physically on `security` and 0007 drops nothing.**
+Checkpoint 3.2 enumerates what the migration does and a drop is not in it, and its
+done-when takes `ExpectedMonetary` from 18 to 19, which holds only while
+`security.market_cap` is still counted. A clean edit to this document is not a claim
+that a column is gone: `SCHEMA.md` says in its own opening that its column lists are
+the load-bearing ones rather than exhaustive. What is left is four columns nothing
+writes after 3.11 and nothing reads after 3.12, recorded as a finding in `PROGRESS.md`
+rather than dropped here, because dropping them moves two asserted counts.
+
+---
+
+## 2026-08-12, §3's C05 Writes cell
+
+`ARCHITECTURE.html` is a spec under D-73, so this is a clean edit and the prior wording
+is recorded here. Human-directed.
+
+**§3's catalogue, the C05 Writes cell.** D-95 and migration 0008 give FlowIngestor a
+third write and the cell named two. Removed:
+
+> insider_transaction, institutional_holding [D-61]
+
+It now names `flow_fetch_attempt` as well, with D-61 kept beside the two tables it
+decided and D-95 at the point of change. `git diff docs/ARCHITECTURE.html` touches that
+cell and nothing else.
+
+**Nothing else in the row moved.** The Runs cell still reads `Daily 17:45` [D-75] and
+the Reads cell still names the insider and ownership endpoints and `security` [D-58,
+D-74]. `flow_fetch_attempt` is deliberately absent from the Reads cell: a stage may read
+what it writes, which is what `DeclaredAccess.CanRead` says and what C03's cell already
+relies on.
+
+**This is the second Writes-cell drift in two days.** C03's was corrected under D-91 on
+2026-08-11 and C05's is corrected here. The finding underneath both is that the Writes
+column has no conformance test, where the Reads column gained one after four deviations
+went unnoticed. That finding predicted the next instances would be C14 in phase 4 and
+C22 in phase 8; it has been confirmed twice before either, which moves the test from
+worth building to overdue [`PROGRESS.md`, the fundamentals rotation].
+
+---
+
+## 2026-08-12, §3's C01 Writes cell and §16's store list
+
+`ARCHITECTURE.html` is a spec under D-73, so the removals below are clean edits and the
+prior wording is here. Human-directed. Every store named is already in a migration and
+in `SCHEMA.md`; the architecture was behind them.
+
+**§3's catalogue, the C01 Writes cell.** D-92 and migration 0007 give UniverseBuilder a
+second write and the cell named one. Removed:
+
+> security
+
+It now reads `security, security_daily` with D-92 at the point of change. **This is the
+third component to drift at the moment it gained a second write**, after C03 under D-91
+and C05 under D-95, and it is recorded in the existing Writes-conformance finding rather
+than as a new one.
+
+**§16's store matrix gains four rows, and they supersede nothing.** A purely new row has
+no prior wording to quote, so what is recorded here is that they are additions and which
+they are:
+
+- `security_daily`, ticker × date, 100 MB [D-92, migration 0007]
+- `fundamental_fetch_attempt`, one per ticker, tiny [D-91, migration 0006]
+- `sentiment_derived_daily`, ticker × day, 200 MB [D-78, migration 0004]
+- `flow_fetch_attempt`, one per ticker, tiny [D-95, migration 0008]
+
+**The sizes are derived from the grain and are estimates**, as every figure in that
+column is. The two attempt records are one row per ticker and are tiny by construction.
+`security_daily` is ticker by weekly evaluation date, roughly 741,000 rows over the
+window, and 100 MB is the figure `SCHEMA.md` already carries for it.
+`sentiment_derived_daily` is ticker by day with six real columns, so it sits between
+`flow_daily` at 52 MB and `valuation_daily` at 540 MB on column count and lands near
+200 MB. `SCHEMA.md` calls that store "Small", which is a word §16 uses for
+low-cardinality stores and not for ticker-by-day ones; the divergence is recorded in
+`PROGRESS.md` rather than resolved by changing a figure neither document measured.
+
+**§16's `screen_evaluation` row gains a marker rather than losing the row.** It is the
+one store §16 names that `SCHEMA.md` does not declare, its migration being phase 4's.
+Removed from the Store cell:
+
+> <b>screen_evaluation</b> <span class="tag new">NEW</span>
+
+It now carries `NOT YET IN SCHEMA` beside the existing tag. The new test reads that
+marker rather than holding an exclusion list of its own, which is where D-83 and D-76
+put a rule like this, and it fails if a store carrying the marker turns out to be
+declared after all, so the marker cannot outlive the condition it records.
+
+**Two paragraphs are added under the matrix**, stating that the list is now held against
+`SCHEMA.md` in both directions and what the marker means. Neither replaces existing
+prose; the D-76 paragraph above them is unchanged.
+
+---
+
+## 2026-08-12, size leaves `SCHEMA.md`
+
+`SCHEMA.md` is a spec under D-73, so these are clean edits and the prior wording is
+here. Human-directed.
+
+**Size after backfill is §16's column.** A size word in a `SCHEMA.md` heading was a
+third statement of a fact already held in §16 and derivable from the grain the same
+heading states, which is the duplication D-76 exists to remove. The trigger was one
+disagreement, `sentiment_derived_daily` reading "Small" against §16's 200 MB, and the
+answer is the rule rather than the correction: **33 of the 35 table headings carried
+one and all 33 are gone.** `security` and `local_model_config` never had one.
+
+**§16 is unchanged by this.** Its figures stay the estimates they are, including the
+200 MB that started this.
+
+**The preamble sentence goes with them.** Removed:
+
+> **Sizes are estimates after a five-year backfill, not measurements.**
+
+It qualified figures this document no longer states, and a rule about a thing that is
+not there is the same drift in miniature. What replaces it says where size lives and
+that the §16 test holds the store list and not the size column.
+
+**The 33 removals, verbatim.** Each was the trailing sentence of a heading's opening
+paragraph, after the writer declaration. Thirty were at the end of a line; three had
+wrapped onto a line of their own and that line is gone, `insider_transaction`,
+`institutional_holding` and `dossier`.
+
+| Table | Removed |
+|---|---|
+| `security_daily` | ~100 MB. |
+| `price_daily` | ~400 MB. |
+| `fundamental_snapshot` | ~60 MB. |
+| `fundamental_fetch_attempt` | Tiny. |
+| `flow_fetch_attempt` | Tiny. |
+| `sentiment_daily` | ~380 MB. |
+| `sentiment_derived_daily` | Small. |
+| `headline` | Small. |
+| `insider_transaction` | Small. |
+| `institutional_holding` | Small. |
+| `flow_daily` | ~52 MB. |
+| `events` | Small. |
+| `indicator_daily` | ~1.2 GB, the second largest table. |
+| `valuation_daily` | ~540 MB. |
+| `market_context_daily` | Small. |
+| `gate_result` | ~120 MB. |
+| `screen_score_daily` | ~1.4 GB, the largest table. |
+| `screen_history` | Small. |
+| `candidate_set` | ~9 MB. |
+| `attribution` | ~9 MB. |
+| `news_digest` | Grows ~10 MB/yr. |
+| `dossier` | Grows ~40 MB/yr. |
+| `proposal` | Grows ~30 MB/yr. |
+| `portfolio` | Tiny. |
+| `portfolio_selection` | Small. |
+| `order / fill / position` | Small. |
+| `trade_outcome` | Small. |
+| `config_rows` | Tiny. |
+| `researcher_memory` | Small. |
+| `calibration` | Small. |
+| `run_log` | Small. |
+| `cost_ledger` | Small. |
+| `alert` | Small. |
+
+**Two of them said something §16 does not.** `indicator_daily` was "the second largest
+table" and `screen_score_daily` "the largest", which is a ranking rather than a size and
+is not carried across: §16 states both figures and the ordering is read off them. D-84's
+note under the matrix already makes the point about `screen_score_daily` at length.
+
+**Nothing else in the paragraphs moved.** The grain, the writer declaration and every
+decision citation are untouched, which is what `SchemaDocument.WritersByTable` and
+`SchemaDocument.Tables` parse; both still read 37 tables and the five conformance tests
+over this document pass unchanged.
+
+---
+
+## 2026-08-12, D-96 and D-97, the earnings store and the sector column
+
+Two authored decisions and the store they create. `ARCHITECTURE.html` and `SCHEMA.md`
+are specs under D-73, so the two catalogue cells below are clean edits and the prior
+wording is here. Human-directed.
+
+**§3's C03 Writes cell.** D-96 gives FundamentalsIngestor a third write. Removed:
+
+> fundamental_snapshot, fundamental_fetch_attempt [D-91]
+
+It now names `earnings_history` as well, with D-91 kept beside the two tables it decided
+and D-96 at the point of change.
+
+**§3's C09 Reads cell.** D-96 gives ValuationEngine the store that feeds
+`last_two_earnings_surprises`, a column it has written null since 0001. Removed:
+
+> `price_daily`, `fundamental_snapshot`
+
+**§16's store matrix gains one row**, `earnings_history` at ticker by fiscal period and
+30 MB. A purely new row supersedes nothing, so it has no prior wording and is recorded
+here as an addition. The store-list conformance test's count moves from 38 to 39.
+
+**`SCHEMA.md` gains `earnings_history`'s section and a `sector` column on
+`fundamental_snapshot`.** Both are additions. Three `real` columns are declared as not
+money: `eps_actual` and `eps_estimate` are per-share figures rather than monetary
+totals, and `surprise_fraction` is a ratio. The monetary count is unchanged at 19,
+`sector` being text.
+
+**`BUILD_PLAN.md`'s `1 → 3` carried obligation, closed at 3.7.** A clean edit under
+D-73, `BUILD_PLAN.md` being a spec under that test. Removed:
+
+> | 1 | 3 | `FundamentalsIngestor` does not read `events`, so earnings do not jump the
+> rotation queue. `ARCHITECTURE.html` §3 gives C03 `events` in Reads and the code
+> declares `price_daily` and `security` only. The read conformance test added at the
+> post phase 1 reconciliation carries this as its one recorded deviation and fails the
+> moment it stops being one, so it cannot go stale. The catalogue is right and the code
+> is incomplete [D-74], which rules out both available shortcuts: declaring `events`
+> without reading it makes the declaration mean nothing, and removing it from the
+> catalogue is editing an authored document to match what was built. `events` has been
+> built since 1.8, so nothing blocks the work. Owed to phase 3 because that is the next
+> phase to run ingest, and a fixed rotation head leaves every name outside it unread
+> indefinitely, which is a coverage property backfill depends on. **Lands at 3.7**,
+> with the full pool sweep |
+
+C03 now reads `events` for the names that reported inside
+`events.earnings_backward_days` and ranks them above staleness in the shared rotation.
+`ReadDeclarationConformanceTests` carried it as its one recorded deviation and **failed
+the moment it stopped being one**, which is how the closure was found rather than
+remembered; that list is now empty.
+
+**Why the sector column is not on `security`**, recorded because it is the option a
+reader would expect. It would make C03 a second writer on the table C01 owns, requiring
+a split declaration [INVARIANT 10, D-77]; it would carry one sector per ticker, which is
+today's sector applied to every historical date and the exact defect `security_daily`
+was created to remove; and it would put a weekly stage's read behind a nightly stage's
+write. The full reasoning is D-97.
+
+---
+
+## 2026-08-12, D-98, the holders capture moves to C03
+
+`ARCHITECTURE.html` and `SCHEMA.md` are specs under D-73, so the three edits below are
+clean and the prior wordings are here. Implementing an authored decision.
+
+**§3's catalogue, the C03 Writes cell.** D-98 gives FundamentalsIngestor a fourth
+write. Removed:
+
+> fundamental_snapshot, fundamental_fetch_attempt [D-91], earnings_history [D-96]
+
+It now names `institutional_holding` as well, with D-91 and D-96 kept beside the tables
+they decided and D-98 at the point of change.
+
+**§3's catalogue, the C05 Writes cell.** The same table leaves it. Removed:
+
+> insider_transaction, institutional_holding [D-61], flow_fetch_attempt [D-95]
+
+D-61 decided both source tables at their natural grain and stays beside the one that
+remains here, with D-98 alongside it as the decision that made form 4 the only source
+this component ingests. `git diff docs/ARCHITECTURE.html` touches those two cells and
+nothing else, two lines of a 1,000-line file.
+
+**`SCHEMA.md`'s `institutional_holding` writer declaration.** Removed:
+
+> Grain: ticker by holder by report date, the source's own. **Writer: FlowIngestor.**
+
+The grain is unchanged and the writer is now `FundamentalsIngestor`, which is what
+`WriteOwnershipConformanceTests.EveryWritingComponentIsNamedAsAWriterInSchemaDocument`
+reads: it failed on the code change alone and passes on this one, so the two statements
+are held against each other rather than maintained in parallel. A sentence is added
+below the column list saying the block rides C03's call and that no sweep re-fetches
+it, which is what stops a reader looking for the endpoint that populates this table.
+
+**§16's store matrix does not change.** No table is added or removed and the Written-by
+column left that table at D-76, so write ownership is stated in §3 and in `SCHEMA.md`
+and nowhere else. The store-list conformance test's count stays at 39.
+
+**The Reads cells did not move and one of them is now stale.** C05's still names the
+ownership endpoint, which the component no longer calls. That is an endpoint rather
+than a table, so `ReadDeclarationConformanceTests` neither sees it nor could: it
+intersects the cell against `SCHEMA.md`'s table list and drops everything else, exactly
+as it drops `digest_provider` from C29's. Recorded as open item 20 rather than
+corrected here, the file being human-edited only and this change's scope being the two
+Writes cells [`CLAUDE.md` §13].
+
+**No provider call was made and no units were spent.** The measurement D-98 rests on
+was taken on 2026-08-12 at 40 units and is not repeated; the regression test added with
+this change reads the captured block off disk and covers our parse rather than the
+provider's response [`FIXTURES.md`, the unfiltered `Holders` block].
+
+---
+
+## 2026-08-12, D-98's two open items closed
+
+`ARCHITECTURE.html` is a spec under D-73, so the edit below is clean and the prior
+wording is here.
+
+**§3's catalogue, the C05 Reads cell.** D-98 stopped the component calling the
+ownership endpoint and the cell went on naming it. Removed:
+
+> Insider, ownership [D-58], `security` for the universe it iterates [D-74]
+
+D-58 dropped short interest from the flow screen and stays beside the endpoint that
+remains, with D-98 alongside it as the decision that removed the other. `git diff
+docs/ARCHITECTURE.html` touches that cell and nothing else, one line.
+
+**Nothing else in the row moved.** The Runs cell still reads `Daily 17:45` [D-75] and
+the Writes cell still names `insider_transaction` and `flow_fetch_attempt` [D-61, D-95,
+D-98].
+
+**Why no test caught it, recorded rather than built.**
+`ReadDeclarationConformanceTests` intersects the Reads cell against `SCHEMA.md`'s table
+list and drops whatever does not match, which is what lets it read `security` out of
+"for the universe it iterates" and what makes it drop `digest_provider` from C29's. The
+consequence is that the half of every Reads cell naming endpoints is checked in neither
+direction, inside the test that has caught two things this week. That is the same
+unchecked-column shape as the Writes column and it is recorded beside it in
+`PROGRESS.md`, so whoever builds one sees the other.
+
+**`institutional_holding` gains no schema change and no document change.** The
+duplicate-key guard landing with this is code and tests only: the grain, the writer
+declaration and the column list are what they already were.
+
+---
+
+## 2026-08-12, the backfill driver
+
+No spec document changed. `CONFIG_REFERENCE.md`'s Consumer column moved from NOT BOUND
+to a named component for six backfill keys, which is verified content rather than a
+supersession: each was confirmed by reading the line that consumes it, at
+`PriceIngestor.cs:108-111`, `FundamentalsIngestor.cs:88-94` and `Program.cs:175`. The
+four still reading NOT BOUND are sweep weights for checkpoints not yet built.
+
+`ARCHITECTURE.html`, `SCHEMA.md` and `RUNBOOK.md` are untouched. The driver is a Worker
+command over `BackfillRun`, which §3 already accounts for, and it adds no component, no
+table and no config key.
+
+---
+
+## 2026-08-12, range-scoped resumption
+
+`RUNBOOK.md` is a spec under D-73 and this is an addition rather than a supersession, so
+nothing is removed. Its Backfill section gains a "Running an ingest sweep" subsection
+before the existing two-pass text, which is now under "The two-pass screen build". The
+new text says to pass both dates for a multi-day sweep, what each exit code means, and
+what to do when a refusal names a row. The reason it has to be stated is that `to`
+defaults to today and today moves at midnight.
+
+**No other document changed.** `ARCHITECTURE.html`, `SCHEMA.md` and `CONFIG_REFERENCE.md`
+are untouched: no component, table, column or config key moved. The rule is a change to
+how `BackfillRun` reads a `run_log` row it already read.
+
+**One `run_log` row was deleted from the developer database**, id 1311, and its text and
+consequence are in `PROGRESS.md` rather than here, because it was data rather than a
+document and the record has to sit where the finding does.
+
+---
+
+## 2026-08-12, the failed sweep, the frontier position and the connection retry
+
+`RUNBOOK.md` is a spec under D-73 and this is an addition, so nothing is removed. Its
+"Running an ingest sweep" subsection gains three paragraphs, on what a failure records,
+on the connection retry and its count, and on why a per-ticker write failure is not
+tolerated. The last of those sits beside the two exceptions the failure table already
+enumerates, so the absent third reads as deliberate rather than forgotten.
+
+**No other document changed.** No component, table, column or config key moved. The
+retry's attempt count and backoff are constants in the data layer rather than config
+keys, on the precedent the transport already sets: the rate limiter's 1,000 a minute
+and the HTTP handler's pooled-connection lifetime are constants too, and config in this
+system is for values the experiment turns on [`CLAUDE.md` §8].
+
+**A hypothesis was refuted rather than acted on, and the measurement is in
+`PROGRESS.md`.** The instruction to establish why a physical connection was being
+established per ticker rested on a sound reading of the stack. It is not what happens:
+7 physical opens over 402 tickers at a worker count of 8. Nothing was changed about
+pooling, because there was nothing wrong with it.
+
+---
+
+## 2026-08-13, the candidate pool derived without a whole-table window
+
+No document changed. D-4's criteria are untouched, no component, table, column or config
+key moved, and the pool is the same set: 7,320 tickers both ways with 0 missing and 0
+extra, proved against the shipped statement extracted verbatim out of the source rather
+than against a copy of it.
+
+What changed is one SQL statement in `FundamentalsIngestor.BootstrapPoolAsync`, from
+169.9 seconds to 11 against a 78,087,416-row `price_daily`. Both the nightly path and the
+range path call it, so both are fixed by the one change.
+
+**The sixty-day trailing slice the work was specified around is not in the code**, and
+`PROGRESS.md` carries the measurement that rejected it: it returns 4,834 tickers where
+the old statement returns 7,320, dropping every delisted name whose last bar predates the
+window, and it is not faster. The call site states that rather than stating a width.
+
+---
+
+## 2026-08-13, resumption is an attempt record and the frontier goes
+
+`SCHEMA.md` gains `### price_fetch_attempt`, declaring its writer, its four columns and
+why presence in `price_daily` is not the predicate. `ARCHITECTURE.html` gains the store
+in §16 and the table in C02's Writes cell. Both are additions and nothing is removed
+from either, so there is no prior wording to record.
+
+**A prior wording is recorded here, and it is a code contract rather than a document
+sentence.** `BackfillResult` carried a `Position`, `BackfillContext` carried a
+`ResumeFrom`, `RunLog` returned a `ResumePoint` carrying a parsed ticker and a parsed
+range, and `BackfillRun` refused a run whose range did not match the recorded one. All
+of that is gone. What it said, so the reasoning is not lost with it:
+
+> A resume point belongs to the range that produced it. The position is a ticker and
+> which pool it indexes into is decided by the range, so resuming a wider sweep from a
+> narrower one's position skips every name the narrow one did not contain. A mismatch
+> refuses rather than starting over, because `to` defaults to today and a sweep
+> re-invoked the next day would silently restart and never finish.
+
+That was right about the position and is answered differently: an attempt record keys on
+the range start, so a sweep re-invoked the next morning reads its own rows whatever `to`
+resolves to, and there is nothing left for a mismatch to corrupt.
+
+**Three failures in one day are what the change rests on**, and they are in
+`PROGRESS.md` rather than here. The position was produced once out of three, and the two
+that produced nothing were not unlucky: one fault arrived in the allowance gate's own
+call, outside the dispatch loop the frontier watched, and one row was deleted by a test
+fixture's cleanup.
+
+**`RUNBOOK.md` is a spec under D-73 and this both adds and supersedes.** Its "Running an
+ingest sweep" subsection loses the instruction to pass both dates on a resume and the
+paragraph on what a failure records. The prior wordings:
+
+> A multi-day sweep passes both dates. `to` defaults to today, so a sweep resumed the
+> next morning without them asks for a different range and is refused, naming the row.
+
+> A failure records the lowest ticker still in flight. Everything strictly below it was
+> dispatched and finished, so the next run re-dispatches that one and everything above
+> rather than the whole pool.
+
+It gains a paragraph on vacuuming after a bulk load, which is new rather than a
+replacement.
+
+**No config key moved and no decision number was taken.** A decision is owed for the
+resumption design and `PROGRESS.md` says so; the citation in the two documents is the
+checkpoint until one exists.
+
+---
+
+## 2026-08-13, D-99 authored and the citations redirected
+
+`DECISIONS.md` gains **D-99 A ticker-partitioned backfill resumes by attempt record, not
+by position**, `ACTIVE`, superseding the resume-position reasoning recorded under open
+item 22. Nothing is removed from that register: a superseded entry keeps its number and
+item 22's record keeps its strikes [D-73].
+
+**Four documents cited the checkpoint or the migration where D-99 is now the source, and
+each is a clean edit with the citation at the point of change.** The prior wordings,
+verbatim:
+
+`SCHEMA.md`, in the `price_fetch_attempt` section:
+
+> **What a ticker-partitioned sweep resumes on, and the only thing it resumes on**
+> [0010].
+
+`ARCHITECTURE.html`, §3's C02 Writes cell and §16's store row, both carrying the
+checkpoint in the citation span:
+
+> price_daily, price_fetch_attempt <span class="rmv">3.6</span>
+
+> <b>price_fetch_attempt</b> <span class="tag new">NEW</span> | one per ticker <span
+> class="rmv">3.6</span> | tiny
+
+`FIXTURES.md`, four rows registering against the migration in the Registered column and
+one clause citing it inline:
+
+> | A price ticker that answers 404 | 0010 |
+
+> | A middle ticker that throws inside the parallel body | 0010 |
+
+> | A halt over one range and a sweep asking for another | 0010 |
+
+> | A sweep's own rows, cleared and counted | item 22, 0010 |
+
+> The fixture range starts at 2019-06-03 rather than at `backfill.window_start`, so a
+> fixture attempt can never be read as a real one [0010]
+
+`RUNBOOK.md` cited neither and stated the rule uncited, which is the same defect one step
+further on [`CLAUDE.md` §13]. It gains `[D-99]` on the paragraph that states it rather
+than losing a wording.
+
+**The migration citation is kept beside the decision in `SCHEMA.md` and dropped
+elsewhere**, on that document's own convention: it already reads `[D-95, 0008]` and
+`[D-97, 0009]`, the decision carrying the reasoning and the migration the DDL.
+`ARCHITECTURE.html`'s citation spans carry decision numbers and correction-pass letters
+and have never carried a migration number, and `FIXTURES.md`'s Registered column names
+the thing that caused the fixture to exist.
+
+---
+
+## 2026-08-13, the phase 3 plan stops naming a recorded position
+
+`prompts/BuildPlans/phase-3-backfill.md` is read to know the current plan and takes clean
+edits. **Three passages named a recorded position, not one.** `prompts/spent/` is
+untouched: it keeps the plan as issued.
+
+3.4's gate paragraph:
+
+> A clean halt records the position reached in the run log and exits with a status an
+> operator can see, so tomorrow's run resumes rather than restarts.
+
+3.4's done-when:
+
+> a seeded allowance below the next unit's weight halts the sweep with its position
+> recorded and no rows lost
+
+3.6's done-when:
+
+> a run halted by the gate resumes from its recorded position and reaches the same store
+> as an uninterrupted one.
+
+**One further passage was read and left alone.** §2's seven-days paragraph says the gate
+"halts cleanly at the wall, records where it reached, and resumes on D-68's per-grain
+idempotence". That names a date rather than a position and `run_log.run_date` still
+carries it, so it is true as written. 3.16's "resumable from where an interruption left
+it" is likewise unchanged in meaning.
+
+---
+
+## 2026-08-13, Figure 2 gains a component, times and layer boxes
+
+Human-directed correction to `ARCHITECTURE.html` [`CLAUDE.md` §13]. Clean edits under
+D-73. No decision changes; every figure below is brought into line with one already
+authored.
+
+**C35 SentimentEngine was in Figure 1's layer 2 list and in the §3 catalogue and not in
+Figure 2**, so the figure showed four compute components where the system has five. It
+is added after C34. Nothing was removed to make room.
+
+**The four compute nodes were the only ones in the figure carrying no clock time**, which
+is what let the row read as two rows when it wrapped. All five now carry `id · time`. The
+prior wordings, verbatim:
+
+> <div class="node n-compute"><span class="id">C08</span>
+
+> <div class="node n-compute"><span class="id">C09</span>
+
+> <div class="node n-compute"><span class="id">C10</span>
+
+> <div class="node n-compute"><span class="id">C34</span>
+
+**C10's ordering constraint was invisible.** Its §3 Reads cell names `indicator_daily`
+for breadth, so it must follow C08, while the row presented the five as
+interchangeable. Its prior `rl`, verbatim:
+
+> Breadth, VIX, regime, sector strength
+
+**Each layer is now a labelled `.group` box** rather than a bare row, the row having
+been the figure's only device for grouping and a wrapped row reading as a sequence
+step. Six boxes in flow order, labels matching Figure 1's layer names: ingest, the
+guard alone because it is the abort point, compute, select, decide, execute. The
+trailing `order` store and C31 stay outside. The left border colour ties each box to
+its layer in Figure 1, so the two figures use one visual language.
+
+The stylesheet gains `.group`, `.glabel`, `.group .arrow`, the six `.g-*` colour
+variants and `width:100%` on `.flow`. The container is a centred flex column rather
+than a plain block, without which the arrow divs stretch to full width and their glyph
+lands at the left edge.
+
+---
+
+## 2026-08-13, three figures stop saying five screens where the live set governs
+
+D-84 gave a screen's config row a state, so a screen can be registered and scored
+without being allocated slots, and D-85 made the allocator read the live ones. `shadow`
+appeared fourteen times in `ARCHITECTURE.html` and in no figure. This is D-83's family:
+a figure stating a count where a rule governs the set.
+
+**Figure 3** is the figure a reader uses to learn what a screen is, so it is where the
+distinction belongs. The five stay named, being the live set today, and the figure now
+says what makes them the live set: a line under the row, and a clause on the floor node
+stating that every registered screen is scored there and maintains its own
+distribution, shadows included, while only the live ones are allocated slots. Nothing
+was removed.
+
+**Figure 4 contradicted itself.** Its dedupe step already read "Union across the live
+screens [D-85]" and its megacap bound already held at every live-screen count rather
+than only at five. Only the input line was missed. Its prior wording, verbatim:
+
+> <div class="store" style="min-width:340px"><b>screen_score_daily</b>five ranked lists,
+> floors already applied</div>
+
+**Figure 7 is the one that matters most**, because unfiltered the Screens control would
+rotate over every registered screen including shadows that surface no candidates, and
+corrupting a control is worse than losing one [D-39]. Its prior wording, verbatim:
+
+> <div class="step"><b>Fixed rotation</b><span>Each screen's top-ranked name, rotating
+> so all five get equal turns</span></div>
+
+---
+
+## 2026-08-13, Figure 10 names where the tuner's measurements land
+
+The figure showed `config_rows → C13, C14` as the tuner's output. C22 also writes
+`screen_evaluation`, which D-87 exists for: the sustained-fail rule needs the
+consecutive count to be a record rather than a recomputation, since recomputing applies
+today's definitions to a past evaluation [D-40]. The store is in §16 and in `SCHEMA.md`
+and appeared in no figure.
+
+It is added beside `config_rows`, naming its readers, since a store whose reader is
+unnamed is the drift this document keeps producing. Nothing was removed.
+
+---
+
+## 2026-08-13, section 2's backfill ticker count is repriced from a measurement
+
+3.6's load makes D a query rather than an estimate: admitted delisted names carrying at
+least one bar at or after `backfill.window_start`. Measured 2026-08-13, **16,862** of
+32,611 admitted delisted names. The prior wording put the whole distinct-ticker count
+across the backfill at roughly 2,500, which implied about 500 delisted additions on top
+of the live universe, and the candidate pool is 34 times that. The figure it is replaced
+with is a bound rather than a count, because what clears section 2's criteria on any
+given date is C01's answer and is not measured.
+
+The prior wording, verbatim:
+
+> Around 2,000 names live, and roughly 2,500 distinct tickers across the five-year
+> backfill once delisted names are included.
+
+"Around 2,000 names live" is unchanged and is deliberately left alone. Phase 1 measured
+2,840 and that gap is an open authored question recorded in `PROGRESS.md`, so correcting
+it here would answer it in passing.
+
+---
+
+## 2026-08-14, C04's Reads cell names `price_daily` [3.8, D-101]
+
+D-101 widened C04's backfill pool to the live universe plus every admitted delisted
+common stock carrying a bar at or after `backfill.window_start`, and finding that set
+reads `price_daily`. `ReadDeclarationConformanceTests` asserts the cell and the declared
+read set against each other in both directions, so the cell moves in the same commit as
+the code that declares the read: editing it earlier fails the build from the other side.
+
+The prior wording, verbatim:
+
+> Sentiment endpoint, `security` for the universe it iterates [D-74]
+
+The nightly stage reads no prices and still does not. The read belongs to
+`ExecuteRangeAsync` alone, which is why the appended clause says what it is for rather
+than naming the table on its own.
+
+---
+
+## 2026-08-14, C06's Reads cell names `price_daily` [3.10, D-101]
+
+The same edit as C04's above and for the same reason. D-101 widened C06's backfill pool
+to the live universe plus every admitted delisted common stock carrying a bar at or
+after `backfill.window_start`, and finding that set reads `price_daily`. The cell moves
+in the same commit as the code that declares the read, `ReadDeclarationConformanceTests`
+asserting both directions.
+
+The prior wording, verbatim:
+
+> Calendar, splits, dividends, `security` for the universe it iterates [D-74]
+
+The nightly stage reads no prices and still does not. The widening reaches which tickers
+are asked and not which event families: no earnings row is written by the range pass and
+that absence is unchanged.
+
+---
+
+## 2026-08-14, §16 gains `sentiment_fetch_attempt` [3.8, 0011]
+
+An addition, superseding nothing, so there is no prior wording. It is recorded here
+anyway because a reader looking for when a store entered the matrix should find the
+answer in the same place every other change to these documents is recorded, and an entry
+a reader cannot find is the same as no entry.
+
+Appended in migration order with `event_fetch_attempt` below it. The grain wording and
+the size match `price_fetch_attempt`, `fundamental_fetch_attempt` and
+`flow_fetch_attempt`, which is the convention for a per-ticker record.
+
+The row closed `StoreMatrixConformanceTests.EveryTableDeclaredInSchemaDocumentIsNamedInTheMatrix`,
+which had been failing since the table entered `SCHEMA.md` at 3.8.
+
+---
+
+## 2026-08-14, §16 gains `event_fetch_attempt` [3.10, 0012]
+
+An addition, superseding nothing, so there is no prior wording, and recorded for the
+same reason as the row above.
+
+Appended after `sentiment_fetch_attempt`, which is the order the migrations added them.
+Same grain wording and same size, for the same reason: it is the fifth per-ticker
+attempt record and the convention is what makes the five readable as one kind of thing.
+
+---
+
+## 2026-08-16, five Reads cells move to `security_daily`, and C01 gains it [3.12, D-92]
+
+Human-authorised as a shape: each cell's `security` reference becomes `security_daily`
+and every other clause is preserved. Wholesale replacement was explicitly not
+authorised, so the prior wordings are recorded here in full.
+
+`ARCHITECTURE.html` §3 is a spec and takes clean edits [D-73], which is why the prior
+wording lives here rather than as a strike in the document.
+
+**C04 SentimentIngestor.** Two clauses since D-101 appended `price_daily`; only the
+first changed.
+
+> Sentiment endpoint, `security` for the universe it iterates [D-74], `price_daily` for
+> the in-window delisted names [D-101]
+
+**C08 IndicatorEngine.** Bare where the other four are qualified, and left bare. An
+unexplained read is a separate finding and inventing an explanation for uniformity would
+be worse than leaving it.
+
+> `price_daily`, `security`
+
+**C10 MarketContextEngine.**
+
+> `price_daily` for the benchmark and the sector composites, `security` for the members
+> it aggregates [D-74], `indicator_daily` for breadth
+
+**C11 PercentileEngine.**
+
+> `indicator_daily`, `valuation_daily`, `flow_daily`, `sentiment_derived_daily`,
+> `security` for the size bucket and sector that define a cell [D-74]
+
+**C35 SentimentEngine.**
+
+> `sentiment_daily`, `security` for the universe it iterates [D-74]
+
+**C01 UniverseBuilder is an addition rather than a substitution**, and is reported
+separately for that reason. It gained `security_daily` so the nightly path can measure a
+departure against the membership in force before it, which is the `is_active` gap 3.11
+opened and this checkpoint closes. Nothing was removed.
+
+> Symbol list, `price_daily`, `fundamental_snapshot`
+
+---
+
+## 2026-08-16, C03, C05 and C06 move to `security_daily` [3.12, D-92]
+
+Human-authorised on the same shape as the five: the `security` clause becomes
+`security_daily`, every other clause and citation preserved. These three were outside the
+originally named five and were found by counting the readers rather than reading the
+plan, which said "every reader" and then enumerated five of eight.
+
+Anchored on the component row rather than the cell text, because C06's cell was
+byte-identical to C04's.
+
+**C03 FundamentalsIngestor.**
+
+> Fundamentals endpoint, `events`, `price_daily` for the candidate pool, `security` for
+> rotation order [D-74]
+
+**C05 FlowIngestor.**
+
+> Insider [D-58, D-98], `security` for the universe it iterates [D-74]
+
+**C06 EventsIngestor.** Two clauses since 3.10 appended `price_daily`; only the first
+changed.
+
+> Calendar, splits, dividends, `security` for the universe it iterates [D-74],
+> `price_daily` for the in-window delisted names [D-101]
+
+---
+
+## 2026-08-18, `RUNBOOK.md`'s attempt stamp is corrected to D-99's asymmetry [3.17, D-99]
+
+The backfill section stated that a sweep's attempt rows are stamped with `from`. That is
+true of C02, C04 and C06 and false of C03 and C05, which stamp the range end, and D-99
+is the decision that records the asymmetry and gives its reason: `last_attempted_date`
+is also what the nightly rotation orders on, so an attempt stamped with a 2021 window
+start would put every swept ticker back at the head of the rotation.
+
+A spec contradicting a decision, so it is a clean edit [D-73] and the prior wordings are
+here. Two passages carried the rule rather than one, which is why the document was swept
+for the stamp instead of the single sentence being corrected: the second is the sentence
+an operator reads to know what a resumed run will dispatch.
+
+**Cost of believing the old wording.** A sweep re-invoked the next morning on a defaulted
+`to` presents C03 and C05 with an empty attempt set and re-fetches both pools whole. The
+paragraph's own opening clause, "pass `to` as well if the range end matters", kept the
+advice right while the reason stated under it was wrong, which is why the error survived
+being read.
+
+**The first passage.** Its opening sentence and its closing clause both went; the
+`backfill.window_start` clause in the middle is unchanged and is not repeated here.
+
+> **Pass `from`, and pass `to` as well if the range end matters.** A sweep's attempt rows
+> are stamped with `from`, so that is the argument one sweep has to keep constant across
+> the days it spans.
+
+> `to` defaults to today and moves at midnight, and nothing resumes on it.
+
+**The second passage**, inside "Every exit resumes the same way, including a killed
+process".
+
+> it dispatches the pool members carrying no attempt row for this range start.
+
+---
+
+## 2026-08-19, `CONFIG_REFERENCE.md`: two allowance keys named two consumers and have five
+
+Checkpoint 3.18 fills the Consumer column for every key phase 3 wired up, and that column
+means someone read the composition code rather than inferred from the name. Reading it
+found two rows wrong. A clean edit [D-73], with the prior wording here.
+
+**What was wrong.** `backfill.daily_unit_allowance` and `backfill.unit_reserve` are read
+by every sweep that spends: C02, C03, C04, C05 and C06, each passing them to
+`context.NextUnitAsync(weight, reserve, allowance, ct)`. Both rows named two of the five.
+
+**Cost of believing the old wording.** An operator changing the reserve to give a sweep
+more room would have expected it to affect the price and fundamentals sweeps and would
+have moved the floor under the sentiment, flow and events sweeps as well. The reserve is
+what guarantees a nightly run can still execute after a backfill day, so a row that
+understates its reach understates what a change to it touches.
+
+**The prior wording**, both rows as they stood at `9abe41f`.
+
+> | `backfill.daily_unit_allowance` | 100000 | 3.1, 3.3 | `PriceIngestor` C02, `FundamentalsIngestor` C03 | 3.6 |
+
+> | `backfill.unit_reserve` | 50000 | 3.3 | `PriceIngestor` C02, `FundamentalsIngestor` C03 | 3.6 |
+
+**The other eight were right and are now stamped rather than pending.** Their Verified
+cells carried a checkpoint number, being the checkpoint at which verification would land,
+and now carry the date it happened. `backfill.ticker_concurrency` gained a clause saying
+what does not read it, C05 being serial by design, because a concurrency key named for one
+component reads as an oversight rather than as a decision.
+
+
+---
+
+## 2026-08-22, `CONFIG_REFERENCE.md`: two paragraphs still said NOT BOUND after the table stopped
+
+The Backfill table was filled at 3.18 and stamped `verified 2026-08-19` for all ten keys.
+Two paragraphs around it were not touched and went on describing the state before that,
+so the document contradicted itself on the same screen. A clean edit [D-73], with the
+prior wording here.
+
+**What was wrong.** The prose above the table said four keys "still read NOT BOUND" and
+named them as the sweep weights for checkpoints not yet built; the paragraph below the
+table said "Every Consumer here reads `NOT BOUND` and that is the true state after 3.4".
+Neither was true at `f2f0746`: every one of the ten carries a consumer read out of the
+composition code and a verified date.
+
+**Cost of believing the old wording.** `CONFIG_REFERENCE.md` records the verified
+consumer precisely so an audit can tell a wired key from an unwired one. A document that
+says NOT BOUND beside a table saying otherwise makes the reader pick, and the rule it
+exists to enforce is that an unverified entry is worse than an absent one.
+
+**The prior wording**, both passages as they stood at `f2f0746`.
+
+> The six backfill keys now bound were confirmed the same way, at
+> `PriceIngestor.cs:108-111` and `FundamentalsIngestor.cs:88-94` for the range stages,
+> and `Program.cs:175` for the driver's read of `backfill.window_start`. The four that
+> still read NOT BOUND are the sweep weights for checkpoints not yet built, and their
+> absence from a grep over `src/` is what the entry states.
+
+> **Every Consumer here reads `NOT BOUND` and that is the true state after 3.4.** The
+> keys are seeded before anything resolves them, and 3.4 builds the gate they will be
+> passed to rather than the sweep that resolves them: `AllowanceRule.Decide` takes the
+> reserve, the weight and the configured allowance as arguments, and each sweep resolves
+> its own three for the date it is working on. So the column names the checkpoint that
+> will fill it rather than a component nothing has confirmed. An unverified entry is
+> worse than an absent one, and a guessed one is worse than both.
+
+**The reasoning in the second passage is kept and only its tense and its claim moved.**
+Why the reserve is a parameter rather than resolved inside the gate is still the reason
+the column read NOT BOUND at 3.4, and that is worth a reader knowing.
+
+
+---
+
+## 2026-08-22, `BUILD_PLAN.md`: the replay line took the counterexample rather than losing it
+
+Phase 3's replay done-when asserted byte identity without qualification, and item 52 is a
+standing counterexample to it: one row in 7,622 moved on a recompute whose inputs had not
+moved. The mechanism is known and it is neither the prune nor nondeterminism, so the line
+was amended to say what it asserts and what it does not, in the shape the paragraph
+already used for the fundamentals re-ingest. A clean edit [D-73], with the prior wording
+here.
+
+**What was wrong.** Nothing in the line was false about the case it had in mind. What it
+lacked was the case it did not: a ticker whose own-history window and whose benchmark
+window are derived by two different rules, which C08 does deliberately, and which can
+leave the two paths with no overlapping benchmark bars at all.
+
+**Why the line moved and the code did not.** Harmonising the two windows would satisfy
+the done-when and would be a code change made for that reason rather than because the
+behaviour is wrong. Which bound is correct, a row count that keeps a delisted name's last
+272 bars or a calendar span that keeps the benchmark aligned to the run date, is a
+separate question nobody has asked. The line now records the divergence with its
+mechanism instead, so a later session testing the other reading knows it was expected.
+
+**The prior wording**, as it stood at `8fdc1a7`.
+
+> *What is asserted.* Re-running any compute stage over a date, against a store whose
+> ingest has not moved, reproduces what the backfill wrote byte for byte. Tested at 3.13
+> as range mode against nightly for one date, and run end to end at 3.17 through
+> `run-night`.
+>
+> *What is not claimed.* Byte identity does not survive a re-ingest of fundamentals.
+
+The fundamentals paragraph is unchanged and is now the second of two, and the marker on
+the heading gained "and again at item 52".
+
+
+---
+
+## 2026-08-22, `SCHEMA.md`: `security.first_seen` says what it means, and what it means changed under it
+
+The prune truncated `price_daily` at 2016-01-04 and `first_seen` is derived from that
+table, so the column's meaning moved without the column moving. A clean edit [D-73],
+because this is a spec describing a column a reader needs the current meaning of.
+
+**There is no prior wording to quote, and that is the finding.** `security`'s entry
+listed `ticker`, `name`, `first_seen`, `last_seen`, `delisted_date` and defined only
+`delisted_date`. The two lifespan columns were named and never said what they held, so
+nothing in the document was falsified by the prune and nothing in it was true about the
+store either. A column whose meaning is only in the reader's head cannot be contradicted
+by a change to the data.
+
+**What was added.** That `first_seen` and `last_seen` mean the earliest and latest bar
+the store holds rather than the earliest and latest that existed; that both are
+recomputed from `price_daily` bounded `date <= asOf` on every C01 run against a
+conflict target of `ticker` alone, so a prune moves them forward silently; and the
+measured extent, 2,916 of 4,399 rows carrying a `first_seen` before the 2016-01-04
+floor, the earliest 1962-01-02, all three re-read off the store on 2026-08-22.
+
+**And that nothing reads either column.** Confirmed by reading the lines rather than by
+the grep that found them. That is the answer to the second half of item 51 and it costs
+nothing to state: the truncation has no consumer today, and the exposure is D-48's
+future per-date reconstruction rather than anything running now.
+
+**What was deliberately not written.** Whether `first_seen` should mean first listed or
+first retained is a decision, and if it is the former it cannot be derived from a pruned
+`price_daily` at all. That stays open at item 51 and is named in the document as
+unauthored rather than settled in passing [`CLAUDE.md` §13].
+
+## 2026-08-22, `SCHEMA.md`: the two attempt records gain the sweep marker [0013, item 44]
+
+A clean edit, these being spec entries describing tables whose shape changed under
+them [D-73]. `fundamental_fetch_attempt` and `flow_fetch_attempt` each gain
+`swept_through_date`, and `last_attempted_date` becomes nullable on both.
+
+Prior wording, identical in both entries, was the column line alone:
+
+> `ticker`, `last_attempted_date`, `last_yield_date`, `rows_last_attempt`.
+
+with no statement of what `last_attempted_date` meant to each reader, which is what
+let one column serve two purposes without the document showing it. The three carried
+properties at the foot of the `flow_fetch_attempt` entry are unchanged and still
+carried.
+
+Migration `0013_attempt_sweep_marker.sql`. The decision number for the split is owed
+and is not taken here: D-99 named the remedy and deferred it, item 44 records it, and
+authoring it is a human's [`CLAUDE.md` §13].
+
+## 2026-08-22, `RUNBOOK.md`: the rebuild's date rule follows the attempt split [0013, item 44]
+
+A clean edit, `RUNBOOK.md` being a document read to know the current state [D-73]. The
+paragraph told an operator that C03 and C05 stamp the range end "because that column is
+also what the nightly rotation orders on", which stopped being true at 0013, and it gave
+only the direction that no longer costs anything.
+
+Prior wording:
+
+> **Both dates are required here and the reason is a bill.** `to` would otherwise
+> default to today and today moves at midnight. C02, C04 and C06 stamp their attempt
+> rows with the range start and do not care what `to` is; **C03 and C05 stamp the range
+> end**, because that column is also what the nightly rotation orders on, so those two
+> presented with a `to` one day later see an empty attempt set and sweep their whole
+> pool again. A rebuild spans days by construction, so this is the ordinary case rather
+> than an edge.
+
+The stamp is still the range end and both dates are still required. What changed is the
+column it lands in and that the marker reads as coverage, so the earlier-`to` direction
+is now a fall-through where it used to re-sweep both pools whole.
+
+## 2026-08-22, `SCHEMA.md`: `first_seen` means first retained, and the question closes [item 51]
+
+A clean edit, `SCHEMA.md` being a document read to know the current state [D-73]. The
+entry already carried the meaning; what it also carried was the meaning being open, and
+a spec that states a rule and then says the rule is unauthored settles nothing.
+
+Prior wording, the closing sentence of the "nothing reads either column" paragraph:
+
+> So the truncation costs nothing today. The exposure is D-48, which makes these two and
+> `delisted_date` the basis for reconstructing membership per date: a reconstruction
+> written later would read a lifespan that starts where the retained history starts.
+> **What the column would have to mean for that to work, and whether it can be derived
+> from a pruned `price_daily` at all, is unauthored and open at item 51.**
+
+and the prune sentence above it:
+
+> A prune of `price_daily` therefore moves them forward on the next run, with no error
+> and nothing to compare against: the 2026-08-21 prune truncated that table at
+> 2016-01-04, and 2,916 of 4,399 `security` rows carried a `first_seen` earlier than
+> that, the earliest 1962-01-02.
+
+Both are replaced because the truncation stopped being prospective on 2026-08-22, when
+C01 ran inside the 3.16 sequence and took the count from 2,916 to 3. The retained reading
+is now stated as settled, with what it costs D-48 stated rather than implied.

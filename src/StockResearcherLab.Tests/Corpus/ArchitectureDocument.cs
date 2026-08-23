@@ -200,6 +200,102 @@ public static class ArchitectureDocument
         return rows;
     }
 
+    // ------------------------------------------ section 05, the screen table ---
+
+    /// <summary>One row of §05's screen table.</summary>
+    /// <param name="Id">The screen id, which is also its config id segment.</param>
+    /// <param name="Name">The screen's name, as the document gives it.</param>
+    /// <param name="RanksOn">
+    /// The Ranks-on cell split on its own separator, tags stripped. A token that is
+    /// a bare lower-case identifier is a metric; anything else is prose, which is
+    /// what S5's cell is entirely.
+    /// </param>
+    public readonly record struct ScreenRow(string Id, string Name, IReadOnlyList<string> RanksOn)
+    {
+        /// <summary>The tokens that are metric names rather than prose, ordinal.</summary>
+        public IReadOnlySet<string> Metrics
+            => RanksOn.Where(IsMetricToken).ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// §05's screen table, from the document.
+    ///
+    /// **Why this exists.** A screen is a configuration row, so the only thing holding
+    /// the seeded rows to the design is a reader who remembers what §05 says. That is
+    /// the second list this repository keeps finding, one copy of it being prose and
+    /// therefore never diffed. `screens.S3.metrics` could lose an input to a bad edit
+    /// and every downstream number would stay plausible.
+    ///
+    /// **The separator is the document's own middle dot**, which is what the Ranks-on
+    /// cells are written with. Splitting on it rather than on whitespace is what keeps
+    /// `gate: S1 top quintile AND technical bottom quintile AND stabilising` one token
+    /// instead of eight.
+    ///
+    /// **A decision chip inside the cell is dropped whole, tags and text together.**
+    /// S4's cell carries one between two of its metrics, and stripping only the tags
+    /// leaves `D-58` glued to `distinct_buyer_count`, which then fails to look like a
+    /// metric and vanishes from the set. The screen would read as having one input where
+    /// it has two, and the check would pass or fail for the wrong reason. Found by this
+    /// check disagreeing with the seeded configuration on S4.
+    /// </summary>
+    public static IReadOnlyList<ScreenRow> ScreenTable() => ScreenTableIn(File.ReadAllText(Path));
+
+    /// <summary>
+    /// §05's screen table, from arbitrary markup, so the check can be run against a
+    /// deliberately altered copy. A conformance test that has never failed has not been
+    /// tested [`StoreMatrixIn`'s own reasoning].
+    /// </summary>
+    public static IReadOnlyList<ScreenRow> ScreenTableIn(string html)
+    {
+        ArgumentNullException.ThrowIfNull(html);
+
+        var rows = new List<ScreenRow>();
+
+        foreach (Match row in ScreenTableRow.Matches(html))
+        {
+            rows.Add(new ScreenRow(
+                row.Groups["id"].Value,
+                StripTags(row.Groups["name"].Value).Trim(),
+                [.. StripTags(row.Groups["ranks"].Value)
+                    .Split(RanksSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)]));
+        }
+
+        if (rows.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "ARCHITECTURE.html section 05 has no screen table rows. This check reads that table and " +
+                "would otherwise pass over an empty set, which is the failure it exists to prevent.");
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// A Ranks-on token that is a metric name rather than prose. Lower-case, digits and
+    /// underscores only, which is `METRICS.md`'s own naming and excludes every prose
+    /// token in the table including S5's two whole clauses.
+    /// </summary>
+    private static bool IsMetricToken(string token)
+        => token.Length > 0 && token.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c) || c == '_');
+
+    private static string StripTags(string cell)
+        => Tag.Replace(DecisionChip.Replace(cell, string.Empty), string.Empty);
+
+    // Singleline off, for the reason CatalogueRow gives.
+    private static readonly Regex ScreenTableRow = new(
+        @"<tr><td class=""mono""><b>(?<id>S\d+)</b></td><td>(?<name>.*?)</td>"
+        + @"<td class=""wrapmono"">(?<ranks>.*?)</td>",
+        RegexOptions.Compiled);
+
+    private static readonly Regex Tag = new(@"<[^>]*>", RegexOptions.Compiled);
+
+    /// <summary>A decision citation, which is this document's markup rather than cell text.</summary>
+    private static readonly Regex DecisionChip = new(
+        @"<span class=""rmv"">[^<]*</span>",
+        RegexOptions.Compiled);
+
+    private static readonly char[] RanksSeparator = ['·'];
+
     /// <summary>The marker a store carries while §16 names it and `SCHEMA.md` does not declare it.</summary>
     public const string NotYetInSchemaMarker = "<span class=\"tag\">NOT YET IN SCHEMA</span>";
 

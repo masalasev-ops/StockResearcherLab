@@ -77,16 +77,30 @@ public static class TestDatabase
         }
     }
 
-    /// <summary>Every table in the public schema, ordinal-sorted.</summary>
+    /// <summary>
+    /// Every table in the public schema, ordinal-sorted, excluding partition children.
+    ///
+    /// **The partition predicate is the whole reason this reads `pg_class` rather than
+    /// `information_schema.tables`.** A partition child is a `BASE TABLE` there, so
+    /// `screen_score_daily`'s seven yearly children would each be reported as a table
+    /// `SCHEMA.md` does not declare, and declaring them would be declaring storage
+    /// rather than a store [D-111, 0017]. `relispartition` is the one thing that
+    /// separates a child from a table, and `relkind IN ('r','p')` keeps the
+    /// partitioned parent while still excluding views, which is what lets
+    /// `candidate_attribution` exist without being declared as a table [D-110].
+    /// </summary>
     public static async Task<IReadOnlyList<string>> PublicTablesAsync(CancellationToken ct = default)
     {
         await using var conn = await OpenAsync(ct).ConfigureAwait(false);
         await using var cmd = new NpgsqlCommand(
             """
-            SELECT table_name
-            FROM information_schema.tables
-            WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-            ORDER BY table_name;
+            SELECT c.relname
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relkind IN ('r', 'p')
+              AND NOT c.relispartition
+            ORDER BY c.relname;
             """, conn);
 
         var names = new List<string>();

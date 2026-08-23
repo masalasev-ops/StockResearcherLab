@@ -594,6 +594,58 @@ against the universe composite, with keys in ordinal sort order. Dictionary enum
 order is unspecified and this column reaches the cached prefix, where a byte difference
 breaks the cache and roughly triples the input bill silently [INVARIANT 6].
 
+### percentile_cell_daily
+Grain: date by size bucket by sector by metric. **Writer: PercentileEngine.**
+
+`date`, `size_bucket`, `sector`, `metric`, `source_table`, `cell_members`,
+`bucket_members`, `min_members`, `ranked_scope`.
+
+**The population a percentile was ranked against, kept rather than discarded** [D-107].
+C11 computes each metric's non-null count in its cell and in its bucket inside one
+window function, uses both to pick a scope, and until 0014 kept neither. A percentile
+without the size of the population behind it is unreadable: one over three members and
+one over eighty are the same number, and the fifteen-member fallback is theoretical
+rather than visible.
+
+**The grain is the cell, not the row.** The population is a property of the cell, so one
+row per member per metric would restate it thousands of times over on the two largest
+tables in the store.
+
+`cell_members` is the non-null count of that metric in `(size_bucket, sector)` and is
+null on the row that carries no sector. `bucket_members` is the count in the bucket
+alone and repeats across the sectors of a bucket, which is a redundancy accepted so a
+reader takes one row per metric rather than two. `min_members` is
+`percentile.cell_min_members` as it stood on that date.
+
+**`ranked_scope` is stored rather than derived**, `cell`, `bucket` or `none` under a
+`CHECK`. Comparing a count against a floor and labelling the answer is a computation,
+and the reader that shows this does not compute; storing it leaves that decision with
+the component that made it.
+
+**A null sector forms no cell** and goes to the bucket fallback [`METRICS.md` §6.4], so
+it has a row with no sector. The key is a unique index over `coalesce(sector, '')`,
+Postgres not allowing a null in a primary key, and the column stays nullable because the
+empty string is not a sector.
+
+`metric` is sufficient in the key without `source_table` beside it, the thirty metric
+names being distinct across the four sources. `source_table` is carried so a reader knows
+where to look, and a future collision is a failed key rather than a silent overwrite.
+
+### percentile_cell_coverage
+Grain: one row per source table. **Writer: PercentileEngine.**
+
+`source_table`, `covered_from`, `covered_to`.
+
+**What the populating pass reached, read as coverage and never as equality** [D-106,
+D-107]. Without it a date the pass has not reached and a cell that does not exist are
+the same empty result, and a reader would render "no cell" for a date whose cells simply
+have not been written yet.
+
+One row per source table rather than one for the store, because the pass writes per
+source and a halt between the four statements of a date leaves three further on than the
+fourth. The pass runs date-descending, so the covered set is a contiguous suffix and two
+dates describe it.
+
 ### percentile columns
 Named `<metric>_pctile` and stored alongside the metric they rank, on the metric's own
 table rather than in a table of their own. `real`, scaled 0 to 100, and none of them is

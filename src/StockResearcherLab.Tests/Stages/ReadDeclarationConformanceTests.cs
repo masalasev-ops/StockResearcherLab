@@ -243,10 +243,15 @@ public sealed class ReadDeclarationConformanceTests
     {
         var catalogue = ArchitectureDocument.ReadTablesByComponent();
 
-        // Reads a table its cell does not name. C36's cell is the membership three.
+        // Reads a table its cell does not name. The cell grows a checkpoint at a time,
+        // so the fixture takes it from the catalogue and adds one rather than restating
+        // it: a hardcoded list here would be the second list this repository keeps
+        // finding, and it would go stale at 3.5.3.
+        var declared = catalogue["RecordInspector"].OrderBy(t => t, StringComparer.Ordinal).ToList();
+
         var reachesTooFar = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
         {
-            ["RecordInspector"] = ["security", "security_daily", "universe_rejection", "proposal"],
+            ["RecordInspector"] = [.. declared, "proposal"],
         };
 
         Assert.Equal(["RecordInspector -> proposal"], Undeclared(reachesTooFar, catalogue));
@@ -259,8 +264,7 @@ public sealed class ReadDeclarationConformanceTests
         };
 
         Assert.Equal(
-            ["RecordInspector -> security", "RecordInspector -> security_daily",
-             "RecordInspector -> universe_rejection"],
+            declared.Select(t => "RecordInspector -> " + t),
             Unread(declaresNothing, catalogue));
         Assert.Empty(Undeclared(declaresNothing, catalogue));
     }

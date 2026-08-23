@@ -282,22 +282,242 @@ public sealed class PercentileEngineTests
             "step D-10 refuses is now reachable.");
     }
 
+    // ------------------------------------------------- the cell store [D-107] ---
+
+    /// <summary>
+    /// The stored population is the one the ranking used, asserted against the fixture's
+    /// own arithmetic rather than against the statement that wrote it.
+    ///
+    /// BROAD carries sixteen non-null members against a floor of fifteen, so its cell
+    /// clears and `ranked_scope` is `cell`. THIN carries five, so it does not, and it
+    /// falls back to bucket A's whole non-null population of twenty-one. **Sixteen
+    /// against five against twenty-one is the whole panel in three numbers**: a
+    /// percentile of 80 means one thing over five members and another over twenty-one,
+    /// and until 0014 nothing downstream could tell which.
+    /// </summary>
+    [Fact]
+    public async Task TheStoredCellCarriesThePopulationTheRankingUsed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+        await RunAsync(ct).ConfigureAwait(true);
+
+        var broad = await CellAsync(BucketA, SectorBroad, ct).ConfigureAwait(true);
+        Assert.Equal(16, broad.CellMembers);
+        Assert.Equal(21, broad.BucketMembers);
+        Assert.Equal(MinMembers, broad.MinMembers);
+        Assert.Equal("cell", broad.RankedScope);
+
+        var thin = await CellAsync(BucketA, SectorThin, ct).ConfigureAwait(true);
+        Assert.Equal(5, thin.CellMembers);
+        Assert.Equal(21, thin.BucketMembers);
+        Assert.Equal("bucket", thin.RankedScope);
+
+        await ClearAsync(ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// A name with no sector forms no cell, so its row carries a null `cell_members`
+    /// rather than a cell of zero, and the fallback it took is what `ranked_scope` says.
+    ///
+    /// Zero and absent are different facts here in the way `CLAUDE.md` §6 means: a cell
+    /// of zero would say the sector was ranked and found empty, where the truth is that
+    /// no sector cell was formed at all [`METRICS.md` §6.4].
+    /// </summary>
+    [Fact]
+    public async Task ANameWithNoSectorCarriesANullCellCountRatherThanAZero()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+        await RunAsync(ct).ConfigureAwait(true);
+
+        var none = await CellAsync(BucketB, null, ct).ConfigureAwait(true);
+
+        Assert.Null(none.CellMembers);
+        Assert.Equal("bucket", none.RankedScope);
+        Assert.True(none.BucketMembers >= MinMembers,
+            $"bucket B carries {none.BucketMembers} non-null member(s), so the bucket fallback " +
+            "could not have been what ranked these rows and this assertion is testing nothing.");
+
+        await ClearAsync(ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// A cell whose bucket is also below the floor is ranked by nothing, and the store
+    /// says so rather than leaving a reader to infer it from two counts and a threshold.
+    /// </summary>
+    [Fact]
+    public async Task ACellWhoseBucketIsAlsoThinIsRecordedAsRankedByNothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+        await RunAsync(ct).ConfigureAwait(true);
+
+        var tiny = await CellAsync(BucketC, SectorTiny, ct).ConfigureAwait(true);
+
+        Assert.True(tiny.BucketMembers < MinMembers,
+            $"bucket C carries {tiny.BucketMembers} non-null member(s) against a floor of " +
+            $"{MinMembers}, so it clears and this is not the case the assertion is for.");
+
+        Assert.Equal("none", tiny.RankedScope);
+
+        await ClearAsync(ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// **The stored cells reproduce what the run log reports for the same date.**
+    ///
+    /// `FallbackReportSql` counts rows per scope and the cell store counts members per
+    /// cell, and the two have to agree: a ticker ranked in a sector cell is one of that
+    /// cell's members, so summing `cell_members` over the cells whose scope is `cell`
+    /// gives the same number the report calls `in_cell`. They are computed by two
+    /// statements from one CTE, and this is the assertion that keeps them one answer
+    /// rather than two [D-107].
+    /// </summary>
+    [Fact]
+    public async Task TheStoredCellsAgreeWithTheFallbackReportForTheSameDate()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+        await RunAsync(ct).ConfigureAwait(true);
+
+        var source = PercentileEngine.Sources.Single(s => s.Table == "indicator_daily");
+
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
+
+        var reported = 0L;
+        await using (var cmd = new NpgsqlCommand(
+            PercentileEngine.FallbackReportSql(source, RunDate, MinMembers), conn))
+        await using (var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(true))
+        {
+            while (await r.ReadAsync(ct).ConfigureAwait(true))
+            {
+                if (string.Equals(r.GetString(0), Metric, StringComparison.Ordinal))
+                {
+                    reported = r.GetInt64(1);
+                }
+            }
+        }
+
+        await using var stored = new NpgsqlCommand(
+            """
+            SELECT coalesce(sum(cell_members), 0)
+            FROM percentile_cell_daily
+            WHERE date = @d AND metric = @m AND ranked_scope = 'cell';
+            """, conn);
+        stored.Parameters.AddWithValue("d", RunDate);
+        stored.Parameters.AddWithValue("m", Metric);
+
+        var summed = (long?) await stored.ExecuteScalarAsync(ct).ConfigureAwait(true);
+
+        Assert.True(reported > 0,
+            "The fallback report counted nothing ranked in a cell, so this comparison would " +
+            "hold over two zeroes and say nothing.");
+
+        Assert.Equal(reported, summed);
+
+        await ClearAsync(ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// The marker advances with the pass, and a date beyond it is distinguishable from a
+    /// date whose cells simply do not exist [D-106, D-107].
+    /// </summary>
+    [Fact]
+    public async Task TheCoverageMarkerRecordsTheDateTheWriteReached()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct).ConfigureAwait(true);
+        await RunAsync(ct).ConfigureAwait(true);
+
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
+        await using var cmd = new NpgsqlCommand(
+            "SELECT source_table, covered_from, covered_to FROM percentile_cell_coverage ORDER BY source_table;",
+            conn);
+
+        var covered = new List<(string Source, DateOnly From, DateOnly To)>();
+        await using (var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(true))
+        {
+            while (await r.ReadAsync(ct).ConfigureAwait(true))
+            {
+                covered.Add((r.GetString(0), r.GetFieldValue<DateOnly>(1), r.GetFieldValue<DateOnly>(2)));
+            }
+        }
+
+        Assert.Equal(
+            PercentileEngine.Sources.Select(s => s.Table).OrderBy(t => t, StringComparer.Ordinal),
+            covered.Select(c => c.Source));
+
+        // Read as coverage, never as equality: the marker spans this run's date and
+        // whatever earlier runs on this database reached, and the assertion is that this
+        // date is inside it rather than that it equals it [D-106].
+        Assert.All(covered, c => Assert.True(c.From <= RunDate && c.To >= RunDate,
+            $"{c.Source} covers {c.From} to {c.To}, which does not contain {RunDate}."));
+
+        await ClearAsync(ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Reads one cell row for one metric. The sector is matched through `coalesce`, the
+    /// same way the unique index is keyed, so the row that carries no sector is
+    /// reachable at all.
+    /// </summary>
+    private static async Task<(int? CellMembers, int BucketMembers, int MinMembers, string RankedScope)>
+        CellAsync(string bucket, string? sector, CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
+        await using var cmd = new NpgsqlCommand(
+            """
+            SELECT cell_members, bucket_members, min_members, ranked_scope
+            FROM percentile_cell_daily
+            WHERE date = @d AND size_bucket = @b AND coalesce(sector, '') = @s AND metric = @m;
+            """, conn);
+        cmd.Parameters.AddWithValue("d", RunDate);
+        cmd.Parameters.AddWithValue("b", bucket);
+        cmd.Parameters.AddWithValue("s", sector ?? string.Empty);
+        cmd.Parameters.AddWithValue("m", Metric);
+
+        await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+
+        Assert.True(await r.ReadAsync(ct).ConfigureAwait(false),
+            $"No cell row for {bucket}/{sector ?? "(no sector)"}/{Metric} on {RunDate}.");
+
+        return (
+            await r.IsDBNullAsync(0, ct).ConfigureAwait(false) ? null : r.GetInt32(0),
+            r.GetInt32(1),
+            r.GetInt32(2),
+            r.GetString(3));
+    }
+
     // ------------------------------------------------------------- declared ---
 
     /// <summary>
     /// Thirty columns over four tables, each declared as an <c>Update</c> of a column
-    /// set disjoint from what the metric engine inserts [D-77].
+    /// set disjoint from what the metric engine inserts [D-77], plus the two stores this
+    /// stage owns whole from 3.5.2 [D-107].
+    ///
+    /// **The two are separated by operation rather than counted together.** The four are
+    /// updates of somebody else's rows and the two are inserts of this stage's own, and
+    /// collapsing them into one count would hide the case INVARIANT 10 is read per
+    /// operation for.
     /// </summary>
     [Fact]
     public void TheDeclaredWritesAreThirtyPercentileColumnsOverFourTables()
     {
         var stage = new PercentileEngine();
 
-        Assert.Equal(4, stage.WriteSet.Count);
-        Assert.All(stage.WriteSet, w => Assert.Equal(WriteOperation.Update, w.Operation));
-        Assert.Equal(30, stage.WriteSet.Sum(w => w.Columns.Count));
-        Assert.All(stage.WriteSet, w => Assert.All(w.Columns,
+        var ranked = stage.WriteSet.Where(w => w.Operation == WriteOperation.Update).ToList();
+        var owned = stage.WriteSet.Where(w => w.Operation == WriteOperation.Insert).ToList();
+
+        Assert.Equal(4, ranked.Count);
+        Assert.Equal(30, ranked.Sum(w => w.Columns.Count));
+        Assert.All(ranked, w => Assert.All(w.Columns,
             c => Assert.EndsWith(PercentileEngine.Suffix, c, StringComparison.Ordinal)));
+
+        // The cell store and its coverage marker, owned whole rather than by column set.
+        Assert.Equal(
+            ["percentile_cell_coverage", "percentile_cell_daily"],
+            owned.Select(w => w.Table).OrderBy(t => t, StringComparer.Ordinal));
 
         // The five the Reads cell names, and no more.
         Assert.Equal(
@@ -494,6 +714,18 @@ public sealed class PercentileEngineTests
         await using (var cmd = new NpgsqlCommand(
             "DELETE FROM security_daily WHERE size_bucket = ANY(@b);", conn))
         {
+            cmd.Parameters.AddWithValue("b", new[] { BucketA, BucketB, BucketC });
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
+
+        // The cells this fixture's buckets produced [D-107, 0014]. Scoped to the fixture's
+        // own buckets rather than to the date, because the date is shared with nothing but
+        // the coverage marker is not: the marker is left standing deliberately, being a
+        // record of what a pass reached rather than of rows that exist.
+        await using (var cmd = new NpgsqlCommand(
+            "DELETE FROM percentile_cell_daily WHERE date = @d AND size_bucket = ANY(@b);", conn))
+        {
+            cmd.Parameters.AddWithValue("d", RunDate);
             cmd.Parameters.AddWithValue("b", new[] { BucketA, BucketB, BucketC });
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         }

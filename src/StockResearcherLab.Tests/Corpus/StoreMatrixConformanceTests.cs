@@ -44,7 +44,8 @@ public sealed class StoreMatrixConformanceTests
         // added sentiment_fetch_attempt [0011]. Forty-two at 3.10, which added
         // event_fetch_attempt [0012].
         //
-        // Forty-three at 3.5.1, which added universe_rejection [D-108].
+        // Forty-three at 3.5.1, which added universe_rejection [D-108]. Forty-five at
+        // 3.5.2, which added percentile_cell_daily and percentile_cell_coverage [D-107].
         //
         // **This count moves before the rows it counts, and deliberately.** §16 is in
         // `ARCHITECTURE.html`, which is human-edited only [`CLAUDE.md` §13], and the
@@ -52,7 +53,7 @@ public sealed class StoreMatrixConformanceTests
         // Moving the count here leaves exactly two authored lines between this branch
         // and a green gate rather than four, so the rows land and everything passes at
         // once.
-        Assert.Equal(43, stores.Count);
+        Assert.Equal(45, stores.Count);
 
         // Distinct, because a store named twice would satisfy a count and a set
         // comparison while saying two different things about one table.

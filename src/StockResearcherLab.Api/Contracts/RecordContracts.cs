@@ -17,7 +17,60 @@ namespace StockResearcherLab.Api.Contracts;
 public sealed record RecordView(
     string Ticker,
     DateOnly Date,
-    MembershipPanel Membership);
+    MembershipPanel Membership,
+    MetricsPanel Metrics);
+
+/// <summary>
+/// Every ranked metric with three figures beside it: the raw value, the percentile, and
+/// the size of the cell the percentile was ranked in [D-107].
+///
+/// **The third is the one that makes the other two readable.** A percentile over three
+/// members and one over eighty are the same number without it, and the fifteen-member
+/// fallback is theoretical until a reader can see the cell it fired on.
+/// </summary>
+/// <param name="Cell">
+/// The cell this name belonged to on this date, being its size bucket and sector from
+/// the `security_daily` row in force. Null when the name had no row, in which case it
+/// belonged to no cell and every metric reads as unranked.
+/// </param>
+/// <param name="Populated">
+/// Whether the populating pass has reached this date. False means the cell figures are
+/// not written yet, which is a different state from a cell that does not exist and
+/// renders differently [D-106, D-107].
+/// </param>
+/// <param name="CoveredFrom">The earliest date the pass has reached, null before it has run at all.</param>
+public sealed record MetricsPanel(
+    MetricCell? Cell,
+    bool Populated,
+    DateOnly? CoveredFrom,
+    DateOnly? CoveredTo,
+    IReadOnlyList<MetricRow> Metrics);
+
+/// <summary>The cell a name belonged to, which is the pair C11 partitions on [D-10].</summary>
+public sealed record MetricCell(string? SizeBucket, string? Sector);
+
+/// <param name="Value">
+/// The raw value as stored. Null means the metric could not be computed for this name on
+/// this date, which is a different fact from zero.
+/// </param>
+/// <param name="Percentile">Null where nothing ranked it, which the scope says the reason for.</param>
+/// <param name="CellMembers">
+/// The non-null population of this metric in this name's `(size_bucket, sector)` cell.
+/// Null where the name has no sector and so formed no cell.
+/// </param>
+/// <param name="RankedScope">
+/// `cell`, `bucket` or `none`, stored by C11 rather than derived here. The page does not
+/// compare a count against a floor and label the answer.
+/// </param>
+public sealed record MetricRow(
+    string Table,
+    string Metric,
+    decimal? Value,
+    double? Percentile,
+    int? CellMembers,
+    int? BucketMembers,
+    int? MinMembers,
+    string? RankedScope);
 
 /// <summary>
 /// Was this name a member on that date, and if not, which criterion stopped it.

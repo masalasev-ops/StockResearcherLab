@@ -107,10 +107,30 @@ public sealed class PercentileEngine : IStage, IBackfillStage
         "security_daily",
     ];
 
+    /// <summary>The columns of the cell store this stage owns, which is all of them [D-107, 0014].</summary>
+    public static readonly string[] CellColumns =
+    [
+        "date", "size_bucket", "sector", "metric", "source_table",
+        "cell_members", "bucket_members", "min_members", "ranked_scope",
+    ];
+
+    /// <summary>The coverage marker's columns [D-106, D-107].</summary>
+    public static readonly string[] CoverageColumns = ["source_table", "covered_from", "covered_to"];
+
+    /// <summary>
+    /// The four percentile column sets, plus the two stores D-107 adds.
+    ///
+    /// **The two new ones are inserts where the four are updates**, which is the same
+    /// per-operation reading of INVARIANT 10 that lets the metric engines own the metric
+    /// columns while this stage owns the `_pctile` ones. Here the whole row is this
+    /// stage's, so there is no split to declare.
+    /// </summary>
     public IReadOnlyList<TableWrite> WriteSet { get; } =
-        Sources
-            .Select(s => new TableWrite(s.Table, WriteOperation.Update, s.PercentileColumns))
-            .ToList();
+    [
+        .. Sources.Select(s => new TableWrite(s.Table, WriteOperation.Update, s.PercentileColumns)),
+        new TableWrite("percentile_cell_daily", WriteOperation.Insert, CellColumns),
+        new TableWrite("percentile_cell_coverage", WriteOperation.Insert, CoverageColumns),
+    ];
 
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
     {
@@ -126,6 +146,8 @@ public sealed class PercentileEngine : IStage, IBackfillStage
                 source.Table, WriteOperation.Update,
                 UpdateSql(source, context.Date, minMembers),
                 parameters: null, ct).ConfigureAwait(false);
+
+            await WriteCellsAsync(context.Data, source, context.Date, minMembers, ct).ConfigureAwait(false);
 
             var counts = await FallbackCountsAsync(context, source, minMembers, ct).ConfigureAwait(false);
 
@@ -227,6 +249,12 @@ public sealed class PercentileEngine : IStage, IBackfillStage
                     source.Table, WriteOperation.Update,
                     UpdateSql(source, date, minMembers),
                     parameters: null, ct).ConfigureAwait(false);
+
+                // Per source and inside the date loop, which is what the per-source grain
+                // of the marker is for: a halt between the four statements of one date
+                // leaves three sources further on than the fourth, and the marker says so
+                // rather than claiming the date whole [D-107].
+                await WriteCellsAsync(stage.Data, source, date, minMembers, ct).ConfigureAwait(false);
 
                 var counts = await FallbackCountsAsync(stage, source, minMembers, ct).ConfigureAwait(false);
 
@@ -357,6 +385,87 @@ public sealed class PercentileEngine : IStage, IBackfillStage
     }
 
     /// <summary>
+    /// The cell populations this stage computes and used to discard, written per cell
+    /// [D-107, 0014].
+    ///
+    /// **Built from the same <see cref="Windowed"/> query the ranking uses**, for the
+    /// reason <see cref="FallbackReportSql"/> gives: a stored population that disagreed
+    /// with the percentile beside it would be worse than no population at all, and two
+    /// copies of the cell rule is exactly how they come to disagree.
+    ///
+    /// **One row per <c>(size_bucket, sector)</c> per metric.** The counts are constant
+    /// inside a partition, so <c>max</c> over the group reads the value the window
+    /// function already put on every row rather than recomputing it.
+    ///
+    /// **Rows with no size bucket are excluded rather than grouped.** A name outside the
+    /// active universe belongs to no cell, and C09 writes a wider set of tickers than the
+    /// universe, so grouping them would invent a cell whose population nothing ranked
+    /// against.
+    ///
+    /// **A null sector produces the bucket row.** Its <c>cell_members</c> is null, which
+    /// is the absence that says no cell was formed rather than a cell of zero
+    /// [`METRICS.md` §6.4].
+    /// </summary>
+    public static string CellSql(MetricTable source, DateOnly date, int minMembers)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        var d = Literal(date);
+        var floor = minMembers.ToString(CultureInfo.InvariantCulture);
+
+        var arms = source.Metrics.Select(m => $"""
+            SELECT {d} AS date, w.size_bucket, w.sector, '{m}' AS metric,
+                   '{source.Table}' AS source_table,
+                   CASE WHEN w.sector IS NOT NULL THEN max(w.{m}_cell_n)::int END AS cell_members,
+                   max(w.{m}_bucket_n)::int AS bucket_members,
+                   {floor} AS min_members,
+                   CASE
+                       WHEN w.sector IS NOT NULL AND max(w.{m}_cell_n) >= {floor} THEN 'cell'
+                       WHEN max(w.{m}_bucket_n) >= {floor} THEN 'bucket'
+                       ELSE 'none'
+                   END AS ranked_scope
+            FROM w
+            WHERE w.size_bucket IS NOT NULL
+            GROUP BY w.size_bucket, w.sector
+            """);
+
+        return $"""
+            WITH w AS (
+                {Windowed(source, d)}
+            )
+            INSERT INTO percentile_cell_daily
+                (date, size_bucket, sector, metric, source_table,
+                 cell_members, bucket_members, min_members, ranked_scope)
+            {string.Join("\nUNION ALL\n", arms)}
+            ON CONFLICT (date, size_bucket, coalesce(sector, ''), metric) DO UPDATE
+                SET source_table   = excluded.source_table,
+                    cell_members   = excluded.cell_members,
+                    bucket_members = excluded.bucket_members,
+                    min_members    = excluded.min_members,
+                    ranked_scope   = excluded.ranked_scope;
+            """;
+    }
+
+    /// <summary>
+    /// What the pass has reached for one source table, widened by one date [D-106,
+    /// D-107].
+    ///
+    /// **`LEAST` and `GREATEST` rather than an assignment**, so the marker records
+    /// coverage rather than the invocation that last touched it. D-106 states that rule
+    /// for a ticker-partitioned sweep and it holds identically here: a marker overwritten
+    /// with the current date would narrow to a single day the moment one date was
+    /// re-run, and a reader would then be told the rest was never populated.
+    /// </summary>
+    public static string CoverageSql(string sourceTable, DateOnly date)
+        => $"""
+            INSERT INTO percentile_cell_coverage (source_table, covered_from, covered_to)
+            VALUES ('{sourceTable}', {Literal(date)}, {Literal(date)})
+            ON CONFLICT (source_table) DO UPDATE
+                SET covered_from = LEAST(percentile_cell_coverage.covered_from, excluded.covered_from),
+                    covered_to   = GREATEST(percentile_cell_coverage.covered_to, excluded.covered_to);
+            """;
+
+    /// <summary>
     /// The shared inner query: every row of the source table for the date, with the
     /// cell it belongs to and, per metric, the two populations and the two ranks.
     /// </summary>
@@ -431,6 +540,27 @@ public sealed class PercentileEngine : IStage, IBackfillStage
 
     /// <summary>Rows ranked in their sector cell, in their bucket alone, and left null; and cells that fell back.</summary>
     public readonly record struct Fallback(long InCell, long InBucket, long Unranked, long ThinCells);
+
+    /// <summary>
+    /// One date's cells for one source, and the marker that says the date was reached.
+    ///
+    /// **The rows written are deliberately not added to the stage's row count.** That
+    /// count is what the zero-row halt reads and what the run log reports as the work of
+    /// the stage, and the work of this stage is ranking. Cells are a record of how the
+    /// ranking was done, so counting them would inflate a figure two other mechanisms
+    /// read [D-65, `RUNBOOK.md`].
+    /// </summary>
+    private static async Task WriteCellsAsync(
+        IStageData data, MetricTable source, DateOnly date, int minMembers, CancellationToken ct)
+    {
+        await data.WriteAsync(
+            "percentile_cell_daily", WriteOperation.Insert,
+            CellSql(source, date, minMembers), parameters: null, ct).ConfigureAwait(false);
+
+        await data.WriteAsync(
+            "percentile_cell_coverage", WriteOperation.Insert,
+            CoverageSql(source.Table, date), parameters: null, ct).ConfigureAwait(false);
+    }
 
     private static async Task<IReadOnlyDictionary<string, Fallback>> FallbackCountsAsync(
         StageContext context, MetricTable source, int minMembers, CancellationToken ct)

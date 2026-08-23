@@ -77,7 +77,46 @@ public sealed class RecordInspector : IReadOwner
     /// would pass over, and the point of the check is that the cell and the code say the
     /// same thing at every commit.
     /// </summary>
-    private static readonly string[] Tables = ["security", "security_daily", "universe_rejection"];
+    private static readonly string[] Tables =
+    [
+        "security", "security_daily", "universe_rejection",
+        "indicator_daily", "valuation_daily", "flow_daily", "sentiment_derived_daily",
+        "percentile_cell_daily", "percentile_cell_coverage",
+    ];
+
+    /// <summary>
+    /// The four metric stores and the metrics ranked on each, in the order C11 declares
+    /// them.
+    ///
+    /// **Stated here rather than taken from `PercentileEngine.Sources`**, and that is a
+    /// second list this repository would normally refuse. It is accepted because the
+    /// alternative is worse: the Api may never reference Pipeline, which is what
+    /// structurally stops a page invoking a stage [`CLAUDE.md` §4], so importing the real
+    /// list would cost the guarantee the whole read-only surface rests on. What keeps the
+    /// two in step is a test, `MetricsPanelTests`, which reads both and fails when they
+    /// diverge, and which is in the test project because that is the one place that sees
+    /// both.
+    /// </summary>
+    public static readonly (string Table, string[] Metrics)[] MetricSources =
+    [
+        ("indicator_daily", [
+            "atr_pct", "adx14", "dist_20dma", "dist_200dma", "dist_52w_high",
+            "dist_52w_high_20d_change", "rs_change_21d", "rs_change_63d",
+            "rs_21d_63d_change", "rs_20d_slope", "rs_change_vs_sector",
+            "volume_vs_50d_avg", "ma50_200_slope", "median_dollar_volume_20d",
+        ]),
+        ("valuation_daily", [
+            "fcf_yield", "ev_ebit", "ev_ebit_vs_own_5y", "roic", "roic_4q_change",
+            "gross_margin_4q_change", "net_debt_ebitda", "accruals",
+            "share_count_change", "revenue_growth_4q_trend",
+        ]),
+        ("flow_daily", [
+            "insider_net_90d_usd", "distinct_buyer_count", "inst_ownership_change",
+        ]),
+        ("sentiment_derived_daily", [
+            "article_count_z_own_90d", "sentiment_delta_7v30", "sentiment_7d_level",
+        ]),
+    ];
 
     /// <summary>
     /// D-4's criteria, in C01's own test order, so the panel lists them the way the
@@ -104,7 +143,173 @@ public sealed class RecordInspector : IReadOwner
 
     /// <summary>The whole record for one name on one date. Panels are added a checkpoint at a time.</summary>
     public async Task<RecordView> ReadAsync(string ticker, DateOnly date, CancellationToken ct = default)
-        => new(ticker, date, await MembershipAsync(ticker, date, ct).ConfigureAwait(false));
+    {
+        var membership = await MembershipAsync(ticker, date, ct).ConfigureAwait(false);
+
+        return new RecordView(
+            ticker, date, membership,
+            await MetricsAsync(ticker, date, membership.InForce, ct).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// Every ranked metric with its raw value, its percentile, and the size of the cell
+    /// it was ranked in [D-107].
+    ///
+    /// **Four reads for the values, one per source, and one read for the cells.** The
+    /// cell figures are joined on the name's own `(size_bucket, sector)` taken from the
+    /// membership row already read, which is why this takes it rather than reading
+    /// `security_daily` a second time.
+    ///
+    /// **A name with no membership row belongs to no cell**, so every metric reads as
+    /// unranked rather than as a cell of zero. The panel says which of the two it is.
+    /// </summary>
+    public async Task<MetricsPanel> MetricsAsync(
+        string ticker, DateOnly date, MembershipRow? inForce, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
+
+        var coverage = await CoverageAsync(date, ct).ConfigureAwait(false);
+        var cells = await CellsAsync(date, inForce, ct).ConfigureAwait(false);
+        var rows = new List<MetricRow>();
+
+        foreach (var (table, metrics) in MetricSources)
+        {
+            var values = await ValuesAsync(table, metrics, ticker, date, ct).ConfigureAwait(false);
+
+            foreach (var metric in metrics)
+            {
+                var cell = cells.GetValueOrDefault(metric);
+                var v = values.GetValueOrDefault(metric);
+
+                rows.Add(new MetricRow(
+                    table, metric, v.Value, v.Percentile,
+                    cell?.CellMembers, cell?.BucketMembers, cell?.MinMembers, cell?.RankedScope));
+            }
+        }
+
+        var cellOf = inForce is null ? null : new MetricCell(inForce.SizeBucket, inForce.Sector);
+
+        return new MetricsPanel(
+            cellOf, coverage.Populated, coverage.From, coverage.To, rows);
+    }
+
+    /// <summary>
+    /// One source table's raw values and percentiles for one name on one date.
+    ///
+    /// The column list is built from the declared metric names, so a metric added to
+    /// <see cref="MetricSources"/> and absent from the table fails loudly at the
+    /// statement rather than reading as null.
+    /// </summary>
+    private async Task<Dictionary<string, (decimal? Value, double? Percentile)>> ValuesAsync(
+        string table, IReadOnlyList<string> metrics, string ticker, DateOnly date, CancellationToken ct)
+    {
+        var columns = string.Join(", ", metrics.SelectMany(m => new[] { m, m + "_pctile" }));
+
+        var rows = await _data.ReadAsync(
+            table,
+            $"SELECT {columns} FROM {table} WHERE ticker = {Literal(ticker)} AND date = DATE '{Iso(date)}';",
+            ct).ConfigureAwait(false);
+
+        var map = new Dictionary<string, (decimal?, double?)>(StringComparer.Ordinal);
+
+        if (rows.Count == 0)
+        {
+            return map;
+        }
+
+        for (var i = 0; i < metrics.Count; i++)
+        {
+            map[metrics[i]] = (Number(rows[0][i * 2]), Real(rows[0][(i * 2) + 1]));
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// The cell rows for this name's own cell, one per metric.
+    ///
+    /// **`coalesce` on the sector rather than an equality**, because the row that carries
+    /// no sector is the bucket fallback's and `NULL = NULL` would match nothing. That is
+    /// the same shape the unique index uses, so the read and the key agree.
+    /// </summary>
+    private async Task<Dictionary<string, CellFigures>> CellsAsync(
+        DateOnly date, MembershipRow? inForce, CancellationToken ct)
+    {
+        var map = new Dictionary<string, CellFigures>(StringComparer.Ordinal);
+
+        if (inForce?.SizeBucket is not { } bucket)
+        {
+            return map;
+        }
+
+        var rows = await _data.ReadAsync(
+            "percentile_cell_daily",
+            $"""
+             SELECT metric, cell_members, bucket_members, min_members, ranked_scope
+             FROM percentile_cell_daily
+             WHERE date = DATE '{Iso(date)}'
+               AND size_bucket = {Literal(bucket)}
+               AND coalesce(sector, '') = {Literal(inForce.Sector ?? string.Empty)};
+             """,
+            ct).ConfigureAwait(false);
+
+        foreach (var r in rows)
+        {
+            map[(string) r[0]!] = new CellFigures(
+                r[1] as int?, (int) r[2]!, (int) r[3]!, (string) r[4]!);
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// Whether the populating pass has reached this date, read as coverage and never as
+    /// equality [D-106].
+    ///
+    /// **A date inside the covered range of every source is populated.** Taking the
+    /// narrowest of the four is what makes a halt between the four statements of one date
+    /// read as not populated rather than as populated with a source missing.
+    /// </summary>
+    private async Task<(bool Populated, DateOnly? From, DateOnly? To)> CoverageAsync(
+        DateOnly date, CancellationToken ct)
+    {
+        var rows = await _data.ReadAsync(
+            "percentile_cell_coverage",
+            "SELECT max(covered_from), min(covered_to), count(*) FROM percentile_cell_coverage;",
+            ct).ConfigureAwait(false);
+
+        if (rows.Count == 0 || rows[0][2] is not long sources || sources < MetricSources.Length)
+        {
+            return (false, Date(rows.Count == 0 ? null : rows[0][0]), Date(rows.Count == 0 ? null : rows[0][1]));
+        }
+
+        var from = Date(rows[0][0]);
+        var to = Date(rows[0][1]);
+
+        return (from is not null && to is not null && date >= from && date <= to, from, to);
+    }
+
+    private sealed record CellFigures(int? CellMembers, int BucketMembers, int MinMembers, string RankedScope);
+
+    private static decimal? Number(object? value) => value switch
+    {
+        null => null,
+        decimal d => d,
+        float f => (decimal) f,
+        double d => (decimal) d,
+        int i => i,
+        long l => l,
+        _ => null,
+    };
+
+    private static double? Real(object? value) => value switch
+    {
+        null => null,
+        float f => f,
+        double d => d,
+        decimal m => (double) m,
+        _ => null,
+    };
 
     /// <summary>
     /// Membership, and for a name that is not a member the criterion C01 stopped on.

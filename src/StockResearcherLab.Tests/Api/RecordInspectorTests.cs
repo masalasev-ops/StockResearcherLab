@@ -176,14 +176,38 @@ public sealed class RecordInspectorTests
     public async Task ItReadsExactlyTheTablesItDeclares()
     {
         var ct = TestContext.Current.CancellationToken;
-        var data = new NoRows();
+        var data = new WithMembership();
 
         await new RecordInspector(data, new RecordingConfig())
-            .MembershipAsync("AAPL.US", new DateOnly(2022, 6, 15), ct).ConfigureAwait(true);
+            .ReadAsync("AAPL.US", new DateOnly(2022, 6, 15), ct).ConfigureAwait(true);
 
+        // The whole record rather than one panel, because the declaration covers the
+        // page and a per-panel assertion would pass while the set was wider than the
+        // work. Distinct, since a panel may read a table another panel already read.
         Assert.Equal(
             RecordInspector.Access().ReadSet.Order(StringComparer.Ordinal),
-            data.Touched.Order(StringComparer.Ordinal));
+            data.Touched.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// **A name with no membership row is not looked up in the cell store**, and that is
+    /// the behaviour rather than an omission: it belonged to no cell, so there is nothing
+    /// keyed for it to read. Asserted because the test above needs a membership row to
+    /// reach all nine tables, and without this the difference between "does not read it"
+    /// and "cannot read it" would be invisible.
+    /// </summary>
+    [Fact]
+    public async Task ANameWithNoMembershipRowIsNotLookedUpInTheCellStore()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var data = new NoRows();
+
+        var view = await new RecordInspector(data, new RecordingConfig())
+            .ReadAsync("AAPL.US", new DateOnly(2022, 6, 15), ct).ConfigureAwait(true);
+
+        Assert.DoesNotContain("percentile_cell_daily", data.Touched);
+        Assert.Null(view.Metrics.Cell);
+        Assert.All(view.Metrics.Metrics, m => Assert.Null(m.RankedScope));
     }
 
     // ---------------------------------------------------------------- doubles ---
@@ -202,6 +226,41 @@ public sealed class RecordInspectorTests
         {
             Touched.Add(table);
             return Task.FromResult<IReadOnlyList<IReadOnlyList<object?>>>([]);
+        }
+
+        public Task<long> WriteAsync(
+            string table, WriteOperation operation, string sql,
+            IReadOnlyDictionary<string, object?>? parameters = null, CancellationToken ct = default)
+            => throw new UndeclaredTableAccessException("RecordInspector", table, operation.ToString(), "none");
+
+        public Task<long> BulkUpsertAsync(
+            string table, IReadOnlyList<string> columns, IReadOnlyList<string> conflictTarget,
+            Func<IBulkWriter, CancellationToken, Task> write, CancellationToken ct = default)
+            => throw new UndeclaredTableAccessException("RecordInspector", table, "Insert", "none");
+    }
+
+    /// <summary>
+    /// The same, with one `security_daily` row, so the metrics panel has a cell to look
+    /// up and the reader reaches every table it declares.
+    /// </summary>
+    private sealed class WithMembership : IStageData
+    {
+        public List<string> Touched { get; } = [];
+
+        public Task<IReadOnlyList<IReadOnlyList<object?>>> ReadAsync(
+            string table, string sql, CancellationToken ct = default, int? commandTimeoutSeconds = null)
+        {
+            Touched.Add(table);
+
+            IReadOnlyList<IReadOnlyList<object?>> rows = table switch
+            {
+                // date, sector, size_bucket, market_cap, is_active
+                "security_daily" =>
+                    [[new DateTime(2022, 6, 12), "Technology", "mid", 4_000_000_000m, true]],
+                _ => [],
+            };
+
+            return Task.FromResult(rows);
         }
 
         public Task<long> WriteAsync(

@@ -146,6 +146,88 @@ else
             key had not come into force yet on that date.
         </p>
     </section>
+
+    @* --------------------------------------------------------- metrics --- *@
+    <section>
+        <h3>Metrics</h3>
+
+        @{
+            var mx = _view.Metrics;
+        }
+
+        @if (mx.Cell is null)
+        {
+            <p class="empty">
+                This name had no membership row in force on this date, so it belonged to no cell and
+                nothing ranked it. The raw values below are whatever the compute layer wrote.
+            </p>
+        }
+        else
+        {
+            <p class="sub">
+                Ranked in <b>@Absent(mx.Cell.SizeBucket)</b> / <b>@Absent(mx.Cell.Sector)</b>.
+                A percentile over three members and one over eighty are the same number, so the
+                cell column is the one to read first.
+            </p>
+        }
+
+        @if (!mx.Populated)
+        {
+            <p class="fail">
+                Cell populations are <b>not populated for this date</b>.
+                @if (mx.CoveredFrom is null)
+                {
+                    <text>The pass that writes them has not run.</text>
+                }
+                else
+                {
+                    <text>
+                        The pass has reached
+                        @mx.CoveredFrom.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                        to
+                        @mx.CoveredTo!.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                        and this date is outside it.
+                    </text>
+                }
+                That is a different state from a cell that does not exist, and the cell columns below
+                are blank for that reason rather than because nothing ranked this name.
+            </p>
+        }
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th style="text-align:right">Value</th>
+                    <th style="text-align:right">Pctile</th>
+                    <th style="text-align:right">Cell n</th>
+                    <th style="text-align:right">Bucket n</th>
+                    <th style="text-align:right">Floor</th>
+                    <th>Ranked in</th>
+                    <th>Store</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var mr in mx.Metrics)
+                {
+                    <tr>
+                        <td><code>@mr.Metric</code></td>
+                        <td class="num">@Figure(mr.Value)</td>
+                        <td class="num">@Figure(mr.Percentile)</td>
+                        <td class="num">@Count(mr.CellMembers, mx.Populated)</td>
+                        <td class="num">@Count(mr.BucketMembers, mx.Populated)</td>
+                        <td class="num">@Count(mr.MinMembers, mx.Populated)</td>
+                        <td class="@ScopeClass(mr.RankedScope)">@Scope(mr.RankedScope, mx.Populated)</td>
+                        <td class="sub">@mr.Table</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <p class="sub">
+            Every figure here is stored. <code>Ranked in</code> is written by the percentile engine
+            rather than worked out from the count against the floor, so this page compares nothing.
+        </p>
+    </section>
 }
 
 @code {
@@ -197,4 +279,32 @@ else
 
     private static string Money(decimal? value)
         => value?.ToString("N0", CultureInfo.InvariantCulture) ?? "absent";
+
+    private static string Figure(decimal? value)
+        => value?.ToString("G6", CultureInfo.InvariantCulture) ?? "absent";
+
+    private static string Figure(double? value)
+        => value?.ToString("F1", CultureInfo.InvariantCulture) ?? "absent";
+
+    // Three states, not two. Absent means the cell row does not exist for this name;
+    // not populated means the pass has not reached this date and the figure is not
+    // written yet. A blank cell would read as the first when it is the second, which is
+    // the distinction 3.5.2 is built around.
+    private static string Count(int? value, bool populated)
+        => value?.ToString("N0", CultureInfo.InvariantCulture) ?? (populated ? "absent" : "not populated");
+
+    private static string Scope(string? scope, bool populated) => scope switch
+    {
+        "cell" => "sector cell",
+        "bucket" => "size bucket",
+        "none" => "nothing",
+        _ => populated ? "absent" : "not populated",
+    };
+
+    private static string ScopeClass(string? scope) => scope switch
+    {
+        "cell" => "ok",
+        "none" => "fail",
+        _ => "",
+    };
 }

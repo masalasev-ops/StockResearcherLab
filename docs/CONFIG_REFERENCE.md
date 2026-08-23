@@ -317,19 +317,19 @@ regime keys are verified at `MarketContextEngine.cs:56-57`.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `screens.slot_ceiling` | 8 | D-7 | CandidateAllocator | unverified |
+| `screens.slot_ceiling` | 8 | D-7 | **no reader** | see below, 4.9 |
 | `screens.floor_percentile` | 98 | D-9 | `ScreenEngine.ExecuteAsync`, `ScreenEngine.cs` | verified 4.5 |
 | `screens.floor_lookback_days` | 250 | D-9 | `ScreenEngine.ExecuteAsync`, `ScreenEngine.cs` | verified 4.5 |
-| `screens.<id>.metrics` | per screen | D-6 | ScreenEngine | unverified |
-| `screens.<id>.slots` | 8 each at start | D-43 | CandidateAllocator | unverified |
-| `screens.<id>.state` | `live` for S1 to S5 | D-84, D-119 | ScreenEngine | unverified |
-| `screens.<id>.min_inputs` | S1 5, S2 4, S3 3, S4 2 | D-112 | ScreenEngine | unverified |
-| `screens.S5.quality_metrics` | S1's list, copied | D-120 | ScreenEngine | unverified |
-| `screens.S5.technical_metrics` | `dist_200dma`, `dist_52w_high`, `rs_change_63d`, each high | D-120 | ScreenEngine | unverified |
-| `screens.S5.quality_min_inputs` | 5 | D-112, D-120 | ScreenEngine | unverified |
-| `screens.S5.technical_min_inputs` | 3 | D-112, D-120 | ScreenEngine | unverified |
-| `screens.S5.quality_quintile_min` | 80 | D-120 | ScreenEngine | unverified |
-| `screens.S5.technical_quintile_max` | 20 | D-120 | ScreenEngine | unverified |
+| `screens.<id>.metrics` | per screen | D-6 | `ScreenRegistry.LoadOneAsync` via the screen's own facade, `ScreenRegistry.cs` | verified 4.7 |
+| `screens.<id>.slots` | 8 each at start | D-43 | `CandidateAllocator.Validated`, `CandidateAllocator.cs` | verified 4.9 |
+| `screens.<id>.state` | `live` for S1 to S5 | D-84, D-119 | `ScreenRegistry.IdsAsync` and `.LoadOneAsync`, `ScreenRegistry.cs` | verified 4.7 |
+| `screens.<id>.min_inputs` | S1 5, S2 4, S3 3, S4 2, S5 1 | D-112 | `ScreenEngine.ScoreSql`, `ScreenEngine.cs` | verified 4.7 |
+| `screens.S5.quality_metrics` | S1's list, copied | D-120 | `ScreenRegistry.LoadEligibilityAsync`, `ScreenRegistry.cs` | verified 4.7 |
+| `screens.S5.technical_metrics` | `dist_200dma`, `dist_52w_high`, `rs_change_63d`, each high | D-120 | `ScreenRegistry.LoadEligibilityAsync`, `ScreenRegistry.cs` | verified 4.7 |
+| `screens.S5.quality_min_inputs` | 5 | D-112, D-120 | `ScreenEngine.Composite`, `ScreenEngine.cs` | verified 4.7 |
+| `screens.S5.technical_min_inputs` | 3 | D-112, D-120 | `ScreenEngine.Composite`, `ScreenEngine.cs` | verified 4.7 |
+| `screens.S5.quality_quintile_min` | 80 | D-120 | `ScreenEngine.EligibleSql`, `ScreenEngine.cs` | verified 4.7 |
+| `screens.S5.technical_quintile_max` | 20 | D-120 | `ScreenEngine.EligibleSql`, `ScreenEngine.cs` | verified 4.7 |
 
 Screen definitions are rows rather than code, so a sixth screen is an insert and not
 a deployment.
@@ -354,6 +354,16 @@ case. Uppercase is used because S1 to S5 is how every other document in this cor
 a screen, and because the facade compares the id in the key against the screen's own id.
 The four older `s5.*` keys below keep their existing names and are unchanged; the facade
 treats that form as screen-scoped too, so they are reachable by S5 and by nothing else.
+
+**`screens.slot_ceiling` has no reader and this row records that rather than an assumed
+one.** D-7 gives a ceiling of eight slots per screen; `screens.<id>.slots` is what a screen
+actually has and what the tuner moves. The ceiling cannot also be a cap on that, because
+D-43's cap is twelve and a ceiling of eight would make the tuner's range unreachable, and
+D-116's proportion is what turns a slot count into a quota, so there is nothing left for
+the key to do. C14 validates against `tuner.slot_floor` and `tuner.slot_cap` instead. It is
+the same shape D-116 retired `screens.quota_large`, `quota_mid` and `quota_small` for, and
+retiring it is an authored decision rather than a build session's. Reported at 4.9; the key
+is still seeded, config being append-only.
 
 **These three shared keys were documented here and seeded by nothing until 4.5.**
 `screens.slot_ceiling`, `screens.floor_percentile` and `screens.floor_lookback_days` have
@@ -403,9 +413,9 @@ scored population moves enough over the window to matter [`CLAUDE.md` §11].
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `s5.stabilisation_z_max` | 1.0 | D-13 | ScreenEngine | unverified |
-| `s5.sentiment_delta_min` | 0 | D-13 | ScreenEngine | unverified |
-| `s5.news_gate_min_articles` | 3 | D-14 | ScreenEngine | unverified |
+| `s5.stabilisation_z_max` | 1.0 | D-13 | `ScreenEngine.NewsSettled`, `ScreenEngine.cs` | verified 4.7 |
+| `s5.sentiment_delta_min` | 0 | D-13 | `ScreenEngine.NewsSettled`, `ScreenEngine.cs` | verified 4.7 |
+| `s5.news_gate_min_articles` | 3 | D-14 | `ScreenEngine.NewsSettled`, `ScreenEngine.cs` | verified 4.7 |
 | `s5.no_digest_disqualifier_min_articles_90d` | 12 | D-60 | rubric prefix | unverified |
 
 `s5.news_gate_min_articles` is the fail-open threshold. Below three articles in seven
@@ -436,10 +446,10 @@ C12 GateEngine's thresholds [D-117].
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `gates.gap_pct` | 8 | D-117 | GateEngine | unverified |
-| `gates.earnings_blackout_days_before` | 5 | D-117 | GateEngine | unverified |
-| `gates.earnings_blackout_days_after` | 2 | D-117 | GateEngine | unverified |
-| `gates.cooldown_days` | 30 | D-117 | GateEngine | unverified |
+| `gates.gap_pct` | 8 | D-117 | `GateEngine.Gap`, `GateEngine.cs` | verified 4.8 |
+| `gates.earnings_blackout_days_before` | 5 | D-117 | `GateEngine.EarningsBlackout`, `GateEngine.cs` | verified 4.8 |
+| `gates.earnings_blackout_days_after` | 2 | D-117 | `GateEngine.EarningsBlackout`, `GateEngine.cs` | verified 4.8 |
+| `gates.cooldown_days` | 30 | D-117 | `GateEngine.Cooldown`, `GateEngine.cs` | verified 4.8 |
 
 **Halt and already-held carry no key.** They are conditions rather than thresholds: a
 name is halted or it is not, and an open `position` row is the already-held test itself.
@@ -537,8 +547,8 @@ The chain is an ordered list, so adding a third link is an insert.
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
 | `tuner.shrinkage_old` | 0.8 | D-43 | ScreenTuner | unverified |
-| `tuner.slot_floor` | 4 | D-43 | ScreenTuner | unverified |
-| `tuner.slot_cap` | 12 | D-43 | ScreenTuner | unverified |
+| `tuner.slot_floor` | 4 | D-43 | ScreenTuner, and `CandidateAllocator.Validated` from 4.9 | verified 4.9 |
+| `tuner.slot_cap` | 12 | D-43 | ScreenTuner, and `CandidateAllocator.ExecuteAsync` for the shadow quota | verified 4.10 |
 | `tuner.benchmark_column` | vs_peers | D-42 | ScreenTuner | unverified |
 | `lessons.min_sample` | 30 | D-44 | LessonWriter | unverified |
 | `lessons.expiry_months` | 6 | D-44 | LessonWriter | unverified |
@@ -552,8 +562,8 @@ value, but changing it to `vs_spy` is a defect and not a tuning option [INVARIAN
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
 | `validator.rejection_rate_alert` | 0.05 | — | ProposalValidator | unverified |
-| `monitor.megacap_share_max` | 0.333 | D-7 | ConcentrationMonitor | unverified |
-| `monitor.distinct_tickers_60d_min` | 250 | — | ConcentrationMonitor | unverified |
+| `monitor.megacap_share_max` | 0.333 | D-7 | `ConcentrationMonitor.ExecuteAsync`, `ConcentrationMonitor.cs` | verified 4.11 |
+| `monitor.distinct_tickers_60d_min` | 250 | — | `ConcentrationMonitor.ExecuteAsync`, `ConcentrationMonitor.cs` | verified 4.11 |
 | `monitor.cache_hit_rate_min` | 0.80 | — | CostLedger | unverified |
 | `cost.annual_budget` | 100 | — | CostLedger | unverified |
 | `freshness.row_count_abort_below` | 40000 | D-59 | FreshnessGuard | verified 2026-08-09 |

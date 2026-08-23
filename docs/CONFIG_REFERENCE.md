@@ -323,7 +323,9 @@ regime keys are verified at `MarketContextEngine.cs:56-57`.
 | `screens.<id>.metrics` | per screen | D-6 | ScreenEngine | unverified |
 | `screens.<id>.slots` | 8 each at start | D-43 | CandidateAllocator | unverified |
 | `screens.<id>.state` | `live` for S1 to S5 | D-84, D-119 | ScreenEngine | unverified |
-| `screens.<id>.min_inputs` | **unset** | D-112 | ScreenEngine | unverified |
+| `screens.<id>.min_inputs` | S1 5, S2 4, S3 3, S4 2 | D-112 | ScreenEngine | unverified |
+| `screens.s5.quality_min_inputs` | 5 | D-112, D-120 | ScreenEngine | unverified |
+| `screens.s5.technical_min_inputs` | 3 | D-112, D-120 | ScreenEngine | unverified |
 
 Screen definitions are rows rather than code, so a sixth screen is an insert and not
 a deployment.
@@ -339,12 +341,30 @@ registered** [D-119]. The shadow mechanism is proven in phase 4 against a fixtur
 screen that is removed again, so `shadow` is a value the key accepts rather than one
 any seeded row carries.
 
-**`screens.<id>.min_inputs` has no default yet, and the blank is the accurate state.**
-D-112 makes the key the thing that stops a name with one input of seven being scored as
-confidently as one with seven, and states that below it the score is null. It does not
-say what the number is, and no other document does. It is owed before 4.3 seeds this
-namespace, and a value invented here would be a number nobody reviewed sitting in the
-column this document exists to make trustworthy [`CLAUDE.md` §8].
+**`screens.<id>.min_inputs` is set per screen, and the values were chosen against
+measured coverage rather than picked** [D-112]. Read on 2026-08-12 over the 2,865 active
+members, counting non-null `_pctile` inputs per name per screen:
+
+| Screen | Inputs | Floor | Members scorable at that floor |
+|---|---|---|---|
+| S1 quality | 7 | 5 | 2,356 of 2,865, 82.2% |
+| S2 trend | 5 | 4 | 2,865 of 2,865, 100% |
+| S3 sentiment | 3 | 3 | 1,763 of 2,865, 61.5% |
+| S4 flow | 2 | 2 | 2,517 of 2,865, 87.9% |
+| S5 quality composite | 7 | 5 | 2,356 of 2,865, 82.2% |
+| S5 technical composite | 3 | 3 | 2,865 of 2,865, 100% |
+
+**S1 is the only screen where this key is a real dial.** Its coverage is graded: 33.1% of
+members carry all seven inputs, 61.2% carry six, 82.2% five and 93.4% four. A floor of
+seven would draw S1's 98th percentile over 947 names, and S1 is the screen the design's
+argument against a megacap tilt leans on hardest. S3 and S4 are near-binary instead, a
+name either carrying the sentiment or flow row or not, so 3.4% and 0.3% of members
+respectively hold a partial row and lowering either floor buys almost nothing.
+
+**The same read on 2022-06-15 is the reason these are not tuned to one date.** S1 is
+better there, 45.4% at all seven against 33.1%; S3 is worse at 39.6% and S4 at 68.3%. The
+floors are unchanged across both, and the range run at 4.13 is what says whether the
+scored population moves enough over the window to matter [`CLAUDE.md` §11].
 
 ## Mean reversion stabilisation
 
@@ -365,38 +385,47 @@ that an absence of news is the ordinary state rather than a signal [D-60].
 
 ## Gates
 
-C12 GateEngine's thresholds. **The namespace exists and carries no key yet, and that is
-the accurate state rather than an omission** [D-117].
+C12 GateEngine's thresholds [D-117].
 
-D-117 puts every gate threshold under `gates.*`, one key per threshold, with no literal
-at a call site [`CLAUDE.md` §8]. **What no document in this corpus states is what any of
-those thresholds is.** `ARCHITECTURE.html` §3 gives C12 thirteen words, "Earnings
-blackout, gap, halt, already held, cooldown", and neither that section nor `DECISIONS.md`
-nor `METRICS.md` gives a width, a percentage or a day count for any of the five. D-117
-settles where the gate applies and what `gate_state` means over history; it does not set
-a number.
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `gates.gap_pct` | 8 | D-117 | GateEngine | unverified |
+| `gates.earnings_blackout_days_before` | 5 | D-117 | GateEngine | unverified |
+| `gates.earnings_blackout_days_after` | 2 | D-117 | GateEngine | unverified |
+| `gates.cooldown_days` | 30 | D-117 | GateEngine | unverified |
 
-So the keys are owed before 4.8, and each needs a value and a decision behind it:
+**Halt and already-held carry no key.** They are conditions rather than thresholds: a
+name is halted or it is not, and an open `position` row is the already-held test itself.
+D-117 asks for one key per threshold and these two have none to state.
 
-| Gate | What a threshold would have to say | State |
-|---|---|---|
-| Earnings blackout | how many days either side of a report a name is gated | unauthored |
-| Gap | what size of move gates a name, and measured over what | unauthored |
-| Halt | whether this carries a threshold at all or reads a status | unauthored |
-| Already held | expected to carry none, an open position being the condition | unauthored |
-| Cooldown | how many days after an exit a name stays gated | unauthored |
+**All four values are unconstrained by anything in this corpus, and that is recorded
+rather than glossed.** `ARCHITECTURE.html` §3 gives C12 thirteen words and no width,
+percentage or day count; D-117 settles where the gate applies and what `gate_state` means
+over history and sets no number. Nothing here was reasoned to from a measurement, and the
+three seeded so the engine is whole are seeded for that reason and not because a value was
+derived [`CLAUDE.md` §8, §11].
 
-**No row is invented here.** This document's own rule is that an unverified entry is
-worse than an absent one, and a fabricated default is worse than both: it would be read
-as decided, seeded by 4.3, and reach `gate_result` as a threshold nobody chose
-[`CLAUDE.md` §8, §13].
+**`gates.gap_pct` is the only one 4.8's distribution can speak to.** Three of the five
+reasons are structurally unevaluable across the whole backfill window: `position` and
+`trade_outcome` hold no rows until phase 7, so already-held and cooldown can never fire,
+and `events.earnings_backward_days` is 7 with earnings deliberately not backfilled, so the
+blackout has no calendar to read on a historical date [D-117]. Gap is therefore the one
+threshold whose value changes a row in this phase, and the firing distribution at 4.8 is
+the only evidence any of these four has.
 
-**Two things about the gate are authored and are recorded so 4.8 is not blocked on
-them.** Every failing reason is recorded rather than the first, so `passed` is the empty
-reason array rather than a separately written flag, and the reason vocabulary is closed
-so a value outside it fails the stage. And `attribution.gate_state` carries `passed` or
-`passed_partial` and never `gated`, a gated name having no attribution row to carry it
-[D-117].
+**8 rather than a looser figure, for what the gate is for.** It excludes a name that has
+already made the move, and the ordinary "the news already happened" case is a 5 to 10
+percent overnight gap. A 15 percent threshold is a rare event on a mid or large cap, so it
+would pass almost everything and produce a firing distribution of nearly all zeroes, which
+is a threshold that cannot be read at 4.8. 8 is arbitrary in the same sense as the other
+three; the difference is that it produces a distribution worth reading.
+
+**One interaction is recorded as seen and accepted rather than discovered in phase 7.**
+`gates.cooldown_days` is 30 calendar days and `risk.time_stop_days` is 40 [D-34], so a
+name can be re-surfaced as a candidate before a position that ran its full time stop would
+have closed. The two keys are not in conflict today, `position` and `trade_outcome` being
+empty and the cooldown gate inert for the whole of phase 4. It first matters in phase 7,
+which is where the two are reconciled if they need to be.
 
 ## Risk
 

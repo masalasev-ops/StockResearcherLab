@@ -372,6 +372,15 @@ public sealed class ConfigSeeder
         ("backfill.weight_splits", "1"),
         ("backfill.weight_dividends", "1"),
 
+        // The shared screen rules, which are one rule for every screen rather than any
+        // screen's property. **These were documented in CONFIG_REFERENCE.md from the
+        // first corpus and seeded by nothing until 4.5**, which found it by failing to
+        // resolve the lookback: three keys with values, decisions and a Consumer column
+        // behind them, and no row in the store [D-7, D-9].
+        ("screens.slot_ceiling", "8"),
+        ("screens.floor_percentile", "98"),
+        ("screens.floor_lookback_days", "250"),
+
         // Screens, as config rows. The set of screens is discovered from these keys
         // and never from a list in code, which is what CLAUDE.md section 5 means by a
         // screen being a row: a sixth screen is an insert, not a deployment.

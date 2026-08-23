@@ -318,8 +318,8 @@ regime keys are verified at `MarketContextEngine.cs:56-57`.
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
 | `screens.slot_ceiling` | 8 | D-7 | CandidateAllocator | unverified |
-| `screens.floor_percentile` | 98 | D-9 | ScreenEngine | unverified |
-| `screens.floor_lookback_days` | 250 | D-9 | ScreenEngine | unverified |
+| `screens.floor_percentile` | 98 | D-9 | `ScreenEngine.ExecuteAsync`, `ScreenEngine.cs` | verified 4.5 |
+| `screens.floor_lookback_days` | 250 | D-9 | `ScreenEngine.ExecuteAsync`, `ScreenEngine.cs` | verified 4.5 |
 | `screens.<id>.metrics` | per screen | D-6 | ScreenEngine | unverified |
 | `screens.<id>.slots` | 8 each at start | D-43 | CandidateAllocator | unverified |
 | `screens.<id>.state` | `live` for S1 to S5 | D-84, D-119 | ScreenEngine | unverified |
@@ -354,6 +354,14 @@ case. Uppercase is used because S1 to S5 is how every other document in this cor
 a screen, and because the facade compares the id in the key against the screen's own id.
 The four older `s5.*` keys below keep their existing names and are unchanged; the facade
 treats that form as screen-scoped too, so they are reachable by S5 and by nothing else.
+
+**These three shared keys were documented here and seeded by nothing until 4.5.**
+`screens.slot_ceiling`, `screens.floor_percentile` and `screens.floor_lookback_days` have
+carried values, decisions and a Consumer column since the first corpus, and
+`ConfigSeeder.Keys` had no row for any of them. It was found by C13 failing to resolve the
+lookback rather than by an audit, which is the direction this document's own rule does not
+cover: an unverified entry is worse than an absent one, and an entry for a key with no row
+at all is worse than both. `ConfigSeeder.Keys` moves 74 to 77.
 
 **`screens.quota_large`, `quota_mid` and `quota_small` are retired** [D-116]. D-89's
 proportion is the only quota arithmetic and nothing reads the three keys once it

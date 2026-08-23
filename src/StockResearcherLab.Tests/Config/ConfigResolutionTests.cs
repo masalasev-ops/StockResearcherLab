@@ -325,7 +325,14 @@ public sealed class ConfigResolutionTests
         // screens, six for S5's two composites and their floors and quintiles, and four
         // gate thresholds. The count is asserted rather than described because a key
         // with nothing behind it is exactly what this catches [D-112 to D-120].
-        Assert.Equal(74, ConfigSeeder.Keys.Count);
+        //
+        // Seventy-seven at 4.5, which adds the three shared screen rules. They are not
+        // new: screens.slot_ceiling, screens.floor_percentile and
+        // screens.floor_lookback_days have been in CONFIG_REFERENCE.md since the first
+        // corpus with D-7 and D-9 behind them, and no seeder row. This assertion is the
+        // check for a key with nothing behind it and the gap was the other way round,
+        // which is why 4.5 found it by failing to resolve rather than by counting.
+        Assert.Equal(77, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)

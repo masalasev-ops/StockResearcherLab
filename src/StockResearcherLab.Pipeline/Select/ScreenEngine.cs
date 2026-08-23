@@ -99,16 +99,29 @@ public sealed class ScreenEngine : IStage
     public IReadOnlyList<string> ReadSet { get; } =
     [
         "indicator_daily", "valuation_daily", "flow_daily", "sentiment_derived_daily",
-        "security_daily", "config_rows", "screen_history",
+        "security_daily", "config_rows", "screen_history", "screen_score_daily",
     ];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
     [
         new("screen_score_daily", WriteOperation.Insert, ScoreColumns),
+        new("screen_score_daily", WriteOperation.Update, RankColumns),
+        new("screen_history", WriteOperation.Insert, HistoryColumns),
     ];
 
     public static readonly string[] ScoreColumns =
         ["date", "screen_id", "ticker", "score", "rank_within_screen", "config_version"];
+
+    /// <summary>
+    /// The rank pass owns this column alone, which is the same per-operation reading of
+    /// INVARIANT 10 that lets C11 update the <c>_pctile</c> columns of a row C08
+    /// inserted [D-77]. Here both operations are this component's, so there is no
+    /// second writer, and declaring the column set is what keeps that visible.
+    /// </summary>
+    public static readonly string[] RankColumns = ["rank_within_screen"];
+
+    public static readonly string[] HistoryColumns =
+        ["screen_id", "date", "floor_score", "p98_trailing", "observation_days"];
 
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
     {
@@ -125,6 +138,14 @@ public sealed class ScreenEngine : IStage
             return new StageResult(0, "ok", "no screen is registered on this date, so nothing was scored");
         }
 
+        var lookback = (int) ConfigValue.Long(
+            await context.Config.RequireAsync("screens.floor_lookback_days", context.Date, ct)
+                .ConfigureAwait(false));
+
+        var percentile = ConfigValue.Long(
+            await context.Config.RequireAsync("screens.floor_percentile", context.Date, ct)
+                .ConfigureAwait(false));
+
         long written = 0;
         var detail = new List<string>();
 
@@ -139,11 +160,147 @@ public sealed class ScreenEngine : IStage
                 parameters: null, ct).ConfigureAwait(false);
 
             written += rows;
-            detail.Add($"{screen.ScreenId} {rows.ToString(CultureInfo.InvariantCulture)}");
+
+            var floor = await ApplyFloorAsync(context, screen, lookback, percentile, ct).ConfigureAwait(false);
+
+            detail.Add(
+                $"{screen.ScreenId} {rows.ToString(CultureInfo.InvariantCulture)} scored, " +
+                (floor.FloorScore is null
+                    ? $"no floor at {floor.ObservationDays.ToString(CultureInfo.InvariantCulture)} of " +
+                      $"{lookback.ToString(CultureInfo.InvariantCulture)} days"
+                    : $"floor {floor.FloorScore.Value.ToString("0.####", CultureInfo.InvariantCulture)}, " +
+                      $"{floor.Ranked.ToString(CultureInfo.InvariantCulture)} ranked"));
         }
 
-        return new StageResult(written, "ok", string.Join(", ", detail));
+        return new StageResult(written, "ok", string.Join("; ", detail));
     }
+
+    /// <summary>
+    /// One screen's floor on one date, and the ranks that follow from it.
+    ///
+    /// **Ranking here rather than in the allocator is what makes §06's "floors already
+    /// applied" literally true.** C14 then needs no floor knowledge at all and cannot
+    /// apply one differently.
+    ///
+    /// **The floor is the 98th percentile of the non-null score population** [D-115].
+    /// D-112 makes a score null below a screen's minimum input count, so the column is
+    /// legitimately sparse, and Postgres counts nulls toward <c>PERCENT_RANK</c>'s
+    /// denominator. A floor over 700,000 slots of which 200,000 are null is a different
+    /// number from one over 500,000 real scores and the two are indistinguishable on the
+    /// page. This is PercentileEngine's own <c>count(metric)</c> argument one level up.
+    ///
+    /// **Below the lookback there is no floor and nothing is ranked.** That is
+    /// `SCREEN_LIFECYCLE.md` §5.1's rule for a newly registered shadow applied
+    /// identically to a live screen at the start of the backfill window, because it is
+    /// the same condition rather than an analogous one.
+    /// </summary>
+    private static async Task<FloorOutcome> ApplyFloorAsync(
+        StageContext context, ScreenDefinition screen, int lookbackDays, double percentile, CancellationToken ct)
+    {
+        var rows = await context.Data.ReadAsync(
+            "screen_score_daily",
+            TrailingSql(screen.ScreenId, context.Date, lookbackDays, percentile), ct).ConfigureAwait(false);
+
+        var row = rows[0];
+        var observationDays = Convert.ToInt32(row[0], CultureInfo.InvariantCulture);
+        var p98 = row[1] is null or DBNull ? (double?) null : Convert.ToDouble(row[1], CultureInfo.InvariantCulture);
+
+        // Below the lookback there is no floor, whatever the trailing distribution says.
+        // The p98 is still recorded, so a reader can see what the short window held
+        // without it being mistaken for a floor in force [D-115].
+        var floorScore = observationDays >= lookbackDays ? p98 : null;
+
+        await context.Data.WriteAsync(
+            "screen_history", WriteOperation.Insert,
+            HistorySql(screen.ScreenId, context.Date, floorScore, p98, observationDays),
+            parameters: null, ct).ConfigureAwait(false);
+
+        if (floorScore is null)
+        {
+            return new FloorOutcome(null, observationDays, 0);
+        }
+
+        var ranked = await context.Data.WriteAsync(
+            "screen_score_daily", WriteOperation.Update,
+            RankSql(screen.ScreenId, context.Date, floorScore.Value), parameters: null, ct)
+            .ConfigureAwait(false);
+
+        return new FloorOutcome(floorScore, observationDays, ranked);
+    }
+
+    /// <summary>
+    /// The trailing window: how many dates this screen has scored inside it, and the
+    /// p98 of the non-null scores over it.
+    ///
+    /// **<c>percentile_cont</c> over <c>score</c> with a <c>WHERE score IS NOT NULL</c>,
+    /// not over the column as it stands.** The aggregate already skips nulls, and the
+    /// predicate is there so the intent is on the page rather than resting on a property
+    /// of the function: D-115's whole point is that the denominator is the real scores
+    /// and not the slots [D-115].
+    ///
+    /// The window is inclusive of the date being scored, so tonight's scores are part of
+    /// the distribution tonight's floor is drawn from. That is the trailing distribution
+    /// §05 describes rather than a lagged one, and it is stated because the alternative
+    /// is invisible in the output.
+    /// </summary>
+    public static string TrailingSql(string screenId, DateOnly date, int lookbackDays, double percentile)
+        => $"""
+            WITH win AS (
+                SELECT date, score
+                FROM screen_score_daily
+                WHERE screen_id = {Quote(screenId)}
+                  AND date <= {Literal(date)}
+                  AND date > {Literal(date)} - INTERVAL '{Int(lookbackDays * 2)} days'
+            )
+            SELECT
+                (SELECT count(DISTINCT date) FROM win)::int AS observation_days,
+                (SELECT percentile_cont({Num(percentile / 100d)}) WITHIN GROUP (ORDER BY score)
+                 FROM win WHERE score IS NOT NULL) AS p98;
+            """;
+
+    public static string HistorySql(
+        string screenId, DateOnly date, double? floorScore, double? p98, int observationDays)
+        => $"""
+            INSERT INTO screen_history (screen_id, date, floor_score, p98_trailing, observation_days)
+            VALUES ({Quote(screenId)}, {Literal(date)}, {Nullable(floorScore)}, {Nullable(p98)},
+                    {Int(observationDays)})
+            ON CONFLICT (screen_id, date) DO UPDATE SET
+                floor_score = EXCLUDED.floor_score,
+                p98_trailing = EXCLUDED.p98_trailing,
+                observation_days = EXCLUDED.observation_days;
+            """;
+
+    /// <summary>
+    /// **Dense from 1 at or above the floor and null below it**, so C14 reads a ranked
+    /// list with the floor already applied and needs no floor knowledge of its own.
+    ///
+    /// <c>dense_rank</c> rather than <c>row_number</c>, so two names on the same score
+    /// take the same rank rather than being separated by whichever the sort happened to
+    /// put first. Ordering is score descending then ticker ascending, which makes the
+    /// tie-break explicit and the result reproducible [`CLAUDE.md` §6].
+    /// </summary>
+    public static string RankSql(string screenId, DateOnly date, double floorScore)
+        => $"""
+            UPDATE screen_score_daily t
+            SET rank_within_screen = r.rk
+            FROM (
+                SELECT ticker,
+                       dense_rank() OVER (ORDER BY score DESC, ticker ASC)::int AS rk
+                FROM screen_score_daily
+                WHERE screen_id = {Quote(screenId)}
+                  AND date = {Literal(date)}
+                  AND score IS NOT NULL
+                  AND score >= {Num(floorScore)}
+            ) r
+            WHERE t.screen_id = {Quote(screenId)}
+              AND t.date = {Literal(date)}
+              AND t.ticker = r.ticker;
+            """;
+
+    private static string Nullable(double? value)
+        => value is null ? "NULL" : Num(value.Value);
+
+    private readonly record struct FloorOutcome(double? FloorScore, int ObservationDays, long Ranked);
 
     /// <summary>
     /// One screen, one date, one statement.

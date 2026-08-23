@@ -2101,3 +2101,30 @@ the operator adopted phase 4's authored items before its first checkpoint, and t
 the section is that divergence made visible rather than left to be found. Neither
 `surfaced_as` nor `score_per_screen` is a `real` column, so neither enters the not-money
 declaration and no check reads either before `0017` lands.
+
+## 2026-08-23, phase 4 checkpoint 4.5
+
+**`ARCHITECTURE.html` §3, C13 ScreenEngine's Reads cell, a second time** [4.5, D-74,
+D-115]. Prior wording, being 4.1's corrected cell before this checkpoint:
+
+> `indicator_daily`, `valuation_daily`, `flow_daily`, `sentiment_derived_daily` for the
+> ranked percentiles, `security_daily` for the membership it scores, `config_rows`,
+> `screen_history`
+
+**`screen_score_daily` is added, and this amendment was forced rather than chosen.** The
+same cell's own description says C13 "maintains each screen's trailing 250-day
+distribution for its floor", and that distribution is the score table. So the component
+provably must read what it writes, and the cell named every input except the one the
+floor is drawn from.
+
+**It could not be recorded as a deviation instead.** `RecordedDeviations` exempts the
+cell-names-what-the-code-does-not direction. This is the other one, which
+`ReadDeclarationConformanceTests` deliberately gives no exemption list because it is the
+direction that hid the fundamentals pool closing over itself [D-74]. The two remaining
+options were a stage that cannot open the table it needs, or a declaration that lies
+about what the code reads.
+
+This is a fifth Reads-cell amendment beyond the four the operator authorised when phase
+4's authored items were adopted. It is the same cell and the same class of defect that
+`prompts/BuildPlans/phase-4-screens-and-selection.md` §8 reports as B1, and it is
+recorded here rather than folded into that authorisation.

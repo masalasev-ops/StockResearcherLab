@@ -305,6 +305,12 @@ public sealed class ScreenEngineTests
     {
         await ClearAsync(ct);
 
+        // The shared floor keys are the stage's, not this fixture's, and the seeder is
+        // idempotent. Without them the stage fails resolving screens.floor_lookback_days,
+        // which is correct behaviour and was how 4.5 found this fixture was relying on
+        // another test file having seeded first.
+        await new ConfigSeeder(TestDatabase.ConnectionString).SeedAsync(ct).ConfigureAwait(true);
+
         await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
 
         // The fabricated screen, seeded as config. Nothing in code knows this screen
@@ -386,6 +392,11 @@ public sealed class ScreenEngineTests
         // broke 4.1's zero-row assertion from a different test file, which is exactly the
         // kind of cross-test leak a screen-scoped delete hides.
         await ExecAsync(conn, "DELETE FROM screen_score_daily WHERE date = @d;", ct, ("d", RunDate));
+
+        // C13 writes screen_history for every screen it scores from 4.5, so the same
+        // by-date cleanup applies here. Six rows survived the first time: the five live
+        // screens plus the fabricated one.
+        await ExecAsync(conn, "DELETE FROM screen_history WHERE date = @d;", ct, ("d", RunDate));
         await ExecAsync(conn, "DELETE FROM valuation_daily WHERE ticker = ANY(@t);", ct, ("t", tickers));
         await ExecAsync(conn, "DELETE FROM indicator_daily WHERE ticker = ANY(@t);", ct, ("t", tickers));
         await ExecAsync(conn, "DELETE FROM security_daily WHERE ticker = ANY(@t);", ct, ("t", tickers));

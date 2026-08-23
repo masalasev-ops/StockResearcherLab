@@ -2003,3 +2003,26 @@ reasoning as what was believed; `0016` carries the correction.
 
 Six when the section was written, seven once U7 was added without the sentence moving,
 and eight from U8.
+
+## 2026-08-23, the phase 3.5 sign-off
+
+**`ARCHITECTURE.html` §16, the note on the three measured sizes** [3.5 review]. Prior
+wording, replaced because it repeated a comparison this repository had struck the same
+day rather than because it was superseded:
+
+> carry figures read off the store on 2026-08-23, and each was measured against a
+> `price_daily` holding 4,326 tickers rather than the 50,785 the pool reached at 3.6. A
+> larger pool moves all three roughly in proportion to the names evaluated, so they are
+> floors for this store rather than forecasts for a restored one.
+
+Two errors in one sentence and one inherited by the next. **50,785 is not a
+`price_daily` ticker count**, it is the admitted pool, so the comparison set a table
+against a population it was never the same set as; `PROGRESS.md` struck that reading at
+`0e8ca25` and this paragraph kept it. **50,785 is 3.1's figure rather than 3.6's**, and
+the pool is 50,737 today. The second sentence inherited the conflation by making the
+comparison a pool one, where what moves these three sizes is a fuller `price_daily`.
+
+What the corrected sentence states instead is what was measured: 4,326 tickers, 4,306 of
+them carrying a bar inside the window, and the 2026-08-20 prune as what left the table at
+that count. The floors reading is unchanged, being right for the reason the wrong
+sentence gave badly.

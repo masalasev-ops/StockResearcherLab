@@ -342,7 +342,9 @@ public sealed class ConfigResolutionTests
         // Eighty-two at 4.9, which adds tuner.slot_floor and tuner.slot_cap. C14
         // validates a screen's slot count against them before C22 exists, and they had
         // the same documented-and-unseeded gap as the five above.
-        Assert.Equal(82, ConfigSeeder.Keys.Count);
+        //
+        // Eighty-four at 4.11, which adds C28's two bounds.
+        Assert.Equal(84, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)

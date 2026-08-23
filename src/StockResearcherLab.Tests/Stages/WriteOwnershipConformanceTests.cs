@@ -70,7 +70,7 @@ public sealed class WriteOwnershipConformanceTests
     /// C08, C09, C10, C11 and C35, the last authored at D-78 after this comment
     /// was written and after C34 had already been built early with D-61's ingest.
     /// </summary>
-    private const int ExpectedOwners = 17;
+    private const int ExpectedOwners = 18;
 
     /// <summary>
     /// The assertion that keeps the rest of this file meaningful. A conformance test
@@ -103,7 +103,7 @@ public sealed class WriteOwnershipConformanceTests
                      // The selection layer, from 4.8. Named for the reason the compute
                      // components are named: a registry that lost one should fail by
                      // that one's name and not by a count being off by one.
-                     "GateEngine", "ScreenEngine", "CandidateAllocator",
+                     "GateEngine", "ScreenEngine", "CandidateAllocator", "ConcentrationMonitor",
                  })
         {
             Assert.Contains(owners, o => string.Equals(o.Name, component, StringComparison.Ordinal));

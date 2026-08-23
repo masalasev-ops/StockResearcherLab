@@ -72,6 +72,10 @@ public static class PipelineComposition
             new GateEngine(),
             new ScreenEngine(),
             new CandidateAllocator(),
+
+            // Outside the layers with RunLog, per section 02, and registered here
+            // because it reads stores the pipeline wrote and calls nothing.
+            new ConcentrationMonitor(),
         };
 
         if (eodhd is not null)

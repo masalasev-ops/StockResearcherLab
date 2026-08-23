@@ -122,7 +122,7 @@ public sealed class RegistryNameTests
             .Owners.Select(o => o.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
 
         Assert.Equal(viaToken, viaClient);
-        Assert.Equal(17, viaClient.Count);
+        Assert.Equal(18, viaClient.Count);
         Assert.Contains("PriceIngestor", viaClient);
         Assert.Contains("FundamentalsIngestor", viaClient);
     }
@@ -140,7 +140,7 @@ public sealed class RegistryNameTests
             .BuildRegistry(TestDatabase.ConnectionString, eodhd: null)
             .Owners.Select(o => o.Name).ToList();
 
-        Assert.Equal(10, owners.Count);
+        Assert.Equal(11, owners.Count);
         Assert.DoesNotContain("PriceIngestor", owners);
         Assert.DoesNotContain("FundamentalsIngestor", owners);
 

@@ -465,6 +465,14 @@ public sealed class ConfigSeeder
         // other two tuner keys stay unseeded: nothing reads them before phase 8.
         ("tuner.slot_floor", "4"),
         ("tuner.slot_cap", "12"),
+
+        // C28's two bounds, which are the two diversity guarantees stated as numbers.
+        // megacap_share_max is D-7's third and distinct_tickers_60d_min is the phase's
+        // own done-when. **Documented and unseeded until 4.11**, the fifth instance and
+        // the fifth found by a resolve failing. The other three monitor and cost keys
+        // stay unseeded: nothing reads them before phase 6.
+        ("monitor.megacap_share_max", "0.333"),
+        ("monitor.distinct_tickers_60d_min", "250"),
     ];
 
     private readonly string _connectionString;

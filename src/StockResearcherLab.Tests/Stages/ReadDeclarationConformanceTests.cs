@@ -35,7 +35,7 @@ public sealed class ReadDeclarationConformanceTests
     /// It moves deliberately when a phase adds a stage. Fourteen at 4.4, which adds
     /// C13 ScreenEngine.
     /// </summary>
-    private const int ExpectedStages = 16;
+    private const int ExpectedStages = 17;
 
     /// <summary>
     /// Section 3 catalogues thirty-six components, C36 RecordInspector having joined at
@@ -116,7 +116,7 @@ public sealed class ReadDeclarationConformanceTests
                      "SentimentIngestor", "FlowIngestor", "EventsIngestor", "FlowEngine",
                      "IndicatorEngine", "ValuationEngine", "SentimentEngine",
                      "MarketContextEngine", "PercentileEngine",
-                     "GateEngine", "ScreenEngine", "CandidateAllocator",
+                     "GateEngine", "ScreenEngine", "CandidateAllocator", "ConcentrationMonitor",
                  })
         {
             Assert.True(stages.ContainsKey(expected), $"{expected} is registered and is not under test.");

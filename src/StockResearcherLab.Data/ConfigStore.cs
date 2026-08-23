@@ -296,6 +296,22 @@ public sealed class ConfigSeeder
         // than guessed twice.
         ("backfill.ticker_concurrency", "8"),
 
+        // ----------------------------------------------------- phase 3.5 [3.5.3] ---
+
+        // How many of a ticker's most recent bars the record inspector shows on the
+        // inputs panel [D-109].
+        //
+        // **A display bound rather than a metric window, and it is the one thing the
+        // panel bounds that no component already owns.** The sentiment window is
+        // sentiment.lookback_days and the insider window is FlowEngine.WindowDays,
+        // which is a constant precisely because insider_net_90d_usd carries the number
+        // in its name. Bars have neither, so the alternative here is a literal at the
+        // call site, which is what CLAUDE.md section 8 rules out.
+        //
+        // Twenty, being the liquidity window D-4's dollar volume criterion is computed
+        // over, so the panel shows the bars the membership panel's verdict rests on.
+        ("inspector.recent_bars", "20"),
+
         // The allowance and what is held back from it. dailyRateLimit read 100,000
         // at 3.1, which is the same figure phase P and phase 1 read.
         //

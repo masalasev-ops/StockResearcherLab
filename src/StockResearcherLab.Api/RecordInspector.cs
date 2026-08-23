@@ -82,6 +82,8 @@ public sealed class RecordInspector : IReadOwner
         "security", "security_daily", "universe_rejection",
         "indicator_daily", "valuation_daily", "flow_daily", "sentiment_derived_daily",
         "percentile_cell_daily", "percentile_cell_coverage",
+        "price_daily", "fundamental_snapshot", "sentiment_daily", "insider_transaction",
+        "market_context_daily",
     ];
 
     /// <summary>
@@ -93,7 +95,7 @@ public sealed class RecordInspector : IReadOwner
     /// alternative is worse: the Api may never reference Pipeline, which is what
     /// structurally stops a page invoking a stage [`CLAUDE.md` §4], so importing the real
     /// list would cost the guarantee the whole read-only surface rests on. What keeps the
-    /// two in step is a test, `MetricsPanelTests`, which reads both and fails when they
+    /// two in step is a test, `MetricSourceParityTests`, which reads both and fails when they
     /// diverge, and which is in the test project because that is the one place that sees
     /// both.
     /// </summary>
@@ -148,7 +150,230 @@ public sealed class RecordInspector : IReadOwner
 
         return new RecordView(
             ticker, date, membership,
-            await MetricsAsync(ticker, date, membership.InForce, ct).ConfigureAwait(false));
+            await MetricsAsync(ticker, date, membership.InForce, ct).ConfigureAwait(false),
+            await InputsAsync(ticker, date, ct).ConfigureAwait(false),
+            await MarketAsync(date, membership.InForce?.Sector, ct).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// Breadth, the regime label and the name's own sector composite, on one line.
+    ///
+    /// **The composite is read out of the stored jsonb by key rather than recomputed
+    /// from any price series.** C10 writes `sector_relative_strength` as an object of
+    /// sector to trailing relative return with its keys in ordinal order, and taking one
+    /// entry out of it is a read. Recomputing it here would be a second implementation of
+    /// a composite whose member floor, window and benchmark all live in C10.
+    ///
+    /// **`vix` is null and the panel says absent rather than blank** [D-80]. The bulk
+    /// end-of-day feed carries equities and the index is not among them, so the column is
+    /// written null explicitly and a blank cell would read as a rendering gap.
+    /// </summary>
+    public async Task<MarketPanel> MarketAsync(DateOnly date, string? sector, CancellationToken ct = default)
+    {
+        var rows = await _data.ReadAsync(
+            "market_context_daily",
+            $"""
+             SELECT breadth, vix, regime_label,
+                    sector_relative_strength ->> {Literal(sector ?? string.Empty)}
+             FROM market_context_daily
+             WHERE date = DATE '{Iso(date)}';
+             """,
+            ct).ConfigureAwait(false);
+
+        if (rows.Count == 0)
+        {
+            return new MarketPanel(false, null, null, null, sector, null);
+        }
+
+        return new MarketPanel(
+            true, Real(rows[0][0]), Real(rows[0][1]), rows[0][2] as string, sector,
+            Composite(rows[0][3]));
+    }
+
+    /// <summary>
+    /// One entry of the sector composite object.
+    ///
+    /// **Read with `->>` rather than `->`**, so Postgres returns text and the value
+    /// arrives as a string whatever the driver would have mapped a `jsonb` scalar to.
+    /// `->` would leave the CLR type to the provider, and a mapping change would turn
+    /// every composite on the page into an absence without erroring.
+    ///
+    /// A sector the object does not carry yields SQL null and reads as absent, which is
+    /// the state a sector below `market.sector_composite_min_members` produces: one name's
+    /// noise is not a sector, so C10 writes no entry rather than a number [2.1].
+    /// </summary>
+    private static double? Composite(object? value)
+        => value is string text
+           && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)
+            ? d
+            : Real(value);
+
+    /// <summary>
+    /// What the compute layer read, rather than what it produced.
+    ///
+    /// **Every window here belongs to a component and none belongs to this page.**
+    /// Sentiment takes `sentiment.lookback_days` resolved as of the viewed date, insider
+    /// takes the ninety days `insider_net_90d_usd` carries in its own name, and filings
+    /// take no window at all: everything readable on the date, which is what
+    /// `filing_date_effective &lt;= date` means [INVARIANT 12]. The bar count is the one
+    /// bound no component owns and it is `inspector.recent_bars`.
+    /// </summary>
+    public async Task<InputsPanel> InputsAsync(string ticker, DateOnly date, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
+
+        var bars = (int) await LongAsync("inspector.recent_bars", date, 20, ct).ConfigureAwait(false);
+        var sentimentDays = (int) await LongAsync("sentiment.lookback_days", date, 30, ct).ConfigureAwait(false);
+
+        return new InputsPanel(
+            bars,
+            await BarsAsync(ticker, date, bars, ct).ConfigureAwait(false),
+            await FilingsAsync(ticker, date, ct).ConfigureAwait(false),
+            sentimentDays,
+            await SentimentAsync(ticker, date, sentimentDays, ct).ConfigureAwait(false),
+            InsiderWindowDays,
+            await InsiderAsync(ticker, date, ct).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// The ninety-day insider window, as a constant and deliberately not a key.
+    ///
+    /// `FlowEngine.WindowDays` gives the reason and it holds identically here: the column
+    /// is named <c>insider_net_90d_usd</c> in `ARCHITECTURE.html` §3 and §5 and in D-61,
+    /// so a tunable ninety would be a second place for the number to live and the column
+    /// name would be wrong the first time they disagreed. Copying the constant rather
+    /// than the key is therefore copying the same decision, not weakening it.
+    /// </summary>
+    public const int InsiderWindowDays = 90;
+
+    private async Task<IReadOnlyList<PriceBar>> BarsAsync(
+        string ticker, DateOnly date, int bars, CancellationToken ct)
+    {
+        var rows = await _data.ReadAsync(
+            "price_daily",
+            $"""
+             SELECT date, close, adj_close, volume
+             FROM price_daily
+             WHERE ticker = {Literal(ticker)} AND date <= DATE '{Iso(date)}'
+             ORDER BY date DESC
+             LIMIT {bars.ToString(CultureInfo.InvariantCulture)};
+             """,
+            ct).ConfigureAwait(false);
+
+        return rows
+            .Select(r => new PriceBar(Date(r[0])!.Value, r[1] as decimal?, r[2] as decimal?, r[3] as long?))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Every filing readable on the date, newest effective date first.
+    ///
+    /// **Filtered and ordered on `filing_date_effective` and never on `period_end`**
+    /// [INVARIANT 12, D-46, D-62]. Period end is the natural-looking key and hands a
+    /// reader quarterly numbers weeks before they were public; a viewer ordering on it
+    /// would teach that reading to everyone who opens the page.
+    ///
+    /// The newest row is marked, being the one a valuation input would have resolved
+    /// from. **Which column came from which filing is not recorded**, so the panel shows
+    /// the rows and says that rather than implying a provenance the store does not hold.
+    /// </summary>
+    private async Task<IReadOnlyList<Filing>> FilingsAsync(string ticker, DateOnly date, CancellationToken ct)
+    {
+        var rows = await _data.ReadAsync(
+            "fundamental_snapshot",
+            $"""
+             SELECT period_end, filing_date, filing_date_effective, filing_date_unknown_reason, period_type
+             FROM fundamental_snapshot
+             WHERE ticker = {Literal(ticker)}
+               AND filing_date_effective IS NOT NULL
+               AND filing_date_effective <= DATE '{Iso(date)}'
+             ORDER BY filing_date_effective DESC, period_end DESC;
+             """,
+            ct).ConfigureAwait(false);
+
+        return rows
+            .Select((r, i) => new Filing(
+                Date(r[0])!.Value, Date(r[1]), Date(r[2]), r[3] as string, r[4] as string,
+                MostRecentReadable: i == 0))
+            .ToList();
+    }
+
+    /// <summary>
+    /// The days inside the window that carry a row, and only those.
+    ///
+    /// **Absent days are not filled.** The series is sparse by construction, rows
+    /// appearing only on days that carry news, and a zero here would say attention was
+    /// measured at nothing rather than not measured [D-12, D-78].
+    /// </summary>
+    private async Task<IReadOnlyList<SentimentDay>> SentimentAsync(
+        string ticker, DateOnly date, int windowDays, CancellationToken ct)
+    {
+        var rows = await _data.ReadAsync(
+            "sentiment_daily",
+            $"""
+             SELECT date, article_count, sentiment_score
+             FROM sentiment_daily
+             WHERE ticker = {Literal(ticker)}
+               AND date <= DATE '{Iso(date)}'
+               AND date > DATE '{Iso(date.AddDays(-windowDays))}'
+             ORDER BY date DESC;
+             """,
+            ct).ConfigureAwait(false);
+
+        return rows
+            .Select(r => new SentimentDay(Date(r[0])!.Value, r[1] as int?, Real(r[2])))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Insider filings inside the ninety-day window, keyed on the date the filing became
+    /// public rather than on the transaction date.
+    ///
+    /// `FlowEngine` filters `filed_at` for the same reason: a transaction is not evidence
+    /// until it is filed, and reading on `transaction_date` alone is INVARIANT 12's
+    /// mistake arriving through a table with a different shape. Both dates are shown so
+    /// the lag is inspectable.
+    /// </summary>
+    private async Task<IReadOnlyList<InsiderFiling>> InsiderAsync(
+        string ticker, DateOnly date, CancellationToken ct)
+    {
+        var rows = await _data.ReadAsync(
+            "insider_transaction",
+            $"""
+             SELECT filed_at, transaction_date, reporting_owner_name, transaction_code,
+                    shares_amount, price_per_share
+             FROM insider_transaction
+             WHERE ticker = {Literal(ticker)}
+               AND filed_at <= DATE '{Iso(date)}'
+               AND filed_at > DATE '{Iso(date.AddDays(-InsiderWindowDays))}'
+             ORDER BY filed_at DESC, transaction_date DESC;
+             """,
+            ct).ConfigureAwait(false);
+
+        return rows
+            .Select(r => new InsiderFiling(
+                Date(r[0]), Date(r[1]), r[2] as string, r[3] as string,
+                r[4] as decimal?, r[5] as decimal?))
+            .ToList();
+    }
+
+    /// <summary>
+    /// A whole-number key as of the viewed date, falling back to the stated default where
+    /// no version was in force yet.
+    ///
+    /// **A reader falls back where a stage fails.** A stage resolving nothing is a run
+    /// that must not continue [D-72]; a viewer resolving nothing is looking at a date
+    /// before the key existed, which is a fact about that date rather than a fault, and
+    /// refusing to render the panel would hide the three other windows that do resolve.
+    /// </summary>
+    private async Task<long> LongAsync(string key, DateOnly date, long fallback, CancellationToken ct)
+    {
+        var row = await _config.ResolveAsync(key, date, ct).ConfigureAwait(false);
+
+        return row is not null
+               && long.TryParse(row.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v)
+            ? v
+            : fallback;
     }
 
     /// <summary>
@@ -228,9 +453,12 @@ public sealed class RecordInspector : IReadOwner
     /// <summary>
     /// The cell rows for this name's own cell, one per metric.
     ///
-    /// **`coalesce` on the sector rather than an equality**, because the row that carries
-    /// no sector is the bucket fallback's and `NULL = NULL` would match nothing. That is
-    /// the same shape the unique index uses, so the read and the key agree.
+    /// **`IS NOT DISTINCT FROM` rather than an equality**, because `NULL = NULL` matches
+    /// nothing and the row that carries no sector is the one a name with no sector needs.
+    /// That is the same comparison the unique index makes under `NULLS NOT DISTINCT`, so
+    /// the read and the key agree [0016]. An equality with `coalesce` would agree with
+    /// neither: it merges the null cell with the empty-string one, which C11 ranks
+    /// separately.
     /// </summary>
     private async Task<Dictionary<string, CellFigures>> CellsAsync(
         DateOnly date, MembershipRow? inForce, CancellationToken ct)
@@ -249,7 +477,7 @@ public sealed class RecordInspector : IReadOwner
              FROM percentile_cell_daily
              WHERE date = DATE '{Iso(date)}'
                AND size_bucket = {Literal(bucket)}
-               AND coalesce(sector, '') = {Literal(inForce.Sector ?? string.Empty)};
+               AND sector IS NOT DISTINCT FROM {SectorLiteral(inForce.Sector)};
              """,
             ct).ConfigureAwait(false);
 
@@ -269,6 +497,15 @@ public sealed class RecordInspector : IReadOwner
     /// **A date inside the covered range of every source is populated.** Taking the
     /// narrowest of the four is what makes a halt between the four statements of one date
     /// read as not populated rather than as populated with a source missing.
+    ///
+    /// **The span is checked against the date's own rows rather than trusted on its
+    /// own**, because a span only means what it looks like while the covered set is
+    /// contiguous, and the nightly path can break that. C11 writes cells for the date it
+    /// runs on, so a night that runs after a gap widens `covered_to` past dates nothing
+    /// ever wrote, and every one of them would then read as populated with its cells
+    /// absent. That is precisely the confusion this marker exists to prevent, arriving
+    /// through the writer rather than through the reader. Two reads, and the second is
+    /// one indexed existence check.
     /// </summary>
     private async Task<(bool Populated, DateOnly? From, DateOnly? To)> CoverageAsync(
         DateOnly date, CancellationToken ct)
@@ -278,15 +515,21 @@ public sealed class RecordInspector : IReadOwner
             "SELECT max(covered_from), min(covered_to), count(*) FROM percentile_cell_coverage;",
             ct).ConfigureAwait(false);
 
-        if (rows.Count == 0 || rows[0][2] is not long sources || sources < MetricSources.Length)
+        var from = rows.Count == 0 ? null : Date(rows[0][0]);
+        var to = rows.Count == 0 ? null : Date(rows[0][1]);
+
+        if (rows.Count == 0 || rows[0][2] is not long sources || sources < MetricSources.Length
+            || from is null || to is null || date < from || date > to)
         {
-            return (false, Date(rows.Count == 0 ? null : rows[0][0]), Date(rows.Count == 0 ? null : rows[0][1]));
+            return (false, from, to);
         }
 
-        var from = Date(rows[0][0]);
-        var to = Date(rows[0][1]);
+        var present = await _data.ReadAsync(
+            "percentile_cell_daily",
+            $"SELECT 1 FROM percentile_cell_daily WHERE date = DATE '{Iso(date)}' LIMIT 1;",
+            ct).ConfigureAwait(false);
 
-        return (from is not null && to is not null && date >= from && date <= to, from, to);
+        return (present.Count > 0, from, to);
     }
 
     private sealed record CellFigures(int? CellMembers, int BucketMembers, int MinMembers, string RankedScope);
@@ -444,4 +687,14 @@ public sealed class RecordInspector : IReadOwner
     /// </summary>
     private static string Literal(string ticker)
         => "'" + ticker.Replace("'", "''", StringComparison.Ordinal) + "'";
+
+    /// <summary>
+    /// A sector as a SQL literal, or the keyword NULL.
+    ///
+    /// Separate from <see cref="Literal(string)"/> because a null sector is a value the
+    /// key holds rather than an absent argument, and rendering it as <c>''</c> would ask
+    /// for the empty-string cell instead [0016].
+    /// </summary>
+    private static string SectorLiteral(string? sector)
+        => sector is null ? "NULL" : Literal(sector);
 }

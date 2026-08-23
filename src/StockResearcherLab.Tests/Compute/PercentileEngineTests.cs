@@ -458,9 +458,10 @@ public sealed class PercentileEngineTests
     }
 
     /// <summary>
-    /// Reads one cell row for one metric. The sector is matched through `coalesce`, the
-    /// same way the unique index is keyed, so the row that carries no sector is
-    /// reachable at all.
+    /// Reads one cell row for one metric. The sector is matched with
+    /// `IS NOT DISTINCT FROM`, the same comparison the unique index makes under
+    /// `NULLS NOT DISTINCT`, so the row that carries no sector is reachable and is not
+    /// confused with the empty-string cell C11 ranks separately [0016].
     /// </summary>
     private static async Task<(int? CellMembers, int BucketMembers, int MinMembers, string RankedScope)>
         CellAsync(string bucket, string? sector, CancellationToken ct)
@@ -470,11 +471,11 @@ public sealed class PercentileEngineTests
             """
             SELECT cell_members, bucket_members, min_members, ranked_scope
             FROM percentile_cell_daily
-            WHERE date = @d AND size_bucket = @b AND coalesce(sector, '') = @s AND metric = @m;
+            WHERE date = @d AND size_bucket = @b AND sector IS NOT DISTINCT FROM @s AND metric = @m;
             """, conn);
         cmd.Parameters.AddWithValue("d", RunDate);
         cmd.Parameters.AddWithValue("b", bucket);
-        cmd.Parameters.AddWithValue("s", sector ?? string.Empty);
+        cmd.Parameters.AddWithValue("s", (object?) sector ?? DBNull.Value);
         cmd.Parameters.AddWithValue("m", Metric);
 
         await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);

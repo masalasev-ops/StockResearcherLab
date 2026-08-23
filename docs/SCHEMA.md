@@ -623,9 +623,16 @@ and the reader that shows this does not compute; storing it leaves that decision
 the component that made it.
 
 **A null sector forms no cell** and goes to the bucket fallback [`METRICS.md` §6.4], so
-it has a row with no sector. The key is a unique index over `coalesce(sector, '')`,
-Postgres not allowing a null in a primary key, and the column stays nullable because the
-empty string is not a sector.
+it has a row with no sector. The key is a unique index over
+`(date, size_bucket, sector, metric)` declared `NULLS NOT DISTINCT`, Postgres not
+allowing a null in a primary key [0016].
+
+**An empty-string sector is a different cell from a null one and the key distinguishes
+them.** `security_daily.sector` holds both, and C11's `CellQualifies` tests
+`sector IS NOT NULL`, so an empty string is a real cell of its own while a null forms no
+cell at all. The two reach the same bucket fallback by different routes and seeing which
+route is what this store is for. A reader matches with `IS NOT DISTINCT FROM`, which is
+the comparison the index makes.
 
 `metric` is sufficient in the key without `source_table` beside it, the thirty metric
 names being distinct across the four sources. `source_table` is carried so a reader knows

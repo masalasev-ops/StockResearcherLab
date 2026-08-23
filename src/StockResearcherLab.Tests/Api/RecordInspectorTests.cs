@@ -210,6 +210,126 @@ public sealed class RecordInspectorTests
         Assert.All(view.Metrics.Metrics, m => Assert.Null(m.RankedScope));
     }
 
+    // ------------------------------------------ inputs and market [3.5.3, 3.5.4] ---
+
+    /// <summary>
+    /// **The filings read keys on `filing_date_effective` and never on `period_end`**
+    /// [INVARIANT 12, D-46, D-62].
+    ///
+    /// Period end is the natural-looking key and hands a reader quarterly numbers weeks
+    /// before they were public. A viewer that filtered on it would not error, would look
+    /// entirely right, and would teach that reading to everyone who opens the page.
+    ///
+    /// **`period_end` does appear, as the tiebreak inside one effective date, and that is
+    /// asserted rather than forbidden.** Two filings can share an effective date and the
+    /// order between them has to be stable; a tiebreak cannot change which rows are
+    /// readable, where a filter or a leading sort key can. So what this asserts is the
+    /// filter and the leading sort, which are the two that decide readability.
+    /// </summary>
+    [Fact]
+    public async Task TheFilingsReadKeysOnTheEffectiveFilingDateAndNeverOnPeriodEnd()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var data = new NoRows();
+
+        await new RecordInspector(data, new RecordingConfig())
+            .InputsAsync("AAPL.US", new DateOnly(2022, 6, 15), ct).ConfigureAwait(true);
+
+        var sql = data.Sql.Single(s => s.Contains("fundamental_snapshot", StringComparison.Ordinal));
+
+        var where = sql[sql.IndexOf("WHERE", StringComparison.Ordinal)
+            ..sql.IndexOf("ORDER BY", StringComparison.Ordinal)];
+
+        Assert.Contains("filing_date_effective", where, StringComparison.Ordinal);
+        Assert.DoesNotContain("period_end", where, StringComparison.Ordinal);
+
+        var order = sql[sql.IndexOf("ORDER BY", StringComparison.Ordinal)..];
+        Assert.StartsWith("ORDER BY filing_date_effective", order, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The sentiment window is `sentiment.lookback_days` as of the viewed date, and the
+    /// insider window is the ninety days the column name carries. Neither is invented
+    /// here, which is the first rule in the form it takes on this panel.
+    /// </summary>
+    [Fact]
+    public async Task TheInputWindowsAreTheComponentsOwnRatherThanThePages()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var viewed = new DateOnly(2022, 6, 15);
+        var config = new RecordingConfig();
+
+        var panel = await new RecordInspector(new NoRows(), config)
+            .InputsAsync("AAPL.US", viewed, ct).ConfigureAwait(true);
+
+        Assert.Equal(RecordInspector.InsiderWindowDays, panel.InsiderWindowDays);
+        Assert.Equal(90, panel.InsiderWindowDays);
+
+        // Resolved for the viewed date, like every other key this reader reads.
+        Assert.All(config.AskedFor, d => Assert.Equal(viewed, d));
+        Assert.Contains("sentiment.lookback_days", config.Keys);
+        Assert.Contains("inspector.recent_bars", config.Keys);
+    }
+
+    /// <summary>
+    /// A store holding nothing gives four empty lists rather than an error, and the panel
+    /// renders each as an absence. A name with no bars is exactly the case the membership
+    /// panel points at when it says a name was not evaluated.
+    /// </summary>
+    [Fact]
+    public async Task ANameWithNoInputsIsFourAbsencesRatherThanAnError()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var panel = await new RecordInspector(new NoRows(), new RecordingConfig())
+            .InputsAsync("NOTHING.US", new DateOnly(2022, 6, 15), ct).ConfigureAwait(true);
+
+        Assert.Empty(panel.Bars);
+        Assert.Empty(panel.Filings);
+        Assert.Empty(panel.SentimentDays);
+        Assert.Empty(panel.InsiderFilings);
+    }
+
+    /// <summary>
+    /// A date C10 never ran for reads as no row rather than as a market of zeroes, and
+    /// `vix` is absent by design rather than blank [D-80].
+    /// </summary>
+    [Fact]
+    public async Task ADateWithNoMarketRowSaysSoRatherThanRenderingZeroes()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var panel = await new RecordInspector(new NoRows(), new RecordingConfig())
+            .MarketAsync(new DateOnly(2022, 6, 15), "Technology", ct).ConfigureAwait(true);
+
+        Assert.False(panel.Present);
+        Assert.Null(panel.Breadth);
+        Assert.Null(panel.RegimeLabel);
+        Assert.Null(panel.Vix);
+        Assert.Equal("Technology", panel.Sector);
+    }
+
+    /// <summary>
+    /// The sector composite is taken out of the stored object by key rather than
+    /// recomputed. Asserted on the statement, because a reader that rebuilt the composite
+    /// from `price_daily` would produce a number that looks right and is C10's
+    /// construction reimplemented by hand.
+    /// </summary>
+    [Fact]
+    public async Task TheSectorCompositeIsReadOutOfTheStoredObjectByKey()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var data = new NoRows();
+
+        await new RecordInspector(data, new RecordingConfig())
+            .MarketAsync(new DateOnly(2022, 6, 15), "Technology", ct).ConfigureAwait(true);
+
+        var sql = data.Sql.Single(s => s.Contains("market_context_daily", StringComparison.Ordinal));
+
+        Assert.Contains("sector_relative_strength ->> 'Technology'", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("price_daily", sql, StringComparison.Ordinal);
+    }
+
     // ---------------------------------------------------------------- doubles ---
 
     /// <summary>
@@ -221,10 +341,14 @@ public sealed class RecordInspectorTests
     {
         public List<string> Touched { get; } = [];
 
+        /// <summary>The statements issued, so a test can assert what a read keys on.</summary>
+        public List<string> Sql { get; } = [];
+
         public Task<IReadOnlyList<IReadOnlyList<object?>>> ReadAsync(
             string table, string sql, CancellationToken ct = default, int? commandTimeoutSeconds = null)
         {
             Touched.Add(table);
+            Sql.Add(sql);
             return Task.FromResult<IReadOnlyList<IReadOnlyList<object?>>>([]);
         }
 
@@ -278,9 +402,12 @@ public sealed class RecordInspectorTests
     {
         public List<DateOnly> AskedFor { get; } = [];
 
+        public List<string> Keys { get; } = [];
+
         public Task<ConfigRow?> ResolveAsync(string key, DateOnly asOf, CancellationToken ct = default)
         {
             AskedFor.Add(asOf);
+            Keys.Add(key);
             return Task.FromResult<ConfigRow?>(new ConfigRow(key, 1, "1", new DateOnly(2020, 1, 1)));
         }
 

@@ -202,6 +202,50 @@ at once, which is the resource that runs out first.
 are operator configuration in the same sense as the risk caps: the tuner moves screen
 slots and touches nothing else.
 
+## Record inspector
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `inspector.recent_bars` | 20 | 3.5.3 | `RecordInspector` C36 `InputsAsync` | verified 2026-08-23 |
+
+**It is a display bound rather than a metric window, and it is the only bound on this
+panel that no component already owns.** The sentiment window is
+`sentiment.lookback_days` and the insider window is `FlowEngine.WindowDays`, which is a
+constant precisely because `insider_net_90d_usd` carries the number in its own name.
+Bars have neither, so the alternative here is a literal at a call site, which is what
+`CLAUDE.md` §8 rules out.
+
+Twenty, being the liquidity window D-4's dollar volume criterion is computed over, so
+the panel shows the bars the membership panel's verdict rests on rather than an
+arbitrary depth.
+
+**Resolved as of the date being viewed**, like every key this reader reads. A viewer
+resolving as of now would draw today's floors beside a 2022 verdict, which is correct
+looking and wrong [D-43, INVARIANT 13].
+
+### Keys this reader consumes without owning
+
+`RecordInspector` reads these for display and none of them was added for it. The
+Consumer columns in the sections above name it alongside their owners.
+
+| Key | Read for | Where |
+|---|---|---|
+| `universe.min_price` | the membership panel's criteria table | `RecordInspector.CriterionKeys` |
+| `universe.min_adv_20d` | the same | the same |
+| `universe.min_history_days` | the same | the same |
+| `universe.min_market_cap` | the same | the same |
+| `universe.bucket_large_floor` | the same | the same |
+| `universe.bucket_mid_floor` | the same | the same |
+| `fundamentals.min_clean_gaps_for_substitution` | the same | the same |
+| `sentiment.lookback_days` | the inputs panel's sentiment window | `RecordInspector.InputsAsync` |
+
+**A reader falls back where a stage fails.** A stage resolving nothing is a run that must
+not continue [D-72]; a viewer resolving nothing is looking at a date before the key
+existed, which is a fact about that date rather than a fault, so the criteria table shows
+the value absent and the two windowed panels take their stated default.
+
+---
+
 ## Percentiles
 
 | Key | Default | Set by | Consumer | Verified |

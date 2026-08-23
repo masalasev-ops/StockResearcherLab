@@ -228,6 +228,171 @@ else
             rather than worked out from the count against the floor, so this page compares nothing.
         </p>
     </section>
+
+    @* ---------------------------------------------------------- inputs --- *@
+    <section>
+        <h3>Inputs</h3>
+        <p class="sub">What the compute layer read. The panel to open when a number above looks wrong.</p>
+
+        @{
+            var inp = _view.Inputs;
+        }
+
+        <h4>Last @inp.BarWindow bars at or before @DateText</h4>
+        @if (inp.Bars.Count == 0)
+        {
+            <p class="empty">No <code>price_daily</code> bar at or before this date. The store holds nothing to compute from.</p>
+        }
+        else
+        {
+            <table>
+                <thead><tr><th>Date</th><th style="text-align:right">Close</th><th style="text-align:right">Adj close</th><th style="text-align:right">Volume</th></tr></thead>
+                <tbody>
+                    @foreach (var b in inp.Bars)
+                    {
+                        <tr>
+                            <td>@b.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)</td>
+                            <td class="num">@Figure(b.Close)</td>
+                            <td class="num">@Figure(b.AdjClose)</td>
+                            <td class="num">@Whole(b.Volume)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        <h4>Filings readable on @DateText</h4>
+        @if (inp.Filings.Count == 0)
+        {
+            <p class="empty">
+                No <code>fundamental_snapshot</code> row was readable on this date, which is what
+                <code>no_fundamentals</code> means above if that is the criterion recorded.
+            </p>
+        }
+        else
+        {
+            <table>
+                <thead>
+                    <tr>
+                        <th>Effective</th><th>Period end</th><th>Filed</th>
+                        <th>Unknown reason</th><th>Type</th><th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var f in inp.Filings)
+                    {
+                        <tr>
+                            <td>@Absent(f.FilingDateEffective)</td>
+                            <td>@f.PeriodEnd.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)</td>
+                            <td>@Absent(f.FilingDate)</td>
+                            <td class="@(f.UnknownReason == "none" ? "" : "fail")">@Absent(f.UnknownReason)</td>
+                            <td>@Absent(f.PeriodType)</td>
+                            <td class="ok">@(f.MostRecentReadable ? "newest readable" : "")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <p class="sub">
+                Filtered and ordered on <code>filing_date_effective</code>, never on
+                <code>period_end</code>. <b>Which valuation column came from which filing is not
+                recorded</b>: <code>valuation_daily</code> stores the value and not its source row,
+                so the newest readable filing is marked and nothing more is claimed.
+            </p>
+        }
+
+        <h4>Sentiment days inside @inp.SentimentWindowDays days</h4>
+        @if (inp.SentimentDays.Count == 0)
+        {
+            <p class="empty">No <code>sentiment_daily</code> row inside the window.</p>
+        }
+        else
+        {
+            <table>
+                <thead><tr><th>Date</th><th style="text-align:right">Articles</th><th style="text-align:right">Score</th></tr></thead>
+                <tbody>
+                    @foreach (var s in inp.SentimentDays)
+                    {
+                        <tr>
+                            <td>@s.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)</td>
+                            <td class="num">@Whole(s.ArticleCount)</td>
+                            <td class="num">@Figure(s.SentimentScore)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <p class="sub">
+                @inp.SentimentDays.Count day(s) carry a row out of @inp.SentimentWindowDays.
+                Days with no row are not listed and are not zeroes: the series is sparse by
+                construction and a zero would say attention was measured at nothing.
+            </p>
+        }
+
+        <h4>Insider filings inside @inp.InsiderWindowDays days</h4>
+        @if (inp.InsiderFilings.Count == 0)
+        {
+            <p class="empty">No <code>insider_transaction</code> row filed inside the window.</p>
+        }
+        else
+        {
+            <table>
+                <thead>
+                    <tr>
+                        <th>Filed</th><th>Transacted</th><th>Owner</th>
+                        <th>Code</th><th style="text-align:right">Shares</th><th style="text-align:right">Price</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var f in inp.InsiderFilings)
+                    {
+                        <tr>
+                            <td>@Absent(f.FiledAt)</td>
+                            <td>@Absent(f.TransactionDate)</td>
+                            <td>@Absent(f.OwnerName)</td>
+                            <td class="@(f.TransactionCode == "P" ? "ok" : "")">@Absent(f.TransactionCode)</td>
+                            <td class="num">@Figure(f.Shares)</td>
+                            <td class="num">@Figure(f.PricePerShare)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <p class="sub">
+                Windowed on <code>filed_at</code>, which is when the filing became public, rather
+                than on the transaction date. Both are shown so the lag is inspectable.
+                <code>P</code> is an open-market purchase and is the only code S4 counts.
+            </p>
+        }
+    </section>
+
+    @* -------------------------------------------------- market context --- *@
+    <section>
+        <h3>Market context</h3>
+
+        @{
+            var mk = _view.Market;
+        }
+
+        @if (!mk.Present)
+        {
+            <p class="empty">
+                No <code>market_context_daily</code> row for this date. C10 writes one row per date,
+                so this is a date it never ran for rather than a date with no market.
+            </p>
+        }
+        else
+        {
+            <p>
+                Breadth <b>@Figure(mk.Breadth)</b>
+                &nbsp;·&nbsp; regime <b>@Absent(mk.RegimeLabel)</b>
+                &nbsp;·&nbsp; VIX <b>@Figure(mk.Vix)</b>
+                &nbsp;·&nbsp; @Absent(mk.Sector) composite <b>@Figure(mk.SectorComposite)</b>
+            </p>
+            <p class="sub">
+                VIX is absent by design: the bulk end-of-day feed carries equities and the index is
+                not among them, so the column is written null rather than proxied. The composite is
+                read out of the stored object by sector key, not recomputed.
+            </p>
+        }
+    </section>
 }
 
 @code {
@@ -285,6 +450,12 @@ else
 
     private static string Figure(double? value)
         => value?.ToString("F1", CultureInfo.InvariantCulture) ?? "absent";
+
+    private static string Whole(long? value)
+        => value?.ToString("N0", CultureInfo.InvariantCulture) ?? "absent";
+
+    private static string Whole(int? value)
+        => value?.ToString("N0", CultureInfo.InvariantCulture) ?? "absent";
 
     // Three states, not two. Absent means the cell row does not exist for this name;
     // not populated means the pass has not reached this date and the figure is not

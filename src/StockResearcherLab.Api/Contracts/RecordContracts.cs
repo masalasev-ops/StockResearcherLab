@@ -18,7 +18,102 @@ public sealed record RecordView(
     string Ticker,
     DateOnly Date,
     MembershipPanel Membership,
-    MetricsPanel Metrics);
+    MetricsPanel Metrics,
+    InputsPanel Inputs,
+    MarketPanel Market);
+
+/// <summary>
+/// The market on that date, on one line.
+/// </summary>
+/// <param name="Present">
+/// Whether `market_context_daily` holds a row for the date at all. False is a real
+/// state: C10 writes one row per date and a date it never ran for has none.
+/// </param>
+/// <param name="Vix">
+/// Always absent, and stated rather than left blank. The bulk end-of-day feed carries
+/// equities and the index is not among them, so the column is written null rather than
+/// proxied by a realised-volatility substitute that would carry the name without the
+/// meaning [D-80].
+/// </param>
+/// <param name="SectorComposite">
+/// The name's own sector's trailing relative return, read out of the stored jsonb object
+/// by key. Null when the name has no sector, or when the object carries no entry for it.
+/// </param>
+public sealed record MarketPanel(
+    bool Present,
+    double? Breadth,
+    double? Vix,
+    string? RegimeLabel,
+    string? Sector,
+    double? SectorComposite);
+
+/// <summary>
+/// The panel opened when a number looks wrong: what the compute layer read, rather than
+/// what it produced.
+///
+/// **The windows are the components' own.** Sentiment is `sentiment.lookback_days`
+/// resolved as of the viewed date, insider is the ninety days `insider_net_90d_usd`
+/// carries in its name, and filings are everything readable rather than a window at all.
+/// A panel with a window of its own would be a second definition, which is the first
+/// rule in its other form.
+/// </summary>
+/// <param name="Filings">
+/// Every `fundamental_snapshot` row readable on the date, ordered by effective filing
+/// date. **Which of these fed which valuation column is not recorded** and the panel
+/// says so: `valuation_daily` stores the value and not its source row.
+/// </param>
+public sealed record InputsPanel(
+    int BarWindow,
+    IReadOnlyList<PriceBar> Bars,
+    IReadOnlyList<Filing> Filings,
+    int SentimentWindowDays,
+    IReadOnlyList<SentimentDay> SentimentDays,
+    int InsiderWindowDays,
+    IReadOnlyList<InsiderFiling> InsiderFilings);
+
+public sealed record PriceBar(DateOnly Date, decimal? Close, decimal? AdjClose, long? Volume);
+
+/// <param name="FilingDateEffective">
+/// The key every read filters on, never `period_end` and never the raw `filing_date`
+/// [D-46, D-62, INVARIANT 12]. The other two are shown so the gap is inspectable and
+/// nothing is ordered on them.
+/// </param>
+/// <param name="UnknownReason">
+/// `none`, `null`, `equal` or `negative`. Which case fired is diagnostic: a rise in
+/// `null` is the provider dropping the field and `negative` is a date that cannot exist.
+/// </param>
+/// <param name="MostRecentReadable">
+/// True on the newest row readable at the date, which is the one a valuation input would
+/// have been resolved from. **That it was the newest is a fact; that a given column came
+/// from it is not recorded.**
+/// </param>
+public sealed record Filing(
+    DateOnly PeriodEnd,
+    DateOnly? FilingDate,
+    DateOnly? FilingDateEffective,
+    string? UnknownReason,
+    string? PeriodType,
+    bool MostRecentReadable);
+
+/// <summary>
+/// A day carrying a sentiment row. **Days with no row are not filled with zeroes**: the
+/// series is sparse by construction, rows appearing only on days that carry news, and a
+/// zero would say attention was measured at nothing rather than not measured [D-12].
+/// </summary>
+public sealed record SentimentDay(DateOnly Date, int? ArticleCount, double? SentimentScore);
+
+/// <param name="TransactionCode">
+/// Retained rather than collapsed, because the S4 rubric disqualifies option exercises
+/// and scheduled plan activity and a count that cannot separate an open-market purchase
+/// from an award is not the count the screen needs [D-61].
+/// </param>
+public sealed record InsiderFiling(
+    DateOnly? FiledAt,
+    DateOnly? TransactionDate,
+    string? OwnerName,
+    string? TransactionCode,
+    decimal? Shares,
+    decimal? PricePerShare);
 
 /// <summary>
 /// Every ranked metric with three figures beside it: the raw value, the percentile, and

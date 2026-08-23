@@ -228,7 +228,14 @@ public sealed class PercentileEngine : IStage, IBackfillStage
         // so the distribution rather than the total is what it is measured on [3.15].
         var elapsed = new List<long>();
 
-        foreach (var date in dates)
+        // **Newest first** [D-107]. Each date's ranking is a closed question over that
+        // date's rows and depends on no other date, so the order changes nothing about
+        // the output; what it changes is which dates answer first while a long pass
+        // walks. A panel that answers for last week during the hours the backfill runs
+        // is worth more than one that answers for nothing until it finishes, and
+        // descending also makes the coverage marker a contiguous suffix that two dates
+        // describe rather than a set of ranges.
+        foreach (var date in dates.Reverse())
         {
             var started = System.Diagnostics.Stopwatch.GetTimestamp();
 
@@ -405,6 +412,12 @@ public sealed class PercentileEngine : IStage, IBackfillStage
     /// **A null sector produces the bucket row.** Its <c>cell_members</c> is null, which
     /// is the absence that says no cell was formed rather than a cell of zero
     /// [`METRICS.md` §6.4].
+    ///
+    /// **An empty-string sector is a different cell from a null one and the key says so**
+    /// [0016]. `CellQualifies` tests `sector IS NOT NULL`, so an empty string is a real
+    /// cell of its own, and 0014's `coalesce` collapsed the two. It failed on the first
+    /// real range run rather than quietly overwriting one cell with the other, which is
+    /// the one good thing about that key.
     /// </summary>
     public static string CellSql(MetricTable source, DateOnly date, int minMembers)
     {
@@ -437,7 +450,7 @@ public sealed class PercentileEngine : IStage, IBackfillStage
                 (date, size_bucket, sector, metric, source_table,
                  cell_members, bucket_members, min_members, ranked_scope)
             {string.Join("\nUNION ALL\n", arms)}
-            ON CONFLICT (date, size_bucket, coalesce(sector, ''), metric) DO UPDATE
+            ON CONFLICT (date, size_bucket, sector, metric) DO UPDATE
                 SET source_table   = excluded.source_table,
                     cell_members   = excluded.cell_members,
                     bucket_members = excluded.bucket_members,

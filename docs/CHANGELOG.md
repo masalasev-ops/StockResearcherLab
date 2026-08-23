@@ -8,6 +8,7 @@ was working against.
 
 ---
 
+
 ## 0.1.0 — 2026-08-05
 
 Initial corpus, written before any code exists.
@@ -1979,3 +1980,26 @@ and the prune sentence above it:
 Both are replaced because the truncation stopped being prospective on 2026-08-22, when
 C01 ran inside the 3.16 sequence and took the count from 2,916 to 3. The retained reading
 is now stated as settled, with what it costs D-48 stated rather than implied.
+
+## 2026-08-23, phase 3.5
+
+**`SCHEMA.md`, `percentile_cell_daily`, the key** [0016]. Prior wording, replaced
+because it was wrong rather than because it was superseded:
+
+> **A null sector forms no cell** and goes to the bucket fallback [`METRICS.md` §6.4], so
+> it has a row with no sector. The key is a unique index over `coalesce(sector, '')`,
+> Postgres not allowing a null in a primary key, and the column stays nullable because the
+> empty string is not a sector.
+
+The last clause is the error: the empty string is a sector as far as C11 is concerned,
+because `CellQualifies` tests `sector IS NOT NULL`. `coalesce` therefore mapped two
+different cells to one key, and the first real range run refused the statement rather
+than letting one overwrite the other. Migration `0014` is not edited and keeps this
+reasoning as what was believed; `0016` carries the correction.
+
+**`ARCHITECTURE.html` §15, the screens count** [D-109]. Prior wording:
+
+> Six screens.
+
+Six when the section was written, seven once U7 was added without the sentence moving,
+and eight from U8.

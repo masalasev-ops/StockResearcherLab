@@ -46,6 +46,7 @@ cannot reach them.
 | 1 Ingest and universe | IN PROGRESS | 050d5c7 | Every checkpoint 1.1 to 1.14 landed, 136 tests. All twelve definition-of-done lines met live on 2026-08-09: the universe rebuilt to 2,840 names and `run-night` ran all seven stages end to end. Four findings are open and all four are authored questions, not build work: C01 never deactivates, the universe is 2,840 rather than roughly 2,000, C05 cannot fit any schedule, and CI cannot catch the timeout failure class. The CI runner gap is recorded below rather than at sign-off |
 | 2 Compute | IN PROGRESS | 68aafa4 | Every checkpoint 2.1 to 2.15 landed, 221 tests. Five components built: C08, C09, C10, C11 and C35. All eleven definition-of-done lines met on 2026-08-11, with `run-night` completing twelve stages on the blessed date 2026-08-07 and the compute layer digesting identically on re-run. Two components had never executed before this phase ran them and both were broken at the write, which is the phase's largest finding. `METRICS.md` is still the unauthored draft 2.1 produced and all nine of its PROPOSAL entries are now running code |
 | 3 Backfill | **SIGNED OFF** | 7764dfe | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b`, 314 with D-98's implementation, 324 with its two open items closed, 326 with the backfill driver, 332 with range-scoped resumption and 338 with the frontier position and the connection retry, `ci.ps1` green at each, then 336 at `5be4d33` when the frontier's four tests were replaced by two, 336 again at `3fcdd57` and `cf42116`, and **342 at `7c25f13`** where D-100 replaced the intermittent retry test with two and added five at the provider client. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built, and ~~3.6 has been run once: it failed at 58 percent after 2h10m, leaving `price_daily` at 78 million rows and 12 GB~~ **3.6 completed on 2026-08-13**, after three failed attempts, a vacuum, and its resumption rebuilt onto `price_fetch_attempt` [D-99, 0010]: 33,359,792 bars over 18,812 tickers in 108.4 minutes, the pool covered at 50,737 attempt rows, and `price_daily` at 109.6 million rows and 18.3 GB. ~~3.7 to 3.10 are unrun and the phase's remaining sweeps spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them.~~ The open findings are the table at the foot of this file rather than a second list here; ~~**item 24 blocks 3.7 and every nightly run against the backfilled store**~~ [closed, item 24]. ~~**Every checkpoint 3.1 to 3.16 is built as of 2026-08-17, at 429 tests, 416 before 3.16, `ci.ps1` green at `e619ba7`.**~~ ~~What is built and what has been run are different lines and the difference is the phase's remaining work. **Run:** 3.6, 3.7, 3.8 and 3.10 swept and completed, and 3.11 filled `security_daily`. **Built and unrun:** 3.9, which is the last owed sweep at roughly three days of allowance, and the whole of stage D, so `indicator_daily` and `valuation_daily` still carry phase 2's nightly rows. **3.16 spends nothing to build and its first invocation is a spending decision**, C05's sweep being inside the order. 3.17 and 3.18 are outstanding and 3.17's timing line is owed against a stage D run.~~ **Restated 2026-08-22 at `126f5d8`, the paragraph above having gone four days and about fourteen commits stale.** Every checkpoint 3.1 to 3.18 is built, at **441 tests**, `guards.ps1` green. What is built and what has been run are different lines and the difference is what remains. **Run and complete:** every ingest sweep, 3.6, 3.7, 3.8, 3.9 and 3.10; 3.11's `security_daily` fill; and stage D except its last component, C08, C09, C10, C11 and C35 all carrying a range `run_log` row. **3.9 completed 2026-08-22 at `run_log` 1760**, 2,864 of 2,864 members, once item 59 turned out to be the pager rather than the ticker. ~~**Outstanding:** C34 over the range [item 55], the sequence driver 3.16 never having been invoked once, 3.17's `run-night` replay half [item 44], and the three sign-off blockers that need an authored decision rather than a build, items 51, 52 and 60.~~ **Restated 2026-08-22 at the close of the day's work, at `718a43f` plus the run.** Items 51, 52, 57 and 60 all closed, at 451 tests, `ci.ps1` green at every one of the day's seven commits and **GitHub CI green on the branch at `aae9464`**, which is sign-off step 1's first half. **The compute half re-ran whole over the corrected range** 2021-01-04..2026-08-12 in 98.81 minutes, and **the replay reproduced 2026-08-12 byte for byte across all five compute tables**, zero rows differing in either direction. **Two done-when lines are half evidenced and are recorded as half rather than claimed whole.** 3.16: the compute half ran through the same `BackfillRun` the sequence uses, so the work and the `run_log` rows are the sequence's, but the driver's own ordering and fall-through was not exercised, because at the corrected range end C03 and C05 re-dispatch whole for about 440,000 units [item 62]. 3.17: the replay is the compute half rather than the literal evening order, the five ingest stages skipped deliberately, because a full `run-night` would have C02 give 2026-08-13 real bars and item 60's stale rows there would stop being identifiable by their thin date. **The timing done-when is measured and not met**, 170.35 minutes with C01 against "minutes rather than hours", which is a finding rather than a bound to move [`CLAUDE.md` section 11]. ~~**What phase 3 still needs is three authored decisions and a review**: the timing verdict, item 44 with item 62, and a decision number for item 60's refuse-not-clamp rule.~~ **Two of the three are taken as of 2026-08-22.** **D-105** numbers the frontier rule and closes item 60. **The timing verdict** is recorded: 170.35 minutes is not met, the bound is not moved, and it closes as a measured finding because nothing depends on the rebuild being fast, D-88 and `SCREEN_LIFECYCLE.md` §6.7 bundling every rebuild-forcing change into one gated boundary. **What remains is one authored decision and the review**: the item 44 split, D-99's own named remedy, now merged with item 62 and carrying three named triggers. Sign-off step 2 must run in a session that has not committed here, and the four partial lines are listed in the handover note at the head of this file | ~~BUILD COMPLETE, AWAITING SIGN-OFF~~ **PHASE 3 SIGNED OFF, 2026-08-22.** **Step 1, CI green:** `ci.ps1` green at every commit and GitHub CI green on the branch at `cb327d0`, the branch head at the time, verified independently rather than taken. **Step 2, the review:** run in a session that had not committed here, recorded in full below, reproducing 451 tests and re-measuring every store-side line against the database. It returned four exceptions and all four are now closed: the two wrong figures corrected with their mechanisms, item 52's fixture on the forward list, item 44's column split built and proved, and the timing line resolved on a consumer search. **3.16 closes MET**, `BackfillSequence.ExecuteAsync` having run once end to end at `run_log` 1775 to 1786, twelve sources, 54,452,165 rows, exit 0. **The rebuild is 121.30 minutes** measured as one command in one process, and the done-when is still NOT met on that figure; it closes because no consumer of it exists, not because the figure was argued down. **454 tests.** ~~Two things are owed and neither is a build session's~~ **Both are now authored, 2026-08-22.** **D-106** states the sweep-marker rule and closes items 44 and 62. **`first_seen` means first retained**, stated in `SCHEMA.md`, closing item 51; `_verify_security_before` is decided gone with the reasoning recorded, and the drop itself is the one step still owed a hand. **One qualification on the sign-off, stated rather than left to be found: the session that reviewed this phase then built the `0013` split inside it**, so that migration and its two components have not been read by a session that did not write them. `BUILD_PLAN.md`'s two-step sign-off assumes those are different sessions and here they were not. It is covered by 454 tests including both halves of the split and by a real-store run, and it is named here because a reader should decide about it rather than inherit it. |
+| 3.5 The record for one name on one date | **BUILD COMPLETE, AWAITING SIGN-OFF** | `54da3d5` | Checkpoints 3.5.1 to 3.5.4 built. `C36 RecordInspector` at `/record?ticker=&date=`, four panels, reading fourteen stores through the same guarded route a stage uses and behind an empty write set. D-107, D-108 and D-109 authored. Migrations 0014, 0015 and 0016. Both range passes run: C01 over 292 evaluation dates in 14.94 minutes, C11 over 1,462 trading dates in 48.54 minutes, both at zero provider units. 495 tests. Sign-off step 2 must run in a session that has not committed here |
 | 4 Screens and selection | NOT STARTED | | |
 | 5 Digest chain | NOT STARTED | | |
 | 6 Researcher | NOT STARTED | | |
@@ -8960,3 +8961,175 @@ them are in `docs/archive/process-2026-08.md`.
 | 23 | ~~**What broke the pooled connector at 29,500 tickers is not established.** The 3.6 sweep failed at a `TimeoutException` inside `AuthenticateSASL`, which only runs on a physical open, and pooling was then measured working: **7 opens over 402 tickers at a worker count of 8**, off `pg_stat_database.sessions`. So the open was the pool replacing a connector that had broken, and what broke it is the part with no evidence behind it. Two candidates and neither is confirmed: a `count(*)` over 59 million rows run against the sweep by this session, which the client abandoned after five minutes without stopping the server-side scan, and the sweep's own load at eight concurrent COPY streams with `Command Timeout=300`. **The exposure is now bounded rather than closed** — the open retries twice and a failure costs one chunk instead of a sweep — so this is a question about the database rather than a blocker. What would answer it is the retry count in the run log across a full sweep: regularly non-zero means the pool is being broken repeatedly and the cause is worth chasing; zero or one means it was the one-off it looks like. **Two partial re-runs on 2026-08-13 both reported `0 connection open(s) retried`**, one of them over 128.6 minutes and 13,529 tickers, so the pool was not being broken repeatedly across either. Neither completed a full sweep and the original failure is still unexplained, so this stays open on the same trigger. **What did break the second re-run is a different fault and is item 27**: the upsert crossing its 300-second command timeout on a bloated table, which is a statement failing on a connection that was already open and is deliberately not retried~~ **Closed on 2026-08-13 by the count the item asked for.** Run 1517 completed the sweep, 18,812 tickers over 108.4 minutes at a worker count of 8, and reported **0 connection open(s) retried**. The item's own rule decides it: zero or one means the original failure was the one-off it looked like, and this is zero across a full pass rather than across a partial one. **What broke the connector at 29,500 tickers is still unexplained and is now unreproduced**, which is the difference between an open question and an open item. **One qualification on the zero**, found the same day at the gate: `OpenAsync` retries `NpgsqlException` and `TimeoutException` and not a bare `SocketException`, so the count is silent about connect-phase socket faults. It is not silent here, because such a fault is rethrown rather than swallowed and the run completed, so nothing of either kind occurred during 1517. The predicate itself is item 29 | Closed. The predicate gap it exposed is item 29 |
 | 22 | ~~**A test fixture's halted range row would be resumed from by the first real sweep.** `run_log` id 1311 on the developer database is `PriceIngestor`, `halted`, `run_date` 2021-01-08, `reached 2021-01-08 at L07.US`, left by `PriceBackfillTests`, which clears `run_log WHERE stage = 'PriceIngestor'` before each test rather than after and runs the real component under its real name. `BackfillRun` resumes from the newest range row when its status is `halted`, so 3.6 would have started at `L07.US`, skipped every admitted ticker below it, completed, and reported a plausible count over a partial load. **Two fixes and they are not equivalent**: a test that also clears afterwards still leaves a row when it crashes, where scoping a resume point to the range that produced it closes both, since `RunLog.LastRangeRunAsync` matches on stage name and the `range ` prefix and never on the range itself. The second is a question about D-68 and D-93 rather than a patch. **CI is not exposed**, `ci.ps1` dropping its database before every run; this is the developer database, which is also the test database [item 10]. **The row is data and no test can find it**; what found it is the driver printing its resume point before running~~ **Closed on 2026-08-12, human-directed, and both halves were taken.** A resume point now has to record the range being asked for, and a halted row over a different range throws naming both ranges and the row id rather than falling through to a fresh start, because `to` defaults to today and a silent restart on a multi-day sweep burns a day of allowance and never finishes. `PriceBackfillTests` clears afterwards as well, which stops the ordinary case arriving without closing the crash case. Row 1311 is gone and its text and consequence are recorded in the narrative above, since a row deleted without a record teaches nothing twice | Closed |
 | 21 | ~~**`institutional_holding` has no guard against two entries resolving to one key.** `BulkUpsertSql.Upsert` is `INSERT ... SELECT ... ON CONFLICT (ticker, report_date, holder_name) DO UPDATE`, so two entries in one payload sharing a holder name and a report date arrive in one statement and Postgres raises `ON CONFLICT DO UPDATE command cannot affect row a second time`. **This is D-96's failure one table over**, which the earnings capture met by deduplicating in the parse and reporting the collision count to the run log, and it predates D-98 rather than arriving with it. Nothing observed says it happens: the captured block carries no duplicate and 1.9 read none. What D-98 changed is the exposure, C05 having written 250 tickers a night where 3.7's sweep writes about 4,800 in one run, and a single collision there fails the stage mid-sweep after the units before it are spent. The fix is D-96's, three lines and a counter; whether the same tie-break applies to a holder is the part that is authored~~ **Closed on 2026-08-12, human-directed, before 3.7's sweep.** The parse deduplicates: the larger current share count wins, the first in document order wins on a tie, a known count beats an absent one whichever came first, and summing is rejected because adding two entries writes a number the provider did not send. The count is reported per run in both paths beside the holdings row count, and its zero is asserted as well as its non-zero. **The failure was run rather than quoted**: removing the guard reproduces `Npgsql.PostgresException 21000` through the stage, which is what makes the guard known to be load-bearing. **The rule was chosen against zero observations and the count is what audits it**, so a non-zero count from 3.7's sweep is a reason to inspect the rows before trusting it | Closed. Re-read at 3.7's sweep, where the count is the observation the rule was chosen without |
+
+---
+
+## Phase 3.5, the record for one name on one date
+
+Built 2026-08-23 on branch `phase-3.5-record-inspector`, from the plan at
+`prompts/BuildPlans/phase-3.5-record-inspector.md`. **Written by the build. Every figure
+below is a query against the store or a wall clock on a run.**
+
+### What was built
+
+| Checkpoint | What landed |
+|---|---|
+| 3.5.1 | The route, the membership panel, `C36 RecordInspector` and its read declaration, `Universe.AsOf` moved to `Core`, migration `0015`, and C01 recording the criterion that rejected |
+| 3.5.2 | Migration `0014`, C11 writing `percentile_cell_daily` and `percentile_cell_coverage`, and the metrics panel showing the cell beside the percentile |
+| 3.5.3 | The inputs panel: bars, filings, sentiment days, insider filings |
+| 3.5.4 | The market context line |
+
+`IStage` split into `IWriteOwner` and `IReadOwner` over a shared `IComponent`, which is
+what lets a stage be both without `Name` becoming ambiguous at every call site. C36 is
+the first reader that owns no write and the first component the read conformance sees
+from outside the pipeline registry.
+
+### The two range passes
+
+Both spend zero provider units. Both were run against the developer store on
+2026-08-23.
+
+| Pass | Range | Unit | Wall clock | Result |
+|---|---|---|---|---|
+| C01, `universe_rejection` | 2021-01-04..2026-08-12 | 292 weekly evaluation dates | **14.94 minutes** | 1,222,263 rows written, reached 2026-08-09, membership 2,432 to 2,863 |
+| C11, `percentile_cell_daily` | 2021-01-04..2026-08-12 | 1,462 trading dates | **48.54 minutes** | 26,834,803 percentile rows rewritten and 1,858,932 cell rows written over 1,457 dates carrying cells, 367 MB, coverage 2021-01-04..2026-08-12 on all four sources |
+
+**C11 was measured over one month before the window was committed to**, at 23 dates in
+43.9 seconds, which is 1.9 seconds a date and put the window at roughly 46 minutes. That
+is the same discipline 3.14 used and it is what turned the key defect below into a
+one-month failure rather than an hour-long one.
+
+### The membership check D-108's definition of done asks for
+
+**`security_daily` is identical row for row either side of the projection change.**
+Snapshotted before the C01 pass for two evaluation dates, 2022-03-06 and 2024-06-02,
+5,237 rows; compared after with `EXCEPT` in both directions.
+
+| Direction | Rows differing |
+|---|---|
+| before, not after | **0** |
+| after, not before | **0** |
+
+That is the assertion standing between an addition and a membership change, and it is
+met as a measurement rather than as an argument. `NoPrePassFailureIsAdmitted` covers the
+same property as a test, over names built to fail one pre-pass criterion each while
+clearing all six that follow.
+
+### What the rejection store says, which nothing could say before
+
+447,196 rows over 292 evaluation dates and 2,728 distinct tickers, **59 MB**.
+
+| Criterion | Rows | Tickers | Share |
+|---|---|---|---|
+| `below_min_dollar_volume` | 152,785 | 1,573 | 34.2% |
+| `below_min_price` | 120,196 | 1,074 | 26.9% |
+| `delisted_on_date` | 115,408 | 792 | 25.8% |
+| `insufficient_history` | 24,313 | 693 | 5.4% |
+| `below_clean_gaps` | 23,026 | 308 | 5.1% |
+| `below_market_cap` | 10,598 | 572 | 2.4% |
+| `not_common_stock` | 622 | 3 | 0.1% |
+| `no_fundamentals` | 248 | 6 | 0.1% |
+| `no_share_count` | **0** | 0 | 0% |
+
+**Two of the nine criteria are near-empty and both are explained by the store rather
+than by the code.** `not_common_stock` reaches three tickers because `price_daily` was
+loaded at 3.6 from the admitted common stock pool, so almost nothing in it is anything
+else; the criterion is not dead, it is starved of the population it exists to reject.
+`no_share_count` is zero: every name that reached that test carried a readable share
+count, which is a fact about the fundamentals coverage on this store and is worth
+re-reading after any re-ingest.
+
+**The three pre-pass criteria are 66.5% of all rejections between them**, which is the
+half that was invisible before this phase: none of the three was counted anywhere, and a
+name failing one of them was absent from C01's run log line entirely.
+
+### One defect, found by running rather than by a test
+
+**0014's key collapsed an empty-string sector into a null one.** The key was
+`(date, size_bucket, coalesce(sector, ''), metric)`, on the reasoning that a null sector
+forms no cell and Postgres does not allow a null in a primary key. `security_daily.sector`
+can also hold the empty string, so two genuinely different cells mapped to one key.
+
+**It failed loudly.** The first real range run stopped at 2026-07-01 with `ON CONFLICT DO
+UPDATE command cannot affect row a second time`: that date carries one `mid` name with an
+empty-string sector against three with none. Nothing was written wrong, because Postgres
+refused the statement rather than letting one cell overwrite the other on every date.
+
+**The two are different cells and that is C11's reading rather than an opinion.**
+`CellQualifies` tests `sector IS NOT NULL`, so an empty string is a real cell of its own
+and on the measured date it is a cell of one, which fails the floor and falls back to the
+bucket. A null sector forms no cell at all and reaches the same fallback by a different
+route, and seeing which route is the whole point of the store.
+
+Migration `0016` replaces the index with `(date, size_bucket, sector, metric) NULLS NOT
+DISTINCT`, the statement and the reader both match on the same comparison, and 0014 is
+left unedited including its comment, which is snapshot-first working as intended: the
+file records what was believed and 0016 records the correction.
+
+After the fix, one month carries 25,413 cell rows over 23 dates, of which 1,932 have a
+null sector and 90 an empty-string one. **Both populations exist and are now
+distinguishable, which is what the defect was hiding.**
+
+### Findings, reported and not resolved
+
+**`security_daily.sector` holds the empty string as well as null, and they are ranked
+differently.** One `mid` name on 2026-07-01. C11 treats `''` as a real sector cell of one
+member, which fails the fifteen-member floor and falls back to the bucket, so the
+percentile is the same as a null sector would have produced and the route is different.
+Whether an empty sector should be normalised to null at ingest is an authored question
+and is not this phase's. What is closed is that the two are no longer confusable in the
+record.
+
+**`price_daily` holds 4,326 distinct tickers, not the 50,785 the phase 3 record
+describes.** Every one has a bar inside the window. The prune recorded at item 51
+truncated the table at 2016-01-04 and the ticker count is what it left. Every size in
+this section is measured against that store and would grow roughly in proportion to the
+evaluated pool on a restored one; the three §16 rows say so.
+
+**`SentimentIngestorTests` clears its `security_daily` rows at the start of each test and
+not at the end.** It seeds rows that are active with a null `size_bucket`, which is
+exactly what `PercentileEngineTests.NoActiveUniverseMemberCarriesANullSizeBucket` fails
+on, so the suite stays green only on class ordering. Adding a class moved that ordering
+and surfaced it twice during this build. `UniverseRejectionTests` clears in
+`DisposeAsync` for that reason. Reported rather than fixed, the other class not being
+this phase's.
+
+**Which valuation column came from which filing is still not recorded**, as the plan
+said it would not be. The inputs panel shows every readable filing with its effective
+date, marks the newest, and states that the provenance is not held. Recorded so a later
+reader does not read the absence as an oversight.
+
+**The bar count is a new config key and the plan said there would be none.**
+`inspector.recent_bars` at 20. The plan's sentence covers metric windows, where a second
+definition is a defect, and the two the same panel shows are already owned elsewhere:
+sentiment by `sentiment.lookback_days` and insider by `FlowEngine.WindowDays`, a constant
+because `insider_net_90d_usd` carries the number in its name. Bars have neither, so the
+alternative was a literal at a call site. Stated here rather than left as a quiet
+difference from the plan.
+
+**One done-when line is met in a narrower sense than its wording.** 3.5.3 says no row is
+"keyed or ordered on `period_end`". The filings read is filtered on
+`filing_date_effective` alone and ordered on it first, with `period_end` as the tiebreak
+inside one effective date. A tiebreak cannot change which rows are readable, where a
+filter or a leading sort key can, and two filings sharing an effective date need a stable
+order. The test asserts the filter and the leading sort rather than the absence of the
+word.
+
+### Definition of done
+
+| # | Line | Status |
+|---|---|---|
+| 1 | One route answers the question, on a real store, for a real name on a historical date and the most recent one | **MET.** `AAPL.US` on 2024-06-05 renders four panels: member, large/Technology, evaluated 2024-06-02; `atr_pct` at the 7.1st percentile of a 127-member cell against a 797-member bucket; 20 bars, 155 filings, 30 sentiment days, 41 insider filings; breadth 0.669, `risk_on`, Technology composite -0.034282. Also on 2026-08-12, the most recent date. `ASML.US` on the same date reads rejected on `below_clean_gaps`, which is the question the panel exists for answered in one page load |
+| 2 | Every figure on the page is read from a store | **MET**, structurally: the read set is declared, `DeclaredAccess` refuses anything outside it, the write set is empty so every operation on every declared table throws, and `ApiIsolationTests` holds the Api free of Pipeline in its compiled closure |
+| 3 | The metrics panel shows the cell population beside every percentile, over a populated window | **MET**, over 1,457 populated dates. The fallback is visible where it fired: 521,530 cells ranked in the bucket and 65,912 ranked by nothing, against 1,271,490 ranked in a sector cell. `inst_ownership_change` on `AAPL.US` reads scope `none` with a cell of zero, which is the state that was previously indistinguishable from a metric nobody looked at |
+| 4 | The membership panel names the criterion for a rejected name, for each of the nine criteria | **MET**, one test per criterion against a name built to fail exactly that one, plus the admitted control without which nine rejections would also be what a C01 that rejects everything produces. Seven of the nine appear in the real store; `no_share_count` and `not_common_stock` are near-empty for reasons recorded above rather than untested |
+| 5 | The catalogue and the code agree about what this reader reads, in both directions, with the failure exercised against a fabricated reader | **MET** |
+
+**Invariants at risk, and what holds them.** 10: `SCHEMA.md` declares
+`UniverseBuilder` and `PercentileEngine` as the writers of the three new tables in the
+same checkpoints as their migrations, and `WriteOwnershipConformanceTests` passes
+unchanged. 12: the filings read keys on `filing_date_effective`, asserted on the
+statement. 13: every threshold resolves as of the viewed date, asserted by a double that
+records the dates it was asked for. 16: `ExpectedMonetary` is unchanged at 19, neither
+new table carrying a monetary column.
+

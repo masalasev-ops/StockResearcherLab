@@ -682,6 +682,16 @@ Grain: ticker by day. **Writer: GateEngine.**
 
 Records every failing reason, not the first.
 
+**The reason vocabulary is closed by a CHECK and not only by an enum.** `reasons` may
+hold `earnings_blackout`, `gap`, `halt`, `already_held` and `cooldown`, which are §03's
+five in §03's order, and the constraint arrives with migration `0018` at checkpoint 4.8.
+A vocabulary closed in code alone leaves the column able to hold a string no reader can
+interpret, which would then fail at read time one night later and one component away from
+whatever wrote it.
+
+**`passed` is `cardinality(reasons) = 0` and is written in the same statement**, so the
+flag and the array cannot disagree.
+
 ### screen_score_daily
 Grain: ticker by screen by day. **Writer: ScreenEngine.**
 

@@ -2161,3 +2161,21 @@ second taken during the build rather than at adoption. Both are the same cell.
 follows the register, and 4.6's divergence table carries the difference with the decision
 beside it so the seeded two-input list does not read as the design. Recorded here so the
 amendment is not lost between the two documents.
+
+## 2026-08-23, phase 4 checkpoint 4.8
+
+**`ARCHITECTURE.html` §3, C12 GateEngine's Reads cell** [4.8, D-74]. Prior wording:
+
+> `events`, `price_daily`, `position`, `trade_outcome`
+
+**`security_daily` is added**, and this is the same defect as B1 and B2 in
+`prompts/BuildPlans/phase-4-screens-and-selection.md` §8 rather than a new kind. §3 gives
+C12 four stores and the component's own rule is that every active member gets a row,
+which requires the table the membership is read from. The cell named four stores and not
+that one, so it could not be satisfied as written.
+
+The wording follows the idiom five other cells already use for the same table, C04's
+"`security_daily` for the universe it iterates" among them.
+
+This is a seventh Reads-cell amendment beyond the four the operator authorised, and the
+third taken during the build. It is the first on a cell other than C13's.

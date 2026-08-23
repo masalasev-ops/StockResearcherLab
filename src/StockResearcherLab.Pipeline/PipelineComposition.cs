@@ -3,8 +3,9 @@ using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data;
 using StockResearcherLab.Data.Eodhd;
 using StockResearcherLab.Pipeline.Compute;
-using StockResearcherLab.Pipeline.Select;
+using StockResearcherLab.Pipeline.Decide;
 using StockResearcherLab.Pipeline.Ingest;
+using StockResearcherLab.Pipeline.Select;
 
 namespace StockResearcherLab.Pipeline;
 
@@ -65,6 +66,12 @@ public static class PipelineComposition
 
             // Layer 3. Selection derives from the percentile store and calls no
             // provider either, so it registers on the same terms as layer 2.
+            //
+            // C12 sits with them although it is a Decide-layer component, because it
+            // derives from stores the ingest wrote and calls nothing. It runs before
+            // C13 in the evening order and after it in nothing: C13 does not read
+            // gate_result and must not [D-117].
+            new GateEngine(),
             new ScreenEngine(),
         };
 

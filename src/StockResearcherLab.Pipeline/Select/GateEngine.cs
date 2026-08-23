@@ -4,7 +4,7 @@ using StockResearcherLab.Core.Config;
 using StockResearcherLab.Core.Gates;
 using StockResearcherLab.Core.Stages;
 
-namespace StockResearcherLab.Pipeline.Decide;
+namespace StockResearcherLab.Pipeline.Select;
 
 /// <summary>
 /// C12. Every active member is labelled with every reason it is unavailable tonight, or

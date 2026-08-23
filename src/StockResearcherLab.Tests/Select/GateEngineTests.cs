@@ -5,11 +5,11 @@ using StockResearcherLab.Core.Gates;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data;
 using StockResearcherLab.Pipeline;
-using StockResearcherLab.Pipeline.Decide;
+using StockResearcherLab.Pipeline.Select;
 using StockResearcherLab.Tests.Corpus;
 using Xunit;
 
-namespace StockResearcherLab.Tests.Decide;
+namespace StockResearcherLab.Tests.Select;
 
 /// <summary>
 /// Checkpoint 4.8. C12 labels every active member with every reason it is unavailable,

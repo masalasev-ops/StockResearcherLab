@@ -140,6 +140,10 @@ public sealed class CandidateAllocator : IStage
 
         await EnsureGateHasRunAsync(context, ct).ConfigureAwait(false);
 
+        // Whether anything is ranked tonight, which is what separates the warm-up from
+        // every other way of writing no candidate [section 18, 4.12].
+        var ranked = await RankedRowsAsync(context, ct).ConfigureAwait(false);
+
         // The date is cleared before it is written, so the run replaces the night rather
         // than merging with whatever a previous run of it left.
         await context.Data.WriteAsync(
@@ -173,7 +177,44 @@ public sealed class CandidateAllocator : IStage
                 + " already standing and left untouched [INVARIANT 4]";
         }
 
-        return new StageResult(written, "ok", detail);
+        // **Zero candidates with no floor anywhere is the warm-up case and is correct.**
+        // The first `screens.floor_lookback_days` sessions of the window carry scores and
+        // no candidates, because a screen below its lookback has no floor and ranks
+        // nothing [D-115]. That is the floor working, and it must not read as the data
+        // fault section 18 halts on, which is every live screen ranking nothing against
+        // floors that do exist. C13 raises that one; this stage only says its own zero
+        // was expected.
+        var warmUp = written == 0 && ranked == 0;
+
+        if (warmUp)
+        {
+            detail += "; nothing is ranked, so no live screen has a floor yet and no candidate "
+                + "is written. This is the warm-up rather than a fault: C13 halts the run when "
+                + "every live screen with a floor ranks nothing [D-115, section 18]";
+        }
+
+        return new StageResult(written, "ok", detail, ZeroRowsExpected: warmUp);
+    }
+
+    /// <summary>
+    /// How many rows any screen ranked on this date.
+    ///
+    /// **Zero here means the warm-up and nothing else, and that is a property of C13
+    /// rather than of this query.** C13 halts the run when every live screen with a floor
+    /// ranks nothing, so a night that reaches this component with nothing ranked is a
+    /// night where no live screen has a floor yet [section 18, D-115]. Reading
+    /// <c>screen_score_daily</c> rather than <c>screen_history</c> is what keeps this
+    /// stage inside §3's Reads cell.
+    /// </summary>
+    private static async Task<long> RankedRowsAsync(StageContext context, CancellationToken ct)
+    {
+        var rows = await context.Data.ReadAsync(
+            "screen_score_daily",
+            "SELECT count(*)::bigint FROM screen_score_daily WHERE date = " + Literal(context.Date) +
+            " AND rank_within_screen IS NOT NULL;",
+            ct).ConfigureAwait(false);
+
+        return Convert.ToInt64(rows[0][0], CultureInfo.InvariantCulture);
     }
 
     /// <summary>

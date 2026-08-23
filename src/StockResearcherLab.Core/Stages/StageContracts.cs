@@ -61,8 +61,27 @@ public sealed record TableWrite(string Table, WriteOperation Operation, IReadOnl
 ///
 /// Null everywhere else, which is the ordinary case.
 /// </param>
+/// <param name="ZeroRowsExpected">
+/// The stage wrote nothing and that is a correct outcome for this date.
+///
+/// **The zero-row halt is one rule and section 18 gives several components an
+/// exception to it**, so the exception has to come from the stage rather than from a
+/// list in the runner. "A stage produces zero rows: halt remaining stages" sits in that
+/// table beside "a screen cannot fill a size slot: leave it empty" and "megacap share
+/// above a third: alert", and the second and third describe components that legitimately
+/// write nothing on an ordinary night.
+///
+/// **A stage sets this only where it can say why**, which is what keeps it from becoming
+/// a way to switch the halt off. C28 writes no alert when both guarantees held. C14
+/// writes no candidate when no screen has a floor yet, which is the warm-up case and is
+/// distinguishable from every live screen returning zero against floors that do exist
+/// [4.12, section 18].
+///
+/// False everywhere else, so the halt is the default and the exception is written down.
+/// </param>
 public readonly record struct StageResult(
-    long RowsWritten, string Status = "ok", string? Detail = null, DateOnly? TradingDate = null)
+    long RowsWritten, string Status = "ok", string? Detail = null, DateOnly? TradingDate = null,
+    bool ZeroRowsExpected = false)
 {
     public static StageResult None => new(0);
 

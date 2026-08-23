@@ -61,7 +61,23 @@ public sealed class NightlyRun
         "SentimentEngine",      // C35 18:05
         "MarketContextEngine",  // C10 18:05, after C08 because breadth reads indicator_daily
         "PercentileEngine",     // C11 18:15, last, because it ranks what the four above wrote
+
+        // Selection. C12 before C13 because section 04 puts it there, and C13 does not
+        // read gate_result in any case and must not [D-117]. C14 after both. C28 last,
+        // at 19:00, outside the layers.
+        "GateEngine",           // C12 18:20
+        "ScreenEngine",         // C13 18:25
+        "CandidateAllocator",   // C14 18:30
+        "ConcentrationMonitor", // C28 19:00
     ];
+
+    /// <summary>
+    /// The selection half alone, for a range run that has already computed everything
+    /// upstream of it. It lives on <see cref="BackfillSequence"/>, beside the source
+    /// order it is the counterpart of, and is named here so a reader of the evening order
+    /// finds it [4.12, 4.13].
+    /// </summary>
+    public static IReadOnlyList<string> SelectionOrder => BackfillSequence.SelectionOrder;
 
     private readonly StageRegistry _registry;
     private readonly StageRunner _runner;
@@ -128,7 +144,14 @@ public sealed class NightlyRun
             // nothing, not on the count alone: zero rows is a legitimate result for
             // a stage that declares no writes, which is what the guard is
             // [RUNBOOK failure table].
-            if (stage.WriteSet.Count > 0 && result.RowsWritten == 0)
+            //
+            // **And on the stage not having said its own zero was expected.** Section
+            // 18 gives C14 and C28 an exception to this rule in the same table that
+            // states it: an unfillable slot is left empty, and a night where both
+            // diversity guarantees held raises no alert. The exception comes from the
+            // stage, which is the only thing that can say why its zero was correct,
+            // rather than from a list of stage names here that would go stale [4.12].
+            if (stage.WriteSet.Count > 0 && result.RowsWritten == 0 && !result.ZeroRowsExpected)
             {
                 steps.Add(new NightlyStep(name, "halted", 0,
                     "A stage that writes produced no rows. A partial run is worse than none, because " +

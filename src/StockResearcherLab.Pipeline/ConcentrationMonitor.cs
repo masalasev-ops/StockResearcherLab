@@ -143,7 +143,12 @@ public sealed class ConcentrationMonitor : IStage
             " distinct over " + measured.DistinctDates.ToString(CultureInfo.InvariantCulture) +
             " dates, " + raised.ToString(CultureInfo.InvariantCulture) + " alert(s)";
 
-        return new StageResult(raised, "ok", detail);
+        // **Zero alerts is the good night**, and section 18 says so in the two rows that
+        // give this component its behaviour: alert when the megacap share is above a
+        // third, alert when distinct tickers fall below 250. Neither says halt when
+        // neither fired, so the stage says its own zero was expected rather than the
+        // runner keeping a list of stages allowed to write nothing.
+        return new StageResult(raised, "ok", detail, ZeroRowsExpected: true);
     }
 
     /// <summary>The two figures, and the window each was measured over.</summary>

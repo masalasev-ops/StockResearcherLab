@@ -178,6 +178,12 @@ public sealed class ScreenEngine : IStage
         long written = 0;
         var detail = new List<string>();
 
+        // Counted so the two ways a night can produce no candidate can be told apart
+        // below. Live screens only: a shadow surfaces nothing either way [D-84].
+        var live = 0;
+        var withoutFloor = 0;
+        var ranking = 0;
+
         // Ordinal by id rather than in the order config enumerated, so two runs over one
         // date write in the same order and the run log line is byte-identical
         // [CLAUDE.md section 6].
@@ -199,6 +205,41 @@ public sealed class ScreenEngine : IStage
                       $"{lookback.ToString(CultureInfo.InvariantCulture)} days"
                     : $"floor {floor.FloorScore.Value.ToString("0.####", CultureInfo.InvariantCulture)}, " +
                       $"{floor.Ranked.ToString(CultureInfo.InvariantCulture)} ranked"));
+
+            if (screen.State == ScreenState.Live)
+            {
+                live++;
+
+                if (floor.FloorScore is null)
+                {
+                    withoutFloor++;
+                }
+                else if (floor.Ranked > 0)
+                {
+                    ranking++;
+                }
+            }
+        }
+
+        // **Every live screen returning zero against floors that exist is a data fault
+        // and halts; every live screen having no floor yet is the warm-up and does not**
+        // [section 18, D-84, 4.12]. Those two look identical downstream, both being an
+        // empty candidate set, and section 18 gives them opposite behaviour. A shadow is
+        // not counted either way, since it surfaces nothing whatever it scores.
+        if (live > 0 && ranking == 0 && withoutFloor < live)
+        {
+            // Thrown rather than returned as an alert. Section 18 says halt, and a stage
+            // halts by failing the run; the run log carries the message, which is the
+            // same channel C07's abort uses [CLAUDE.md section 6, INVARIANT 10].
+            throw new InvalidOperationException(
+                "Every live screen with a floor ranked nothing on " +
+                context.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) +
+                ". Section 18 halts here rather than continuing, because a floor is the 98th " +
+                "percentile of a screen's own trailing distribution and roughly two percent of " +
+                "the scored population clears it in the ordinary course, so nothing clearing it " +
+                "anywhere indicates a data fault rather than a quiet market [D-84]. A screen " +
+                "still below its lookback has no floor and is not counted. " +
+                string.Join("; ", detail));
         }
 
         return new StageResult(written, "ok", string.Join("; ", detail));

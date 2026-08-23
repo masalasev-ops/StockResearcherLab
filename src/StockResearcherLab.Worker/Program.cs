@@ -33,6 +33,9 @@ switch (command)
     case "run-night":
         return await RunNightAsync().ConfigureAwait(false);
 
+    case "run-selection":
+        return await RunNightAsync(BackfillSequence.SelectionOrder).ConfigureAwait(false);
+
     case "backfill":
         return await BackfillAsync().ConfigureAwait(false);
 
@@ -46,6 +49,10 @@ switch (command)
         Console.WriteLine("  stages                list the registered components and what each writes.");
         Console.WriteLine("  run <stage> [date]    run one stage. Date defaults to today, US Eastern.");
         Console.WriteLine("  run-night [date]      run the evening sequence in order, halting on the first failure.");
+        Console.WriteLine("  run-selection [date]  run the selection half of that sequence over the store as it");
+        Console.WriteLine("                        stands: C12, C13, C14 and C28, and no ingest. This is the");
+        Console.WriteLine("                        night a backfilled date gets, the sources having already");
+        Console.WriteLine("                        filled it, and it calls no provider [4.12].");
         Console.WriteLine("  backfill <from> <to>  run every source over a range, in order, each finishing");
         Console.WriteLine("                        before the next begins. Sources already swept report");
         Console.WriteLine("                        `covered` and fall through, so re-issuing the identical");
@@ -94,7 +101,7 @@ async Task<int> MigrateAsync()
     return 0;
 }
 
-async Task<int> RunNightAsync()
+async Task<int> RunNightAsync(IReadOnlyList<string>? order = null)
 {
     var clock = new SystemClock();
     var date = args.Length > 1
@@ -112,12 +119,15 @@ async Task<int> RunNightAsync()
     var configVersion = await new ConfigStore(connectionString)
         .RequireVersionAsync(date).ConfigureAwait(false);
 
-    Console.WriteLine($"run-night  {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}  config v{configVersion}");
+    var label = order is null ? "run-night" : "run-selection";
+
+    Console.WriteLine(
+        $"{label}  {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}  config v{configVersion}");
 
     var night = NightlyRun.For(
         connectionString, config["Eodhd:ApiToken"], clock, Console.WriteLine);
 
-    var result = await night.ExecuteAsync(date, configVersion).ConfigureAwait(false);
+    var result = await night.ExecuteAsync(date, configVersion, order).ConfigureAwait(false);
 
     Console.WriteLine($"  {result.Summary()}");
 

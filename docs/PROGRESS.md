@@ -47,7 +47,7 @@ cannot reach them.
 | 2 Compute | IN PROGRESS | 68aafa4 | Every checkpoint 2.1 to 2.15 landed, 221 tests. Five components built: C08, C09, C10, C11 and C35. All eleven definition-of-done lines met on 2026-08-11, with `run-night` completing twelve stages on the blessed date 2026-08-07 and the compute layer digesting identically on re-run. Two components had never executed before this phase ran them and both were broken at the write, which is the phase's largest finding. `METRICS.md` is still the unauthored draft 2.1 produced and all nine of its PROPOSAL entries are now running code |
 | 3 Backfill | **SIGNED OFF** | 7764dfe | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b`, 314 with D-98's implementation, 324 with its two open items closed, 326 with the backfill driver, 332 with range-scoped resumption and 338 with the frontier position and the connection retry, `ci.ps1` green at each, then 336 at `5be4d33` when the frontier's four tests were replaced by two, 336 again at `3fcdd57` and `cf42116`, and **342 at `7c25f13`** where D-100 replaced the intermittent retry test with two and added five at the provider client. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built, and ~~3.6 has been run once: it failed at 58 percent after 2h10m, leaving `price_daily` at 78 million rows and 12 GB~~ **3.6 completed on 2026-08-13**, after three failed attempts, a vacuum, and its resumption rebuilt onto `price_fetch_attempt` [D-99, 0010]: 33,359,792 bars over 18,812 tickers in 108.4 minutes, the pool covered at 50,737 attempt rows, and `price_daily` at 109.6 million rows and 18.3 GB. ~~3.7 to 3.10 are unrun and the phase's remaining sweeps spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them.~~ The open findings are the table at the foot of this file rather than a second list here; ~~**item 24 blocks 3.7 and every nightly run against the backfilled store**~~ [closed, item 24]. ~~**Every checkpoint 3.1 to 3.16 is built as of 2026-08-17, at 429 tests, 416 before 3.16, `ci.ps1` green at `e619ba7`.**~~ ~~What is built and what has been run are different lines and the difference is the phase's remaining work. **Run:** 3.6, 3.7, 3.8 and 3.10 swept and completed, and 3.11 filled `security_daily`. **Built and unrun:** 3.9, which is the last owed sweep at roughly three days of allowance, and the whole of stage D, so `indicator_daily` and `valuation_daily` still carry phase 2's nightly rows. **3.16 spends nothing to build and its first invocation is a spending decision**, C05's sweep being inside the order. 3.17 and 3.18 are outstanding and 3.17's timing line is owed against a stage D run.~~ **Restated 2026-08-22 at `126f5d8`, the paragraph above having gone four days and about fourteen commits stale.** Every checkpoint 3.1 to 3.18 is built, at **441 tests**, `guards.ps1` green. What is built and what has been run are different lines and the difference is what remains. **Run and complete:** every ingest sweep, 3.6, 3.7, 3.8, 3.9 and 3.10; 3.11's `security_daily` fill; and stage D except its last component, C08, C09, C10, C11 and C35 all carrying a range `run_log` row. **3.9 completed 2026-08-22 at `run_log` 1760**, 2,864 of 2,864 members, once item 59 turned out to be the pager rather than the ticker. ~~**Outstanding:** C34 over the range [item 55], the sequence driver 3.16 never having been invoked once, 3.17's `run-night` replay half [item 44], and the three sign-off blockers that need an authored decision rather than a build, items 51, 52 and 60.~~ **Restated 2026-08-22 at the close of the day's work, at `718a43f` plus the run.** Items 51, 52, 57 and 60 all closed, at 451 tests, `ci.ps1` green at every one of the day's seven commits and **GitHub CI green on the branch at `aae9464`**, which is sign-off step 1's first half. **The compute half re-ran whole over the corrected range** 2021-01-04..2026-08-12 in 98.81 minutes, and **the replay reproduced 2026-08-12 byte for byte across all five compute tables**, zero rows differing in either direction. **Two done-when lines are half evidenced and are recorded as half rather than claimed whole.** 3.16: the compute half ran through the same `BackfillRun` the sequence uses, so the work and the `run_log` rows are the sequence's, but the driver's own ordering and fall-through was not exercised, because at the corrected range end C03 and C05 re-dispatch whole for about 440,000 units [item 62]. 3.17: the replay is the compute half rather than the literal evening order, the five ingest stages skipped deliberately, because a full `run-night` would have C02 give 2026-08-13 real bars and item 60's stale rows there would stop being identifiable by their thin date. **The timing done-when is measured and not met**, 170.35 minutes with C01 against "minutes rather than hours", which is a finding rather than a bound to move [`CLAUDE.md` section 11]. ~~**What phase 3 still needs is three authored decisions and a review**: the timing verdict, item 44 with item 62, and a decision number for item 60's refuse-not-clamp rule.~~ **Two of the three are taken as of 2026-08-22.** **D-105** numbers the frontier rule and closes item 60. **The timing verdict** is recorded: 170.35 minutes is not met, the bound is not moved, and it closes as a measured finding because nothing depends on the rebuild being fast, D-88 and `SCREEN_LIFECYCLE.md` §6.7 bundling every rebuild-forcing change into one gated boundary. **What remains is one authored decision and the review**: the item 44 split, D-99's own named remedy, now merged with item 62 and carrying three named triggers. Sign-off step 2 must run in a session that has not committed here, and the four partial lines are listed in the handover note at the head of this file | ~~BUILD COMPLETE, AWAITING SIGN-OFF~~ **PHASE 3 SIGNED OFF, 2026-08-22.** **Step 1, CI green:** `ci.ps1` green at every commit and GitHub CI green on the branch at `cb327d0`, the branch head at the time, verified independently rather than taken. **Step 2, the review:** run in a session that had not committed here, recorded in full below, reproducing 451 tests and re-measuring every store-side line against the database. It returned four exceptions and all four are now closed: the two wrong figures corrected with their mechanisms, item 52's fixture on the forward list, item 44's column split built and proved, and the timing line resolved on a consumer search. **3.16 closes MET**, `BackfillSequence.ExecuteAsync` having run once end to end at `run_log` 1775 to 1786, twelve sources, 54,452,165 rows, exit 0. **The rebuild is 121.30 minutes** measured as one command in one process, and the done-when is still NOT met on that figure; it closes because no consumer of it exists, not because the figure was argued down. **454 tests.** ~~Two things are owed and neither is a build session's~~ **Both are now authored, 2026-08-22.** **D-106** states the sweep-marker rule and closes items 44 and 62. **`first_seen` means first retained**, stated in `SCHEMA.md`, closing item 51; `_verify_security_before` is decided gone with the reasoning recorded, and the drop itself is the one step still owed a hand. **One qualification on the sign-off, stated rather than left to be found: the session that reviewed this phase then built the `0013` split inside it**, so that migration and its two components have not been read by a session that did not write them. `BUILD_PLAN.md`'s two-step sign-off assumes those are different sessions and here they were not. It is covered by 454 tests including both halves of the split and by a real-store run, and it is named here because a reader should decide about it rather than inherit it. **The `price_daily` sizes here are pre-prune** [item 51]: the size the 2026-08-20 prune left is in the prune record and the current ticker count is in the phase 3.5 record, neither restated here. |
 | 3.5 The record for one name on one date | ~~**BUILD COMPLETE, AWAITING SIGN-OFF**~~ **PHASE 3.5 SIGNED OFF, 2026-08-23.** **Step 1:** GitHub CI green at `0e8ca25` and `ci.ps1` re-run independently there and at `75ed6b0`. **Step 2:** the review ran in a session that had not committed here, re-measured every store-side line against the database, and returned nine exceptions; **eight are closed** and the corrections are recorded below. **One survives, named rather than carried quietly:** `RecordInspector` holds a second copy of the as-of membership pick, agreeing with `Universe.AsOf` today with nothing holding it so, and closing it is a change to a statement six components read. It blocks nothing in phase 4 | ~~`54da3d5`~~ `75ed6b0` | Checkpoints 3.5.1 to 3.5.4 built, and the sign-off corrections after them. ~~495 tests~~ **498 tests**, the three added by the panel correction. `C36 RecordInspector` at `/record?ticker=&date=`, four panels, reading fourteen stores through the same guarded route a stage uses and behind an empty write set. D-107, D-108 and D-109 authored. Migrations 0014, 0015 and 0016. Both range passes run: C01 over 292 evaluation dates in 14.94 minutes, C11 over 1,462 trading dates in 48.54 minutes, both at zero provider units. ~~495 tests. Sign-off step 2 must run in a session that has not committed here~~ [both superseded at the head of this cell] |
-| 4 Screens and selection | NOT STARTED | | |
+| 4 Screens and selection | IN PROGRESS | 3702496 | Checkpoints 4.1 to 4.12 built, **676 tests**, `guards.ps1` green. Components: C12 GateEngine, C13 ScreenEngine, C14 CandidateAllocator and C28 ConcentrationMonitor. Migrations `0017`, `0018` and `0019`. The five screens are configuration rows and a fabricated sixth scores with nothing in the source naming it. **The warm-up night ran against the populated store on 2026-08-07**: C12 labelled 2,819 members, C13 scored 14,095 rows, C14 wrote zero candidates and C28 raised no alert, and the run completed rather than halting, which is 4.12's own done-when. **What remains is 4.13 and 4.14**, and 4.13 stops for the operator's reading of the persistence measure before 4.14 freezes any attribution row. Nine items are reported rather than closed and they are in the phase 4 block below |
 | 5 Digest chain | NOT STARTED | | |
 | 6 Researcher | NOT STARTED | | |
 | 7 Risk and execution | NOT STARTED | | |
@@ -9634,3 +9634,102 @@ copy of the as-of membership pick.** It agrees with `Universe.AsOf` today, nothi
 it so, and closing it is a change to a statement six components read. It blocks nothing in
 phase 4, which does not use the reader, and it is the first thing to settle if that
 statement is touched again.
+
+---
+
+## Phase 4, screens and candidate selection
+
+Checkpoints 4.1 to 4.12 built. **676 tests**, `guards.ps1` green, `ci.ps1` green at 4.1
+to 4.5 and at `7516d8b`; it has not been re-run since. HEAD at the time of writing is
+`3702496` for 4.11, with 4.12 following.
+
+### What was measured
+
+Every figure here is a measurement against the populated store or the suite, not a design
+estimate.
+
+| Figure | Value | Where |
+|---|---|---|
+| The warm-up night, members labelled by C12 | 2,819 | `run-selection 2026-08-07` |
+| Scores written by C13 | 14,095, being 2,819 x 5 | same run |
+| Candidates written by C14 | **0**, and correct | same run |
+| Alerts raised by C28 | 0 | same run |
+| Names passing every gate | 1,893 of 2,819 | `gate_result` on that date |
+| Gated for earnings blackout | 912 | same |
+| Gated for gap, at `gates.gap_pct` 8 | 64 | same |
+| Gated for halt | 9 | same |
+| `gate_state` | `passed_partial` on all 2,819 | same |
+| Reasons unevaluable on a live date | `already_held`, `cooldown` | C12's run log line |
+| S1 names scored, min_inputs 5 of 7 | 2,352 of 2,819 | `screen_score_daily` |
+| S2 names scored, min_inputs 4 of 5 | 2,819 of 2,819 | same |
+| S3 names scored, min_inputs 3 of 3 | 1,757 of 2,819 | same |
+| S4 names scored, min_inputs 2 of 2 | 2,473 of 2,819 | same |
+| **S5 names scored, past its gate** | **3 of 2,819** | same |
+| Names ranked by any screen | 0, no floor existing yet | same |
+| Bucket drift, 2022-06-15 against today | 1,117 of 2,568 members | 4.11's measurement |
+| Large share, point in time | 28.97 percent | same |
+| Large share, from `security` | 32.09 percent | same |
+
+**S5 scoring three names of 2,819 is the gate working and matches the design estimate.**
+`ARCHITECTURE.html` §05 gives mean reversion a typical fill of "0 to 5, median 3". That
+agreement is a coincidence at one date rather than evidence, and it is recorded because a
+reader meeting three rows in a table of 14,095 would otherwise read it as a fault.
+
+**The bucket drift figure is 4.11's whole argument as a number.** Forty-three percent of
+the 2022 universe sits in a different size bucket today than it did then, and the large
+share moves 3.1 points on the universe. C28 reads `security_daily` as of the candidate's
+own date for exactly that reason [D-92, D-74].
+
+### Reported, not closed
+
+Nine items. None blocks 4.13. Every one is the operator's rather than a build session's.
+
+| # | Item |
+|---|---|
+| 1 | **`ARCHITECTURE.html` §05's S4 Ranks-on cell still names `inst_ownership_change`**, which D-118 drops. Configuration follows the register and 4.6's divergence table carries the difference with the decision beside it, failing when the cell is amended |
+| 2 | **Three Reads-cell amendments were taken during the build**, beyond the four authorised at adoption and the fifth taken at 4.5. C13 gains `sentiment_daily` for S5's article count [4.7]; C12 gains `security_daily` for the membership it labels [4.8]. Both prior wordings are in `CHANGELOG.md` and both were forced rather than chosen |
+| 3 | **`gate_state`'s computation is not sited anywhere in the corpus.** D-117 says what it means and never says which component works it out. Migration `0019` puts the column on `gate_result` and C12 writes it; the two alternatives and why they are worse are in the migration's own header. **Reversible until 4.14** |
+| 4 | **The evaluability reading behind `passed_partial` is also a build decision.** A reason is evaluable when the store it reads holds something bearing on the date, per date rather than per ticker, which is D-117's own wording |
+| 5 | **The halt condition is unauthored.** Nothing defines it operationally; `CONFIG_REFERENCE.md` says only that it carries no threshold key. Implemented as the one reading `price_daily` supports: no bar for the session, or a bar with no volume. It fired on 9 of 2,819 names |
+| 6 | **`candidate_set.slot_filled` has no stated meaning anywhere** and is written null |
+| 7 | **`screens.slot_ceiling` has no reader.** `CONFIG_REFERENCE.md` names CandidateAllocator as its consumer, and once `screens.<id>.slots` exists the ceiling cannot also be a cap without contradicting D-43's cap of twelve |
+| 8 | **The two `alert_type` strings and C28's twenty-date megacap window are unauthored.** `SCHEMA.md` gives `alert.alert_type` no vocabulary |
+| 9 | **`SCREEN_LIFECYCLE.md` §4.5 says eight readers mean "candidate" against a table that marks seven.** Reported before this phase and unchanged by it |
+
+### Five config keys were documented and seeded by nothing
+
+Found five separate times, every one by a resolve failing rather than by a count, which is
+the same shape 4.5 first met. The seeder went from 44 keys to 84 across this phase.
+
+| Keys | Found at | Documented since |
+|---|---|---|
+| `screens.slot_ceiling`, `screens.floor_percentile`, `screens.floor_lookback_days` | 4.5 | the first corpus, D-7 and D-9 |
+| `s5.stabilisation_z_max`, `s5.sentiment_delta_min`, `s5.news_gate_min_articles` | 4.7 | the first corpus, D-13 and D-14 |
+| `tuner.slot_floor`, `tuner.slot_cap` | 4.9 | the first corpus, D-43 |
+| `monitor.megacap_share_max`, `monitor.distinct_tickers_60d_min` | 4.11 | the first corpus, D-7 |
+
+The `screens.*`, `gates.*` and `screens.S5.*` keys this phase authored are the rest of the
+difference.
+
+### Defects this phase found in its own work
+
+| Where | What |
+|---|---|
+| 4.5, corrected at `7516d8b` | The trailing floor window took a calendar span of twice the lookback, which is about 344 trading dates at a lookback of 250. Every floor after the gate fired would have been drawn over a third more history than D-9 states. It passed 4.5's tests because every fixture used consecutive calendar days, where a span and a count of dates are the same thing. No floor had been written to the real store |
+| 4.6 | The §05 cell parse stripped tags and kept their text, so the D-58 chip between two of S4's metrics left `D-58` glued to `distinct_buyer_count`, which then failed to look like a metric and vanished. S4 read as having one input where it has two |
+| 4.7 | S5's gate arm was `WHEN NOT (gate) THEN NULL`. In three-valued logic that arm is not taken when the gate is NULL, so a name whose quality composite could not be computed at all fell through and was ranked. It scored 95 in the fixture and nothing about the number looked wrong |
+| 4.9 | `candidate_set` was written with `ON CONFLICT` alone, so a re-run updated the names it surfaced and left behind the ones it no longer did. A gated name stayed a candidate through the second run |
+| Pre-existing, found at 4.10 | `StageRunnerTests` read its own `run_log` row out of `RecentAsync(500)`, which orders by `run_date` first. Once more than five hundred rows carried a later run date than the fixture's clock, the row fell out of the window and `Single` found nothing |
+
+### What 4.13 stops for
+
+**4.13 computes the pre-registered persistence measure, records it per screen with each
+screen's own chance baseline, and stops.** §5 of the phase prompt pre-registers three
+readings and 4.14 does not begin until one is taken. If a screen reads near-chance or as a
+size proxy, the call is the operator's: a changed composition under a new
+`config_version`, a screen withdrawn, or the reading accepted. A weight must not move
+until a number improves [`CLAUDE.md` §11].
+
+**4.14 is this phase's largest irreversible act.** It freezes roughly 34,000 attribution
+rows that no later pass may rewrite [INVARIANT 4, D-40, `RUNBOOK.md`]. Items 3, 4, 5 and 6
+above all reach a frozen column and are reversible only before it runs.

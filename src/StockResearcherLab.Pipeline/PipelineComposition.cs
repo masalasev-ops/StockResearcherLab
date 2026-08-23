@@ -71,6 +71,7 @@ public static class PipelineComposition
             // C13 does not read that table and must not [D-117].
             new GateEngine(),
             new ScreenEngine(),
+            new CandidateAllocator(),
         };
 
         if (eodhd is not null)

@@ -712,6 +712,20 @@ Grain: ticker by day. **Writer: CandidateAllocator.**
 
 `ticker`, `date`, `screens_surfacing`, `size_bucket`, `slot_filled`.
 
+**The allocator deletes the date before it rebuilds it**, and both operations are its
+own, so INVARIANT 10 read per operation is untouched. An insert with `ON CONFLICT` alone
+updates the names a re-run surfaces and leaves behind the ones it no longer does, so a
+night re-run after a name was gated would keep that name in the set. Two runs of a stage
+over one date must produce identical output and with the stale row surviving they did
+not [4.9].
+
+**`slot_filled` has no stated meaning anywhere in this corpus and is written null.** The
+grain is one row per candidate and a candidate is a name that took a slot, so a column
+saying so would be true of every row; a column about the slots that stayed empty cannot
+be carried at this grain, there being no row for them. Null is what the column means
+until something states otherwise, which is the rule for an absent value rather than a
+placeholder [`CLAUDE.md` §6]. Reported at 4.9.
+
 ### attribution
 Grain: ticker by day surfaced. **Writers: CandidateAllocator inserts,
 ForwardReturnFiller updates.**

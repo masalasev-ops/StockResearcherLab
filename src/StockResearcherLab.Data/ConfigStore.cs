@@ -453,6 +453,18 @@ public sealed class ConfigSeeder
         ("gates.earnings_blackout_days_before", "5"),
         ("gates.earnings_blackout_days_after", "2"),
         ("gates.cooldown_days", "30"),
+
+        // The tuner's slot range, which C14 reads before C22 exists. D-43 gives the
+        // tuner a floor of four and a cap of twelve and D-89's proportion holds its
+        // megacap bound and its small-cap floor over exactly that range, so a screen's
+        // slot count is validated against these two rather than clamped [D-43, D-116].
+        //
+        // **Documented in CONFIG_REFERENCE.md since the first corpus and seeded by
+        // nothing until 4.9**, which is the fourth time this gap has been found and the
+        // fourth time it was found by a resolve failing rather than by a count. The
+        // other two tuner keys stay unseeded: nothing reads them before phase 8.
+        ("tuner.slot_floor", "4"),
+        ("tuner.slot_cap", "12"),
     ];
 
     private readonly string _connectionString;

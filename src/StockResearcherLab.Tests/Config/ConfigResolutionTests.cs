@@ -338,7 +338,11 @@ public sealed class ConfigResolutionTests
         // s5.sentiment_delta_min and s5.news_gate_min_articles have been in
         // CONFIG_REFERENCE.md since the first corpus with D-13 and D-14 behind them, and
         // no seeder row. Found the same way, by the gate failing to resolve one.
-        Assert.Equal(80, ConfigSeeder.Keys.Count);
+        //
+        // Eighty-two at 4.9, which adds tuner.slot_floor and tuner.slot_cap. C14
+        // validates a screen's slot count against them before C22 exists, and they had
+        // the same documented-and-unseeded gap as the five above.
+        Assert.Equal(82, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)

@@ -318,16 +318,33 @@ regime keys are verified at `MarketContextEngine.cs:56-57`.
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
 | `screens.slot_ceiling` | 8 | D-7 | CandidateAllocator | unverified |
-| `screens.quota_large` | 2 | D-7 | CandidateAllocator | unverified |
-| `screens.quota_mid` | 3 | D-7 | CandidateAllocator | unverified |
-| `screens.quota_small` | 3 | D-7 | CandidateAllocator | unverified |
 | `screens.floor_percentile` | 98 | D-9 | ScreenEngine | unverified |
 | `screens.floor_lookback_days` | 250 | D-9 | ScreenEngine | unverified |
 | `screens.<id>.metrics` | per screen | D-6 | ScreenEngine | unverified |
 | `screens.<id>.slots` | 8 each at start | D-43 | CandidateAllocator | unverified |
+| `screens.<id>.state` | `live` for S1 to S5 | D-84, D-119 | ScreenEngine | unverified |
+| `screens.<id>.min_inputs` | **unset** | D-112 | ScreenEngine | unverified |
 
 Screen definitions are rows rather than code, so a sixth screen is an insert and not
 a deployment.
+
+**`screens.quota_large`, `quota_mid` and `quota_small` are retired** [D-116]. D-89's
+proportion is the only quota arithmetic and nothing reads the three keys once it
+exists. Config is append-only, so the rows already inserted stay where they are: the
+retirement is a removal from the seeder and from this document rather than a delete.
+Prior wording in `CHANGELOG.md`.
+
+**`screens.<id>.state` is seeded `live` for S1 to S5 and no family member is
+registered** [D-119]. The shadow mechanism is proven in phase 4 against a fixture
+screen that is removed again, so `shadow` is a value the key accepts rather than one
+any seeded row carries.
+
+**`screens.<id>.min_inputs` has no default yet, and the blank is the accurate state.**
+D-112 makes the key the thing that stops a name with one input of seven being scored as
+confidently as one with seven, and states that below it the score is null. It does not
+say what the number is, and no other document does. It is owed before 4.3 seeds this
+namespace, and a value invented here would be a number nobody reviewed sitting in the
+column this document exists to make trustworthy [`CLAUDE.md` §8].
 
 ## Mean reversion stabilisation
 
@@ -345,6 +362,41 @@ days the two news conditions are treated as satisfied rather than failed.
 rubric rather than the gate. The no-digest disqualifier only bites where the ticker
 carried at least twelve articles in ninety days, roughly one a week, because below
 that an absence of news is the ordinary state rather than a signal [D-60].
+
+## Gates
+
+C12 GateEngine's thresholds. **The namespace exists and carries no key yet, and that is
+the accurate state rather than an omission** [D-117].
+
+D-117 puts every gate threshold under `gates.*`, one key per threshold, with no literal
+at a call site [`CLAUDE.md` §8]. **What no document in this corpus states is what any of
+those thresholds is.** `ARCHITECTURE.html` §3 gives C12 thirteen words, "Earnings
+blackout, gap, halt, already held, cooldown", and neither that section nor `DECISIONS.md`
+nor `METRICS.md` gives a width, a percentage or a day count for any of the five. D-117
+settles where the gate applies and what `gate_state` means over history; it does not set
+a number.
+
+So the keys are owed before 4.8, and each needs a value and a decision behind it:
+
+| Gate | What a threshold would have to say | State |
+|---|---|---|
+| Earnings blackout | how many days either side of a report a name is gated | unauthored |
+| Gap | what size of move gates a name, and measured over what | unauthored |
+| Halt | whether this carries a threshold at all or reads a status | unauthored |
+| Already held | expected to carry none, an open position being the condition | unauthored |
+| Cooldown | how many days after an exit a name stays gated | unauthored |
+
+**No row is invented here.** This document's own rule is that an unverified entry is
+worse than an absent one, and a fabricated default is worse than both: it would be read
+as decided, seeded by 4.3, and reach `gate_result` as a threshold nobody chose
+[`CLAUDE.md` §8, §13].
+
+**Two things about the gate are authored and are recorded so 4.8 is not blocked on
+them.** Every failing reason is recorded rather than the first, so `passed` is the empty
+reason array rather than a separately written flag, and the reason vocabulary is closed
+so a value outside it fails the stage. And `attribution.gate_state` carries `passed` or
+`passed_partial` and never `gated`, a gated name having no attribution row to carry it
+[D-117].
 
 ## Risk
 

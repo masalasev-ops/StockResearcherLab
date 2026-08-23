@@ -2026,3 +2026,78 @@ What the corrected sentence states instead is what was measured: 4,326 tickers, 
 them carrying a bar inside the window, and the 2026-08-20 prune as what left the table at
 that count. The floors reading is unchanged, being right for the reason the wrong
 sentence gave badly.
+
+## 2026-08-23, phase 4's authored items
+
+Four clean edits to `ARCHITECTURE.html` under D-73, made on the operator's explicit
+authorisation when phase 4's authored items were adopted. The first three close
+findings B1, B2 and B3 in `prompts/BuildPlans/phase-4-screens-and-selection.md` §8;
+the fourth follows D-111. No code and no migration accompanied them, phase 4 having
+no checkpoint landed at the time.
+
+**`ARCHITECTURE.html` §3, C13 ScreenEngine's Reads cell** [B1, D-74]. Prior wording:
+
+> Percentiles, `config_rows`, `screen_history`
+
+"Percentiles" is bare prose, and `ArchitectureDocument` takes `code` elements only and
+intersects them with `SCHEMA.md`'s tables, so the catalogue yielded two tables where the
+component needs seven. The five now named are `PercentileEngine.Sources`' four ranked
+stores plus `security_daily`, which is the one table `Universe.AsOf` reads and therefore
+where C13's population comes from. Both were read in the code rather than inferred.
+
+**`ARCHITECTURE.html` §3, C14 CandidateAllocator's Reads cell** [B2, D-74, D-92]. Prior
+wording:
+
+> `screen_score_daily`, `gate_result`
+
+This was not markup. §3 and `SCHEMA.md` disagreed about what the component does: C14
+must write `candidate_set.size_bucket` and `attribution.size_bucket`, `sector` and
+`regime`, and neither source table was in the cell while `screen_score_daily` carries
+none of them.
+
+**`ARCHITECTURE.html` §3, C28 ConcentrationMonitor's Reads cell** [B3, D-74, D-92]. Prior
+wording:
+
+> `candidate_set`, `position`, `security`
+
+`security` holds one row per ticker carrying today's bucket. D-92 moved point-in-time
+bucket and market cap to `security_daily` for exactly this reason, and a megacap share
+over a 2022 window computed from `security` classifies 2022 with 2026 buckets. That is
+the defect D-92 exists to prevent, arriving in the one component whose job is to notice a
+wrong number that looks right.
+
+**`ARCHITECTURE.html` §16, the `screen_score_daily` store row** [D-111]. Prior wording:
+
+> ticker × registered screen × day
+
+D-111 reorders the key to `(date, screen_id, ticker)` and range-partitions the table by
+date, one partition a year with no default partition. The grain is restated in the key's
+own order so the row says what the table is rather than what it was. The size column is
+untouched and still carries the D-84 estimate, which 4.13 is where it is measured.
+
+**`CONFIG_REFERENCE.md` §Screens, the three quota keys** [D-116]. Prior wording:
+
+> | `screens.quota_large` | 2 | D-7 | CandidateAllocator | unverified |
+> | `screens.quota_mid` | 3 | D-7 | CandidateAllocator | unverified |
+> | `screens.quota_small` | 3 | D-7 | CandidateAllocator | unverified |
+
+D-89's proportion is the only quota arithmetic and is integral at every slot count from
+four to twelve, where the three keys are that proportion's output at eight alone. Kept as
+its inputs they are three numbers that must sum to `slots`, can be set so they do not, and
+nothing would notice. The config rows already inserted are untouched, config being
+append-only: this is a removal from the seeder and from the reference, not a delete.
+
+**`SCHEMA.md` §attribution, the column list** [D-110]. Prior wording:
+
+> `ticker`, `date`, `screens_surfacing`, `score_per_screen`, `size_bucket`,
+> `sector`, `regime`, `gate_state`, `config_version`, `digest_provider`,
+> `return_5d_raw`, `return_5d_vs_spy`, `return_5d_vs_peers`, and the same triple at
+> 21 and 63 days.
+
+`surfaced_as` is inserted after `score_per_screen`. **The column is not in the database
+and the document says so at the point of change.** D-110 asks that `SCHEMA.md` gain it in
+the same checkpoint as migration `0017` and not before; it is here ahead of that because
+the operator adopted phase 4's authored items before its first checkpoint, and the note in
+the section is that divergence made visible rather than left to be found. Neither
+`surfaced_as` nor `score_per_screen` is a `real` column, so neither enters the not-money
+declaration and no check reads either before `0017` lands.

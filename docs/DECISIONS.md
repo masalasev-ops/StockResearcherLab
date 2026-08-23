@@ -2253,6 +2253,339 @@ without the Api gaining one.
 
 ---
 
+## Screens and selection
+
+Authored 2026-08-23 at phase 3.5's sign-off, from the plan drafted in
+`prompts/BuildPlans/phase-4-screens-and-selection.md` §4. Authored before any phase 4
+code, because each blocks a checkpoint that cannot be built without it [`CLAUDE.md`
+§13]. Entered verbatim from that plan on the operator's explicit authorisation, the
+operator remaining the decider of record.
+
+**The `DoD:` paragraph closing each drafted clause is not carried here**, following
+D-107 and D-109, which were transcribed the same way at phase 3.5's sign-off. The
+register states what was decided and why, which stays true for as long as the decision
+stands; a definition of done states how a checkpoint proves it was built, which is spent
+once that checkpoint passes. The DoD text is in the plan, which is where the checkpoint
+reads it from.
+
+**D-110 `attribution` gains `surfaced_as`, and `score_per_screen` carries the rank
+beside the score.** `ACTIVE`
+D-85 authored both and neither exists. `surfaced_as` has no column in any of the
+sixteen migrations and `score_per_screen` is flat `jsonb` with no writer. This entry is
+the migration detail rather than a new ruling, and it exists because the shape has to be
+settled in the same checkpoint as the column.
+
+`surfaced_as` is text NOT NULL with `CHECK (surfaced_as IN ('candidate','shadow'))` and
+no DEFAULT. No default for `security_daily.is_active`'s reason: a column that defaults
+is a column a writer can decline to think about, and the value that gets written is then
+the one nobody chose. A writer that has not decided must fail at the column.
+
+The constraint rather than a writer-side check, for D-80's reason exactly. This column
+segments every analysis in `SCREEN_LIFECYCLE.md` §4.5, so a drifted value lands in its
+own bucket in every one of them without ever erroring.
+
+`score_per_screen` becomes screen id to an object of score and rank, held by a `jsonb`
+CHECK asserting every top-level value is an object. The flat shape then cannot be
+written at all rather than being refused by whichever writer remembers. It is a shape
+change to a column with no rows in it, so it costs nothing now and cannot be done
+cheaply later.
+
+The `candidate_attribution` view selects `surfaced_as = 'candidate'` and every reader
+meaning candidate reads the view. Reading the table becomes a deliberate act rather than
+the default, which inverts which mistake is easy.
+
+**D-111 `screen_score_daily` is range-partitioned by date with its key reordered, and
+the ranked rows carry a partial index.** `ACTIVE`
+The primary key is `(ticker, screen_id, date)` and the table carries no other index
+[`0001_snapshot.sql`]. Every read this system makes of it is one date: the allocator's
+nightly read, and the backfill's read once per date across roughly 1,260 of them. The
+leading column of the only index is the one the query does not constrain
+[`SCREEN_LIFECYCLE.md` §9.3].
+
+Three changes, and all three rather than one of them.
+
+The key becomes `(date, screen_id, ticker)`. That fixes every per-date read rather than
+only the allocator's, and it is the change §9.3's complaint literally describes.
+
+Declarative range partitioning by date, one partition a year, with no default partition.
+A date outside the declared range then fails loudly rather than landing in a partition
+nothing queries. Partitioning makes the per-date read a single partition scan and makes
+pass one's writes cheaper because each date lands in its own child.
+
+A partial index on `(date, screen_id, rank_within_screen)` WHERE `rank_within_screen` IS
+NOT NULL. The floor admits about two percent of the population, so the index covers
+about two percent of the table and costs about two percent of what §9.3 priced a full
+one at.
+
+§9.3's option 1 as literally written is rejected. A full index on the largest table in
+the system, maintained across roughly 19 million inserts during pass one, to serve a
+query wanting two percent of the rows, while leaving the key's leading column still
+wrong.
+
+The cost is named rather than glossed. Partitioning adds one child relation a year, and
+`SchemaParityTests` and `guards.ps1` both read `information_schema.columns` with no
+partition filter, so every child's `score` column would be reported as an undeclared
+real column. Two predicates in two places, and they are part of this checkpoint rather
+than a surprise inside it.
+
+**D-112 A screen score is the weighted mean of its direction-adjusted percentiles, taken
+over the non-null members of its metric list, and null below a minimum input count.**
+`ACTIVE`
+`METRICS.md` §8 assigns this here and nothing else states it. What the formula has to
+survive is the null rule: a great deal of this store is legitimately absent, and a screen
+that scores absence as the worst value deletes the thinly covered small caps its small
+slots exist to find.
+
+On the 0 to 100 scale the percentiles already use, so a 98th-percentile floor reads
+against the same units the inputs carry and no second scale exists to disagree with the
+first.
+
+Mean and not sum. A sum makes the score a function of how many inputs happened to be
+non-null, so a name with three of seven is scored below one with seven by construction
+rather than on its merits. That is `CLAUDE.md` §6's null rule broken inside the
+arithmetic instead of at a call site, where nothing greps for it.
+
+`screens.<id>.min_inputs` is what stops a name with one of seven being scored as
+confidently as one with seven. Below it the score is null, which is the established idiom
+rather than a new one: `ARCHITECTURE.html` §18 already says of a name with no sentiment
+that the sentiment screen simply cannot rank it.
+
+Weights are carried per metric and default to 1. `METRICS.md` §8 names weights as this
+phase's to author, so the shape has to carry them even where every seeded value is one,
+because adding the field later is a config migration across every screen row.
+
+Rejected: a sum of percentiles, which punishes absence. A geometric mean or a product,
+where one zero annihilates and there is no reason to want an AND across seven quality
+measures. Z-scores, which need a second normalisation the store does not hold and
+reintroduce the cross-sectional scale D-10 removed.
+
+One consequence, stated because a reader will otherwise read it as a defect. A mean
+compresses toward 50 and compresses further as the metric count grows, so S1 at seven
+inputs and S3 at three will show visibly different dispersions and therefore floors at
+visibly different levels. That is correct, each floor being drawn from its own screen's
+distribution, and it is stated so that a floor of 71 on one screen beside 84 on another
+is not read as a fault.
+
+**D-113 The direction a screen reads a metric in lives in `screens.<id>.metrics`, and no
+`_inv` column exists.** `ACTIVE`
+Percentiles are ascending always: higher raw value means higher percentile, for every
+metric [`METRICS.md` §6.3]. S1 ranks on `net_debt_ebitda_inv`, `accruals_inv` and
+`share_count_change_inv`, and those names in `ARCHITECTURE.html` §05 name a direction
+rather than a column. No `_inv` column exists or is meant to [`BUILD_PLAN.md` carried
+obligations, 2 to 4].
+
+The metric list is an array of objects, each carrying the metric, the direction and the
+weight:
+
+```
+{"metric": "net_debt_ebitda", "direction": "low", "weight": 1}
+```
+
+direction "low" is applied as 100 minus the stored percentile. The words are "high" and
+"low" rather than asc and desc or plus and minus one, because the stored percentile is
+always ascending, so the word has to say what the screen rewards rather than how anything
+sorts.
+
+Rejected: a stored `_inv` column, which is a second copy of one fact and doubles the
+percentile write. That is the shape D-76, D-77 and D-83 each removed from this corpus.
+
+Rejected: a parallel `screens.<id>.directions` key, being two lists that can fall out of
+length with each other and produce a plausible score when they do.
+
+**D-114 `base_breakout_flag` enters S2 as a fixed bonus in score points outside the mean,
+and a null flag contributes what false contributes.** `ACTIVE`
+It is the one column with a named reader that is not percentiled, because a percentile
+over a two-valued column collapses to two values and carries nothing the boolean does not
+[`METRICS.md` §6.5]. It is an S2 ranking input [`ARCHITECTURE.html` §05], so it has to
+enter somehow.
+
+```
+{"metric": "base_breakout_flag", "kind": "bonus", "points": 10}
+```
+
+applied after the weighted mean.
+
+Mapping true to 100 and false to 0 inside the mean is rejected, and the arithmetic is the
+reason. At six S2 inputs one boolean is worth a sixth of the score and opens a fifty-point
+gap between two names differing on one binary condition. That is the magnitude falling out
+of the mean's arithmetic rather than being chosen, which is exactly what §6.5 says a
+percentile over a two-valued column cannot represent. A bonus is the only form where the
+magnitude is stated in configuration.
+
+Rejected: the flag as a hard gate on S2, which narrows the screen to a handful of names
+most nights and leaves its floor drawn over a population it no longer ranks.
+
+Null contributes zero, the same as false, and that is written down rather than defaulted.
+"There is no base" and "the base is unknown" both mean no evidence of a defined entry
+level, and the bonus is evidence-positive only. This is the one place in this system where
+unknown and false legitimately coincide, which is why it is stated rather than left to the
+null rule.
+
+**D-115 The floor is the 98th percentile of the non-null score population, and a screen
+without a full lookback has no floor and ranks nothing.** `ACTIVE`
+D-112 makes a score null for a name below its screen's minimum input count, so the score
+column is legitimately sparse. Postgres counts nulls toward `PERCENT_RANK`'s denominator,
+so a floor computed over 700,000 slots of which 200,000 are null is a different number
+from one computed over 500,000 real scores, and the two are indistinguishable on the
+page. This is PercentileEngine's own `count(metric)` argument applied one level up.
+
+Below `screens.floor_lookback_days` of observations there is no floor. `floor_score` is
+null, `observation_days` records the short window, and nothing is ranked. That is
+`SCREEN_LIFECYCLE.md` §5.1's rule for a newly registered shadow applied identically to a
+live screen at the start of the backfill window, because it is the same condition rather
+than an analogous one.
+
+The consequence is that the first 250 sessions of the window carry scores and no
+candidates, so candidate history begins around 2022-01-03 rather than at the window
+start. That is the floor working and it is stated here so the gap is not read as a failed
+pass.
+
+**D-116 D-89's proportion is the only quota arithmetic, and `screens.quota_large`,
+`quota_mid` and `quota_small` are retired.** `ACTIVE`
+
+```
+large = floor(slots / 4)
+rest  = slots - large
+mid   = floor(rest / 2)
+small = rest - mid
+```
+
+which is exactly 2 / 3 / 3 at eight slots and integral at every count from four to twelve
+[D-89]. The three quota keys are that proportion's output at eight and nothing reads them
+once the proportion exists.
+
+Rejected: keeping them as the proportion's inputs. Three keys that must sum to slots, can
+be set so they do not, and nothing would notice.
+
+Rejected: keeping them for eight and computing only above it. Two code paths that must
+agree, of which the one that runs today is the one nobody exercises.
+
+`SCREEN_LIFECYCLE.md` §10 already says the proportion introduces no value, so a key for it
+would be a key with nothing behind it. Config is append-only, so the existing rows stay
+where they are and the retirement is a removal from the seeder and from
+`CONFIG_REFERENCE.md` rather than a delete.
+
+**D-117 A gated name is scored, excluded at allocation, and its slot passes to the next
+name of the same size. `gate_state` records whether every gate reason was evaluable.**
+`ACTIVE`
+C13 does not read `gate_result` and must not. The floor is the 98th percentile of the
+whole scored population, so a floor over the ungated subset moves when a position opens or
+a cooldown expires, which makes a screen's floor a function of the portfolio [INVARIANT 1,
+INVARIANT 2]. C14 reads `gate_result` and drops gated names from the ranked list before
+slots are filled.
+
+Filling then continues within the bucket, and the distinction from D-8 is the whole of
+this clause. D-8 forbids backfilling from a larger bucket, which is the case where nothing
+of that size cleared the screen's floor. A name that cleared the floor and is unavailable
+tonight is a different case, and conflating the two either leaves a hole D-8 does not ask
+for or leaks the guarantee D-8 exists to hold.
+
+The five gate reasons are named in `ARCHITECTURE.html` §03 and their thresholds are keys
+under a new `gates.*` namespace, one per threshold, with no literal at a call site
+[`CLAUDE.md` §8]. Every failing reason is recorded rather than the first, which
+`SCHEMA.md` already requires of the column, so `passed` is the empty reason array rather
+than a separately written flag.
+
+Three of the five are structurally unevaluable over the backfill window rather than
+passing over it. `position` and `trade_outcome` hold no rows until phase 7, so
+already-held and cooldown can never fire. `events.earnings_backward_days` is 7 and
+earnings are deliberately not backfilled, so the blackout has no calendar to read on a
+historical date.
+
+So `attribution.gate_state` carries `passed` or `passed_partial` and never `gated`, a
+gated name having no attribution row to carry it. `passed_partial` means at least one gate
+reason was structurally unevaluable on that date, and it is what stops a backfilled row
+reading identically to a live one when it is not. This is the D-58 and D-69 pattern met a
+third time and the first time it is labelled on the row rather than found afterwards.
+
+**D-118 S4 drops `inst_ownership_change` and runs on its two insider inputs.** `ACTIVE`,
+closing D-69.
+D-58 removed `short_interest_change` from S4 for this fact in a different form: a screen
+whose backfill scores come from a different population than its live scores has a floor
+drawn from a distribution the live screen does not share. Deciding the same question the
+other way here, with no new evidence, is result-shopping under `CLAUDE.md` §11.
+
+The independent argument does not rest on backfillability at all.
+`inst_ownership_change` is a change in the top twenty holders' total, so when a holder
+enters or leaves that set between report dates, composition change and ownership change
+are added together and the metric cannot separate them [`BUILD_PLAN.md` carried
+obligations, 1 to 4]. The input is defective whether or not it has a history.
+
+Rejected: keep all three and accept a two-input backfill distribution against a
+three-input live screen. That is what D-58 rejected, and its failure is a floor that is
+simply wrong and inspectable by nothing.
+
+Rejected: source ownership from SEC EDGAR 13F. Free and complete, and a second provider
+and a real ingest, which is a phase-1-shaped body of work added to a selection phase's own
+scope [`CLAUDE.md` §3].
+
+Two costs are recorded rather than glossed. Both surviving inputs come from one endpoint,
+so a single provider change now takes the whole screen rather than one input; the screen
+was designed with four inputs from three sources and this is the second removal. And
+`SCREEN_LIFECYCLE.md` §7.6 notes the family covers no axis but S1's, so a later S4 failure
+leaves the flow axis uncovered and is a design decision rather than a swap.
+
+One measured caveat is carried forward rather than discovered in phase 8.
+`sec-filings/{t}/form4` returns 404 Symbol not found for every delisted name tested,
+against the same ticker strings `eod/{t}` answered for in the same run [D-69, measured at
+3.1]. So S4's backfilled distribution, and therefore its floor, is measured over
+survivors. That is a known property of this screen's floor and belongs in `PROGRESS.md` as
+one.
+
+`flow_daily.inst_ownership_change` keeps computing and stays available to the dossier as a
+static feature. It stops being a ranking input, not a column.
+
+**D-119 The shadow family is not registered in phase 4. The mechanism is built and proven
+against a fixture screen, and the registration decision is taken at this phase's
+sign-off.** `ACTIVE`
+`SCREEN_LIFECYCLE.md` gives phase 4 the mechanism: C13 iterating on `screens.<id>.state`
+and C14 recording a shadow to `tuner.slot_cap` under the same proportional quota. It does
+not require that any family member be registered while that mechanism is built, and the
+two are separable.
+
+Registering the family in this phase costs its share of §9.1, taking `screen_score_daily`
+from roughly 1.4 GB to roughly 2.2, and requires D-90 to be answered before the phase can
+start rather than when the fork actually bites.
+
+So the mechanism is exercised against a fixture screen registered as shadow and removed
+again, which is the same proof at none of the cost. The screen that proves a shadow writes
+attribution and no `candidate_set` row does not have to be a screen anyone intends to
+promote.
+
+D-90 is therefore not owed until the family is registered, which is `SCREEN_LIFECYCLE.md`
+§7.5's own condition read literally: the fork is about X-PEAD's registration, and nothing
+registers here. The same applies to the three backfillable members, whose registration is
+a decision taken on the measured live backfill rather than before it.
+
+What this buys beyond cost: the registration decision is then taken by someone who has
+seen five live screens scored over 1,462 dates, with the persistence figures in §5 in
+front of them, rather than by someone reasoning about a mechanism that has never run.
+
+**D-120 S5's quality and technical gates are metric lists of S5's own, and the duplication
+against S1 is the price of INVARIANT 2.** `ACTIVE`
+`ARCHITECTURE.html` §05 states S5's gate as "S1 top quintile AND technical bottom quintile
+AND stabilising", which read literally is one screen reading another. `WORKED_EXAMPLE.md`
+§3 says what it means: the two gates traced there are a quality composite percentile of 84
+and a technical composite percentile of 12. Neither composite is defined anywhere, and
+"technical bottom quintile" names inputs no document lists.
+
+`screens.s5.quality_metrics` holds the same content as S1's metric list, copied.
+`screens.s5.technical_metrics` holds `dist_200dma`, `dist_52w_high` and `rs_change_63d`,
+each direction high, so a low composite is a name that has fallen against its cell on all
+three. Both are composed with D-112's arithmetic from the percentile store and neither
+reads another screen's score or config.
+
+`screens.s5.quality_quintile_min` is 80 and `screens.s5.technical_quintile_max` is 20, top
+and bottom quintile on the 0 to 100 scale `METRICS.md` §6.3 fixes.
+
+The copy is deliberate and is stated rather than deduplicated. Removing it is what
+INVARIANT 2 forbids, in the invariant's own words: sharing a computed value between screens
+looks like removing duplication and destroys the independence the design rests on. What
+holds it is a per-screen config facade that throws when asked for another screen's key, so
+the shortcut is unavailable rather than discouraged.
+
+---
+
 ## Open
 
 **D-53 Whether the local digest model stays local once measured.** `OPEN`
@@ -2277,7 +2610,10 @@ where it went.
 reason.
 
 **D-69 Whether the flow screen survives an unbackfillable institutional
-ownership source.** `OPEN`
+ownership source.** ~~`OPEN`~~ `SUPERSEDED BY D-118`
+[closed 2026-08-23 by D-118, which drops `inst_ownership_change` from S4 and runs
+the screen on its two insider inputs. The body below is kept rather than removed,
+because D-118 cites these measurements rather than restating them.]
 Owed to phase 4, not phase 1. Recorded on the corrected 1.9 measurements, not
 on the retracted ones: the subject is `inst_ownership_change`, and insider
 data is not the problem.
@@ -2335,8 +2671,11 @@ A top-20 current-holders snapshot is a usable static feature. It is only the
 change metric that has no series behind it.
 
 **D-90 Whether post-earnings drift is registered, and on what history.** `OPEN`
-Owed to phase 4, and open rather than decided because it is a fork the design
-cannot settle from what it knows. Its input has no backfillable history and
+~~Owed to phase 4~~ [moved by D-119, not owed until the family is registered. The
+mechanism is built in phase 4 against a fixture screen and no member is seeded, so
+this fork is not reached there. The status is unchanged because the question is
+moved rather than answered], and open rather than decided because it is a fork the
+design cannot settle from what it knows. Its input has no backfillable history and
 nothing else in the family shares the problem.
 
 `events.earnings_backward_days` is 7 [`CONFIG_REFERENCE.md`, verified consumer

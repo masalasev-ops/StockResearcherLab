@@ -706,10 +706,26 @@ Grain: ticker by day. **Writer: CandidateAllocator.**
 Grain: ticker by day surfaced. **Writers: CandidateAllocator inserts,
 ForwardReturnFiller updates.**
 
-`ticker`, `date`, `screens_surfacing`, `score_per_screen`, `size_bucket`,
-`sector`, `regime`, `gate_state`, `config_version`, `digest_provider`,
-`return_5d_raw`, `return_5d_vs_spy`, `return_5d_vs_peers`, and the same triple at
-21 and 63 days.
+`ticker`, `date`, `screens_surfacing`, `score_per_screen`, `surfaced_as`,
+`size_bucket`, `sector`, `regime`, `gate_state`, `config_version`,
+`digest_provider`, `return_5d_raw`, `return_5d_vs_spy`, `return_5d_vs_peers`, and
+the same triple at 21 and 63 days.
+
+**`surfaced_as` and `score_per_screen`'s object shape arrive with migration `0017` at
+checkpoint 4.1 and are not in the database yet** [D-110]. They are stated here rather
+than at the migration because the operator adopted phase 4's authored items ahead of
+its first checkpoint; D-110 asks that this document gain the column in the same
+checkpoint as the migration, and this note is the divergence made visible rather than
+left to be found. Neither is a `real` column, so neither enters the not-money
+declaration below and no check reads them before `0017` lands.
+
+`surfaced_as` is `text NOT NULL` with `CHECK (surfaced_as IN ('candidate','shadow'))`
+and no `DEFAULT`, so a writer that has not decided fails at the column rather than
+taking a value nobody chose. `score_per_screen` is screen id to an object of score and
+rank, held by a `jsonb` CHECK asserting every top-level value is an object, so the flat
+shape cannot be written at all. The `candidate_attribution` view selects
+`surfaced_as = 'candidate'` and every reader meaning candidate reads the view [D-110,
+D-85].
 
 Two components, one operation each [INVARIANT 10 as amended]. **CandidateAllocator
 owns the insert**, writing the row with scores frozen and return columns empty.

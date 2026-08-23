@@ -382,6 +382,42 @@ candidate allocator with quotas and no backfill, the attribution write, and the
 concentration monitor. Then backfill screen scores over the five years using the
 two-pass approach, so floors are live from real history.
 
+**The scope reading is wide, and it is taken here rather than left to the build.**
+4.13 fills `screen_score_daily` over the range and 4.14 runs the gate and the allocator
+over it, so candidate and attribution history exist from the first date a floor exists
+and all six done-when lines below are measurable at sign-off. The narrow reading is
+rejected on two grounds: a done-when line the phase cannot evaluate is not a definition
+of done, and deferring the attribution write moves a decision rather than removing one,
+since the point at which the record starts would then leave this phase for a later one
+to author against live rows beside a gap it cannot fill.
+
+**What the wide reading commits to.** 4.14 freezes roughly 34,000 `attribution` rows
+that no later pass may rewrite [INVARIANT 4, D-40, `RUNBOOK.md`]. That is this phase's
+largest irreversible act, and it is why 4.14 is last, why every decision that could move
+a row's contents closes upstream of it, and why it does not begin until the persistence
+measure in `prompts/BuildPlans/phase-4-screens-and-selection.md` §5 is recorded. The
+incremental cost of the wide reading over the narrow one is priced in §3 of that
+document and is not restated here. Recorded 2026-08-23 on the operator's authorisation.
+
+### Checkpoints
+
+| # | Scope |
+|---|---|
+| 4.1 | All schema, before any component and before a single row. Migration `0017`: `attribution.surfaced_as` NOT NULL with its CHECK and no DEFAULT, the `jsonb` CHECK holding `score_per_screen`'s object shape, `screen_score_daily` recreated partitioned by date with the key reordered and a partial index on the ranked rows, and the `candidate_attribution` view. `SCHEMA.md` and `ARCHITECTURE.html` §16 in this same checkpoint, and the parity checks taught about partition children. Blocked on D-110 and D-111 |
+| 4.2 | The view's reader test, built against no registered readers plus a fabricated one, because a check over an empty list passes vacuously until phase 9. Blocked on D-110 |
+| 4.3 | Config: `screens.*` and `s5.*` seeded, the metric-list shape carrying metric, direction and weight, resolution as of the simulated date, and **a per-screen config facade that refuses another screen's key**, which is INVARIANT 2 made impossible rather than documented. Blocked on D-112, D-113, D-114, D-116, D-118, D-119, D-120 |
+| 4.4 | C13 ScreenEngine, one screen, scoring every active member. **The row count equals the membership count exactly**, which is INVARIANT 1 checked mechanically. Its declared reads name five stores the catalogue does not, reported. Blocked on D-112 and D-113 |
+| 4.5 | Floors: `screen_history` and `rank_within_screen` null below the floor, so §06's "floors already applied" is literally true and the allocator needs no floor knowledge. Blocked on D-115 and D-118 |
+| 4.6 | S2, S3 and S4 as config rows with no new code path. **A fabricated sixth screen produces scores with no code change**, which is what proves a screen is a row. Blocked on D-114 and D-118 |
+| 4.7 | S5, the gated screen. The two composites of its own, the stabilisation conditions, the two news conditions failing open below the article threshold, and **S5 scoring with S1 absent from the registry entirely**. Blocked on D-120 |
+| 4.8 | C12 GateEngine. Every failing reason recorded rather than the first, a new `gates.*` namespace, and the three gates that are structurally inert over the window exercised against fabricated rows rather than left untested. Blocked on D-117 |
+| 4.9 | C14 CandidateAllocator, the live half: the proportion, the ceiling, dedup, `candidate_set`. **An unfillable slot and a gated name's slot are separate fixtures**, being separate cases. Blocked on D-116 and D-117 |
+| 4.10 | The attribution write, scores and ranks frozen, `surfaced_as` and `config_version` stamped, return columns empty, and the shadow path proven against a fixture screen. Its Reads cell does not carry the tables it needs, reported. Blocked on D-110 and D-119 |
+| 4.11 | C28 ConcentrationMonitor, reading `security_daily` rather than `security`, with the difference between the two on a 2022 date asserted as a number |
+| 4.12 | The evening order wired and one real night run. **It produces zero candidates and that is correct**, no floor existing yet, asserted as the warm-up case rather than treated as a halt |
+| 4.13 | The two-pass range run. Pass two refuses to run unless pass one's distinct dates equal the calendar's session count. **The pre-registered persistence measure computed and recorded here, per screen, with its own chance baseline**, before anything freezes. Blocked on D-115 |
+| 4.14 | The gate and the allocator over the range, and the point the record starts: one explicit truncate-and-run, after which `RUNBOOK.md`'s prohibition is operative, with the sha and the frozen row count in `PROGRESS.md`. The done-when distributions measured here, and `CONFIG_REFERENCE.md`'s Consumer column filled from the composition code |
+
 **Done when:** a night yields roughly 26 to 30 candidates; the 2/3/3 size
 distribution holds; megacap share sits under a third including inside the 2022
 drawdown; distinct tickers over any 60-day window exceed 250; overlap between

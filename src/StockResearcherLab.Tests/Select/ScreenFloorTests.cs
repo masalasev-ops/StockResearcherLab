@@ -169,6 +169,62 @@ public sealed class ScreenFloorTests
         }
     }
 
+    /// <summary>
+    /// **The window is a count of dates this screen scored, not a calendar span**, and
+    /// this test is what distinguishes the two [D-9, D-115].
+    ///
+    /// Eight scored dates, every other calendar day, against a lookback of five. A
+    /// calendar span of any width either takes the wrong number of them or takes five
+    /// only by coincidence; counting dates takes exactly the newest five. The scores are
+    /// arranged so the two answers differ: the three oldest dates carry a band the newest
+    /// five do not, so a window that reached them would move the p98.
+    ///
+    /// The first implementation of this statement used a calendar interval of twice the
+    /// lookback and passed every other test in this file, because those fixtures use
+    /// consecutive days where a span and a count are the same thing.
+    /// </summary>
+    [Fact]
+    public async Task TheWindowIsTheLastNScoredDatesAndNotACalendarSpan()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ClearAsync(ct);
+
+        try
+        {
+            // Newest five dates: scores 1..100. Older three: scores 900..999, which no
+            // correct window may reach.
+            for (var i = 0; i < 8; i++)
+            {
+                var date = RunDate.AddDays(-2 * i);
+                var scores = i < Lookback
+                    ? Enumerable.Range(1, 100).Select(x => (double?) x)
+                    : Enumerable.Range(900, 100).Select(x => (double?) x);
+
+                await SeedScoresAsync(date, scores, ct);
+            }
+
+            var (days, p98) = await TrailingAsync(RunDate, Lookback, ct);
+
+            Assert.Equal(Lookback, days);
+
+            // p98 over the newest five dates alone, which are 1..100 repeated. The old
+            // band starts at 900, so any reach into it lifts this above 100.
+            Assert.True(p98!.Value <= 100d,
+                $"the p98 is {p98.Value.ToString(CultureInfo.InvariantCulture)}, which is above the " +
+                "highest score on the newest five dates, so the window reached dates it should not");
+
+            // Hand-computed. Five dates of 1..100 is 500 values, each v occupying
+            // positions 5(v-1)+1 to 5v. percentile_cont(0.98) interpolates at
+            // 0.98 * (500 - 1) = 489.02, which is 0.02 of the way from the 490th value
+            // to the 491st, being 98 and 99. So 98.02.
+            Assert.Equal(98.02d, p98.Value, 2);
+        }
+        finally
+        {
+            await ClearAsync(ct);
+        }
+    }
+
     /// <summary>Ties take the same rank, so the order two equal names arrive in cannot matter.</summary>
     [Fact]
     public void TheRankIsDenseAndTheTieBreakIsExplicit()
@@ -187,7 +243,11 @@ public sealed class ScreenFloorTests
 
         Assert.Contains("WHERE score IS NOT NULL", sql, StringComparison.Ordinal);
         Assert.Contains("percentile_cont(0.98)", sql, StringComparison.Ordinal);
-        Assert.Contains("count(DISTINCT date)", sql, StringComparison.Ordinal);
+
+        // A count of dates, not a calendar interval. The statement must not reach for
+        // INTERVAL at all: that was the first form's defect and it read as correct.
+        Assert.Contains("LIMIT 250", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("INTERVAL", sql, StringComparison.Ordinal);
     }
 
     // ------------------------------------------------------------------ plumbing ---

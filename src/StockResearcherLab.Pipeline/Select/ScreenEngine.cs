@@ -242,18 +242,34 @@ public sealed class ScreenEngine : IStage
     /// the distribution tonight's floor is drawn from. That is the trailing distribution
     /// §05 describes rather than a lagged one, and it is stated because the alternative
     /// is invisible in the output.
+    ///
+    /// **The window is the last <c>lookbackDays</c> dates this screen scored, not a
+    /// calendar span.** D-9 says the trailing 250-day distribution and D-115 counts
+    /// observations, and a trading date is the label the exchange gave a session rather
+    /// than a timezone conversion of a timestamp [`CLAUDE.md` §6]. The first form of this
+    /// statement took a calendar interval of twice the lookback, which is about 344
+    /// trading dates at a lookback of 250: the gate fired at roughly the right moment and
+    /// every floor after it was drawn over a third more history than the decision states.
+    /// It passed 4.5's tests because the fixture used consecutive calendar days, where a
+    /// span and a count of dates are the same thing.
     /// </summary>
     public static string TrailingSql(string screenId, DateOnly date, int lookbackDays, double percentile)
         => $"""
-            WITH win AS (
-                SELECT date, score
+            WITH dates AS (
+                SELECT DISTINCT date
                 FROM screen_score_daily
-                WHERE screen_id = {Quote(screenId)}
-                  AND date <= {Literal(date)}
-                  AND date > {Literal(date)} - INTERVAL '{Int(lookbackDays * 2)} days'
+                WHERE screen_id = {Quote(screenId)} AND date <= {Literal(date)}
+                ORDER BY date DESC
+                LIMIT {Int(lookbackDays)}
+            ),
+            win AS (
+                SELECT s.score
+                FROM screen_score_daily s
+                JOIN dates d ON d.date = s.date
+                WHERE s.screen_id = {Quote(screenId)}
             )
             SELECT
-                (SELECT count(DISTINCT date) FROM win)::int AS observation_days,
+                (SELECT count(*) FROM dates)::int AS observation_days,
                 (SELECT percentile_cont({Num(percentile / 100d)}) WITHIN GROUP (ORDER BY score)
                  FROM win WHERE score IS NOT NULL) AS p98;
             """;

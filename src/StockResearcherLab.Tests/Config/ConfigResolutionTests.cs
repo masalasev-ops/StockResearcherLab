@@ -332,7 +332,13 @@ public sealed class ConfigResolutionTests
         // corpus with D-7 and D-9 behind them, and no seeder row. This assertion is the
         // check for a key with nothing behind it and the gap was the other way round,
         // which is why 4.5 found it by failing to resolve rather than by counting.
-        Assert.Equal(77, ConfigSeeder.Keys.Count);
+        //
+        // Eighty at 4.7, which adds S5's three stabilisation thresholds. Same gap and
+        // same direction as the three above: s5.stabilisation_z_max,
+        // s5.sentiment_delta_min and s5.news_gate_min_articles have been in
+        // CONFIG_REFERENCE.md since the first corpus with D-13 and D-14 behind them, and
+        // no seeder row. Found the same way, by the gate failing to resolve one.
+        Assert.Equal(80, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)

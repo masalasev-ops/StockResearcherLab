@@ -411,6 +411,20 @@ scored population moves enough over the window to matter [`CLAUDE.md` §11].
 `s5.news_gate_min_articles` is the fail-open threshold. Below three articles in seven
 days the two news conditions are treated as satisfied rather than failed.
 
+**The seven days are calendar days and the count comes from `sentiment_daily`.** No store
+carries the count as a column: `sentiment_derived_daily.article_count_z_own_90d` is a
+z-score and cannot say how many articles there were. A day with no `sentiment_daily` row
+is a day with no articles rather than a day nobody looked, so a name with no rows at all
+is below the threshold and fails open, which is the thinly covered small cap the rule
+exists for [`SCHEMA.md`]. Calendar days rather than sessions, because news arrives on days
+the exchange is shut.
+
+**The first three of these were documented here and seeded by nothing until 4.7**, the
+same gap the three shared screen keys had at 4.5 and found the same way, by the gate
+failing to resolve one. They are seeded at the values above, which are the ones this
+document and `ARCHITECTURE.html` §05 already carried; nothing was chosen. The fourth is
+the rubric's and is not a screen threshold, so it stays unseeded until phase 5.
+
 `s5.no_digest_disqualifier_min_articles_90d` is the same asymmetry applied at the
 rubric rather than the gate. The no-digest disqualifier only bites where the ticker
 carried at least twelve articles in ninety days, roughly one a week, because below

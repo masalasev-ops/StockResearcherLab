@@ -428,6 +428,22 @@ public sealed class ConfigSeeder
         ("screens.S5.quality_quintile_min", "80"),
         ("screens.S5.technical_quintile_max", "20"),
 
+        // S5's three stabilisation thresholds, in the older top-level namespace where
+        // CONFIG_REFERENCE.md has documented them since the first corpus [D-13, D-14].
+        // **Documented and seeded by nothing until 4.7**, which is the third time this
+        // has been found: the same held for the three shared screens.* keys at 4.5.
+        // Kept at their documented names rather than moved under screens.S5, a rename
+        // being an authored change to a spec document for no gain.
+        //
+        // news_gate_min_articles is the fail-open threshold and is the one rule here
+        // that must not be tidied into a fail-closed one. Below three articles in seven
+        // days both news conditions are treated as satisfied, because thinly covered
+        // names are what this screen's small slots exist to find [ARCHITECTURE.html
+        // section 05].
+        ("s5.stabilisation_z_max", "1.0"),
+        ("s5.sentiment_delta_min", "0"),
+        ("s5.news_gate_min_articles", "3"),
+
         // Gates. Every threshold is a key and no literal sits at a call site
         // [D-117, CLAUDE.md section 8]. All four values are unconstrained by anything
         // in the corpus and CONFIG_REFERENCE.md records that; only gap_pct fires over

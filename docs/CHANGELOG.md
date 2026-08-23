@@ -2128,3 +2128,36 @@ This is a fifth Reads-cell amendment beyond the four the operator authorised whe
 4's authored items were adopted. It is the same cell and the same class of defect that
 `prompts/BuildPlans/phase-4-screens-and-selection.md` §8 reports as B1, and it is
 recorded here rather than folded into that authorisation.
+
+## 2026-08-23, phase 4 checkpoint 4.7
+
+**`ARCHITECTURE.html` §3, C13 ScreenEngine's Reads cell, a third time** [4.7, D-74,
+D-120]. Prior wording, being 4.5's cell before this checkpoint:
+
+> `indicator_daily`, `valuation_daily`, `flow_daily`, `sentiment_derived_daily` for the
+> ranked percentiles, `security_daily` for the membership it scores, `config_rows`,
+> `screen_history`, `screen_score_daily` for the trailing distribution its floor is the
+> 98th percentile of
+
+**`sentiment_daily` is added, and this amendment was forced in the same way the last
+one was.** §05 states S5's fail-open rule against the seven-day article count: below
+`s5.news_gate_min_articles` articles in seven days both news conditions are treated as
+satisfied. No store carries that count as a column. `sentiment_derived_daily` carries
+`article_count_z_own_90d`, which is a z-score and cannot say how many articles there
+were, and `sentiment_daily.article_count` is the only place the count exists
+[`SCHEMA.md`]. So the component provably must read it to implement the rule the
+architecture states, and the two remaining options were the same two as last time: a
+stage that cannot open the table it needs, or a declaration that lies about what the
+code reads.
+
+The direction is again code-reads-what-the-cell-does-not, which
+`ReadDeclarationConformanceTests` gives no exemption list by design [D-74].
+
+This is a sixth Reads-cell amendment beyond the four the operator authorised, and the
+second taken during the build rather than at adoption. Both are the same cell.
+
+**`ARCHITECTURE.html` §05's S4 Ranks-on cell is NOT amended and needs to be.** D-118 is
+`ACTIVE` and drops `inst_ownership_change` from S4; the cell still names it. The build
+follows the register, and 4.6's divergence table carries the difference with the decision
+beside it so the seeded two-input list does not read as the design. Recorded here so the
+amendment is not lost between the two documents.

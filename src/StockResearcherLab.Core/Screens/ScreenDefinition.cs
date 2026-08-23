@@ -67,7 +67,8 @@ public sealed record ScreenDefinition(
     IReadOnlyList<ScreenMetric> Metrics,
     int MinInputs,
     ScreenState State,
-    int Slots)
+    int Slots,
+    ScreenEligibility? Eligibility = null)
 {
     /// <summary>The ranked half of the metric list, which is what the weighted mean runs over.</summary>
     public IReadOnlyList<ScreenMetric> RankedMetrics
@@ -76,6 +77,15 @@ public sealed record ScreenDefinition(
     /// <summary>The bonus half, applied after the mean [D-114].</summary>
     public IReadOnlyList<ScreenMetric> Bonuses
         => [.. Metrics.Where(m => m.IsBonus)];
+
+    /// <summary>
+    /// Whether this screen ranks only the names that clear a gate [D-120].
+    ///
+    /// **Null for every screen but S5 today, and null because the config rows are
+    /// absent rather than because code checks an id.** A gated screen is one whose
+    /// configuration carries the composite keys.
+    /// </summary>
+    public bool IsGated => Eligibility is not null;
 }
 
 /// <summary>A screen's lifecycle state [D-84, <c>SCREEN_LIFECYCLE.md</c> section 1.1].</summary>

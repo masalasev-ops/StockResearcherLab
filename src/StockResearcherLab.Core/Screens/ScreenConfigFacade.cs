@@ -106,4 +106,19 @@ public sealed class ScreenConfigFacade
 
     /// <summary>This screen's own key, built rather than typed, so a call site cannot name another screen's.</summary>
     public string Own(string suffix) => $"screens.{ScreenId}.{suffix}";
+
+    /// <summary>
+    /// This screen's own key in the older top-level form, so <c>s5.stabilisation_z_max</c>
+    /// rather than <c>screens.S5.stabilisation_z_max</c>.
+    ///
+    /// **Two forms exist because the corpus has two**, and the older one is where three
+    /// of S5's thresholds have been documented since the first `CONFIG_REFERENCE.md`
+    /// [D-13, D-14]. Renaming them would be an authored change to a spec document for no
+    /// gain, and building the key here rather than typing it keeps the same property
+    /// <see cref="Own"/> has: a call site cannot reach another screen's threshold.
+    ///
+    /// Lower-cased invariantly, that being the form the older keys are written in.
+    /// </summary>
+    public string OwnLegacy(string suffix)
+        => $"{ScreenId.ToLowerInvariant()}.{suffix}";
 }

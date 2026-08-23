@@ -109,8 +109,63 @@ public static class ScreenRegistry
                 "nothing [D-112].");
         }
 
-        return new ScreenDefinition(screenId, metrics, minInputs, state, slots);
+        return new ScreenDefinition(
+            screenId, metrics, minInputs, state, slots,
+            await LoadEligibilityAsync(facade, asOf, ct).ConfigureAwait(false));
     }
+
+    /// <summary>
+    /// A screen's gate, or null where it has none [D-120].
+    ///
+    /// **A screen is gated because its configuration carries the keys, not because code
+    /// knows its id.** The presence of <c>quality_metrics</c> is the declaration, so a
+    /// second gated screen is a set of config rows and not a class.
+    ///
+    /// **Half a gate fails the stage rather than being read as no gate.** Once the first
+    /// key is there every other is required. The alternative is a screen that silently
+    /// stops gating because one row was missed, which ranks the whole universe on
+    /// distance below the 200-day average and is the falling-knife screen §05 says the
+    /// gate exists to prevent.
+    /// </summary>
+    private static async Task<ScreenEligibility?> LoadEligibilityAsync(
+        ScreenConfigFacade facade, DateOnly asOf, CancellationToken ct)
+    {
+        var quality = await facade.ResolveAsync(facade.Own(QualityMetrics), asOf, ct).ConfigureAwait(false);
+
+        if (quality is null)
+        {
+            return null;
+        }
+
+        return new ScreenEligibility(
+            new ScreenComposite(
+                ScreenMetricList.Parse(quality),
+                await IntAsync(facade, facade.Own("quality_min_inputs"), asOf, ct).ConfigureAwait(false)),
+            await NumberAsync(facade, facade.Own("quality_quintile_min"), asOf, ct).ConfigureAwait(false),
+            new ScreenComposite(
+                ScreenMetricList.Parse(
+                    await facade.RequireAsync(facade.Own("technical_metrics"), asOf, ct).ConfigureAwait(false)),
+                await IntAsync(facade, facade.Own("technical_min_inputs"), asOf, ct).ConfigureAwait(false)),
+            await NumberAsync(facade, facade.Own("technical_quintile_max"), asOf, ct).ConfigureAwait(false),
+
+            // The three stabilisation thresholds sit in the older top-level namespace,
+            // which is where CONFIG_REFERENCE.md has documented them since the first
+            // corpus. They are as much this screen's as the composite keys are, and the
+            // facade refuses another screen's under either form.
+            await NumberAsync(facade, facade.OwnLegacy("stabilisation_z_max"), asOf, ct).ConfigureAwait(false),
+            await NumberAsync(facade, facade.OwnLegacy("sentiment_delta_min"), asOf, ct).ConfigureAwait(false),
+            await IntAsync(facade, facade.OwnLegacy("news_gate_min_articles"), asOf, ct).ConfigureAwait(false));
+    }
+
+    private const string QualityMetrics = "quality_metrics";
+
+    private static async Task<double> NumberAsync(
+        ScreenConfigFacade facade, string key, DateOnly asOf, CancellationToken ct)
+        => ConfigValue.Double(await facade.RequireAsync(key, asOf, ct).ConfigureAwait(false));
+
+    private static async Task<int> IntAsync(
+        ScreenConfigFacade facade, string key, DateOnly asOf, CancellationToken ct)
+        => (int) ConfigValue.Long(await facade.RequireAsync(key, asOf, ct).ConfigureAwait(false));
 
     private static ScreenState ParseState(ConfigRow row)
         => ConfigValue.String(row) switch

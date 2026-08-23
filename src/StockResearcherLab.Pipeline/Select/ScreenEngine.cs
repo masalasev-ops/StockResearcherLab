@@ -78,6 +78,34 @@ public sealed class ScreenEngine : IStage
             ["sentiment_derived_daily"] = "snt",
         };
 
+    /// <summary>
+    /// The alias of the derived seven-day article count, which is an aggregate over
+    /// <c>sentiment_daily</c> rather than a column on any store [`ARCHITECTURE.html`
+    /// §05, `SCHEMA.md` sentiment_daily].
+    /// </summary>
+    private const string ArticleCountAlias = "art";
+
+    /// <summary>
+    /// The raw columns a gate's stabilisation conditions read, and where they live.
+    ///
+    /// **Raw and not percentiled.** §05 states the three conditions against values
+    /// rather than ranks: an article-count z-score of 1.0, a sentiment difference of
+    /// zero, and a close above its own 20-day average. A percentile of a z-score is a
+    /// different quantity that would compare against the same threshold and produce
+    /// entirely plausible numbers.
+    ///
+    /// <c>dist_20dma</c> is how "close above the 20-day average" is read, that column
+    /// being the signed distance as a fraction, so above the average is above zero. It
+    /// avoids this stage reading a price series, which it must not [INVARIANT 9].
+    /// </summary>
+    private static readonly IReadOnlyList<(string Table, string Column)> StabilisationColumns =
+    [
+        ("indicator_daily", "dist_20dma"),
+        ("indicator_daily", "rs_20d_slope"),
+        ("sentiment_derived_daily", "article_count_z_own_90d"),
+        ("sentiment_derived_daily", "sentiment_delta_7v30"),
+    ];
+
     public string Name => "ScreenEngine";
 
     /// <summary>
@@ -100,6 +128,7 @@ public sealed class ScreenEngine : IStage
     [
         "indicator_daily", "valuation_daily", "flow_daily", "sentiment_derived_daily",
         "security_daily", "config_rows", "screen_history", "screen_score_daily",
+        "sentiment_daily",
     ];
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
@@ -337,6 +366,11 @@ public sealed class ScreenEngine : IStage
         var joins = string.Join("\n            ", TablesFor(screen)
             .Select(t => $"LEFT JOIN {t} {Alias[t]} ON {Alias[t]}.ticker = u.ticker AND {Alias[t]}.date = {d}"));
 
+        if (screen.Eligibility is not null)
+        {
+            joins += "\n            " + ArticleCountJoin(d);
+        }
+
         var weighted = string.Join("\n                     + ", ranked.Select(Weighted));
         var weights = string.Join("\n                     + ", ranked.Select(WeightWhenPresent));
         var present = string.Join("\n                     + ", ranked.Select(Present));
@@ -345,6 +379,15 @@ public sealed class ScreenEngine : IStage
             ? "0"
             : string.Join(" + ", screen.Bonuses.Select(BonusTerm));
 
+        // A screen with no gate emits the statement it emitted before gates existed,
+        // byte for byte. That is what keeps 4.4's and 4.6's snapshots meaningful, and it
+        // is what makes the gate a property of S5's configuration rather than a branch
+        // every screen now runs through.
+        var eligible = screen.Eligibility is null
+            ? string.Empty
+            : $"            WHEN ({EligibleSql(screen.Eligibility)}) IS NOT TRUE\n"
+              + "                    THEN NULL\n";
+
         return $"""
             INSERT INTO screen_score_daily (date, screen_id, ticker, score, rank_within_screen, config_version)
             SELECT
@@ -352,7 +395,7 @@ public sealed class ScreenEngine : IStage
                 {Quote(screen.ScreenId)} AS screen_id,
                 u.ticker,
                 CASE
-                    WHEN ({present}) >= {Int(screen.MinInputs)}
+            {eligible}        WHEN ({present}) >= {Int(screen.MinInputs)}
                     THEN ((({weighted})
                            / NULLIF(({weights}), 0)) + ({bonus}))::real
                     ELSE NULL
@@ -368,12 +411,136 @@ public sealed class ScreenEngine : IStage
             """;
     }
 
-    /// <summary>Ordinal-ordered so the emitted SQL is byte-identical across runs.</summary>
+    /// <summary>
+    /// The gate, as one boolean expression [D-120, `ARCHITECTURE.html` section 05].
+    ///
+    /// **A name that fails it carries null and not a low score**, which is what the
+    /// enclosing <c>CASE</c> arm does: the screen has no opinion about a name it does
+    /// not rank, and a low score would put that name into the population the floor is
+    /// the 98th percentile of and pull the floor down.
+    ///
+    /// **Unknown fails the gate as well, and <c>IS NOT TRUE</c> is what makes that so.**
+    /// A composite that cannot be computed is not evidence that a name is a good business
+    /// beaten down. The arm was first written <c>WHEN NOT (gate)</c>, which is NULL when
+    /// the gate is NULL: the arm is then not taken, the statement falls through to the
+    /// scoring arm, and a name whose quality composite could not be computed at all is
+    /// ranked. It scored 95 in the fixture that found it and nothing about the number
+    /// looked wrong. <c>IS NOT TRUE</c> collapses false and unknown into the one arm,
+    /// which is what section 05 means by a condition being met.
+    /// </summary>
+    public static string EligibleSql(ScreenEligibility gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+
+        return $"({Composite(gate.Quality)}) >= {Num(gate.QualityMin)}\n"
+               + $"                     AND ({Composite(gate.Technical)}) <= {Num(gate.TechnicalMax)}\n"
+               + $"                     AND ({PriceStabilising()})\n"
+               + $"                     AND ({NewsSettled(gate)})";
+    }
+
+    /// <summary>
+    /// One composite, which is D-112's weighted mean over a metric list that is not the
+    /// screen's ranking list [D-120].
+    ///
+    /// Null below the composite's own minimum input count, for the reason a score is
+    /// null below the screen's: the mean of one input out of seven is not a quality
+    /// reading, and a gate that treated it as one would admit names on no evidence.
+    /// </summary>
+    private static string Composite(ScreenComposite composite)
+    {
+        var ranked = composite.Metrics.Where(m => !m.IsBonus).ToList();
+
+        var weighted = string.Join(" + ", ranked.Select(Weighted));
+        var weights = string.Join(" + ", ranked.Select(WeightWhenPresent));
+        var present = string.Join(" + ", ranked.Select(Present));
+
+        return $"CASE WHEN ({present}) >= {Int(composite.MinInputs)} "
+               + $"THEN ({weighted}) / NULLIF(({weights}), 0) ELSE NULL END";
+    }
+
+    /// <summary>
+    /// "Close above the 20-day average OR the relative strength slope positive"
+    /// [section 05].
+    ///
+    /// **This condition does not fail open and the two news conditions do.** Section 05
+    /// scopes the fail-open rule to the news tests, and the reason it gives is coverage:
+    /// a thinly covered name has no articles, which is ordinary, while every member has
+    /// a price history by construction of the universe. So an unknown price condition is
+    /// a name this screen cannot evaluate rather than one it should wave through.
+    ///
+    /// <c>dist_20dma</c> is how "close above the 20-day average" is read, that column
+    /// being the signed distance as a fraction, so above the average is above zero. It
+    /// is also what keeps this stage off a raw price series, which it must not read
+    /// [INVARIANT 9].
+    /// </summary>
+    private static string PriceStabilising()
+        => $"{Alias["indicator_daily"]}.dist_20dma > 0 OR {Alias["indicator_daily"]}.rs_20d_slope > 0";
+
+    /// <summary>
+    /// The two news conditions, **failing open below the article threshold**
+    /// [section 05].
+    ///
+    /// Below <c>news_gate_min_articles</c> articles in seven days both conditions are
+    /// treated as satisfied. Thinly covered names are exactly what this screen's small
+    /// slots exist to find, and failing closed would delete them and reintroduce the
+    /// megacap tilt through the arithmetic rather than through a ranker. The cost is a
+    /// weaker gate on thinly covered names than on well covered ones, which section 05
+    /// records as deliberate.
+    ///
+    /// **<c>COALESCE(count, 0)</c> is correct here and is not the defaulting
+    /// <c>CLAUDE.md</c> section 6 forbids.** `SCHEMA.md` states the rule it rests on: a
+    /// day with no <c>sentiment_daily</c> row is a day with no articles rather than a
+    /// day nobody looked, because C04 covers the whole universe nightly with no
+    /// pre-selection. Absence is a measured zero here, which is the one shape where zero
+    /// is the right reading.
+    /// </summary>
+    private static string NewsSettled(ScreenEligibility gate)
+        => $"COALESCE({ArticleCountAlias}.articles_7d, 0) < {Int(gate.NewsGateMinArticles)} "
+           + $"OR ({Alias["sentiment_derived_daily"]}.article_count_z_own_90d < {Num(gate.StabilisationZMax)} "
+           + $"AND {Alias["sentiment_derived_daily"]}.sentiment_delta_7v30 >= {Num(gate.SentimentDeltaMin)})";
+
+    /// <summary>
+    /// The seven-day article count, aggregated from <c>sentiment_daily</c> because no
+    /// store carries it as a column.
+    ///
+    /// **Seven calendar days and not seven sessions**, which is the opposite of the
+    /// trailing floor window and is right for the opposite reason. A floor is drawn over
+    /// the dates a screen scored, which are sessions. News arrives on days the exchange
+    /// is shut, so a seven-session window over a holiday week reaches back nine or ten
+    /// days of coverage and reads a different quantity than section 05's seven days.
+    /// </summary>
+    private static string ArticleCountJoin(string date)
+        => "LEFT JOIN (\n"
+           + "                            SELECT ticker, sum(article_count)::bigint AS articles_7d\n"
+           + "                            FROM sentiment_daily\n"
+           + $"                            WHERE date > {date} - 7 AND date <= {date}\n"
+           + "                            GROUP BY ticker\n"
+           + $"                        ) {ArticleCountAlias} ON {ArticleCountAlias}.ticker = u.ticker";
+
+    /// <summary>
+    /// Every store the statement joins, ordinal-ordered so the emitted SQL is
+    /// byte-identical across runs.
+    ///
+    /// A gated screen adds the stores its two composites rank on and the stores its
+    /// stabilisation conditions read raw columns from. They fold into one distinct set
+    /// rather than being joined twice, S5's technical composite and its own ranking
+    /// metric both sitting on <c>indicator_daily</c>.
+    /// </summary>
     private static IReadOnlyList<string> TablesFor(ScreenDefinition screen)
         => [.. screen.Metrics
             .Select(m => m.IsBonus ? BooleanTable(m.Metric) : PercentileTable(m.Metric))
+            .Concat(GateTables(screen.Eligibility))
             .Distinct(StringComparer.Ordinal)
             .OrderBy(t => t, StringComparer.Ordinal)];
+
+    private static IEnumerable<string> GateTables(ScreenEligibility? gate)
+        => gate is null
+            ? []
+            : gate.Quality.Metrics
+                .Concat(gate.Technical.Metrics)
+                .Where(m => !m.IsBonus)
+                .Select(m => PercentileTable(m.Metric))
+                .Concat(StabilisationColumns.Select(c => c.Table));
 
     private static string PercentileTable(string metric)
         => TableByMetric.TryGetValue(metric, out var table)

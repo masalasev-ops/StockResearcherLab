@@ -26,3 +26,7 @@ table.pairs th { text-transform: none; letter-spacing: 0; font-size: 13.5px; opa
                  width: 170px; padding: 5px 14px 5px 0; border-top: 1px solid rgba(128,128,128,.22); }
 code { font: inherit; opacity: .85; }
 section { margin-bottom: 8px; }
+
+/* Not applicable, in a table cell rather than as a paragraph. `.empty` carries
+   paragraph padding and would push the row apart. */
+td.na { opacity: .5; }

@@ -217,7 +217,7 @@ else
                         <td class="num">@Count(mr.CellMembers, mx.Populated)</td>
                         <td class="num">@Count(mr.BucketMembers, mx.Populated)</td>
                         <td class="num">@Count(mr.MinMembers, mx.Populated)</td>
-                        <td class="@ScopeClass(mr.RankedScope)">@Scope(mr.RankedScope, mx.Populated)</td>
+                        <td class="@ScopeClass(mr)">@Scope(mr, mx.Populated)</td>
                         <td class="sub">@mr.Table</td>
                     </tr>
                 }
@@ -226,6 +226,10 @@ else
         <p class="sub">
             Every figure here is stored. <code>Ranked in</code> is written by the percentile engine
             rather than worked out from the count against the floor, so this page compares nothing.
+            It reads <b>not applicable</b> where the value is absent: the stored scope describes the
+            cell, and a name with no value was not in the population that cell was ranked over. The
+            counts still show, because a cell that exists without this name in it is a different
+            fact from a cell that does not exist.
         </p>
     </section>
 
@@ -464,18 +468,43 @@ else
     private static string Count(int? value, bool populated)
         => value?.ToString("N0", CultureInfo.InvariantCulture) ?? (populated ? "absent" : "not populated");
 
-    private static string Scope(string? scope, bool populated) => scope switch
+    // Where THIS name was ranked, which is not the same question as what its cell did.
+    //
+    // ranked_scope is a property of the cell and is correct in the store: a cell of 99
+    // non-null members ranked at cell level whether or not this name was one of them.
+    // Rendered per row without the value beside it, it says the opposite of what
+    // happened, and a reader sees "sector cell" against a name that was never ranked.
+    //
+    // A null value is an exact test for that, in both directions: the percentile is null
+    // exactly when the value is, because a name with no value is not in the population
+    // the rank is taken over [METRICS.md section 6.2]. So the value decides this column
+    // and the cell's own verdict is shown only where the name was in it.
+    //
+    // The cell counts beside it still render, and deliberately: they say the cell exists
+    // and this name is absent from it, which is a different fact from the cell not
+    // existing.
+    private static string Scope(MetricRow row, bool populated)
     {
-        "cell" => "sector cell",
-        "bucket" => "size bucket",
-        "none" => "nothing",
-        _ => populated ? "absent" : "not populated",
-    };
+        if (row.Value is null)
+        {
+            return "not applicable";
+        }
 
-    private static string ScopeClass(string? scope) => scope switch
-    {
-        "cell" => "ok",
-        "none" => "fail",
-        _ => "",
-    };
+        return row.RankedScope switch
+        {
+            "cell" => "sector cell",
+            "bucket" => "size bucket",
+            "none" => "nothing",
+            _ => populated ? "absent" : "not populated",
+        };
+    }
+
+    private static string ScopeClass(MetricRow row) => row.Value is null
+        ? "na"
+        : row.RankedScope switch
+        {
+            "cell" => "ok",
+            "none" => "fail",
+            _ => "",
+        };
 }

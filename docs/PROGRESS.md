@@ -9115,6 +9115,57 @@ filter or a leading sort key can, and two filings sharing an effective date need
 order. The test asserts the filter and the leading sort rather than the absence of the
 word.
 
+### What the first real read of the page found, 2026-08-23
+
+**The page's first use was an operator reading the `AAPL.US` record, and it returned three
+things.** That is the return the phase was built for arriving before sign-off rather
+than in phase 4, and it is recorded here as the first evidence that the page does what it
+was built to do.
+
+**One defect, corrected.** `roic` and `roic_4q_change` rendered `sector cell` beside a
+null value. The stored `ranked_scope` is right and is a property of the cell: that cell
+held 99 non-null members and ranked at cell level. This name was not one of them.
+Rendered per row without the value beside it the column said the opposite of what
+happened, and a reader saw "ranked in its cell" against a name that was never ranked.
+
+The column now reads **not applicable** wherever the value is absent. A null value is an
+exact test for it in both directions, measured on this record: no metric carries a value
+without a percentile and none carries a percentile without a value, because a name with
+no value is not in the population the rank is taken over [`METRICS.md` §6.2]. The cell
+counts still render beside it, deliberately: a cell that exists with this name absent
+from it is a different fact from a cell that does not exist. `atr_pct` is unchanged at
+`sector cell`, which is what makes the change a correction rather than a blanket.
+
+**The store was not touched.** `ranked_scope` describes the cell and continues to; what
+changed is one rendering rule in `Record.razor`.
+
+**One existing finding observed rather than predicted.** The inputs panel shows a
+sentiment window of 30 days, from `sentiment.lookback_days`, sitting directly above
+`article_count_z_own_90d` and a baseline C35 computes over ninety. The panel is doing
+what the plan told it to, taking the component's own key resolved as of the viewed date,
+and the key is the one the `2 → 3` carried obligation already records as seeded at 30
+while the baseline needs 90. **This is not a page defect and the panel is left alone.**
+
+What is new is that the obligation is now observed on real data rather than reasoned
+about, and the figures have moved since phase 2 recorded them. Measured on 2024-06-05:
+
+| Reading | Phase 2 | 2026-08-23 |
+|---|---|---|
+| Names carrying the three derived sentiment metrics | 453 of 2,841 | **608 of 2,560** |
+| Rows the median member has inside the 90-day baseline | 10 | **11** |
+| Rows `AAPL.US` has in 30 days against 90 | not read | **30 against 90** |
+
+The last line is the mismatch itself: the panel shows a third of what the metric above it
+reads. **Fixing the key is a separate decision and is not taken here**, and the page is
+now the thing that will show whether it was taken.
+
+**One thing worth noting and not fixing.** The filings panel is correct and unreadable:
+`AAPL.US` on 2024-06-05 renders 155 rows back to 1985, of which the top four matter.
+Every row is genuinely readable on that date, so nothing should be filtered, and the
+panel as it stands answers a question nobody scrolls far enough to ask. A collapse or a
+default limit with the full list behind it is the fix. Not correctness, not urgent, and
+recorded so it is a decision someone takes rather than a thing that stays annoying.
+
 ### Definition of done
 
 | # | Line | Status |

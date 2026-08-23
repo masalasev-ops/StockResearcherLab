@@ -571,7 +571,7 @@ public sealed class RecordInspector : IReadOwner
 
         var identity = await IdentityAsync(ticker, ct).ConfigureAwait(false);
         var inForce = await InForceAsync(ticker, date, ct).ConfigureAwait(false);
-        var rejection = await RejectionAsync(ticker, date, ct).ConfigureAwait(false);
+        var rejection = await RejectionAsync(ticker, date, inForce?.EvaluationDate, ct).ConfigureAwait(false);
         var thresholds = await ThresholdsAsync(date, ct).ConfigureAwait(false);
 
         return new MembershipPanel(identity, inForce, rejection, thresholds);
@@ -634,14 +634,38 @@ public sealed class RecordInspector : IReadOwner
     /// reason: C01 writes both on its weekly cadence, so a date between two evaluations
     /// reads the one before it.
     /// </summary>
-    private async Task<RejectionRow?> RejectionAsync(string ticker, DateOnly date, CancellationToken ct)
+    /// <param name="inForceOn">
+    /// The evaluation date of the `security_daily` row in force, where there is one.
+    ///
+    /// **The as-of pick spans both tables, because one evaluation writes to one of them
+    /// and the answer is whichever C01 reached last** [`SCHEMA.md`, `universe_rejection`].
+    /// Read without this bound the two picks are independent, and a name rejected at one
+    /// evaluation and admitted at a later one carries both: the panel then says member
+    /// and rejected at once, which is the state the two tables partition the population
+    /// precisely to prevent. Measured at the 3.5 sign-off rather than reasoned about:
+    /// 205,940 active rows over 2,228 tickers carry a rejection at an earlier date, so it
+    /// is the ordinary case and not an edge.
+    ///
+    /// **The bound is inclusive and that is the half a `&gt;` would get wrong.** A name
+    /// leaving the universe is written both rows on the one evaluation date, the
+    /// departure into `security_daily` and the criterion here, and the criterion is
+    /// exactly the answer for it. Sharing a date is that case; an earlier date is the
+    /// superseded one.
+    ///
+    /// Null for a name with no membership row at all, which leaves the rejection
+    /// unbounded, that being a name C01 has never admitted.
+    /// </param>
+    private async Task<RejectionRow?> RejectionAsync(
+        string ticker, DateOnly date, DateOnly? inForceOn, CancellationToken ct)
     {
+        var superseded = inForceOn is { } on ? $"\n               AND r.date >= DATE '{Iso(on)}'" : string.Empty;
+
         var rows = await _data.ReadAsync(
             "universe_rejection",
             $"""
              SELECT r.date, r.criterion
              FROM universe_rejection r
-             WHERE r.ticker = {Literal(ticker)} AND r.date <= DATE '{Iso(date)}'
+             WHERE r.ticker = {Literal(ticker)} AND r.date <= DATE '{Iso(date)}'{superseded}
              ORDER BY r.date DESC
              LIMIT 1;
              """,

@@ -1,3 +1,4 @@
+using System.Globalization;
 using StockResearcherLab.Api;
 using StockResearcherLab.Api.Contracts;
 using StockResearcherLab.Core.Config;
@@ -210,6 +211,92 @@ public sealed class RecordInspectorTests
         Assert.All(view.Metrics.Metrics, m => Assert.Null(m.RankedScope));
     }
 
+    /// <summary>
+    /// **A member with an earlier rejection shows no rejection in force**, which is the
+    /// ordinary case rather than an edge: 205,940 active `security_daily` rows over 2,228
+    /// tickers carry a rejection at an earlier date, measured at the 3.5 sign-off.
+    ///
+    /// `ABNB.US` at 2024-06-02 is the measured instance and is used as the fixture rather
+    /// than an invented one: a member on that evaluation date, carrying
+    /// `insufficient_history` from 2021-12-05. Read as two independent as-of picks the
+    /// panel says member and rejected at once, and `SCHEMA.md` has the two tables
+    /// partitioning the evaluated population between them precisely so that cannot
+    /// happen.
+    /// </summary>
+    [Fact]
+    public async Task AMemberWithAnEarlierRejectionShowsNoRejectionInForce()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var data = new AsOfPair(
+            memberOn: new DateTime(2024, 6, 2), isActive: true,
+            rejectedOn: new DateTime(2021, 12, 5), criterion: "insufficient_history");
+
+        var panel = await new RecordInspector(data, new RecordingConfig())
+            .MembershipAsync("ABNB.US", new DateOnly(2024, 6, 5), ct).ConfigureAwait(true);
+
+        Assert.NotNull(panel.InForce);
+        Assert.True(panel.InForce.IsActive);
+        Assert.Null(panel.Rejection);
+
+        // The bound is the statement's rather than this test's arithmetic, and it is the
+        // in-force evaluation date exactly.
+        Assert.Contains(
+            "r.date >= DATE '2024-06-02'",
+            data.Sql.Single(s => s.Contains("universe_rejection", StringComparison.Ordinal)),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// **A departure and its criterion share an evaluation date, and the criterion is
+    /// still the answer.** That is what makes the bound inclusive rather than strict: C01
+    /// writes both rows on the one date when a name leaves, the departure into
+    /// `security_daily` and the criterion into `universe_rejection`, and a `&gt;` would
+    /// hide the only thing that says why it left.
+    ///
+    /// Without this the correction above is a blanket that suppresses every rejection a
+    /// name with any membership row ever had.
+    /// </summary>
+    [Fact]
+    public async Task ADepartureAndItsCriterionShareADateAndTheCriterionIsInForce()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var data = new AsOfPair(
+            memberOn: new DateTime(2024, 6, 2), isActive: false,
+            rejectedOn: new DateTime(2024, 6, 2), criterion: "below_market_cap");
+
+        var panel = await new RecordInspector(data, new RecordingConfig())
+            .MembershipAsync("ABNB.US", new DateOnly(2024, 6, 5), ct).ConfigureAwait(true);
+
+        Assert.NotNull(panel.InForce);
+        Assert.False(panel.InForce.IsActive);
+        Assert.NotNull(panel.Rejection);
+        Assert.Equal("below_market_cap", panel.Rejection.Criterion);
+        Assert.Equal(new DateOnly(2024, 6, 2), panel.Rejection.EvaluationDate);
+    }
+
+    /// <summary>
+    /// **A name with no membership row is not bounded at all**, so its rejection reads
+    /// whatever C01 last wrote for it. A bound derived from an absent row would be the
+    /// same blanket by another route, and this is the state `ASML.US` is in on the date
+    /// the phase demonstrates.
+    /// </summary>
+    [Fact]
+    public async Task ANameWithNoMembershipRowLeavesTheRejectionUnbounded()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var data = new NoRows();
+
+        await new RecordInspector(data, new RecordingConfig())
+            .MembershipAsync("ASML.US", new DateOnly(2024, 6, 5), ct).ConfigureAwait(true);
+
+        var sql = data.Sql.Single(s => s.Contains("universe_rejection", StringComparison.Ordinal));
+
+        Assert.Contains("r.date <= DATE '2024-06-05'", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("r.date >=", sql, StringComparison.Ordinal);
+    }
+
     // ------------------------------------------ inputs and market [3.5.3, 3.5.4] ---
 
     /// <summary>
@@ -385,6 +472,66 @@ public sealed class RecordInspectorTests
             };
 
             return Task.FromResult(rows);
+        }
+
+        public Task<long> WriteAsync(
+            string table, WriteOperation operation, string sql,
+            IReadOnlyDictionary<string, object?>? parameters = null, CancellationToken ct = default)
+            => throw new UndeclaredTableAccessException("RecordInspector", table, operation.ToString(), "none");
+
+        public Task<long> BulkUpsertAsync(
+            string table, IReadOnlyList<string> columns, IReadOnlyList<string> conflictTarget,
+            Func<IBulkWriter, CancellationToken, Task> write, CancellationToken ct = default)
+            => throw new UndeclaredTableAccessException("RecordInspector", table, "Insert", "none");
+    }
+
+    /// <summary>
+    /// One `security_daily` row and one `universe_rejection` row, with the rejection read
+    /// honouring the lower bound the statement carries.
+    ///
+    /// **The double applies the bound rather than ignoring it, and that is what makes the
+    /// absent rejection a behaviour instead of an artifact.** A double returning its row
+    /// whatever it was asked would make the corrected reader fail and the uncorrected one
+    /// pass, which is the assertion inverted. The parse is deliberately literal: it reads
+    /// the one bound the statement can carry and nothing else, so a statement that stopped
+    /// carrying it fails here rather than reading as a store with no such row.
+    /// </summary>
+    private sealed class AsOfPair(DateTime memberOn, bool isActive, DateTime rejectedOn, string criterion)
+        : IStageData
+    {
+        public List<string> Sql { get; } = [];
+
+        public Task<IReadOnlyList<IReadOnlyList<object?>>> ReadAsync(
+            string table, string sql, CancellationToken ct = default, int? commandTimeoutSeconds = null)
+        {
+            Sql.Add(sql);
+
+            IReadOnlyList<IReadOnlyList<object?>> rows = table switch
+            {
+                // date, sector, size_bucket, market_cap, is_active
+                "security_daily" => [[memberOn, "Technology", "large", 90_000_000_000m, isActive]],
+                "universe_rejection" when Admits(sql) => [[rejectedOn, criterion]],
+                _ => [],
+            };
+
+            return Task.FromResult(rows);
+        }
+
+        /// <summary>Whether the statement's lower bound, if it carries one, admits the held row.</summary>
+        private bool Admits(string sql)
+        {
+            const string Marker = "r.date >= DATE '";
+            var at = sql.IndexOf(Marker, StringComparison.Ordinal);
+
+            if (at < 0)
+            {
+                return true;
+            }
+
+            var bound = DateTime.ParseExact(
+                sql.Substring(at + Marker.Length, 10), "yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+            return rejectedOn >= bound;
         }
 
         public Task<long> WriteAsync(

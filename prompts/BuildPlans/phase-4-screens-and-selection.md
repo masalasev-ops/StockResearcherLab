@@ -22,8 +22,14 @@ definitions in `0001_snapshot.sql` [`CLAUDE.md` §7].
 checkpoints in §6 are phase scope and are authored into `BUILD_PLAN.md` by a human rather than
 from here, as are the eleven decision clauses in §4 [`CLAUDE.md` §13].
 
-**This plan is archived to `prompts/spent/` before any code, not after**, on phase 3 and phase
-3.5's precedent and for their reason [`PROGRESS.md`, 2.13].
+**This plan is not archived to `prompts/spent/` yet, and archiving it now would be the wrong
+thing.** Nothing has been issued from it, none of §4's eleven decisions is authored, and no
+checkpoint has landed, so there is no record of what was asked to keep. It goes to
+`prompts/spent/` **as implemented**, which is `CLAUDE.md` §3's wording and is what phase 3's
+archive is: the same document carrying, in its header, that D-92 to D-95 were authored and
+that the eighteen checkpoints reached `BUILD_PLAN.md`. Phase 2's archive is the other shape,
+the prompt issued to the build session at `Status: SPENT`. §8 carries the drift that made this
+worth stating.
 
 ---
 
@@ -1145,6 +1151,18 @@ at the window rather than at a fault.
 price endpoints answered for in the same run [D-69, measured at 3.1]. Both of S4's surviving
 inputs come from that endpoint, so its backfilled distribution excludes names that stopped
 trading. Recorded against the screen's floor in `PROGRESS.md`.
+
+**Phase 3.5 archived a `DRAFT` to `prompts/spent/` before any code, and that is a drift rather
+than a precedent.** `CLAUDE.md` §3 says a prompt is archived after writing code and goes to
+`prompts/spent/` as implemented, and `prompts/README.md` says `spent/` holds "every prompt that
+has been issued", with a status of `ISSUED`, `SPENT` or `SUPERSEDED BY`. Phase 2's archive is
+the prompt issued to the build session at `Status: SPENT`. Phase 3's is the plan as implemented,
+its header recording that its four decisions were authored and its eighteen checkpoints landed.
+Phase 3.5's is a byte-identical copy of the `DRAFT`, carrying a header that cites phase 3 as its
+precedent for archiving early, which phase 3's own archive does not support. Three files in
+`spent/` now read `Status: DRAFT`, a value the README does not list. This plan followed the same
+reasoning at first and it was wrong; correcting it is one line in a header here and an authored
+call about the three existing archives, which is not this phase's to make.
 
 **The persistence measure is deliberately not in this section.** A finding is something reported
 after the fact and that is a bar set before one, so it is §5 and is pre-registered rather than

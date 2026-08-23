@@ -80,12 +80,21 @@ public readonly record struct StageResult(
 /// that needs the time takes an <see cref="IClock"/>; nothing reads system time
 /// directly [INVARIANT 11].
 /// </summary>
-public interface IStage : IWriteOwner
+public interface IStage : IWriteOwner, IReadOwner
 {
-    /// <summary>Tables this stage may read. Reaching outside it is an error, not a warning.</summary>
-    IReadOnlyList<string> ReadSet { get; }
-
     Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default);
+}
+
+/// <summary>
+/// Anything ARCHITECTURE.html section 3 catalogues. It exists so that
+/// <see cref="IWriteOwner"/> and <see cref="IReadOwner"/> can both require a name
+/// without a stage, which is both, meeting two declarations of it and becoming
+/// ambiguous at every call site.
+/// </summary>
+public interface IComponent
+{
+    /// <summary>The component name as ARCHITECTURE.html section 3 gives it, for example UniverseBuilder.</summary>
+    string Name { get; }
 }
 
 /// <summary>
@@ -97,13 +106,31 @@ public interface IStage : IWriteOwner
 /// the runnable ones. A writer the registry cannot see is a writer INVARIANT 10
 /// is not enforced against, which is the whole failure mode.
 /// </summary>
-public interface IWriteOwner
+public interface IWriteOwner : IComponent
 {
-    /// <summary>The component name as ARCHITECTURE.html section 3 gives it, for example UniverseBuilder.</summary>
-    string Name { get; }
-
     /// <summary>Writes this component owns, per operation.</summary>
     IReadOnlyList<TableWrite> WriteSet { get; }
+}
+
+/// <summary>
+/// Anything that reads a store. Most are stages, and from D-109 one is not:
+/// RecordInspector reads eleven stores, writes nothing and runs never.
+///
+/// **This is <see cref="IWriteOwner"/>'s sentence with reader substituted.** That
+/// interface exists because a writer the registry cannot see is a writer INVARIANT 10
+/// is not enforced against; a reader the conformance test cannot see is a reader D-74
+/// is not enforced against, and D-74 exists because four Reads cells and four declared
+/// sets disagreed for a whole phase with nothing able to say so.
+///
+/// A read owner that owns no write declares an empty <see cref="IWriteOwner.WriteSet"/>
+/// through <see cref="DeclaredAccess"/> rather than implementing that interface, which
+/// is what makes any write throw as undeclared before a connection opens instead of
+/// being forbidden by a convention.
+/// </summary>
+public interface IReadOwner : IComponent
+{
+    /// <summary>Tables this component may read. Reaching outside it is an error, not a warning.</summary>
+    IReadOnlyList<string> ReadSet { get; }
 }
 
 /// <summary>

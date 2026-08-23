@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using StockResearcherLab.Core;
 using StockResearcherLab.Core.Stages;
 
 namespace StockResearcherLab.Pipeline.Compute;

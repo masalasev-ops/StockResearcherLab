@@ -1,4 +1,5 @@
 using System.Globalization;
+using StockResearcherLab.Core;
 using StockResearcherLab.Core.Stages;
 
 namespace StockResearcherLab.Pipeline;

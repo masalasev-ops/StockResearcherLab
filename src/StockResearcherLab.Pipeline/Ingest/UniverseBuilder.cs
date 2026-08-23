@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using StockResearcherLab.Core;
 using StockResearcherLab.Core.Config;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data.Eodhd;
@@ -50,9 +51,14 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
         "ticker", "date", "sector", "size_bucket", "market_cap", "is_active",
     ];
 
+    /// <summary>The criterion the evaluation stopped on, per evaluated name that was not admitted [D-108, 0015].</summary>
+    public static readonly string[] RejectionColumns = ["ticker", "date", "criterion"];
+
     private static readonly string[] ConflictTarget = ["ticker"];
 
     private static readonly string[] DailyConflictTarget = ["ticker", "date"];
+
+    private static readonly string[] RejectionConflictTarget = ["ticker", "date"];
 
     private readonly EodhdClient _client;
 
@@ -63,10 +69,23 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
     public IReadOnlyList<string> ReadSet { get; } =
         ["price_daily", "fundamental_snapshot", "security_daily"];
 
+    /// <summary>
+    /// Three tables, and `universe_rejection` is claimed for two operations rather than
+    /// one [D-108, INVARIANT 10 read per operation].
+    ///
+    /// **The delete is what makes a re-run produce identical rows.** An upsert alone
+    /// leaves the row of a name that was rejected on an earlier run and is admitted on
+    /// this one, and `SCHEMA.md` says a member has no row. So the evaluation date is
+    /// recomputed whole: deleted, then inserted. One component owning both operations on
+    /// one table is not the conflict the conformance test looks for, which is two
+    /// components claiming one triple.
+    /// </summary>
     public IReadOnlyList<TableWrite> WriteSet { get; } =
     [
         new TableWrite("security", WriteOperation.Insert, Columns),
         new TableWrite("security_daily", WriteOperation.Insert, DailyColumns),
+        new TableWrite("universe_rejection", WriteOperation.Delete),
+        new TableWrite("universe_rejection", WriteOperation.Insert, RejectionColumns),
     ];
 
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
@@ -89,6 +108,9 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
 
         written += await WriteDailyAsync(
             context, context.Date, day.Members, previous, ct).ConfigureAwait(false);
+
+        written += await WriteRejectionsAsync(
+            context, context.Date, day.Rejections, ct).ConfigureAwait(false);
 
         return new StageResult(written, "ok", day.Detail);
     }
@@ -184,6 +206,7 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
             var day = await MembershipAsync(stage, settings, listing, date, ct).ConfigureAwait(false);
 
             written += await WriteDailyAsync(stage, date, day.Members, previous, ct).ConfigureAwait(false);
+            written += await WriteRejectionsAsync(stage, date, day.Rejections, ct).ConfigureAwait(false);
 
             previous.Clear();
             foreach (var m in day.Members)
@@ -298,7 +321,10 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
     private sealed record Listing(
         IReadOnlyDictionary<string, string> Names, IReadOnlyDictionary<string, DateOnly> DelistedOn);
 
-    private sealed record Day(List<Member> Members, string Detail);
+    private sealed record Day(List<Member> Members, string Detail, List<Rejection> Rejections);
+
+    /// <summary>One evaluated name that was not admitted, and the criterion the evaluation stopped on [D-108].</summary>
+    private readonly record struct Rejection(string Ticker, string Criterion);
 
     private static async Task<Settings> SettingsAsync(StageContext context, CancellationToken ct)
         => new(
@@ -371,6 +397,12 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
         // Every rejection counted, because "the universe builds to roughly 2,000
         // names" is not an answer on its own: what was excluded and by which
         // criterion is what makes the number readable [phase 1 done-when].
+        //
+        // **Counted and now also recorded per ticker** [D-108]. The counts answer "how
+        // many and why" for a date and the rows answer "why this name", which is the
+        // question that took a query nobody could write, three of the nine criteria
+        // having no persisted input to re-derive a verdict from.
+        var rejectedPrePass = 0;
         var rejectedType = 0;
         var rejectedDelisted = 0;
         var rejectedNoFundamentals = 0;
@@ -379,12 +411,37 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
         var rejectedMarketCap = 0;
 
         var members = new List<Member>();
+        var rejections = new List<Rejection>();
+
+        // Recorded only for names with a bar inside the window, which bounds the store
+        // and never the evaluation [D-108]. A name that stopped trading before
+        // `backfill.window_start` can never be a member on any evaluated date, and the
+        // Inputs panel showing no bars is the answer for it.
+        void Reject(in Liquid p, string criterion)
+        {
+            if (p.InWindow)
+            {
+                rejections.Add(new Rejection(p.Ticker, criterion));
+            }
+        }
 
         foreach (var p in liquid)
         {
+            // **First, and that is what keeps this an addition rather than a membership
+            // change.** The statement classifies where it used to filter, so the three
+            // pre-pass criteria now arrive as rows instead of as absences. Tested
+            // anywhere but here, the loop would admit names D-4 excludes [D-108].
+            if (p.Verdict is not null)
+            {
+                rejectedPrePass++;
+                Reject(p, p.Verdict);
+                continue;
+            }
+
             if (!listing.Names.TryGetValue(p.Ticker, out var name))
             {
                 rejectedType++;
+                Reject(p, "not_common_stock");
                 continue;
             }
 
@@ -395,6 +452,7 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
             if (listing.DelistedOn.TryGetValue(p.Ticker, out var stopped) && asOf > stopped)
             {
                 rejectedDelisted++;
+                Reject(p, "delisted_on_date");
                 continue;
             }
 
@@ -406,12 +464,14 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
             if (!fundamentals.TryGetValue(p.Ticker, out var f))
             {
                 rejectedNoFundamentals++;
+                Reject(p, "no_fundamentals");
                 continue;
             }
 
             if (f.CleanGaps < settings.MinCleanGaps)
             {
                 rejectedCleanGaps++;
+                Reject(p, "below_clean_gaps");
                 continue;
             }
 
@@ -420,6 +480,7 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
                 // No readable share count means no market capitalisation, and D-4's
                 // floor cannot be applied. Absent is not zero and not a pass.
                 rejectedNoShares++;
+                Reject(p, "no_share_count");
                 continue;
             }
 
@@ -427,6 +488,7 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
             if (marketCap < settings.MinMarketCap)
             {
                 rejectedMarketCap++;
+                Reject(p, "below_market_cap");
                 continue;
             }
 
@@ -439,16 +501,25 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
         // Ordinal, so two runs over the same data write in the same order.
         members.Sort(static (a, b) => string.CompareOrdinal(a.Ticker, b.Ticker));
 
+        // **The candidate figure keeps its meaning and is no longer `liquid.Count`.**
+        // That count was the names passing price, liquidity and history because the
+        // statement returned only those; it now returns the whole evaluated population,
+        // so reading it here would silently restate the line as something else
+        // [`CLAUDE.md` §1].
+        var candidates = liquid.Count - rejectedPrePass;
+
         var detail = string.Format(
             CultureInfo.InvariantCulture,
             "{0:N0} names on {1}. Rejected: {2:N0} not common stock, {3:N0} already delisted on this " +
             "date, {4:N0} with no fundamentals fetched yet, {5:N0} fetched but below {6} clean filing " +
             "gaps, {7:N0} with no readable share count, {8:N0} below the market cap floor. " +
-            "Candidates passing price, liquidity and history: {9:N0}",
+            "Candidates passing price, liquidity and history: {9:N0} of {10:N0} evaluated. " +
+            "Rejection rows written: {11:N0}",
             members.Count, Iso(asOf), rejectedType, rejectedDelisted, rejectedNoFundamentals,
-            rejectedCleanGaps, settings.MinCleanGaps, rejectedNoShares, rejectedMarketCap, liquid.Count);
+            rejectedCleanGaps, settings.MinCleanGaps, rejectedNoShares, rejectedMarketCap,
+            candidates, liquid.Count, rejections.Count);
 
-        return new Day(members, detail);
+        return new Day(members, detail, rejections);
     }
 
     /// <summary>
@@ -468,6 +539,54 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
     {
         var departed = Departures(previous, members.Select(static m => m.Ticker));
 
+        return await WriteDailyRowsAsync(context, date, members, departed, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The evaluation date's rejections, recomputed whole [D-108].
+    ///
+    /// **Deleted then inserted, and the delete is the half that matters.** An upsert
+    /// leaves behind the row of a name rejected on an earlier run of this date and
+    /// admitted on this one, and `SCHEMA.md` says a member has no row. The delete is
+    /// scoped to the one date, so a stage that fails between the two leaves that date to
+    /// be re-run rather than leaving the store wrong elsewhere, which is what failing
+    /// closed means here [`CLAUDE.md` §6].
+    /// </summary>
+    private static async Task<long> WriteRejectionsAsync(
+        StageContext context, DateOnly date, List<Rejection> rejections, CancellationToken ct)
+    {
+        var removed = await context.Data.WriteAsync(
+            "universe_rejection", WriteOperation.Delete,
+            $"DELETE FROM universe_rejection WHERE date = DATE '{Iso(date)}';",
+            parameters: null, ct).ConfigureAwait(false);
+
+        if (rejections.Count == 0)
+        {
+            return removed;
+        }
+
+        // Ordinal, so two runs over the same data write in the same order [INVARIANT 11's
+        // neighbour: determinism is a correctness property here].
+        rejections.Sort(static (a, b) => string.CompareOrdinal(a.Ticker, b.Ticker));
+
+        return removed + await context.Data.BulkUpsertAsync(
+            "universe_rejection", RejectionColumns, RejectionConflictTarget,
+            async (w, c) =>
+            {
+                foreach (var r in rejections)
+                {
+                    await w.StartRowAsync(c).ConfigureAwait(false);
+                    await w.WriteAsync(r.Ticker, c).ConfigureAwait(false);
+                    await w.WriteAsync(date, c).ConfigureAwait(false);
+                    await w.WriteAsync(r.Criterion, c).ConfigureAwait(false);
+                }
+            }, ct).ConfigureAwait(false);
+    }
+
+    private static async Task<long> WriteDailyRowsAsync(
+        StageContext context, DateOnly date, List<Member> members,
+        IReadOnlyList<string> departed, CancellationToken ct)
+    {
         return await context.Data.BulkUpsertAsync(
             "security_daily", DailyColumns, DailyConflictTarget,
             async (w, c) =>
@@ -569,7 +688,27 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
             }, ct).ConfigureAwait(false);
     }
 
-    private readonly record struct Liquid(string Ticker, decimal Close, DateOnly FirstSeen, DateOnly LastSeen);
+    /// <summary>
+    /// One evaluated candidate.
+    ///
+    /// <paramref name="Verdict"/> is null where the name cleared all three of the
+    /// pre-pass criteria and is the criterion it failed otherwise [D-108]. It exists
+    /// because the statement now classifies where it used to filter, and the loop
+    /// rejects on it before every other criterion so that the admitted set is what it
+    /// was.
+    ///
+    /// <paramref name="FirstSeen"/> and <paramref name="LastSeen"/> are default where
+    /// <paramref name="Verdict"/> is set. The statement does not compute them for a name
+    /// it has already rejected, both being seeks that would otherwise run over the whole
+    /// population rather than over the candidates, and nothing reads them for a
+    /// non-member.
+    ///
+    /// <paramref name="InWindow"/> is whether the ticker has a bar at or after
+    /// <c>backfill.window_start</c>, which is the bound on what gets a rejection row and
+    /// not on what gets evaluated [D-108].
+    /// </summary>
+    private readonly record struct Liquid(
+        string Ticker, decimal Close, DateOnly FirstSeen, DateOnly LastSeen, string? Verdict, bool InWindow);
 
     private readonly record struct Fund(int CleanGaps, decimal? SharesOutstanding);
 
@@ -626,6 +765,7 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
             (settings.MinPrice, settings.MinAdv, settings.MinHistory, settings.StatementTimeout);
 
         var asOf = evaluationDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var windowStart = Iso(settings.WindowStart);
 
         var sql = $"""
             WITH tickers AS (
@@ -650,35 +790,52 @@ public sealed class UniverseBuilder : IStage, IBackfillStage
                 WHERE {DollarVolume.RowFilter}
                 GROUP BY ticker
             ),
-            liquid AS (
-                SELECT l.ticker, l.close
+            classified AS (
+                SELECT l.ticker, l.close,
+                       CASE
+                           WHEN l.close < {minPrice.ToString(CultureInfo.InvariantCulture)}
+                               THEN 'below_min_price'
+                           WHEN m.median_dollar_volume < {minAdv.ToString(CultureInfo.InvariantCulture)}
+                               THEN 'below_min_dollar_volume'
+                           WHEN NOT EXISTS (
+                               SELECT 1 FROM price_daily h
+                               WHERE h.ticker = l.ticker AND h.date <= DATE '{asOf}'
+                               OFFSET {(minHistory - 1).ToString(CultureInfo.InvariantCulture)} LIMIT 1
+                           ) THEN 'insufficient_history'
+                       END AS verdict
                 FROM latest l
                 JOIN mdv m ON m.ticker = l.ticker
-                WHERE l.close >= {minPrice.ToString(CultureInfo.InvariantCulture)}
-                  AND m.median_dollar_volume >= {minAdv.ToString(CultureInfo.InvariantCulture)}
             )
             SELECT q.ticker, q.close,
-                   (SELECT min(f.date) FROM price_daily f
-                     WHERE f.ticker = q.ticker AND f.date <= DATE '{asOf}') AS first_seen,
-                   (SELECT max(g.date) FROM price_daily g
-                     WHERE g.ticker = q.ticker AND g.date <= DATE '{asOf}') AS last_seen
-            FROM liquid q
-            WHERE EXISTS (
-                SELECT 1 FROM price_daily h
-                WHERE h.ticker = q.ticker AND h.date <= DATE '{asOf}'
-                OFFSET {(minHistory - 1).ToString(CultureInfo.InvariantCulture)} LIMIT 1
-            )
+                   CASE WHEN q.verdict IS NULL THEN
+                       (SELECT min(f.date) FROM price_daily f
+                         WHERE f.ticker = q.ticker AND f.date <= DATE '{asOf}') END AS first_seen,
+                   CASE WHEN q.verdict IS NULL THEN
+                       (SELECT max(g.date) FROM price_daily g
+                         WHERE g.ticker = q.ticker AND g.date <= DATE '{asOf}') END AS last_seen,
+                   q.verdict,
+                   EXISTS (
+                       SELECT 1 FROM price_daily w
+                       WHERE w.ticker = q.ticker
+                         AND w.date >= DATE '{windowStart}' AND w.date <= DATE '{asOf}'
+                   ) AS in_window
+            FROM classified q
             ORDER BY q.ticker;
             """;
 
         var rows = await context.Data
             .ReadAsync("price_daily", sql, ct, statementTimeout).ConfigureAwait(false);
 
+        // The two dates are null for a name the statement already rejected, which it does
+        // not compute them for. `default` never reaches a row: nothing reads either
+        // column for a non-member, and the loop rejects on the verdict first.
         return rows.Select(r => new Liquid(
             (string) r[0]!,
             (decimal) r[1]!,
-            DateOnly.FromDateTime((DateTime) r[2]!),
-            DateOnly.FromDateTime((DateTime) r[3]!))).ToList();
+            r[2] is DateTime first ? DateOnly.FromDateTime(first) : default,
+            r[3] is DateTime last ? DateOnly.FromDateTime(last) : default,
+            r[4] as string,
+            (bool) r[5]!)).ToList();
     }
 
     /// <summary>

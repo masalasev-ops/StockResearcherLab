@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using System.Text.Json;
+using StockResearcherLab.Core;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data.Eodhd;
 

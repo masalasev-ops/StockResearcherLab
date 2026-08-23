@@ -121,6 +121,47 @@ so every row C01 writes reads true.
 
 **`market_cap` is `numeric`** [INVARIANT 16].
 
+### universe_rejection
+Grain: ticker by evaluation date. **Writer: UniverseBuilder.**
+
+`ticker`, `date`, `criterion`.
+
+One row for every name C01 evaluated on that date and did not admit. A member has no
+row, so the two tables partition the evaluated population between them: presence in
+`security_daily` with `is_active` is admission, presence here is rejection, and absence
+from both means the name was not evaluated on that date at all [D-108].
+
+**`criterion` is the criterion the evaluation stopped on, not the only one the name
+failed.** D-4 is a conjunction and C01 tests it in a fixed order, so a name below the
+market cap floor that is also thinly traded records the thin trading, that being the
+test it reached first. Recording all nine would suggest an independent evaluation the
+code does not perform, and reading this column as "the only failure" is the mistake the
+sentence exists to prevent.
+
+`criterion` is `NOT NULL` with a `CHECK` on exactly `below_min_price`,
+`below_min_dollar_volume`, `insufficient_history`, `not_common_stock`,
+`delisted_on_date`, `no_fundamentals`, `below_clean_gaps`, `no_share_count` and
+`below_market_cap`, in C01's own test order. The constraint is in the database rather
+than in the writer for the reason `regime_label`'s is: this column segments every count
+taken off it, so a drifted value lands in its own bucket in every segmentation without
+ever erroring.
+
+The first three are applied together inside one statement, which classifies rather than
+filters from D-108 onward. A name reaching the remaining six has already passed them.
+
+**The population is bounded by `backfill.window_start`**, the same bound C01 already
+applies to its symbol listing and for the same reason: a name that stopped trading
+before the window can never be a member on any evaluated date. One population rule
+rather than two, so this table and the listing cannot drift apart.
+
+**No column records the threshold a name failed against.** That is configuration,
+resolved as of the evaluation date by the rule every other reader uses, and a copy here
+could disagree with `config_rows` [D-43, INVARIANT 13].
+
+**The date is recomputed whole rather than merged.** C01 deletes the evaluation date and
+inserts it, so a name that was rejected and is now admitted leaves no stale row, and a
+re-run of one date produces identical rows [D-68].
+
 ---
 
 ## Market data
@@ -552,6 +593,65 @@ over a column none of them reads [D-80].
 against the universe composite, with keys in ordinal sort order. Dictionary enumeration
 order is unspecified and this column reaches the cached prefix, where a byte difference
 breaks the cache and roughly triples the input bill silently [INVARIANT 6].
+
+### percentile_cell_daily
+Grain: date by size bucket by sector by metric. **Writer: PercentileEngine.**
+
+`date`, `size_bucket`, `sector`, `metric`, `source_table`, `cell_members`,
+`bucket_members`, `min_members`, `ranked_scope`.
+
+**The population a percentile was ranked against, kept rather than discarded** [D-107].
+C11 computes each metric's non-null count in its cell and in its bucket inside one
+window function, uses both to pick a scope, and until 0014 kept neither. A percentile
+without the size of the population behind it is unreadable: one over three members and
+one over eighty are the same number, and the fifteen-member fallback is theoretical
+rather than visible.
+
+**The grain is the cell, not the row.** The population is a property of the cell, so one
+row per member per metric would restate it thousands of times over on the two largest
+tables in the store.
+
+`cell_members` is the non-null count of that metric in `(size_bucket, sector)` and is
+null on the row that carries no sector. `bucket_members` is the count in the bucket
+alone and repeats across the sectors of a bucket, which is a redundancy accepted so a
+reader takes one row per metric rather than two. `min_members` is
+`percentile.cell_min_members` as it stood on that date.
+
+**`ranked_scope` is stored rather than derived**, `cell`, `bucket` or `none` under a
+`CHECK`. Comparing a count against a floor and labelling the answer is a computation,
+and the reader that shows this does not compute; storing it leaves that decision with
+the component that made it.
+
+**A null sector forms no cell** and goes to the bucket fallback [`METRICS.md` §6.4], so
+it has a row with no sector. The key is a unique index over
+`(date, size_bucket, sector, metric)` declared `NULLS NOT DISTINCT`, Postgres not
+allowing a null in a primary key [0016].
+
+**An empty-string sector is a different cell from a null one and the key distinguishes
+them.** `security_daily.sector` holds both, and C11's `CellQualifies` tests
+`sector IS NOT NULL`, so an empty string is a real cell of its own while a null forms no
+cell at all. The two reach the same bucket fallback by different routes and seeing which
+route is what this store is for. A reader matches with `IS NOT DISTINCT FROM`, which is
+the comparison the index makes.
+
+`metric` is sufficient in the key without `source_table` beside it, the thirty metric
+names being distinct across the four sources. `source_table` is carried so a reader knows
+where to look, and a future collision is a failed key rather than a silent overwrite.
+
+### percentile_cell_coverage
+Grain: one row per source table. **Writer: PercentileEngine.**
+
+`source_table`, `covered_from`, `covered_to`.
+
+**What the populating pass reached, read as coverage and never as equality** [D-106,
+D-107]. Without it a date the pass has not reached and a cell that does not exist are
+the same empty result, and a reader would render "no cell" for a date whose cells simply
+have not been written yet.
+
+One row per source table rather than one for the store, because the pass writes per
+source and a halt between the four statements of a date leaves three further on than the
+fourth. The pass runs date-descending, so the covered set is a contiguous suffix and two
+dates describe it.
 
 ### percentile columns
 Named `<metric>_pctile` and stored alongside the metric they rank, on the metric's own

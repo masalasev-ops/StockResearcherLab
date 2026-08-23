@@ -314,7 +314,13 @@ public sealed class ConfigResolutionTests
         // Forty-three at D-102, which gives the two pool statements a bound of their
         // own so the connection string's stays the value every other statement is
         // judged against.
-        Assert.Equal(43, ConfigSeeder.Keys.Count);
+        //
+        // Forty-four at 3.5.3, which adds the record inspector's bar count. It is a
+        // display bound rather than a metric window, and it is a key rather than a
+        // literal for the reason section 8 gives: the two windows the same panel shows
+        // are already owned elsewhere, and bars are the one thing it bounds that no
+        // component does.
+        Assert.Equal(44, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)

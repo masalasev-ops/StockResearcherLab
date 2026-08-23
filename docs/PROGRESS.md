@@ -46,7 +46,7 @@ cannot reach them.
 | 1 Ingest and universe | IN PROGRESS | 050d5c7 | Every checkpoint 1.1 to 1.14 landed, 136 tests. All twelve definition-of-done lines met live on 2026-08-09: the universe rebuilt to 2,840 names and `run-night` ran all seven stages end to end. Four findings are open and all four are authored questions, not build work: C01 never deactivates, the universe is 2,840 rather than roughly 2,000, C05 cannot fit any schedule, and CI cannot catch the timeout failure class. The CI runner gap is recorded below rather than at sign-off |
 | 2 Compute | IN PROGRESS | 68aafa4 | Every checkpoint 2.1 to 2.15 landed, 221 tests. Five components built: C08, C09, C10, C11 and C35. All eleven definition-of-done lines met on 2026-08-11, with `run-night` completing twelve stages on the blessed date 2026-08-07 and the compute layer digesting identically on re-run. Two components had never executed before this phase ran them and both were broken at the write, which is the phase's largest finding. `METRICS.md` is still the unauthored draft 2.1 produced and all nine of its PROPOSAL entries are now running code |
 | 3 Backfill | **SIGNED OFF** | 7764dfe | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b`, 314 with D-98's implementation, 324 with its two open items closed, 326 with the backfill driver, 332 with range-scoped resumption and 338 with the frontier position and the connection retry, `ci.ps1` green at each, then 336 at `5be4d33` when the frontier's four tests were replaced by two, 336 again at `3fcdd57` and `cf42116`, and **342 at `7c25f13`** where D-100 replaced the intermittent retry test with two and added five at the provider client. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built, and ~~3.6 has been run once: it failed at 58 percent after 2h10m, leaving `price_daily` at 78 million rows and 12 GB~~ **3.6 completed on 2026-08-13**, after three failed attempts, a vacuum, and its resumption rebuilt onto `price_fetch_attempt` [D-99, 0010]: 33,359,792 bars over 18,812 tickers in 108.4 minutes, the pool covered at 50,737 attempt rows, and `price_daily` at 109.6 million rows and 18.3 GB. ~~3.7 to 3.10 are unrun and the phase's remaining sweeps spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them.~~ The open findings are the table at the foot of this file rather than a second list here; ~~**item 24 blocks 3.7 and every nightly run against the backfilled store**~~ [closed, item 24]. ~~**Every checkpoint 3.1 to 3.16 is built as of 2026-08-17, at 429 tests, 416 before 3.16, `ci.ps1` green at `e619ba7`.**~~ ~~What is built and what has been run are different lines and the difference is the phase's remaining work. **Run:** 3.6, 3.7, 3.8 and 3.10 swept and completed, and 3.11 filled `security_daily`. **Built and unrun:** 3.9, which is the last owed sweep at roughly three days of allowance, and the whole of stage D, so `indicator_daily` and `valuation_daily` still carry phase 2's nightly rows. **3.16 spends nothing to build and its first invocation is a spending decision**, C05's sweep being inside the order. 3.17 and 3.18 are outstanding and 3.17's timing line is owed against a stage D run.~~ **Restated 2026-08-22 at `126f5d8`, the paragraph above having gone four days and about fourteen commits stale.** Every checkpoint 3.1 to 3.18 is built, at **441 tests**, `guards.ps1` green. What is built and what has been run are different lines and the difference is what remains. **Run and complete:** every ingest sweep, 3.6, 3.7, 3.8, 3.9 and 3.10; 3.11's `security_daily` fill; and stage D except its last component, C08, C09, C10, C11 and C35 all carrying a range `run_log` row. **3.9 completed 2026-08-22 at `run_log` 1760**, 2,864 of 2,864 members, once item 59 turned out to be the pager rather than the ticker. ~~**Outstanding:** C34 over the range [item 55], the sequence driver 3.16 never having been invoked once, 3.17's `run-night` replay half [item 44], and the three sign-off blockers that need an authored decision rather than a build, items 51, 52 and 60.~~ **Restated 2026-08-22 at the close of the day's work, at `718a43f` plus the run.** Items 51, 52, 57 and 60 all closed, at 451 tests, `ci.ps1` green at every one of the day's seven commits and **GitHub CI green on the branch at `aae9464`**, which is sign-off step 1's first half. **The compute half re-ran whole over the corrected range** 2021-01-04..2026-08-12 in 98.81 minutes, and **the replay reproduced 2026-08-12 byte for byte across all five compute tables**, zero rows differing in either direction. **Two done-when lines are half evidenced and are recorded as half rather than claimed whole.** 3.16: the compute half ran through the same `BackfillRun` the sequence uses, so the work and the `run_log` rows are the sequence's, but the driver's own ordering and fall-through was not exercised, because at the corrected range end C03 and C05 re-dispatch whole for about 440,000 units [item 62]. 3.17: the replay is the compute half rather than the literal evening order, the five ingest stages skipped deliberately, because a full `run-night` would have C02 give 2026-08-13 real bars and item 60's stale rows there would stop being identifiable by their thin date. **The timing done-when is measured and not met**, 170.35 minutes with C01 against "minutes rather than hours", which is a finding rather than a bound to move [`CLAUDE.md` section 11]. ~~**What phase 3 still needs is three authored decisions and a review**: the timing verdict, item 44 with item 62, and a decision number for item 60's refuse-not-clamp rule.~~ **Two of the three are taken as of 2026-08-22.** **D-105** numbers the frontier rule and closes item 60. **The timing verdict** is recorded: 170.35 minutes is not met, the bound is not moved, and it closes as a measured finding because nothing depends on the rebuild being fast, D-88 and `SCREEN_LIFECYCLE.md` §6.7 bundling every rebuild-forcing change into one gated boundary. **What remains is one authored decision and the review**: the item 44 split, D-99's own named remedy, now merged with item 62 and carrying three named triggers. Sign-off step 2 must run in a session that has not committed here, and the four partial lines are listed in the handover note at the head of this file | ~~BUILD COMPLETE, AWAITING SIGN-OFF~~ **PHASE 3 SIGNED OFF, 2026-08-22.** **Step 1, CI green:** `ci.ps1` green at every commit and GitHub CI green on the branch at `cb327d0`, the branch head at the time, verified independently rather than taken. **Step 2, the review:** run in a session that had not committed here, recorded in full below, reproducing 451 tests and re-measuring every store-side line against the database. It returned four exceptions and all four are now closed: the two wrong figures corrected with their mechanisms, item 52's fixture on the forward list, item 44's column split built and proved, and the timing line resolved on a consumer search. **3.16 closes MET**, `BackfillSequence.ExecuteAsync` having run once end to end at `run_log` 1775 to 1786, twelve sources, 54,452,165 rows, exit 0. **The rebuild is 121.30 minutes** measured as one command in one process, and the done-when is still NOT met on that figure; it closes because no consumer of it exists, not because the figure was argued down. **454 tests.** ~~Two things are owed and neither is a build session's~~ **Both are now authored, 2026-08-22.** **D-106** states the sweep-marker rule and closes items 44 and 62. **`first_seen` means first retained**, stated in `SCHEMA.md`, closing item 51; `_verify_security_before` is decided gone with the reasoning recorded, and the drop itself is the one step still owed a hand. **One qualification on the sign-off, stated rather than left to be found: the session that reviewed this phase then built the `0013` split inside it**, so that migration and its two components have not been read by a session that did not write them. `BUILD_PLAN.md`'s two-step sign-off assumes those are different sessions and here they were not. It is covered by 454 tests including both halves of the split and by a real-store run, and it is named here because a reader should decide about it rather than inherit it. **The `price_daily` sizes here are pre-prune** [item 51]: the size the 2026-08-20 prune left is in the prune record and the current ticker count is in the phase 3.5 record, neither restated here. |
-| 3.5 The record for one name on one date | **BUILD COMPLETE, AWAITING SIGN-OFF** | `54da3d5` | Checkpoints 3.5.1 to 3.5.4 built. `C36 RecordInspector` at `/record?ticker=&date=`, four panels, reading fourteen stores through the same guarded route a stage uses and behind an empty write set. D-107, D-108 and D-109 authored. Migrations 0014, 0015 and 0016. Both range passes run: C01 over 292 evaluation dates in 14.94 minutes, C11 over 1,462 trading dates in 48.54 minutes, both at zero provider units. 495 tests. Sign-off step 2 must run in a session that has not committed here |
+| 3.5 The record for one name on one date | ~~**BUILD COMPLETE, AWAITING SIGN-OFF**~~ **PHASE 3.5 SIGNED OFF, 2026-08-23.** **Step 1:** GitHub CI green at `0e8ca25` and `ci.ps1` re-run independently there and at `75ed6b0`. **Step 2:** the review ran in a session that had not committed here, re-measured every store-side line against the database, and returned nine exceptions; **eight are closed** and the corrections are recorded below. **One survives, named rather than carried quietly:** `RecordInspector` holds a second copy of the as-of membership pick, agreeing with `Universe.AsOf` today with nothing holding it so, and closing it is a change to a statement six components read. It blocks nothing in phase 4 | ~~`54da3d5`~~ `75ed6b0` | Checkpoints 3.5.1 to 3.5.4 built, and the sign-off corrections after them. ~~495 tests~~ **498 tests**, the three added by the panel correction. `C36 RecordInspector` at `/record?ticker=&date=`, four panels, reading fourteen stores through the same guarded route a stage uses and behind an empty write set. D-107, D-108 and D-109 authored. Migrations 0014, 0015 and 0016. Both range passes run: C01 over 292 evaluation dates in 14.94 minutes, C11 over 1,462 trading dates in 48.54 minutes, both at zero provider units. ~~495 tests. Sign-off step 2 must run in a session that has not committed here~~ [both superseded at the head of this cell] |
 | 4 Screens and selection | NOT STARTED | | |
 | 5 Digest chain | NOT STARTED | | |
 | 6 Researcher | NOT STARTED | | |
@@ -9515,3 +9515,122 @@ the null exclusion inside the `CASE` and leaving it to throw is authored, and `0
 `ci.ps1` green at this commit: guards 5 checks over 144 files, 16 migrations from an empty
 server, a second migrate with nothing to apply, and **498 tests**, three more than the 495
 the phase closed at.
+
+### The three exceptions the review left open, 2026-08-23
+
+Human-directed at the close. **Two close and one stays open with its mechanism named.**
+
+#### The `Universe.AsOf` copy: identical today, and nothing holds them so
+
+**The two statements pick the same row and that is a read of both rather than an
+assumption.** `Universe.AsOf` reaches each ticker through
+`WHERE s.ticker = t.ticker AND s.date <= D ORDER BY s.date DESC LIMIT 1`, and
+`InForceAsync` issues `WHERE s.ticker = 'X' AND s.date <= D ORDER BY s.date DESC LIMIT 1`.
+Same predicate, same ordering, same limit, and neither filters `is_active`, which is the
+one place a copy of this pick has gone wrong before. **There is no tie for the ordering to
+break differently**, `security_daily` being keyed on `(ticker, date)`, so one row per
+ticker per date is all either can see.
+
+**What differs is the projection, and it is why the copy exists at all.**
+`Universe.AsOf` returns `ticker, sector, size_bucket, market_cap, is_active` and does not
+return `date`. The membership panel needs the evaluation date the row was written on,
+C01 running weekly so a Wednesday reads the Sunday before it, and a panel showing the
+bucket without the date it was decided on invites a reader to take it for a daily fact.
+The shared statement cannot supply it, so the reader wrote its own.
+
+**Nothing keeps them in step.** No test compares the reader's statement against
+`Universe.AsOf` restricted to one ticker, and the conformance tests hold read
+declarations rather than statement shapes. The divergence has a named shape rather than a
+hypothetical one: this statement was already replaced whole at 3.17, for a form reading
+thousands of index rows instead of hundreds of thousands, and the reason that change was
+safe is that every reader took it because there was one statement. A second one does not
+take the next such change.
+
+**So the checkpoint's stated reason is unmet and stays unmet**, 3.5.1 having moved
+`Universe.AsOf` to `Core` "so one statement answers 'in force on this date' for both the
+pipeline and the page". **Open, and the remedy is authored rather than built here**:
+either `Universe.AsOf` projects the row's date, which every existing caller ignores at no
+cost, or a one-ticker overload sits beside it. Both are a change to a statement six
+components read, which is not a sign-off session's to make.
+
+#### The authorship record for `ARCHITECTURE.html`
+
+**The corpus records authorisation in this file, in prose, and the precedent is 3.8's**,
+whose authorisation is discussed here by name where it turned out to cover the §3 Reads
+cell alone and not §16's store matrix. So the place exists and the line was simply
+missing.
+
+**The line.** The phase 3.5 edits to `ARCHITECTURE.html`, being C36's §3 catalogue row,
+C01's and C11's Writes cells, U8 and the screens count in §15, and the three §16 store
+rows, were made by the build on **the operator's explicit authorisation, 2026-08-23**,
+entered from the plan's §9 list of owed authored items. The same authorisation covers
+D-107 to D-109, the three `SCHEMA.md` sections and the `BUILD_PLAN.md` phase section.
+
+**Two things it is worth being exact about.** `DECISIONS.md`'s Inspection preamble
+records the authorisation for the three decisions and is the only statement of it inside
+the repository; the extension to `ARCHITECTURE.html`, `SCHEMA.md` and `BUILD_PLAN.md`
+stood in the pull request body alone until this line, and a pull request body is not a
+repository artifact [`CLAUDE.md` §7]. And **§3's C36 Reads cell is not the plan's text**:
+the plan named eleven tables, the cell holds fourteen, and it grew a checkpoint at a time
+as the panels landed. That is the right behaviour, the conformance test holding the cell
+and the code together in both directions at every commit, and it is authored beyond what
+was handed over rather than transcribed from it.
+
+#### The three per-checkpoint checks, run rather than argued about
+
+**Which three.** `BUILD_PLAN.md` and the plan's §10 ask for the page opened on a real
+store per checkpoint. Three of those readings had no evidence in the record: **3.5.1 on a
+departed name**, the member and the rejected name being evidenced by `AAPL.US` and
+`ASML.US`; **3.5.3 on a name with a substituted filing date and one with none**; and
+**3.5.4 on a date inside the 2022 drawdown, where the regime label should not read
+`risk_on`**.
+
+**Whether each was run and unrecorded or not run cannot be established from the
+repository, and that is the finding rather than an answer withheld.** The record is the
+only thing that would distinguish them, which is what makes an unrecorded check
+indistinguishable from an absent one. So all three were run here, through `C36` itself
+against the developer store rather than through a query standing in for it, which closes
+the substance whichever they were.
+
+| Check | Name and date | What the reader returned |
+|---|---|---|
+| 3.5.1, a departed name | `BRP.US`, 2024-06-05 | The row in force is 2024-06-02 with `is_active` false, the departure, and the criterion `below_min_price` at that same date reads as in force beside it |
+| 3.5.3, filings substituted | `BCPPF.US`, 2024-06-05 | 155 filings readable, all 155 substituted, newest effective 2024-05-08 against a period end of 2024-03-31 with reason `equal` |
+| 3.5.3, filings all known | `ALCO.US`, 2024-06-05 | 156 filings readable, none substituted, every reason `none` |
+| 3.5.4, the 2022 drawdown | `AAPL.US`, 2022-06-16 | breadth **0.1526**, regime **`risk_off`**, Technology composite -0.1016. The label is not `risk_on`, which is what the check exists to see. Across 2022 the store carries 142 `risk_off` dates, 115 `mixed` and 2 `risk_on` |
+
+**A fourth reading was thinner than it looked and is closed with them.** 3.5.2 asks for a
+metric ranked in its cell and one that fell back to its bucket; the record evidences the
+first on `AAPL.US` and the second only as an aggregate, 521,530 cells. **`BFA.US` on
+2024-06-05 is the second on a page**: large, sector the empty string, `atr_pct` and
+`adx14` and `dist_20dma` each ranked with `cell` 1 against `bucket` 797 and scope
+`bucket`. That is a cell of one failing the fifteen-member floor, and it is the
+empty-string sector `0016` exists to keep apart from a null one, met in a real record
+rather than in the migration's reasoning.
+
+**One reading beyond what was asked, recorded because it is the correction working.**
+`ALCO.US` departed in 2022, its row in force being 2022-06-19 and inactive, and C01 has
+gone on rejecting it since: the panel shows `below_min_dollar_volume` evaluated
+2024-06-02, later than the membership row, so the bound admits it. A blanket suppression
+would have hidden that, and this is the case that shows the bound is a pick rather than a
+filter on membership.
+
+### Sign-off
+
+**PHASE 3.5 SIGNED OFF, 2026-08-23.**
+
+**Step 1, CI green:** GitHub CI green at `0e8ca25` and `ci.ps1` re-run independently at
+that sha and again at `75ed6b0`, 498 tests.
+
+**Step 2, the review:** run in a session that had not committed here, recorded in full
+above, re-measuring every store-side line against the database. It returned nine
+exceptions. **Eight are closed**: two documents corrected, two figures restated with the
+columns each side counts, four `run_log` ids cited, the panel defect fixed and asserted,
+the null close filed as item 64, the authorship line written, and the three unevidenced
+checks run and recorded.
+
+**One survives and is named rather than carried quietly: `RecordInspector` holds a second
+copy of the as-of membership pick.** It agrees with `Universe.AsOf` today, nothing holds
+it so, and closing it is a change to a statement six components read. It blocks nothing in
+phase 4, which does not use the reader, and it is the first thing to settle if that
+statement is touched again.

@@ -9243,3 +9243,179 @@ statement. 13: every threshold resolves as of the viewed date, asserted by a dou
 records the dates it was asked for. 16: `ExpectedMonetary` is unchanged at 19, neither
 new table carrying a monetary column.
 
+### The review at sign-off, 2026-08-23
+
+Run in a session that had not committed in this repository, which is what
+`BUILD_PLAN.md`'s step 2 asks for. **It corrects nothing**, including the two figures
+below that did not reproduce and the two documents carrying a sentence a newer
+measurement contradicts. Every store-side line was re-measured against the developer
+database rather than read.
+
+**Step 1, CI green, verified rather than taken.** GitHub CI run 32643932692 is green at
+`0e8ca25`, the branch head, and `ci.ps1` was re-run here at the same sha: exit 0, guards
+5 checks over 144 files, 16 migrations from an empty server, a second migrate with
+nothing to apply, and **495 tests passed, 0 failed**, which is the count the status row
+states.
+
+#### What reproduced exactly
+
+Twelve store-side figures, every one identical to the record.
+
+| Figure | Recorded | Re-measured |
+|---|---|---|
+| `universe_rejection` | 447,196 rows, 292 dates, 2,728 tickers, 59 MB | identical, spanning 2021-01-10 to 2026-08-09 |
+| The nine criteria and their shares | the table above | identical row for row, `no_share_count` absent, so zero |
+| `percentile_cell_daily` | 1,858,932 rows over 1,457 dates, 367 MB | identical |
+| The scope split | 1,271,490 cell, 521,530 bucket, 65,912 none | identical, and it sums to the row count |
+| `percentile_cell_coverage` | 2021-01-04..2026-08-12 on all four sources, 64 kB | identical |
+| `price_daily` | 4,326 tickers, 4,306 with a bar in the window | identical |
+| `AAPL.US` membership | member, large/Technology, evaluated 2024-06-02 | identical, market cap 2,973,090,305,250 |
+| `AAPL.US` `atr_pct` | 7.1st percentile, cell 127, bucket 797 | identical, `atr_pct_pctile` 7.142857, floor 15, scope `cell` |
+| `AAPL.US` inputs | 20 bars, 155 filings, 30 sentiment days, 41 insider filings | identical |
+| Market context 2024-06-05 | breadth 0.669, `risk_on`, Technology -0.034282 | identical, and `vix` is null as D-80 says |
+| `ASML.US` 2024-06-05 | rejected on `below_clean_gaps` | identical, at evaluation date 2024-06-02, with no `security_daily` row at all |
+| The month after the key fix | 25,413 cells over 23 dates, 1,932 null sector, 90 empty | identical |
+
+`inst_ownership_change` on `AAPL.US` reads a null value against a cell of zero, a bucket
+of zero and scope `none`, which is done-when line 3's example holding. The seven dates
+past the 2026-08-12 frontier carry 16, 14, 13, 12, 13, 22 and 22 bars, which is the
+recorded "between 12 and 22".
+
+#### The `run_log` ids the record does not cite, and they exist
+
+Phase 3's audit pass established that a measured figure names the row that produced it,
+and neither range pass here does. All four rows are in the log and every figure in them
+matches:
+
+| id | Stage | `run_date` | Status | `duration_ms` | Rows |
+|---|---|---|---|---|---|
+| 1787 | UniverseBuilder | 2026-08-09 | ok | 895,192, being 14.92 min | 1,222,263 |
+| 1788 | PercentileEngine | 2026-07-01 | **failed** | 73,323 | none |
+| 1789 | PercentileEngine | 2026-07-31 | ok | 44,099 | 486,890 |
+| 1790 | PercentileEngine | 2026-08-12 | ok | 2,911,103, being 48.52 min | 26,834,803 |
+
+**1788 is the `0014` key defect in the log**, at the date the record names it stopped on,
+and 1789 is the one-month probe that preceded the window. Nothing about them is wrong;
+they are simply not cited, so every figure in this section reads as unevidenced to the
+same audit that made phase 3 cite its own.
+
+#### Two figures that did not reproduce, both in one table
+
+The sentiment comparison against phase 2 is the only place a number moved.
+
+| Reading | Recorded | Re-measured 2026-08-23 |
+|---|---|---|
+| Names carrying **the three** derived sentiment metrics | 608 of 2,560 | **562** of 2,560. 608 is `article_count_z_own_90d` alone |
+| Rows the median member has inside the 90-day baseline | 11 | **12**, and 13 over the names carrying any row at all |
+| `AAPL.US` in 30 days against 90 | 30 against 90 | identical |
+
+The member count of 2,560 is right, and so is the line the table exists for. What the
+first row measures is not what it says: all three metrics together is 562 and the
+recorded 608 is the article-count z-score by itself, so the figure is set against phase
+2's 453 under a label the two columns do not share. Whether phase 2's 453 was the
+three-metric reading cannot be established from here, and that is the point: the two
+columns have to be the same question before the movement between them means anything.
+
+The median is 12 under every variant tried, inclusive and exclusive of the window edge,
+by `percentile_disc` and by `percentile_cont`, and 13 when names with no rows are
+dropped. Not 11.
+
+**One wording rather than a figure.** `MTHI.US` carries 4,043 bars in all, of which
+**1,369 sit below 2016-01-04**, where the prune cut. The recorded "carries 1,369 bars
+from 2010-07-27" is the count that appeared beneath the cut rather than the count the
+ticker holds, and the observation it supports stands.
+
+#### Question 1, does the code match the architecture sections
+
+Yes, and the enforcement is mechanical rather than asserted: `IStage` split into
+`IWriteOwner` and `IReadOwner` over `IComponent`, C36's fourteen-table read set held
+against §3's Reads cell in both directions with the two-registry merge itself asserted,
+the empty write set proved over the object the constructor uses, and `ApiIsolationTests`
+holding the Api free of Pipeline in the csproj walk and in `deps.json` both. INVARIANT 12
+is asserted on the filings statement, 13 on a config double that records the dates it was
+asked for, 16 unchanged at 19. One exception.
+
+**`Universe.AsOf` was moved to `Core` and the page does not use it.** 3.5.1's scope gives
+the move its reason, "so one statement answers 'in force on this date' for both the
+pipeline and the page", and `RecordInspector`'s own class comment repeats it. But
+`InForceAsync` writes its own `ORDER BY s.date DESC LIMIT 1`, and `Universe.AsOf` appears
+in that file only in two comments. The semantics agree today, so nothing is wrong now;
+what exists is a second copy of the as-of pick, which is the shape `Universe.cs` says
+every silent hole in phase 3 took. The checkpoint's stated purpose is unmet and the
+difference is not reported.
+
+#### Question 2, does every number trace to something that produced it
+
+Answered by the three sections above. Beyond the two sentiment figures, two documents
+carry a sentence a newer measurement contradicts.
+
+**`ARCHITECTURE.html` §16 still carries the comparison this record struck the same day.**
+Its new paragraph reads "measured against a `price_daily` holding 4,326 tickers rather
+than the 50,785 the pool reached at 3.6". `0e8ca25` retracted exactly that comparison
+here, 50,785 being the admitted pool rather than a ticker count, and it places the figure
+at 3.1 rather than 3.6 with the pool at 50,737 today. §16 is read to know the current
+state, so the sentence reads as current.
+
+**C01's contribution to the rebuild timing is superseded by this phase's own pass.** The
+measured-figures row still reads "C01's 71.54 [`run_log` 1710] stands unchanged, not
+re-run", and C01 has now re-run over the stated range at 14.92 minutes by `run_log` 1787.
+The two are not comparable, 1710 having been measured before the 2026-08-20 prune, and
+that is why the row needs to say so rather than read as the current figure: as it stands
+the 170.35 minute total is assembled from a number a later measurement of the same stage
+over the same range does not support.
+
+#### Question 3, was a contradiction resolved silently
+
+Three deviations and four findings are disclosed, which is most of it. Three exceptions.
+
+**The plan's authorship line.** §9 lists every document item as "None of these is the
+build session's to write" and the build wrote all of them. `DECISIONS.md` records "on the
+operator's explicit authorisation" for D-107 to D-109; nothing in the repository records
+it for `ARCHITECTURE.html`, which `CLAUDE.md` §13 names human-edited only, and §3's C36
+Reads cell is not the plan's text, the plan naming eleven tables where the cell holds
+fourteen. Growing the cell per checkpoint is right and the conformance test holds it; it
+is authored beyond what was handed over, and phase 3 recorded its equivalent as "3.8's
+authorisation".
+
+**A commit spanning two checkpoints.** `54da3d5` covers 3.5.3 and 3.5.4 against
+`BUILD_PLAN.md`'s "split it". It is explained in the pull request body, which is not a
+repository artifact [`CLAUDE.md` §7]. The status row's HEAD `54da3d5` is also three
+commits behind the branch head.
+
+**Three of the plan's own per-checkpoint checks are not evidenced.** §10 asks for 3.5.4
+on a date inside the 2022 drawdown "where the regime label should not read `risk_on`",
+3.5.3 on a name with a substituted filing date and one with none, and 3.5.1 on a departed
+name. The five done-when lines are evidenced; these are not, and the first is the only
+reading of the regime label anywhere in the record.
+
+#### Two code findings, one of them measured as reachable
+
+**The membership panel can show one name as both admitted and rejected, and the store
+says how often.** `RejectionAsync` takes the most recent rejection at or before the date
+without comparing it to the in-force `security_daily` row's own evaluation date, and
+`Record.razor` renders the two blocks independently. **205,940 active `security_daily`
+rows over 2,228 tickers carry a rejection at an earlier date**, so this is the ordinary
+case rather than an edge: `ABNB.US` is a member on 2024-06-02 and carries
+`insufficient_history` from 2021-12-05, which the page renders as "A member on this date"
+above "Rejected on `insufficient_history`, evaluated 2021-12-05". `SCHEMA.md` says the
+two tables partition the evaluated population between them, and the reader lets a name
+sit in both. The later of the two evaluation dates has to win. No test covers the case.
+
+**`LiquidAsync` no longer excludes a null close, and the mapper throws on one.** The
+filter it replaced was `WHERE l.close >= min_price`, which excluded a null; the `CASE`
+tests `l.close < min_price`, which is unknown for a null and falls through to the dollar
+volume arm, and the row then reaches `(decimal) r[1]!`. `price_daily.close` is nullable
+and `DollarVolume.RowFilter` exists because gaps happen, so the schema permits it.
+**`price_daily` holds no null close today**, measured, so the pass over 292 dates could
+not have met it. The direction is a failed run rather than a changed membership, and no
+enumerated criterion covers a name with no readable close.
+
+#### What this review did not check
+
+**The D-108 membership comparison cannot be re-verified after the fact**, the before
+snapshot having been taken and discarded inside the build. What stands is
+`NoPrePassFailureIsAdmitted`, which asserts the same property over built names rather
+than over the store.
+
+**The page was not opened.** Done-when line 1's rendering is taken from the record,
+though every figure it names was re-measured out of the store and matched.

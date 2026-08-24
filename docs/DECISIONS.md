@@ -2695,6 +2695,41 @@ and it found two on its first run.
 all three are ratified together rather than leaving one unaddressed for a reason that
 would be arbitrary.
 
+**D-126 `alert.alert_type` holds `megacap_share` and `distinct_tickers_60d`, and the
+vocabulary is closed by a CHECK.** `ACTIVE`
+`SCHEMA.md` gave the column no vocabulary at all, so the two strings C28 writes were the
+build's own and nothing stopped a later phase spelling one of these conditions a third
+way. Authored 2026-08-23 on the operator's direction.
+
+The two strings are their conditions' config keys less the bound, so a reader who has one
+has the other. Migration `0021` holds the same list on the column, which is `0018`'s
+instrument for the gate reasons applied unchanged: a vocabulary closed in code alone
+leaves the store able to carry a string no reader can interpret.
+
+**The vocabulary is the alert types that have a writer, and it is deliberately not
+larger.** `ARCHITECTURE.html` §03 gives `alert` one writer and §18 gives that writer two
+conditions. §18's table names four more whose row reads "Alert" and whose owner is C07 on
+completeness, C03 on the filing date substitution rate, C13 on every live screen returning
+zero, and C26 on the cache miss rate. None of those components declares a write to `alert`
+and no document says how their alerts are recorded, so admitting a guess at their strings
+would be inventing a vocabulary rather than closing one. A phase that gives one of them a
+writer extends the constraint, which is a migration and therefore visible.
+
+**The correction this decision also carries.** 4.11 reported C28's twenty-date megacap
+window as unauthored and that was wrong. §18's failure table states the condition as
+"Megacap share above a third over 20 days", found with the whitespace-tolerant pattern
+`Megacap\s+share\s+above\s+a\s+third\s+over\s+20\s+days` against the document's tags
+stripped [`CLAUDE.md` §7]. The number is authored and no key is renamed on the strength of
+a finding that was not true.
+
+**What is genuinely open is narrower and is not closed here.** §18 states both windows in
+"days" and C28 measures both in candidate dates. Candidates exist per session, so a window
+of sessions is what the guarantee is about and a calendar span over a holiday week reaches
+back a different number of nights, which is the distinction the trailing floor window got
+wrong at 4.5. The reading is the build's and it is recorded rather than ratified, because
+the two readings differ by about nine sessions a year on the sixty-day window and neither
+document distinguishes them.
+
 ---
 
 ## Open

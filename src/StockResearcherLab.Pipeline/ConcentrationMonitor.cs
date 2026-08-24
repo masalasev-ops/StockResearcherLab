@@ -1,5 +1,6 @@
 using System.Globalization;
 using StockResearcherLab.Core.Config;
+using StockResearcherLab.Core.Monitoring;
 using StockResearcherLab.Core.Stages;
 
 namespace StockResearcherLab.Pipeline;
@@ -53,24 +54,20 @@ public sealed class ConcentrationMonitor : IStage
     public static readonly string[] Columns = ["date", "alert_type", "detail", "acknowledged"];
 
     /// <summary>
-    /// The megacap share is measured over the last twenty candidate dates and the
-    /// distinct ticker count over the last sixty.
+    /// The two windows, in candidate dates.
     ///
-    /// **Candidate dates and not calendar days.** Candidates exist per session, so a
-    /// window of sessions is what the guarantee is about, and a calendar span over a
-    /// holiday week reaches back a different number of nights. This is the distinction
-    /// the trailing floor window got wrong at 4.5 and it is written down rather than
-    /// assumed here.
+    /// **Both numbers are authored** [`ARCHITECTURE.html` §18]. That failure table
+    /// states the megacap condition as "over 20 days" and the distinct-ticker condition
+    /// as "over 60 days". 4.11 reported the twenty as unauthored and that was wrong; the
+    /// correction is at Q.4 and in D-126, and what remains open is narrower and is
+    /// stated on <see cref="AlertTypes.MegacapWindowDates"/>.
     ///
-    /// **Neither window is a config key and both are named in one that is.**
-    /// `monitor.distinct_tickers_60d_min` carries its window in its own name, so a
-    /// separate `monitor.distinct_tickers_window` would be one fact in two places that
-    /// can disagree. The twenty is stated here for the same reason and reported as
-    /// unauthored: nothing in the corpus fixes it.
+    /// Held on <see cref="AlertTypes"/> beside the vocabulary rather than here, so the
+    /// window and the alert type that carries it are one declaration.
     /// </summary>
-    public const int MegacapWindowDays = 20;
+    public const int MegacapWindowDays = AlertTypes.MegacapWindowDates;
 
-    public const int DistinctWindowDays = 60;
+    public const int DistinctWindowDays = AlertTypes.DistinctWindowDates;
 
     /// <summary>
     /// The bucket the megacap share counts. `large` is `UniverseBuilder`'s name for
@@ -80,15 +77,16 @@ public sealed class ConcentrationMonitor : IStage
     public const string MegacapBucket = "large";
 
     /// <summary>
-    /// The two alert types.
+    /// The two alert types, taken from the closed vocabulary rather than spelled here.
     ///
-    /// **The strings are unauthored and are reported.** Nothing in this corpus names
-    /// them; `SCHEMA.md` gives `alert.alert_type` no vocabulary. They are the two config
-    /// keys' own names less the bound, so a reader who has one has the other.
+    /// 4.11 wrote these as two string literals and reported that nothing in the corpus
+    /// named them. D-126 names them and migration `0021` holds the same two on the
+    /// column, so a third spelling of one of these conditions now fails the insert
+    /// instead of being stored [Q.4].
     /// </summary>
-    public const string MegacapAlert = "megacap_share";
+    public static string MegacapAlert => AlertTypes.Name(AlertType.MegacapShare);
 
-    public const string DistinctTickersAlert = "distinct_tickers_60d";
+    public static string DistinctTickersAlert => AlertTypes.Name(AlertType.DistinctTickers60d);
 
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
     {

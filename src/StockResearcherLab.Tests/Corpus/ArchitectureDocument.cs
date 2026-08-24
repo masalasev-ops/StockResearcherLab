@@ -163,6 +163,22 @@ public static class ArchitectureDocument
     }
 
     /// <summary>
+    /// The whole document with its tags removed and its whitespace collapsed to single
+    /// spaces, for the assertions that hold a component against a sentence rather than
+    /// against a table.
+    ///
+    /// **Prose in this corpus is hard-wrapped and this document is HTML besides**, so a
+    /// phrase that breaks across a line or carries an inline tag will not match a literal
+    /// and the failure is silent: the assertion reports no hit and reads as a pass. This
+    /// flattening is what makes a whitespace-tolerant pattern actually tolerant
+    /// [`CLAUDE.md` §7, N.11].
+    /// </summary>
+    public static string FlattenedText()
+        => Whitespace.Replace(Tag.Replace(File.ReadAllText(Path), " "), " ");
+
+    private static readonly Regex Whitespace = new(@"\s+", RegexOptions.Compiled);
+
+    /// <summary>
     /// One catalogue row, whole. Singleline is deliberately off: a row that lost its
     /// closing tag would otherwise swallow the rest of the document and read as one
     /// enormous Reads cell, which is a silent pass rather than a failure.

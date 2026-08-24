@@ -1,6 +1,7 @@
 using System.Globalization;
 using Npgsql;
 using StockResearcherLab.Core;
+using StockResearcherLab.Core.Monitoring;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data;
 using StockResearcherLab.Pipeline;
@@ -383,6 +384,118 @@ public sealed class ConcentrationMonitorTests
         cmd.Parameters.AddWithValue("t", type);
 
         return (string) (await cmd.ExecuteScalarAsync(ct).ConfigureAwait(true))!;
+    }
+
+    // ------------------------------------------------- the closed vocabulary ---
+
+    /// <summary>
+    /// **The vocabulary is closed by the database and not only by the enum** [D-126,
+    /// Q.4]. A constant closes what this system writes and leaves the column able to
+    /// hold a string no reader can interpret, which is the shape `0018` removed for the
+    /// gate reasons and `0021` removes here.
+    /// </summary>
+    [Fact]
+    public async Task AnAlertTypeOutsideTheVocabularyFailsTheInsert()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
+        await using var tx = await conn.BeginTransactionAsync(ct).ConfigureAwait(true);
+
+        await using var cmd = new NpgsqlCommand(
+            "INSERT INTO alert (date, alert_type, detail, acknowledged) " +
+            "VALUES (DATE '2021-08-02', 'not_an_alert', 'fabricated', FALSE);",
+            conn, tx);
+
+        var thrown = await Assert.ThrowsAsync<PostgresException>(
+            () => cmd.ExecuteNonQueryAsync(ct));
+
+        Assert.Equal("alert_alert_type_vocabulary", thrown.ConstraintName);
+
+        await tx.RollbackAsync(ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// The constraint and the enum hold the same two names, read out of the catalogue
+    /// rather than trusted. The list is duplicated deliberately, a migration built from
+    /// a list in code being a migration whose recorded hash changes with a rebuild.
+    /// </summary>
+    [Fact]
+    public async Task TheConstraintAndTheEnumHoldTheSameVocabulary()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
+        await using var cmd = new NpgsqlCommand(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint " +
+            "WHERE conname = 'alert_alert_type_vocabulary';", conn);
+
+        var definition = (string?) await cmd.ExecuteScalarAsync(ct).ConfigureAwait(true);
+
+        Assert.NotNull(definition);
+
+        foreach (var name in AlertTypes.Names)
+        {
+            Assert.Contains("'" + name + "'", definition, StringComparison.Ordinal);
+        }
+
+        // And nothing else: two quoted strings in the constraint, two in the enum.
+        Assert.Equal(AlertTypes.Names.Count, definition.Count(c => c == '\'') / 2);
+    }
+
+    /// <summary>
+    /// **The stored form is built from the enum, and the digit rule is where that goes
+    /// wrong quietly.** A builder that only breaks on an uppercase letter yields
+    /// `distinct_tickers60d`, which matches no constraint and no config key while
+    /// looking entirely like a name. Asserted against the literals the column and
+    /// `CONFIG_REFERENCE.md` actually carry rather than against the builder's own
+    /// output.
+    /// </summary>
+    [Fact]
+    public void TheStoredFormsAreTheTwoStringsTheColumnHolds()
+    {
+        Assert.Equal(["megacap_share", "distinct_tickers_60d"], AlertTypes.Names);
+
+        Assert.Equal("megacap_share", ConcentrationMonitor.MegacapAlert);
+        Assert.Equal("distinct_tickers_60d", ConcentrationMonitor.DistinctTickersAlert);
+
+        // The window the alert type carries in its name is the window the component
+        // measures over, so the two cannot drift into disagreeing.
+        Assert.Equal(AlertTypes.DistinctWindowDates, ConcentrationMonitor.DistinctWindowDays);
+        Assert.Equal(AlertTypes.MegacapWindowDates, ConcentrationMonitor.MegacapWindowDays);
+        Assert.Equal(20, ConcentrationMonitor.MegacapWindowDays);
+        Assert.Equal(60, ConcentrationMonitor.DistinctWindowDays);
+    }
+
+    /// <summary>Reading a type outside the vocabulary fails closed rather than defaulting.</summary>
+    [Fact]
+    public void ParsingATypeOutsideTheVocabularyThrows()
+    {
+        Assert.Throws<InvalidOperationException>(() => AlertTypes.Parse("not_an_alert"));
+
+        foreach (var name in AlertTypes.Names)
+        {
+            Assert.Equal(name, AlertTypes.Name(AlertTypes.Parse(name)));
+        }
+    }
+
+    /// <summary>
+    /// **Both windows are authored, and 4.11 reported the twenty as unauthored in
+    /// error** [D-126, Q.4]. §18's failure table states the megacap condition as "over
+    /// 20 days" and the distinct-ticker condition as "over 60 days", so this holds the
+    /// component's two constants against the document rather than against a comment.
+    ///
+    /// The pattern is whitespace-tolerant and is stated here rather than only run,
+    /// because the document is HTML and a phrase that breaks across a line would not
+    /// match a literal [`CLAUDE.md` §7, N.11].
+    /// </summary>
+    [Fact]
+    public void SectionEighteenStatesBothWindows()
+    {
+        var flat = ArchitectureDocument.FlattenedText();
+
+        Assert.Matches(@"Megacap\s+share\s+above\s+a\s+third\s+over\s+20\s+days", flat);
+        Assert.Matches(@"Distinct\s+tickers\s+over\s+60\s+days\s+below\s+250", flat);
     }
 
     /// <summary>Per-file, as every other stage fixture in this suite keeps its own.</summary>

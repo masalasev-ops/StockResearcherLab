@@ -915,6 +915,20 @@ Grain: per alert. **Writer: ConcentrationMonitor.**
 
 `date`, `alert_type`, `detail`, `acknowledged`.
 
+**The type vocabulary is closed by a CHECK and not only by a constant** [D-126].
+`alert_type` may hold `megacap_share` and `distinct_tickers_60d`, which are §18's two
+conditions for this writer, and the constraint arrives with migration `0021` at
+checkpoint Q.4. This is `gate_result.reasons` closed the same way for the same reason: a
+vocabulary held in code alone leaves the column able to carry a string no reader can
+interpret.
+
+**§18 names four further conditions whose row reads "Alert" and whose owner is C07, C03,
+C13 or C26.** None of those components declares a write to this table and no document
+says how their alerts are recorded, so their type strings are deliberately not in the
+vocabulary. A phase that gives one of them a writer adds the name and extends the
+constraint in the same checkpoint, which is the rule §attribution's `surfaced_as` already
+follows [D-110].
+
 ### local_model_config
 Grain: one row per provider in the chain. **Writer: the UI, via the single permitted
 write endpoint** [D-51].

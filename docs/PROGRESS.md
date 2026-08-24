@@ -107,7 +107,7 @@ them here rather than editing the architecture, and note the gap where it is lar
 | Figure | Estimated | Measured | Date |
 |---|---|---|---|
 | Universe size | ~2,000 | **2,433 to 2,864 active per evaluation date**, 4,290 distinct ever-members across 292 weekly dates | 2026-08-21, phase 3 |
-| Candidates per night | 26-30 | | |
+| Candidates per night | 26-30 | **29.9 a night over the 1,169 dates that produced any**, smallest 1 and largest 33. Measured over the frozen record 2021-01-11..2026-08-12 and reproduced at sign-off. The smallest is 1 rather than 0 because eight of the dates that produced a candidate are days the exchange was shut, one candidate each [phase 4 sign-off] | 2026-08-24, phase 4 |
 | Screen overlap | 10-15% | **0.5 %** of 34,932 allocated candidates carry more than one live screen, and **2.2 %** of 186,038 ranked name-dates are ranked by more than one, mean 1.02 screens. Both readings miss the estimate the same way, so the gap is not definitional. 2.2 percent is what near-independent ranking produces: five screens each ranking the top two percent of their own scored population would put a name in two sets with probability near 4 percent, and the five do not rank one population. **The estimate is corrected at Q.9 rather than the measurement explained**, all three readings named, `ARCHITECTURE.html` §06 and `BUILD_PLAN.md`'s done-when moving together | 2026-08-24, phase 4, over 4.14's frozen record |
 | Cache hit rate | >90% | | |
 | Annual cost | ~$50 | | |
@@ -9771,8 +9771,16 @@ The range was corrected rather than the guard weakened.
 
 **A second consequence follows and is recorded rather than left to be met later.** D-115
 says candidate history begins around 2022-01-03, computed as 250 sessions from the window
-start. From 2021-01-11 the 250th session is later, and the measured first date any screen
-ranked anything is **2022-01-11**.
+start. ~~From 2021-01-11 the 250th session is later, and the measured first date any screen
+ranked anything is **2022-01-11**.~~ **Both halves are wrong and are corrected at the phase
+4 sign-off review, which re-measured them: the first date any screen ranked anything is
+2021-12-24, on all eight screens, and the first `candidate_set` and `attribution` date is
+2021-12-27.** So candidate history begins earlier than D-115's estimate and not later, and
+the direction of the conclusion above inverts. The cause is not arithmetic: 2021-12-24 is
+Christmas observed and is one of the 54 days in the range that the session list holds and
+the exchange did not trade, so the 250th entry in each screen's lookback arrived on a day
+the market was shut. On a calendar of open dates only the 250th is 2022-01-05, which is
+what D-115 was reaching for. The exception and the measurement behind it are in the review.
 
 ### The persistence measure, per screen, over 2021-01-11..2026-08-12
 
@@ -10070,9 +10078,19 @@ may rewrite them [INVARIANT 4, D-40].
 | `attribution` rows, **frozen** | **74,767** |
 | of which `surfaced_as = 'candidate'` | 34,932 |
 | of which `surfaced_as = 'shadow'` | 39,835 |
-| Alerts raised by C28 | 28 |
+| Alerts raised by C28 | 28, every one the warm-up ramp. See below |
 | Wall clock | **12.72 minutes** |
 | HEAD at the run | `cd8310d` |
+
+**All 28 alerts are the warm-up ramp and none is a concentration finding**, measured at the
+phase 4 sign-off review and recorded here so the figure above is not met bare. Every one is
+`distinct_tickers_60d` and none is `megacap_share`, and all 28 fall on consecutive dates
+from 2021-12-27 to 2022-02-02, which are the first 28 dates that produced any candidate.
+Each says so in its own detail: "32 distinct tickers over the last 1 candidate dates, below
+250", then 2 dates, then 3, up to 27. **C28 does not require a full window and the done-when
+line does**, which is why the same guarantee reads as breached 28 times here and as holding
+at 288 in the table below: the distributions query filters to windows with 60 dates behind
+them and C28 measures whatever is behind it. Neither is wrong and nothing is changed.
 
 **The gate row count equals one live screen's score count exactly**, 3,812,120 against
 3,812,120, which is INVARIANT 1 visible as an identity: C12 labels every active member and

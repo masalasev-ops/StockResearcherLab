@@ -41,10 +41,11 @@ public sealed class CandidateAllocator : IStage
     /// <summary>
     /// §3's cell exactly, after the amendment that closed §8's B2.
     ///
-    /// <c>market_context_daily</c> is declared and not yet read: the regime it supplies
-    /// is stamped on an <c>attribution</c> row, which is 4.10's. Declaring the cell's
-    /// full set is safe in the direction the conformance test enforces without exemption,
-    /// which is a table read and not declared.
+    /// <c>market_context_daily</c> is read by <see cref="AttributionSql"/>, which selects
+    /// <c>regime_label</c> as of the date to stamp on an <c>attribution</c> row. This
+    /// comment said "declared and not yet read" from 4.9, when the declaration went in
+    /// ahead of the reader, until the phase 4 sign-off review; 4.10 made it read and the
+    /// comment did not move.
     ///
     /// <c>config_rows</c> is deliberately absent, §3's cell for this component not naming
     /// it. Config arrives through <see cref="IConfigStore"/> on its own connection, so

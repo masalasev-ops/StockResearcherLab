@@ -2341,3 +2341,33 @@ implicit. `BUILD_PLAN.md` gains a `4 → 8` carried obligation holding the quest
 two-stage measurement as its evidence, phase 8 being where C22 ScreenTuner and the paired
 comparison would read it. A correction to a document that describes a screen is not a
 change to the screen, and the second is a decision on its own.
+
+## 2026-08-24, corrective pass Q, checkpoint Q.11
+
+**`ARCHITECTURE.html` §05's S5 Typical-fill cell** [Q.11]. Human-directed.
+`ARCHITECTURE.html` is a spec under D-73, so this is a clean edit and the prior wording is
+here.
+
+> 0 to 5, median 3
+
+**The cell now reads "0 on all but 68 dates in five years" and §05's gate section gains two
+notes.** S5 filled **68 of 35,108** live seats over 2021-01-11 to 2026-08-12, which is 0.19
+percent. Nothing else in the row moved: the gate and ranking description is unchanged and
+the Size-tilt cell still reads "Regime dependent", S5 ranking 32.9 percent large against a
+universe at 31.3.
+
+**The first note records the two stages, because the store separates them.** The gate
+admits a mean of 2.4 names a date, already below the estimate's median before anything is
+ranked, and the 98th-percentile floor over a trailing distribution that small then ranks
+one name on 70 of 1,457 sessions, 68 of which reach a seat.
+
+**The second note records what the store cannot separate, rather than picking a cause.** A
+name failing the gate carries a null score and unknown is collapsed into failed at the same
+point, so the four conditions are one bit per name-date. Of the three causes open, the
+quintile thresholds and the two composites' composition are both inside that bit. The two
+news conditions failing open are excluded on the gate's shape and not on the record: that
+branch is a disjunction, so removing it could only shrink what the gate admits.
+
+**S5's composition is not changed and the question is filed with S3's.**
+`BUILD_PLAN.md` gains a second `4 → 8` carried obligation beside Q.10's, carrying the
+two-stage measurement and the two config keys that have never been measured.

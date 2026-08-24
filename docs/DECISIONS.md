@@ -2904,6 +2904,271 @@ the same as choosing it.
 
 ---
 
+## Digest chain
+
+Phase 5's twelve. **Adopted 2026-08-24 on the operator's direction, ahead of the phase's
+first checkpoint**, from `prompts/BuildPlans/phase-5-digest-chain.md` §4, which is where the
+reasoning was first set out and which is archived as issued. Two of the twelve close items
+carried rather than opening new ground: D-141 closes the `events` point-in-time obligation
+`BUILD_PLAN.md` has held from phase 1, and D-142 answers the question phase 3 handed here
+about `earnings_history`.
+
+**D-131 `headline` carries the article body, and the digest reads it rather than the
+title.** `ACTIVE`
+`ARCHITECTURE.html` §07 prices local enrichment against articles of five to eight hundred
+tokens, and `headline` had no column that could hold one: `ticker`, `date`, `published_at`,
+`title`, `source` and `url`. A digest built from titles alone summarises about forty-five
+tokens of input, which is not the condensation §07 argues for, and it would leave the
+qualitative gap that section identifies unaddressed while every output looked normal.
+
+`content` is nullable, because the endpoint may send an article without one. Null there
+means the provider sent no body rather than that the body was empty, and a row carrying null
+content is excluded from the digest input and counted [`CLAUDE.md` §6]. `published_at` is
+the column D-133's lookback window is read against.
+
+**D-132 `headline` is idempotent by run scope: C29 deletes the ticker and date it is about
+to write and reinserts.** `ACTIVE`
+This closes the obligation `BUILD_PLAN.md` carried from phase 1, that `headline` is an event
+record and the snapshot grain the other layer-3 stores have does not apply.
+
+Two articles about one company on one day are not a duplicate to be collapsed; they are two
+articles, and they may share a title, a source and a publication timestamp while differing
+in body. So a unique index on the row's own attributes is the wrong instrument, and reaching
+for one is how this starts badly [D-68].
+
+C14 already establishes the shape and `SCHEMA.md` states it: the allocator deletes the date
+before it rebuilds it, both operations are its own, and INVARIANT 10 read per operation is
+untouched. C29 declares `Insert` and `Delete` on `headline` and nothing else writes there.
+
+**The scope is ticker and date rather than date alone**, because C29's unit of work is a
+candidate and a partial night must not delete the candidates it did not reach.
+
+**D-133 The digester reads at most `digest.max_articles` articles published within
+`digest.lookback_days` of the date being processed, most recent first.** `ACTIVE`
+Neither figure existed anywhere in this corpus and both are needed before the first call.
+`digest.max_articles` is 3 and `digest.lookback_days` is 7.
+
+**Three is read off `ARCHITECTURE.html` §07's own cost figures rather than chosen.** The
+rotation at about $1.30 a year and a full secondary year at roughly $18, against Haiku 4.5
+at $1.00 per million input tokens and $5.00 per million output, 28 candidates and 252
+sessions, leave about 1,800 input tokens per candidate, which at §07's five to eight hundred
+tokens an article is three. It also agrees with the S3 and S5 screen blocks, which give
+three headlines each.
+
+Seven days is the window the digest's recency is about. §07 asks for what happened recently
+and the apparent cause of a sharp move, and `s5.news_gate_min_articles` already operates at
+three articles in seven days. D-60's ninety days is a different measurement, of whether a
+name is covered at all, and is not this.
+
+**`digest.lookback_days` and `s5.news_gate_min_articles` read the same seven days and are
+separate keys deliberately.** One is what the digest summarises and the other is when S5's
+two news conditions fail open. They agree today because seven days is the right window for
+both questions rather than because they are one question, and harmonising them into a single
+key, which is the tidy-looking edit a later session will reach for, leaves the gate and the
+digest no longer independently movable. That coupling would be inherited rather than chosen.
+
+Most recent first, ties broken on the source string ordinally, so the selection is
+deterministic when a name carries more than three articles in the window. Five of the seven
+names phase P probed carried more than three in ninety days and NVDA.US carried 1,000, so
+the tie-break is reached in practice rather than in principle.
+
+**D-134 `news_digest` distinguishes four outcomes and a null `digest_text` means no article
+was available to read.** `ACTIVE`
+`digest_text` is nullable and `provider` and `model_name` are NOT NULL [D-29], so a row
+exists only where a link answered or was asked. That leaves four states and they must stay
+separable, because D-60's no-digest disqualifier bites on one of them and not on its
+neighbour.
+
+No row: the ticker was not a candidate that night, or the run halted before the digest step.
+A null `digest_text`: a link was selected and there was nothing to send, meaning no article
+inside the window or every article carrying a null body [D-131], and this is "no digest
+available" in D-60's sense. `NO MATERIAL NEWS`: a link read the articles and returned the
+escape hatch `prompts/digest-instruction.md` defines, which is a reading rather than an
+absence and which D-60 does not bite on. Prose: an ordinary digest.
+
+**The middle two are the pair that gets collapsed**, and collapsing them makes S5's
+disqualifier fire on thinly covered small caps, which is the population the design exists to
+reach and the asymmetry D-60 was written to prevent.
+
+`news_digest` gains a CHECK asserting `model_name` is non-empty rather than merely non-null,
+because an empty string satisfies NOT NULL and records nothing. The `provider` vocabulary is
+closed by a CHECK to the chain's link names, which is `GateReasons`' and `AlertTypes`' shape
+and is deliberately the same shape [D-126].
+
+**D-135 `attribution.digest_provider` stays null. `news_digest.provider` is the record and
+no third component writes `attribution`.** `ACTIVE`
+The column exists in `0001` and nothing can fill it. C14 inserts the attribution row at
+18:30 and the digest is produced at 18:33, so the provider is not known when the row is
+written; C21 owns the update and only of the nine return columns; and `SCHEMA.md` says in
+terms that no third component writes here at all, which is a stronger claim than the
+exception it replaced. Adding C33 as a second claimant of `attribution.Update` would also
+collide with C21 on the table-and-operation pair `WriteOwnershipConformanceTests` asserts
+over.
+
+**Nothing is lost.** `news_digest` is at ticker by day, `attribution` is at ticker by day,
+and the provider sits on the first at the same grain, so `VALIDITY.md` §5's mitigation, that
+`digest_provider` is recorded and the rotation gives a paired sample, is met by the join
+rather than by the copy.
+
+This is D-124's disposition of `slot_filled` applied to a second column for the same reason:
+null says unknown truthfully, and a value stamped on a row no later pass may rewrite is
+worse than an absence. The 74,767 frozen rows are unaffected and could not be otherwise
+[INVARIANT 4].
+
+**D-136 A link is an implementation of one interface, the order comes from
+`local_model_config`, and the seeder seeds both rows.** `ACTIVE`
+`ARCHITECTURE.html` §07 asks for a chain rather than a primary with a fallback branch, so
+that failover works in both directions with no rarely-executed code path. In code that is
+one interface with a health check and a digest call, a list built from `local_model_config`
+ordered by `provider_order` and filtered on `enabled`, and a caller that takes the first
+healthy link. **Nothing in the caller knows which link is preferred.**
+
+`local_model_config` is seeded rather than written by a stage. `SCHEMA.md` names the UI as
+its writer [D-51] and the UI is phase 9, so until then the two rows arrive through
+`ConfigSeeder` alongside the config keys, which is what `seed.ps1`'s header already
+anticipates. The insert is `ON CONFLICT DO NOTHING` on `provider_order`, so a second run
+changes nothing, and this adds no writer to the registry: `SCHEMA.md` already carries the
+precedent that a table's writer may be configuration rather than a stage.
+
+**`last_health_check` and `last_loaded_model` stay null and gain no writer in this phase.**
+C32's Writes cell in §03 says nothing, via C27, and a health check is emitted through the
+run log exactly as C07's abort is. Phase 9 inherits whether the UI fills them, and §20's
+"last successful digest run" reads `run_log` until it does.
+
+**D-137 A malformed or over-long response is retried once on the same link and then falls
+through to the next. Nothing is truncated.** `ACTIVE`
+§18 states the rule and no document said what malformed or over-long mean, so both are
+stated here rather than left to a call site.
+
+**Over-long** is a response whose token count exceeds `digest.max_tokens`, which is 150. The
+cap is requested on the call and asserted on the response, because a provider that ignores
+it returns a long answer with a normal status.
+
+**Malformed** is an empty response, a response that is only whitespace, or a transport
+failure. It is deliberately not a content judgement: a digest that reads oddly is not
+malformed, and a step that decided which summaries were good enough would be judging
+[INVARIANT 7].
+
+**Never truncate.** A half-sentence digest is worse than none, because the researcher
+receives it as a complete fact and the validator cannot check prose. A link that fails twice
+is unhealthy for the remainder of that run, so a dead primary costs two calls rather than
+one per candidate.
+
+**The retry count is not a config key.** §18 states one retry as behaviour rather than as a
+tuning parameter, and a key here would invite raising it, which trades a visible fall-through
+for an invisible delay.
+
+**D-138 The two candidates routed to the secondary are chosen by a stable hash of the run
+date and the ticker, not by `System.Random`.** `ACTIVE`
+D-27 says chosen by the date seed and `CLAUDE.md` §6 says `Random` is seeded from the run
+date, so a seeded `Random` is the reading that first suggests itself. It is rejected for one
+reason: the sequence a seeded `System.Random` produces is a runtime implementation detail,
+and a framework upgrade that changed it would silently change which pair the rotation
+compared, splitting the paired sample D-27 exists to build without anything saying so. That
+is the failure class `CLAUDE.md` §1 is about.
+
+The rule instead: order the night's candidates by an FNV-1a hash of the invariant
+`yyyy-MM-dd` date string concatenated with the ticker, ties broken on the ticker ordinally,
+and take the first `digest.rotation_count`. **The hash is written in this repository, so it
+cannot move underneath the record.**
+
+The rotation runs regardless of primary health [D-27], including on a night the primary is
+down, where the rotation pair is indistinguishable from the fall-through except that
+`was_rotation` is true on those two rows. That is what `was_rotation` is for. If the
+candidate set is smaller than `digest.rotation_count` the whole set rotates and nothing is
+padded.
+
+**D-139 No healthy link halts the run at C33, and C28 moves ahead of C29 in the evening
+order.** `ACTIVE`
+INVARIANT 15 and §18 both state the halt in terms of the researcher and of orders, neither
+of which exists in phase 5. The observable is narrower and is stated rather than assumed:
+the run halts at C33, `NightlyRun` returns not completed, and no stage after C33 executes.
+
+That has a consequence the documents do not address. C28 runs at 19:00, after C33 at 18:33,
+and it is what raises the megacap-share and distinct-ticker alerts. On a halted night the
+candidate set exists and is exactly as concentrated as it is, and losing its alert on the
+nights something else is already wrong is the wrong direction. **C28's 19:00 in §04 is a
+clock time rather than a dependency**: it reads `candidate_set`, `position` and
+`security_daily`, and nothing the digest step writes.
+
+So the evening order becomes C14, C28, C29, C33. The alternative, leaving C28 after C33 and
+accepting that a halted night raises no concentration alert, is defensible and is not taken,
+because the monitor exists so the guarantees are measured rather than assumed and a night
+that halts is not a night they stopped mattering.
+
+**D-140 The secondary link is Haiku 4.5 at `claude-haiku-4-5` through the official Anthropic
+SDK, and C26 CostLedger is built in phase 5 rather than phase 6.** `ACTIVE`
+The model id is a config key rather than a literal, `digest.secondary_model_id`, so that a
+model change is a config version and a splittable history rather than a code edit
+[`CLAUDE.md` §12].
+
+The SDK rather than a hand-rolled client. `EodhdClient` is hand-rolled because that provider
+has no SDK and because the rate limiter and the unit allowance are this system's own;
+neither applies here.
+
+**C26 moves, and the reason is that this phase spends money.** `BUILD_PLAN.md` phase 6
+carries the obligation that the cost ledger must be recording per model before the first
+full night, not after, and phase 6 held it because phase 6 was believed to be the first
+phase that spends money. D-27 makes phase 5 the first: two candidates a night go to the
+secondary regardless of primary health, so the first ordinary night this phase runs makes a
+paid call. The obligation's condition is met one phase early and the obligation moves with
+it rather than the money going unrecorded for a phase.
+
+What C26 records here is one row per digest call that reached the secondary: `date`,
+`model_id`, `portfolio_id` null, the four token counts from the response usage, `cost`
+computed from a config-held price, and `was_batch` false. `cost` is `numeric` [INVARIANT
+16] and the price keys are decimal. **It is deliberately not the whole of C26**: the cache
+hit rate, the annual budget alert and the validator rejection counts are phase 6 and phase
+10 concerns and none of them has an input yet.
+
+**D-141 A backfilled `events` row is not point-in-time for an earnings date, no first-seen
+column is added, and the blackout stays inert over history.** `ACTIVE`
+This closes the obligation `BUILD_PLAN.md` carried from phase 1: `calendar/earnings` sends
+no date on which a schedule became public, `announced_date` is populated for dividends and
+null for earnings and splits, and the table has no first-seen column, so a backfilled row
+and a live-accumulated one are indistinguishable.
+
+Three things settle it and none is new work. **3.10 already loaded no earnings**,
+deliberately, so `events` carries no earnings for any backfilled date and there is nothing
+to separate. **Live accumulation is point-in-time correct by construction**, because a row
+appears the night the calendar first lists it; that is a fact about how the rows arrive
+rather than something the schema records, and a `first_seen` column would record it going
+forward while saying nothing about the rows already there. **And the exposure is bounded
+rather than open**: a schedule is usually published two to four weeks ahead,
+`gates.earnings_blackout_days_before` is 5, and a blackout narrower than the publication
+lead behaves the same either way.
+
+So no column, no backfill, and C12's earnings blackout is inert over the whole frozen window
+and live from the first night it accumulates.
+
+**The consequence is stated rather than left to be found.** The 74,767 frozen `attribution`
+rows were selected under a gate with one of its five conditions never firing, uniformly
+across survivors and delisted names alike, so any analysis comparing frozen-window selection
+against live selection is comparing four gates against five.
+
+**D-142 `earnings_history` cannot serve C12's earnings blackout, and the reason is
+structural rather than a gap in the data.** `ACTIVE`
+Phase 3 left this open in terms, at D-98's discussion: whether `earnings_history`, which C03
+populates over the widened pool [D-96], can serve the gate `events` cannot.
+
+It cannot. The blackout needs the **next** earnings date, which is forward-looking, and
+every read of `earnings_history` is keyed on `report_date <= date` [D-96, INVARIANT 12].
+That rule is what makes the table honest and it is precisely the rule that removes every
+forward row. Lifting it to reach a scheduled future report would read a date out of a
+payload fetched today with nothing recording when it became public, which is the same
+lookahead D-141 declines for `events` arriving through a second table.
+
+**So D-141 and D-142 are one finding seen twice.** A forward earnings date is point-in-time
+only where the arrival of the row is itself the evidence of publication, and that is true of
+live accumulation and of nothing else this system has.
+
+`earnings_history` keeps its purpose, which is D-96's: `last_two_earnings_surprises`, and
+whatever a drift screen would need if D-90 ever registers one. Neither is a forward date.
+D-90's third option, widen the backward window and backfill earnings history first, does not
+fix `announced_date` and is pointed here.
+
+---
+
 ## Open
 
 **D-53 Whether the local digest model stays local once measured.** `OPEN`

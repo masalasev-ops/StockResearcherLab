@@ -2584,6 +2584,85 @@ looks like removing duplication and destroys the independence the design rests o
 holds it is a per-screen config facade that throws when asked for another screen's key, so
 the shortcut is unavailable rather than discouraged.
 
+**D-121 C12 GateEngine computes `gate_state`, and `gate_result` is the column that carries
+it.** `ACTIVE`
+D-117 defines what `gate_state` means and never says which component works it out, so this
+closes the siting rather than the meaning. Authored 2026-08-23 on the operator's direction,
+before 4.14 froze anything, the build having reported it rather than closed it.
+
+Evaluability is a property of the gate evaluation itself. C12 is the only component that
+asks every reason on a date, so it is the only one that knows which of them could be asked,
+and recording a fact where it is already true costs nothing.
+
+Rejected: C14 CandidateAllocator computes it. It would have to read `position`,
+`trade_outcome` and `events` to decide which reasons were evaluable, its Reads cell names
+none of the three, and the amendment would have been the eighth taken on that column in
+four phases [D-125].
+
+Rejected: compute it at read time. `gate_state` is a statement about what was knowable on a
+past night, so a later reader asking the same question of a populated store gets today's
+answer to a question about a past date. That is the reconstruction INVARIANT 4 forbids, met
+at a different column.
+
+Migration `0019` puts the column on `gate_result` with a CHECK closing it to `passed` and
+`passed_partial`, and C14 copies it onto the attribution row it writes.
+
+**D-122 A gate reason is evaluable when the store it reads holds something bearing on the
+date, decided per date and never per ticker.** `ACTIVE`
+D-117 says `passed_partial` means at least one gate reason was structurally unevaluable and
+leaves the reading of unevaluable open. Authored 2026-08-23 on the operator's direction.
+
+Per ticker turns an empty store into a positive answer about a name. `position` holds no
+rows until phase 7, and a per-ticker reading would report already-held as evaluable for
+every name on the grounds that nothing is held in any of them. That is a true sentence
+about the store and a false one about the night, where the reason could not be asked at
+all.
+
+**The consequence is stated rather than discovered.** Every row 4.14 freezes reads
+`passed_partial`. `position` and `trade_outcome` are empty across the whole backfill window
+and `events.earnings_backward_days` is 7, so the blackout has no calendar on a historical
+date and three of the five reasons were unevaluable on every one of them. The column
+therefore discriminates nothing within the backfill and separates the backfill from live
+history at the boundary, which is the whole of what it is for and is worth having.
+
+**The obligation that follows is phase 8's and cannot be met afterwards.** Rows carrying
+`passed_partial` and rows carrying `passed` are not one population, and any measure that
+pools them is measuring the boundary rather than the screens. It is in `BUILD_PLAN.md`'s
+carried obligations as well as here, because that is where the planning for phase 8 looks
+and a rule recorded only beside the code that has it is not recorded [`CLAUDE.md` §7].
+
+**D-123 The halt gate fires when the session has no bar for the name, or a bar with no
+volume.** `ACTIVE`
+`ARCHITECTURE.html` §03 names halt as one of the five gate reasons and nothing in this
+corpus defines it operationally. `CONFIG_REFERENCE.md` records that it carries no threshold
+key, so it is not a volume floor with the number left out. Authored 2026-08-23 on the
+operator's direction.
+
+It is the only reading `price_daily` supports. A halted session produces no print, and the
+bulk end-of-day file carries no halt flag, so an absent bar and a bar with zero volume are
+the two observable forms of one fact.
+
+Rejected: define it against a halt feed. That is a second source and a real ingest, which
+is a phase-1 shaped body of work added to a selection phase's own scope [`CLAUDE.md` §3].
+
+Measured at 4.12: it fired on 9 of 2,819 names on the warm-up night of 2026-08-07.
+
+**D-124 `candidate_set.slot_filled` is written null and has no writer.** `ACTIVE`
+The column is in the `0001` snapshot and no document in this corpus says what a `true` in
+it means. Authored 2026-08-23 on the operator's direction, before 4.14.
+
+Three readings are each defensible and nothing chooses between them: that this candidate
+occupied a slot, that its slot was fillable, or that the bucket it sits in reached its
+quota. Any value written is a guess, and a guess stamped on a row no later pass may rewrite
+is worse than an absence, because null says unknown truthfully and a boolean says something
+[`CLAUDE.md` §6].
+
+So the column stays and carries nothing. Recorded here rather than left for a later phase
+to meet as an oversight: a reader finding an all-null column meets a decision instead.
+
+Rejected: drop the column. `SCHEMA.md` and the migrations would both move for a column that
+costs nothing to keep, and the meaning it was reserved for may still be authored.
+
 ---
 
 ## Open

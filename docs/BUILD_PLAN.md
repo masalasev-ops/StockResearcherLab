@@ -1,4 +1,4 @@
-# BUILD_PLAN.md
+﻿# BUILD_PLAN.md
 
 Twelve phases in dependency order. A phase is not done because the code exists. It
 is done when the stated proof passes, which in every case is something that can be
@@ -576,6 +576,7 @@ second copy of a rule is a rule that can disagree with itself.
 | 2 | the next authored pass on `METRICS.md` | The document still marks itself as the draft produced at 2.1, and all nine of its PROPOSAL entries are now implemented and running. One of them now has a number against it: `roic` excludes goodwill and intangibles from invested capital, and under the strict null propagation the same document states it computes for 1,384 of 3,897 names, `goodwill` being present for 2,483 and `intangible_assets` for 2,686. A company that never acquired anything reports no goodwill line, so the metric goes unknown on exactly the clean operating businesses S1 exists to find. The figure is here so whoever authors the proposal decides with it rather than without it |
 | 2 | the next authored amendment to `prompts/README.md` | The README opens "Two different kinds of thing live here and they follow opposite rules" and `prompts/BuildPlans/` is a third. Reported rather than edited, the README being authored prose stating a rule. Carried from the phase 2 plan, which raised it before any code |
 | 4 | 8 | Config version must be stamped on attribution rows from the first write, or the tuner cannot segment history |
+| 4 | 8 | **Every attribution row 4.14 writes carries `gate_state = 'passed_partial'` and every live row will carry `passed`, so the two are not one population** [D-122]. `position` and `trade_outcome` are empty across the whole backfill window and `events.earnings_backward_days` is 7, so three of the five gate reasons were structurally unevaluable on every backfilled date and one of the remaining two, the blackout, had no calendar to read. Any measure that pools the two sides is measuring the boundary rather than the screens. **It cannot be fixed afterwards**, the column being frozen at 4.14, so the segmentation is phase 8's to apply rather than to add. C21 ForwardReturnFiller is indifferent to it; C22 ScreenTuner and C24 CalibrationReporter are not |
 | 6 | 10 | Cost ledger recording per model before the first full night |
 | SL | 4 | `screens.<id>.state` seeded, `live` for S1 to S5 and `shadow` for whatever the family registers as. C13 iterates on it and changes nothing else [D-84, `SCREEN_LIFECYCLE.md` §1.1, §2] |
 | SL | 4 | `attribution.surfaced_as`, `NOT NULL` with a `CHECK` on `candidate` and `shadow`, and `score_per_screen` carrying each screen's rank beside its score. Both are migration work and both are free now and not later: the column has no rows and the `jsonb` shape has no writer [D-85, §4.3, §4.4] |

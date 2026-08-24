@@ -320,8 +320,8 @@ regime keys are verified at `MarketContextEngine.cs:56-57`.
 | `screens.floor_percentile` | 98 | D-9 | `ScreenEngine.ExecuteAsync`, `ScreenEngine.cs` | verified 4.5 |
 | `screens.floor_lookback_days` | 250 | D-9 | `ScreenEngine.ExecuteAsync`, `ScreenEngine.cs` | verified 4.5 |
 | `screens.<id>.metrics` | per screen | D-6 | `ScreenRegistry.LoadOneAsync` via the screen's own facade, `ScreenRegistry.cs` | verified 4.7 |
-| `screens.<id>.slots` | 8 each at start | D-43 | `CandidateAllocator.Validated`, `CandidateAllocator.cs` | verified 4.9 |
-| `screens.<id>.state` | `live` for S1 to S5 | D-84, D-119 | `ScreenRegistry.IdsAsync` and `.LoadOneAsync`, `ScreenRegistry.cs` | verified 4.7 |
+| `screens.<id>.slots` | 8 for each live screen, 12 for each shadow | D-43, D-129 | `CandidateAllocator.Validated`, `CandidateAllocator.cs` | verified 4.9, and see below on shadows |
+| `screens.<id>.state` | `live` for S1 to S5, `shadow` for X-NSI, X-ACC and X-FM | D-84, D-119, D-129 | `ScreenRegistry.IdsAsync` and `.LoadOneAsync`, `ScreenRegistry.cs` | verified 4.7 |
 | `screens.<id>.min_inputs` | S1 5, S2 4, S3 3, S4 2, S5 1 | D-112 | `ScreenEngine.ScoreSql`, `ScreenEngine.cs` | verified 4.7 |
 | `screens.S5.quality_metrics` | S1's list, copied | D-120 | `ScreenRegistry.LoadEligibilityAsync`, `ScreenRegistry.cs` | verified 4.7 |
 | `screens.S5.technical_metrics` | `dist_200dma`, `dist_52w_high`, `rs_change_63d`, each high | D-120 | `ScreenRegistry.LoadEligibilityAsync`, `ScreenRegistry.cs` | verified 4.7 |
@@ -377,10 +377,22 @@ exists. Config is append-only, so the rows already inserted stay where they are:
 retirement is a removal from the seeder and from this document rather than a delete.
 Prior wording in `CHANGELOG.md`.
 
-**`screens.<id>.state` is seeded `live` for S1 to S5 and no family member is
-registered** [D-119]. The shadow mechanism is proven in phase 4 against a fixture
-screen that is removed again, so `shadow` is a value the key accepts rather than one
-any seeded row carries.
+**`screens.<id>.state` is seeded `live` for S1 to S5 and `shadow` for X-NSI, X-ACC and
+X-FM** [D-129]. It carried no shadow row until Q.7, on D-119's deferral. The registration
+is taken before 4.14 and not at sign-off, because `attribution`'s key is `(ticker, date)`
+with `score_per_screen` one object across screens, so a screen registered after the
+attribution write can never carry a backfilled row.
+
+**X-PEAD is not registered and D-90 is `OPEN` for it alone.** Its input has no backfillable
+history, so registering it here would answer an open fork by side effect
+[`SCREEN_LIFECYCLE.md` §7.5].
+
+**A shadow's `slots` is twelve and the allocator never reads it.** `tuner.slot_cap` is
+twelve and that is the depth `SCREEN_LIFECYCLE.md` §2.1 records a shadow at: it holds no
+slots, so what is recorded is what it would have surfaced at the largest count a promotion
+could ever give it. C14 reads the cap directly for a shadow, and `Validated` applies to live
+screens only, so the value is what a promotion would start from rather than something acted
+on today [D-129].
 
 **`screens.<id>.min_inputs` is set per screen, and the values were chosen against
 measured coverage rather than picked** [D-112]. Read on 2026-08-12 over the 2,865 active

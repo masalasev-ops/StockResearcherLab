@@ -2537,7 +2537,10 @@ static feature. It stops being a ranking input, not a column.
 
 **D-119 The shadow family is not registered in phase 4. The mechanism is built and proven
 against a fixture screen, and the registration decision is taken at this phase's
-sign-off.** `ACTIVE`
+sign-off.** ~~`ACTIVE`~~ **`AMENDED BY D-129`**, which takes the deferred decision for the
+three backfillable members and takes it before 4.14 rather than at sign-off. The reasoning
+below stands and is what D-129 acts on; what it did not reach is that sign-off falls after
+the attribution write, and a screen registered after that can never carry a backfilled row.
 `SCREEN_LIFECYCLE.md` gives phase 4 the mechanism: C13 iterating on `screens.<id>.state`
 and C14 recording a shadow to `tuner.slot_cap` under the same proportional quota. It does
 not require that any family member be registered while that mechanism is built, and the
@@ -2775,6 +2778,49 @@ sit beside an uncorrected one and a positive pattern passes over both.
 
 The item was reported before phase 4 and survived the whole of it unchanged, for the
 reason the rest of this corpus keeps finding: nothing read either number.
+
+**D-129 The three backfillable shadows are registered before 4.14 runs, and the ordering
+is the reason.** `ACTIVE`, amending D-119's timing and taking its deferred decision for
+X-NSI, X-ACC and X-FM. Authored 2026-08-23 on the operator's direction.
+
+`attribution`'s key is `(ticker, date)` with `score_per_screen` one jsonb object across
+screens [D-110, `SCREEN_LIFECYCLE.md` §4.2]. So a screen registered after 4.14 could gain a
+backfilled row only by updating a frozen one, which `CLAUDE.md` §12 and `RUNBOOK.md`
+prohibit outright. **After 4.14 no screen can ever have a backfilled attribution record,
+only a prospective one.**
+
+D-119 put the registration decision at this phase's sign-off, and sign-off falls after
+4.14. That sequence removes an option rather than deferring it, and nobody chose to give it
+up: D-119's reasoning is about who takes the decision and on what evidence, and it does not
+reach the question of what is still available when they take it.
+
+**D-119's own condition is met rather than bypassed.** It defers so that the decision is
+taken by someone who has seen five live screens scored over the range with §5's persistence
+figures in front of them. Those figures exist as of 4.13 and are in `PROGRESS.md`. The
+evidence D-119 was waiting for is what this decision is taken on.
+
+**What registering buys is a distribution to look at, which is the whole reason the family
+exists.** It changes nothing about how a shadow is promoted: D-86 already reads prospective
+observations only for a promotion or a retirement, and backfilled observations count toward
+a shadow's trailing distribution and nothing else. A shadow with no backfilled record has no
+D-9 floor for its first 250 sessions and no record at all for its first year, which is the
+condition §5.1 states.
+
+**The three, and why not four.** X-NSI and X-ACC are extractions from S1 and X-FM is an
+addition, and each ranks on one `valuation_daily` column that C09 already writes and C11
+already percentiles [§7.2, §7.4]. X-PEAD is not registered, because D-90 is `OPEN` for it
+alone: `events.earnings_backward_days` is 7 and `announced_date` is null for earnings, so
+its backfilled distribution would come from a different population than its live one, which
+is what D-58 removed short interest for. Registering it here would answer an open fork by
+side effect.
+
+The cost is the backfill's row count at eight screens rather than five and three more score
+entries in each `score_per_screen` object. §9.1 prices the storage and D-119 states it as
+roughly 1.4 GB going to roughly 2.2.
+
+**Had the answer gone the other way it would still have been a decision taken here**, since
+prospective-only for ever is what the ordering produces on its own and inheriting it is not
+the same as choosing it.
 
 ---
 

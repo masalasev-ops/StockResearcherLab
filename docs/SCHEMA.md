@@ -708,10 +708,13 @@ Grain: ticker by screen by day. **Writer: ScreenEngine.**
 
 `ticker`, `screen_id`, `date`, `score`, `rank_within_screen`, `config_version`.
 
-Larger than the price data it derives from, because every ticker is scored by all
-five screens every day. That is necessary rather than wasteful: the floor is the
-98th percentile of the screen's own trailing distribution and you cannot know the
-distribution without scoring everyone [D-9].
+Larger than the price data it derives from, because every ticker is scored by every
+registered screen every day, which is five live and three shadow since Q.7 [D-129]. That
+is necessary rather than wasteful: the floor is the 98th percentile of the screen's own
+trailing distribution and you cannot know the distribution without scoring everyone [D-9].
+
+**A shadow is scored exactly like a live screen and is allocated nothing** [D-84, D-85].
+It reaches this table and `screen_history`; it does not reach `candidate_set`.
 
 ### screen_history
 Grain: screen by day. **Writer: ScreenEngine.**
@@ -722,6 +725,12 @@ Trailing distribution summary per screen, from which the floor is computed.
 Grain: ticker by day. **Writer: CandidateAllocator.**
 
 `ticker`, `date`, `screens_surfacing`, `size_bucket`, `slot_filled`.
+
+**`slot_filled` is written null and has no writer** [D-124]. Nothing in this corpus says
+what a `true` in it means, and three readings are each defensible: that the candidate
+occupied a slot, that its slot was fillable, or that its bucket reached its quota. A guess
+stamped on a row no later pass may rewrite is worse than an absence, because null says
+unknown truthfully.
 
 **The allocator deletes the date before it rebuilds it**, and both operations are its
 own, so INVARIANT 10 read per operation is untouched. An insert with `ON CONFLICT` alone

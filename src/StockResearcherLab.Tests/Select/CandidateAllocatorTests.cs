@@ -479,7 +479,10 @@ public sealed class CandidateAllocatorTests
         // The seeded five are retired on this date only, at a later config version, so
         // the rows the seeder owns are untouched and every other fixture still sees them
         // live [config is append-only, CLAUDE.md section 8].
-        foreach (var id in new[] { "S1", "S2", "S3", "S4", "S5" })
+        // Every seeded screen, read off the seeder. This was a literal S1 to S5 until
+        // Q.7 registered three shadows, at which point this fixture scored eight screens
+        // where it asserts over one [SeededScreens].
+        foreach (var id in SeededScreens.Ids())
         {
             await ExecAsync("""
                 INSERT INTO config_rows (key, version, value, set_at, set_by)
@@ -548,7 +551,8 @@ public sealed class CandidateAllocatorTests
         await ExecAsync("DELETE FROM security_daily WHERE ticker LIKE 'SRLA.%';", ct);
         await ExecAsync("DELETE FROM config_rows WHERE key LIKE @a OR key LIKE @b;", ct,
             ("a", $"screens.{ScreenA}.%"), ("b", $"screens.{ScreenB}.%"));
-        await ExecAsync("DELETE FROM config_rows WHERE key LIKE 'screens.S%.state' AND version = 2;", ct);
+        await ExecAsync("DELETE FROM config_rows WHERE key LIKE '" + SeededScreens.AnyStateVersionTwo +
+            "' AND version = 2;", ct);
     }
 
     private static async Task ExecAsync(

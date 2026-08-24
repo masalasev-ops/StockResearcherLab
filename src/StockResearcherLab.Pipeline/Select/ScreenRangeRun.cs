@@ -69,6 +69,24 @@ public sealed class ScreenRangeRun
     /// </summary>
     public async Task<ScreenPassResult> ScoreAsync(
         DateOnly from, DateOnly to, CancellationToken ct = default)
+        => await ScoreAsync(from, to, only: null, ct).ConfigureAwait(false);
+
+    /// <summary>
+    /// Pass one over a named subset of the registered screens.
+    ///
+    /// **This exists because re-scoring a screen that is already floored destroys its
+    /// ranks.** <see cref="ScreenEngine.ScoreSql"/> upserts <c>rank_within_screen</c>
+    /// alongside the score and pass one always writes it null, so a second pass one over
+    /// S1 to S5 would silently clear the 190,142 rows pass two ranked. Pass two would put
+    /// them back half an hour later, which is what makes the hazard worth a parameter
+    /// rather than a note: the window where the store is wrong looks exactly like the
+    /// window where it is right.
+    ///
+    /// A null subset is every scored screen, which is what the range run did before this
+    /// and what a full rebuild still wants [Q.7].
+    /// </summary>
+    public async Task<ScreenPassResult> ScoreAsync(
+        DateOnly from, DateOnly to, IReadOnlyCollection<string>? only, CancellationToken ct = default)
     {
         var stage = new ScreenEngine();
         var config = new ConfigStore(_connectionString);
@@ -81,7 +99,8 @@ public sealed class ScreenRangeRun
         {
             var date = sessions[i];
             var version = await config.RequireVersionAsync(date, ct).ConfigureAwait(false);
-            var screens = await ScreenRegistry.LoadScoredAsync(config, date, ct).ConfigureAwait(false);
+            var screens = Selected(
+                await ScreenRegistry.LoadScoredAsync(config, date, ct).ConfigureAwait(false), only);
 
             var data = new StageData(_connectionString, new DeclaredAccess(stage));
 
@@ -101,7 +120,7 @@ public sealed class ScreenRangeRun
 
         return new ScreenPassResult(
             "score", sessions.Count, rows, started.Elapsed,
-            $"{sessions.Count:N0} sessions, {rows:N0} rows, nothing ranked");
+            $"{sessions.Count:N0} sessions, {rows:N0} rows, nothing ranked" + Scope(only));
     }
 
     /// <summary>
@@ -121,6 +140,19 @@ public sealed class ScreenRangeRun
     /// </summary>
     public async Task<ScreenPassResult> FloorAsync(
         DateOnly from, DateOnly to, CancellationToken ct = default)
+        => await FloorAsync(from, to, only: null, ct).ConfigureAwait(false);
+
+    /// <summary>
+    /// Pass two over a named subset, and the refusal narrows with it.
+    ///
+    /// **The guard gets stronger here rather than weaker, which is the part worth
+    /// checking.** It counted distinct dates in <c>screen_score_daily</c> over the range,
+    /// which any one screen covering the range satisfies. It now requires that every
+    /// screen in scope covers every session, so a pass one that completed for four
+    /// screens and died on the fifth is caught where it previously was not [Q.7].
+    /// </summary>
+    public async Task<ScreenPassResult> FloorAsync(
+        DateOnly from, DateOnly to, IReadOnlyCollection<string>? only, CancellationToken ct = default)
     {
         var stage = new ScreenEngine();
         var config = new ConfigStore(_connectionString);
@@ -128,7 +160,10 @@ public sealed class ScreenRangeRun
 
         var data = new StageData(_connectionString, new DeclaredAccess(stage));
 
-        await EnsurePassOneCompleteAsync(data, sessions, from, to, ct).ConfigureAwait(false);
+        var inScope = Selected(
+            await ScreenRegistry.LoadScoredAsync(config, to, ct).ConfigureAwait(false), only);
+
+        await EnsurePassOneCompleteAsync(data, inScope, sessions, from, to, ct).ConfigureAwait(false);
 
         var lookback = (int) ConfigValue.Long(
             await config.RequireAsync("screens.floor_lookback_days", to, ct).ConfigureAwait(false));
@@ -142,7 +177,8 @@ public sealed class ScreenRangeRun
         for (var i = 0; i < sessions.Count; i++)
         {
             var date = sessions[i];
-            var screens = await ScreenRegistry.LoadScoredAsync(config, date, ct).ConfigureAwait(false);
+            var screens = Selected(
+                await ScreenRegistry.LoadScoredAsync(config, date, ct).ConfigureAwait(false), only);
 
             foreach (var screen in screens.OrderBy(s => s.ScreenId, StringComparer.Ordinal))
             {
@@ -181,7 +217,46 @@ public sealed class ScreenRangeRun
 
         return new ScreenPassResult(
             "floor", sessions.Count, rows, started.Elapsed,
-            $"{sessions.Count:N0} sessions, {rows:N0} rows ranked");
+            $"{sessions.Count:N0} sessions, {rows:N0} rows ranked" + Scope(only));
+    }
+
+    private static string Scope(IReadOnlyCollection<string>? only)
+        => only is null
+            ? string.Empty
+            : ", screens " + string.Join(" ", only.Order(StringComparer.Ordinal));
+
+    /// <summary>
+    /// The registered screens this pass covers.
+    ///
+    /// **A name that matches nothing fails rather than being skipped.** A mistyped screen
+    /// id would otherwise run a pass over no screen, write nothing, and report success,
+    /// which is the shape `CLAUDE.md` section 1 describes: the run completes and the
+    /// output is indistinguishable from a screen that scored nothing.
+    /// </summary>
+    private static IReadOnlyList<ScreenDefinition> Selected(
+        IReadOnlyList<ScreenDefinition> scored, IReadOnlyCollection<string>? only)
+    {
+        if (only is null)
+        {
+            return scored;
+        }
+
+        var missing = only
+            .Where(id => !scored.Any(s => string.Equals(s.ScreenId, id, StringComparison.Ordinal)))
+            .OrderBy(id => id, StringComparer.Ordinal)
+            .ToList();
+
+        if (missing.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "No scored screen is registered under: " + string.Join(", ", missing) +
+                ". Registered and scored on this date: " +
+                string.Join(", ", scored.Select(s => s.ScreenId).Order(StringComparer.Ordinal)) +
+                ". A pass restricted to a name nothing matches writes nothing and reports " +
+                "success, which is indistinguishable from a screen that scored nothing.");
+        }
+
+        return [.. scored.Where(s => only.Contains(s.ScreenId, StringComparer.Ordinal))];
     }
 
     /// <summary>
@@ -190,29 +265,38 @@ public sealed class ScreenRangeRun
     /// are.
     /// </summary>
     private static async Task EnsurePassOneCompleteAsync(
-        IStageData data, IReadOnlyList<DateOnly> sessions, DateOnly from, DateOnly to, CancellationToken ct)
+        IStageData data, IReadOnlyList<ScreenDefinition> inScope, IReadOnlyList<DateOnly> sessions,
+        DateOnly from, DateOnly to, CancellationToken ct)
     {
-        var rows = await data.ReadAsync(
-            "screen_score_daily",
-            "SELECT count(DISTINCT date)::int FROM screen_score_daily WHERE date BETWEEN " +
-            Literal(from) + " AND " + Literal(to) + ";", ct).ConfigureAwait(false);
-
-        var scored = Convert.ToInt32(rows[0][0], CultureInfo.InvariantCulture);
-
-        if (scored != sessions.Count)
+        foreach (var screen in inScope.OrderBy(s => s.ScreenId, StringComparer.Ordinal))
         {
-            throw new InvalidOperationException(
-                "Pass one covered " + scored.ToString(CultureInfo.InvariantCulture) +
-                " of the calendar's " + sessions.Count.ToString(CultureInfo.InvariantCulture) +
-                " sessions between " + from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) +
-                " and " + to.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) +
-                ", so pass two will not run. A floor is the 98th percentile of a screen's own " +
-                "trailing distribution, so a floor drawn over a short score table comes from a " +
-                "population that does not exist and looks entirely normal doing it: a number in " +
-                "the right range, on every date, against a table with the right columns. Re-run " +
-                "pass one over the whole range first [D-9, D-115, 4.13].");
+            var rows = await data.ReadAsync(
+                "screen_score_daily",
+                "SELECT count(DISTINCT date)::int FROM screen_score_daily WHERE screen_id = " +
+                Quote(screen.ScreenId) + " AND date BETWEEN " +
+                Literal(from) + " AND " + Literal(to) + ";", ct).ConfigureAwait(false);
+
+            var scored = Convert.ToInt32(rows[0][0], CultureInfo.InvariantCulture);
+
+            if (scored != sessions.Count)
+            {
+                throw new InvalidOperationException(
+                    "Pass one covered " + scored.ToString(CultureInfo.InvariantCulture) +
+                    " of the calendar's " + sessions.Count.ToString(CultureInfo.InvariantCulture) +
+                    " sessions for screen " + screen.ScreenId + " between " +
+                    from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) +
+                    " and " + to.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) +
+                    ", so pass two will not run. A floor is the 98th percentile of a screen's own " +
+                    "trailing distribution, so a floor drawn over a short score table comes from a " +
+                    "population that does not exist and looks entirely normal doing it: a number in " +
+                    "the right range, on every date, against a table with the right columns. Re-run " +
+                    "pass one over the whole range first [D-9, D-115, 4.13].");
+            }
         }
     }
+
+    private static string Quote(string value)
+        => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
 
     private async Task<IReadOnlyList<DateOnly>> SessionsAsync(
         DateOnly from, DateOnly to, CancellationToken ct)

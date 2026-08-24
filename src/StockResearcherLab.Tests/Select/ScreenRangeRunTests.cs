@@ -122,6 +122,135 @@ public sealed class ScreenRangeRunTests
         }
     }
 
+    /// <summary>
+    /// **A pass restricted to a screen touches no other screen's rows** [Q.7].
+    ///
+    /// This is the property the shadow registration rests on. Pass one upserts
+    /// `rank_within_screen` along with the score and always writes it null, so an
+    /// unrestricted pass one over a store that is already floored clears every rank in
+    /// it. Restricting the pass is what makes registering a screen after the range run a
+    /// cheap operation rather than a full rebuild.
+    ///
+    /// The fixture ranks a second screen by hand rather than running pass two, because
+    /// what is under test is whether the restricted pass leaves those ranks alone and not
+    /// how they came to be there.
+    /// </summary>
+    [Fact]
+    public async Task APassRestrictedToOneScreenLeavesAnothersRanksAlone()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct);
+
+        try
+        {
+            await RegisterSecondScreenAsync(ct);
+
+            await Run().ScoreAsync(From, To, ct);
+
+            // Rank the second screen's rows by hand, which is what pass two would have
+            // left behind on a store that had run far enough to have a floor.
+            await ExecAsync(
+                "UPDATE screen_score_daily SET rank_within_screen = 1 WHERE screen_id = @s;",
+                ct, ("s", Second));
+
+            var before = await RankedRowsForAsync(Second, ct);
+            Assert.True(before > 0, "the fixture ranked nothing, so this asserts over an empty set");
+
+            // Pass one again, restricted to the first screen alone.
+            var again = await Run().ScoreAsync(From, To, new[] { Screen }, ct);
+
+            Assert.Equal(before, await RankedRowsForAsync(Second, ct));
+            Assert.Contains(Screen, again.Detail, StringComparison.Ordinal);
+
+            // And the unrestricted pass is what would have cleared them, which is the
+            // half that makes the assertion above mean something rather than describing
+            // a pass that never writes.
+            await Run().ScoreAsync(From, To, ct);
+
+            Assert.Equal(0, await RankedRowsForAsync(Second, ct));
+        }
+        finally
+        {
+            await ClearSecondScreenAsync(ct);
+            await ClearAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// **The refusal is per screen in scope, not per range** [Q.7]. It counted distinct
+    /// dates over the whole range, which one screen covering the range satisfies however
+    /// short another is. A pass one that completed for one screen and died on the second
+    /// is exactly the interruption the guard exists for, and it used to pass.
+    /// </summary>
+    [Fact]
+    public async Task APassOneShortForOneScreenBlocksPassTwoForThatScreen()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct);
+
+        try
+        {
+            await RegisterSecondScreenAsync(ct);
+
+            await Run().ScoreAsync(From, To, ct);
+
+            // One session removed from the second screen alone. Every date in the range
+            // still carries rows, so a count of distinct dates over the range is
+            // unchanged and the old guard saw nothing.
+            var dropped = await OneScoredDateAsync(ct);
+            await ExecAsync(
+                "DELETE FROM screen_score_daily WHERE screen_id = @s AND date = @d;",
+                ct, ("s", Second), ("d", dropped));
+
+            var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => Run().FloorAsync(From, To, ct));
+
+            Assert.Contains(Second, thrown.Message, StringComparison.Ordinal);
+            Assert.Contains("will not run", thrown.Message, StringComparison.Ordinal);
+            Assert.Equal(0, await HistoryRowsAsync(ct));
+
+            // The screen that is complete still floors when it is the only one in scope,
+            // so the guard refuses the short screen rather than the range.
+            var two = await Run().FloorAsync(From, To, new[] { Screen }, ct);
+            Assert.Equal(await SessionCountAsync(ct), two.Dates);
+        }
+        finally
+        {
+            await ClearSecondScreenAsync(ct);
+            await ClearAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// **A screen id nothing matches fails rather than running over nothing.** A pass
+    /// restricted to a mistyped name would write no row and report success, which is
+    /// indistinguishable from a screen that scored nothing [`CLAUDE.md` §1].
+    /// </summary>
+    [Fact]
+    public async Task ARestrictionNamingNoRegisteredScreenFails()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct);
+
+        try
+        {
+            var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => Run().ScoreAsync(From, To, new[] { "SRLRANGE-TYPO" }, ct));
+
+            Assert.Contains("SRLRANGE-TYPO", thrown.Message, StringComparison.Ordinal);
+
+            // The message names what is registered, so the caller can see the typo rather
+            // than only that there was one.
+            Assert.Contains(Screen, thrown.Message, StringComparison.Ordinal);
+
+            Assert.Equal(0, await ScoredDatesAsync(ct));
+        }
+        finally
+        {
+            await ClearAsync(ct);
+        }
+    }
+
     /// <summary>Re-running one date reproduces it byte-identically.</summary>
     [Fact]
     public async Task ReRunningOneDateReproducesIt()
@@ -317,7 +446,10 @@ public sealed class ScreenRangeRunTests
             ("s", $"screens.{Screen}.state"),
             ("l", $"screens.{Screen}.slots"));
 
-        foreach (var id in new[] { "S1", "S2", "S3", "S4", "S5" })
+        // Every seeded screen, read off the seeder. This was a literal S1 to S5 until
+        // Q.7 registered three shadows, at which point this fixture scored eight screens
+        // where it asserts over one [SeededScreens].
+        foreach (var id in SeededScreens.Ids())
         {
             await ExecAsync("""
                 INSERT INTO config_rows (key, version, value, set_at, set_by)
@@ -360,7 +492,8 @@ public sealed class ScreenRangeRunTests
         await ExecAsync("DELETE FROM indicator_daily WHERE ticker LIKE 'SRLR.%';", ct);
         await ExecAsync("DELETE FROM security_daily WHERE ticker LIKE 'SRLR.%';", ct);
         await ExecAsync("DELETE FROM config_rows WHERE key LIKE @k;", ct, ("k", $"screens.{Screen}.%"));
-        await ExecAsync("DELETE FROM config_rows WHERE key LIKE 'screens.S%.state' AND version = 2;", ct);
+        await ExecAsync("DELETE FROM config_rows WHERE key LIKE '" + SeededScreens.AnyStateVersionTwo +
+            "' AND version = 2;", ct);
     }
 
     private static async Task ExecAsync(
@@ -389,6 +522,42 @@ public sealed class ScreenRangeRunTests
         => (int) await ScalarAsync(
             "SELECT count(*)::bigint FROM screen_score_daily " +
             "WHERE date BETWEEN @f AND @t AND rank_within_screen IS NOT NULL;", ct);
+
+    /// <summary>A second live screen, so a restriction has something to leave alone.</summary>
+    private const string Second = "SRLRANGE2";
+
+    private static async Task RegisterSecondScreenAsync(CancellationToken ct)
+        => await ExecAsync("""
+            INSERT INTO config_rows (key, version, value, set_at, set_by) VALUES
+              (@m, 1, @mv::jsonb, TIMESTAMPTZ '2020-01-01 12:00:00Z', 'test'),
+              (@i, 1, '1'::jsonb, TIMESTAMPTZ '2020-01-01 12:00:00Z', 'test'),
+              (@s, 1, '"live"'::jsonb, TIMESTAMPTZ '2020-01-01 12:00:00Z', 'test'),
+              (@l, 1, '8'::jsonb, TIMESTAMPTZ '2020-01-01 12:00:00Z', 'test')
+            ON CONFLICT (key, version) DO UPDATE SET value = EXCLUDED.value;
+            """, ct,
+            ("m", $"screens.{Second}.metrics"), ("mv", OneMetric),
+            ("i", $"screens.{Second}.min_inputs"),
+            ("s", $"screens.{Second}.state"),
+            ("l", $"screens.{Second}.slots"));
+
+    private static async Task ClearSecondScreenAsync(CancellationToken ct)
+        => await ExecAsync(
+            "DELETE FROM config_rows WHERE key LIKE 'screens.' || @s || '.%';", ct, ("s", Second));
+
+    private static async Task<int> RankedRowsForAsync(string screenId, CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
+        await using var cmd = new NpgsqlCommand(
+            "SELECT count(*)::bigint FROM screen_score_daily " +
+            "WHERE screen_id = @s AND date BETWEEN @f AND @t AND rank_within_screen IS NOT NULL;",
+            conn);
+
+        cmd.Parameters.AddWithValue("s", screenId);
+        cmd.Parameters.AddWithValue("f", From);
+        cmd.Parameters.AddWithValue("t", To);
+
+        return (int) (long) (await cmd.ExecuteScalarAsync(ct).ConfigureAwait(true))!;
+    }
 
     private static async Task<int> HistoryRowsAsync(CancellationToken ct)
         => (int) await ScalarAsync(

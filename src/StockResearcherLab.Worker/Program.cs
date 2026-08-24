@@ -60,12 +60,16 @@ switch (command)
         Console.WriteLine("                        stands: C12, C13, C14 and C28, and no ingest. This is the");
         Console.WriteLine("                        night a backfilled date gets, the sources having already");
         Console.WriteLine("                        filled it, and it calls no provider [4.12].");
-        Console.WriteLine("  range-screens <from> <to> [pass]");
+        Console.WriteLine("  range-screens <from> <to> [pass] [screen ...]");
         Console.WriteLine("                        C13 over a range in two passes. Pass one scores every");
         Console.WriteLine("                        session and ranks nothing; pass two writes floors and");
         Console.WriteLine("                        ranks and REFUSES unless pass one covered the calendar's");
         Console.WriteLine("                        every session. Pass is `score`, `floor` or both by");
         Console.WriteLine("                        default. BOTH DATES ARE REQUIRED [4.13].");
+        Console.WriteLine("                        Naming screens restricts both passes to them. A pass one");
+        Console.WriteLine("                        over a screen that is already floored clears its ranks");
+        Console.WriteLine("                        until pass two puts them back, so a screen registered");
+        Console.WriteLine("                        later is scored by naming it [Q.7].");
         Console.WriteLine("  persistence <from> <to>");
         Console.WriteLine("                        section 5's pre-registered persistence measure, per");
         Console.WriteLine("                        screen, with each screen's own chance baseline. Reads no");
@@ -169,19 +173,27 @@ async Task<int> RangeScreensAsync()
     var to = DateOnly.ParseExact(args[2], "yyyy-MM-dd", CultureInfo.InvariantCulture);
     var pass = args.Length > 3 ? args[3] : "both";
 
+    // Every argument after the pass is a screen id, and none means every registered
+    // screen. Restricting the pass is what lets a screen registered later be scored
+    // without re-scoring the ones already floored, which would clear their ranks for as
+    // long as pass two took to put them back [Q.7].
+    string[]? only = args.Length > 4 ? args[4..] : null;
+
     var run = new ScreenRangeRun(RequireConnectionString(), Console.WriteLine);
 
-    Console.WriteLine($"range-screens  {from:yyyy-MM-dd}..{to:yyyy-MM-dd}  pass {pass}");
+    Console.WriteLine(
+        $"range-screens  {from:yyyy-MM-dd}..{to:yyyy-MM-dd}  pass {pass}  " +
+        (only is null ? "every registered screen" : "screens " + string.Join(" ", only)));
 
     if (pass is "both" or "score")
     {
-        var one = await run.ScoreAsync(from, to).ConfigureAwait(false);
+        var one = await run.ScoreAsync(from, to, only).ConfigureAwait(false);
         Console.WriteLine($"  pass one  {one.Detail}, {one.Elapsed.TotalMinutes:0.00} minutes");
     }
 
     if (pass is "both" or "floor")
     {
-        var two = await run.FloorAsync(from, to).ConfigureAwait(false);
+        var two = await run.FloorAsync(from, to, only).ConfigureAwait(false);
         Console.WriteLine($"  pass two  {two.Detail}, {two.Elapsed.TotalMinutes:0.00} minutes");
     }
 

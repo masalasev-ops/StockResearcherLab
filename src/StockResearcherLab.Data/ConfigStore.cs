@@ -423,6 +423,69 @@ public sealed class ConfigSeeder
         ("screens.S5.state", "\"live\""),
         ("screens.S5.slots", "8"),
 
+        // ------------------------------------------------ the shadow family ---
+        //
+        // Three shadows, registered at Q.7 and before 4.14 [D-129]. C13 scores them
+        // like any other screen and C14 writes their attribution rows and no
+        // candidate_set row, which is D-84 and D-85 and needs no code here: the
+        // mechanism was built at 4.9 and 4.10 against a fixture screen and this is
+        // the first registration that means anything.
+        //
+        // **They are registered before 4.14 and not at sign-off, and the ordering is
+        // the whole reason.** attribution's key is (ticker, date) with score_per_screen
+        // one jsonb object across screens, so a screen added after 4.14 could only gain
+        // a backfilled row by updating a frozen one, which RUNBOOK.md forbids outright.
+        // D-119 put the registration decision at sign-off, which falls after 4.14, and
+        // that sequence would have removed the option without anyone choosing to give it
+        // up [D-129].
+        //
+        // **X-PEAD is not here and that is D-90's open fork, not an omission.** Its
+        // input has no backfillable history: events.earnings_backward_days is 7 and
+        // announced_date is null for earnings, so its backfilled distribution would come
+        // from a different population than its live one, which is what D-58 removed
+        // short interest for [SCREEN_LIFECYCLE.md section 7.5].
+        //
+        // Each ranks on one valuation_daily column that C09 already writes and C11
+        // already percentiles, so the whole cost is these rows and their share of
+        // section 9.1's storage.
+        //
+        // X-NSI, an extraction from S1. Net share issuance is a management action rather
+        // than an accounting outcome, and as one of seven S1 inputs it can be outvoted by
+        // six valuation and quality measures on exactly the names where dilution is the
+        // whole story [section 7.2]. Direction low: a company retiring shares is the good
+        // case, which is why S1's cell names the input share_count_change_inv [D-113].
+        ("screens.X-NSI.metrics", """[{"metric":"share_count_change","direction":"low","weight":1}]"""),
+        ("screens.X-NSI.min_inputs", "1"),
+        ("screens.X-NSI.state", "\"shadow\""),
+        ("screens.X-NSI.slots", "12"),
+
+        // X-ACC, an extraction from S1. Accruals measure the divergence between
+        // accounting earnings and cash, and S1's own rubric names accruals as its
+        // characteristic failure while six other inputs can outvote it [section 7.2].
+        // Direction low, as S1's accruals_inv names.
+        ("screens.X-ACC.metrics", """[{"metric":"accruals","direction":"low","weight":1}]"""),
+        ("screens.X-ACC.min_inputs", "1"),
+        ("screens.X-ACC.state", "\"shadow\""),
+        ("screens.X-ACC.slots", "12"),
+
+        // X-FM, an addition. Fundamental momentum is the trajectory of the business
+        // rather than its level, which is D-11's principle applied to revenue rather than
+        // to returns. It drops gross_margin_4q_change deliberately: that column is an S1
+        // ranking input and including it would make one screen an extraction and an
+        // addition at once, which is two statistical treatments on one screen
+        // [section 7.3].
+        ("screens.X-FM.metrics", """[{"metric":"revenue_growth_4q_trend","direction":"high","weight":1}]"""),
+        ("screens.X-FM.min_inputs", "1"),
+        ("screens.X-FM.state", "\"shadow\""),
+        ("screens.X-FM.slots", "12"),
+
+        // The slot count is twelve because that is tuner.slot_cap, which is the depth
+        // section 2.1 records a shadow at: it holds no slots, so what is recorded is what
+        // it would have surfaced at the largest count a promotion could ever give it. C14
+        // reads the cap directly for a shadow and never this key, and Validated() applies
+        // only to live screens, so the value is what a promotion would start from rather
+        // than something the allocator acts on today.
+
         // S5's two composites, held as metric lists of S5's own. The quality list is
         // the same content as S1's, copied, and the copy is deliberate: removing it is
         // what INVARIANT 2 forbids. What holds it is the per-screen facade, which

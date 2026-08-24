@@ -350,7 +350,12 @@ public sealed class ConfigResolutionTests
         // written for: it catches a key with nothing behind it, and this is the opposite,
         // a key with nothing in front of it. The seeded row already inserted is untouched,
         // config being append-only.
-        Assert.Equal(83, ConfigSeeder.Keys.Count);
+        //
+        // Ninety-five at Q.7, which registers the three shadows: four keys each for
+        // X-NSI, X-ACC and X-FM [D-129]. A screen is a row and registering one is an
+        // insert, which is what CLAUDE.md section 5 means and what 4.6 proved with a
+        // fabricated sixth. These three are the first registration that is meant to last.
+        Assert.Equal(95, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)

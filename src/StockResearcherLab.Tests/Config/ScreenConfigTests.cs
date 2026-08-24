@@ -2,6 +2,7 @@ using Npgsql;
 using StockResearcherLab.Core.Config;
 using StockResearcherLab.Core.Screens;
 using StockResearcherLab.Data;
+using StockResearcherLab.Pipeline.Compute;
 using StockResearcherLab.Tests.Corpus;
 using Xunit;
 
@@ -244,23 +245,77 @@ public sealed class SeededScreenConfigTests
     }
 
     /// <summary>
-    /// The five live ids resolved as of a date are exactly S1 to S5, and no family
-    /// member is registered [D-119].
+    /// **The registered screens are S1 to S5 live and three shadows, and the split by
+    /// state is the assertion** [D-129]. It read "exactly S1 to S5, and no family member
+    /// is registered" until Q.7, on D-119's deferral. D-129 takes that decision for the
+    /// three backfillable members and takes it before 4.14, because a screen registered
+    /// after the attribution write can never carry a backfilled row.
+    ///
+    /// **X-PEAD is asserted absent rather than left unmentioned.** D-90 is `OPEN` and its
+    /// input has no backfillable history, so its absence is a fork nobody has taken and
+    /// not an oversight in this list [`SCREEN_LIFECYCLE.md` §7.5].
     /// </summary>
     [Fact]
-    public async Task TheLiveScreensAreExactlyS1ToS5()
+    public async Task TheRegisteredScreensAreFiveLiveAndThreeShadows()
     {
         var ct = TestContext.Current.CancellationToken;
         await SeedAsync(ct);
 
-        var ids = ConfigSeeder.Keys
-            .Select(k => k.Key)
-            .Where(k => k.EndsWith(".state", StringComparison.Ordinal))
-            .Select(k => k.Split('.')[1])
-            .OrderBy(id => id, StringComparer.Ordinal)
-            .ToList();
+        var config = Store();
+        var registered = await ScreenRegistry.LoadAsync(config, WindowStart, ct).ConfigureAwait(true);
 
-        Assert.Equal(["S1", "S2", "S3", "S4", "S5"], ids);
+        Assert.Equal(
+            ["S1", "S2", "S3", "S4", "S5"],
+            registered.Where(s => s.State == ScreenState.Live)
+                .Select(s => s.ScreenId).OrderBy(id => id, StringComparer.Ordinal));
+
+        Assert.Equal(
+            ["X-ACC", "X-FM", "X-NSI"],
+            registered.Where(s => s.State == ScreenState.Shadow)
+                .Select(s => s.ScreenId).OrderBy(id => id, StringComparer.Ordinal));
+
+        Assert.DoesNotContain("X-PEAD", registered.Select(s => s.ScreenId));
+
+        // Retired screens are not scored at all, so an id in this state would silently
+        // leave the score table. None exists yet and the assertion says so.
+        Assert.DoesNotContain(registered, s => s.State == ScreenState.Retired);
+
+        // The shadows are registered as of the window start and not only as of today,
+        // which is what lets pass one score them across the whole backfill range. A
+        // set_at later than the range would register them for no historical date and the
+        // range run would write nothing for them while reporting success.
+        Assert.Equal(8, registered.Count);
+    }
+
+    /// <summary>
+    /// **Each shadow ranks on one `valuation_daily` column that C09 already writes and
+    /// C11 already percentiles**, which is why the whole cost of the family is these
+    /// config rows [`SCREEN_LIFECYCLE.md` §7.4]. Asserted because a shadow ranking on a
+    /// column nothing percentiles scores null everywhere and reads as a screen that
+    /// found nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("X-NSI", "share_count_change", MetricDirection.Low)]
+    [InlineData("X-ACC", "accruals", MetricDirection.Low)]
+    [InlineData("X-FM", "revenue_growth_4q_trend", MetricDirection.High)]
+    public async Task EachShadowRanksOnOnePercentiledColumn(
+        string screenId, string metric, MetricDirection direction)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct);
+
+        var definition = await ScreenRegistry
+            .LoadOneAsync(Store(), screenId, WindowStart, ct).ConfigureAwait(true);
+
+        var only = Assert.Single(definition.Metrics);
+
+        Assert.Equal(metric, only.Metric);
+        Assert.Equal(direction, only.Direction);
+        Assert.Equal(1, definition.MinInputs);
+        Assert.Empty(definition.Bonuses);
+        Assert.Null(definition.Eligibility);
+
+        Assert.Contains(metric, PercentileEngine.Sources.SelectMany(s => s.Metrics));
     }
 
     /// <summary>The three _inv names in section 05 are seeded as direction low [D-113].</summary>

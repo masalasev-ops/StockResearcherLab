@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data;
 
@@ -23,12 +23,20 @@ public sealed record DoneWhenLine(string Line, string Measured, bool? Holds);
 /// sign-off reproduces the recorded numbers or contradicts them, which is what makes them
 /// traceable rather than asserted [D-67].
 ///
-/// **Two of the six lines are stated loosely in the plan and the reading is named rather
+/// **Three of the six lines are stated loosely in the plan and the reading is named rather
 /// than assumed.** "Roughly 26 to 30 candidates" is measured as the mean over dates that
-/// produced any, and "overlap between screens near 10 to 20 percent" as the share of
-/// candidate rows surfaced by more than one live screen, which is the only quantity
-/// `candidate_set.screens_surfacing` can answer. Both readings are printed beside the
-/// figure so a reader can disagree with the reading rather than with the number.
+/// produced any. "Any 60-day window" is read as sixty candidate dates rather than sixty
+/// calendar days, which is the looser of the two: sixty sessions span more calendar than
+/// sixty days and therefore hold more distinct names. And the overlap line prints both of
+/// its readings, because the plan asks for both. Every reading is printed beside its figure
+/// so a reader can disagree with the reading rather than with the number.
+///
+/// **The overlap line carries no verdict, and that is the plan's own shape** [Q.9, phase 4
+/// sign-off]. Its clause described what the design would do rather than stating a bound the
+/// result has to clear, the description was wrong, and it was corrected to the measurement.
+/// Setting a bound now would be a bar fitted to the measurement that produced it, so the
+/// line reports the two readings against the independence figure they are compared with and
+/// neither passes nor fails.
 /// </summary>
 public static class SelectionDistributions
 {
@@ -39,9 +47,20 @@ public static class SelectionDistributions
     public static readonly (string Bucket, double Target)[] SizeTarget =
         [("large", 2d / 8d), ("mid", 3d / 8d), ("small", 3d / 8d)];
 
+    /// <param name="live">
+    /// The live screen ids, resolved from `screens.&lt;id&gt;.state` as of the range end.
+    /// The overlap line's second reading is over ranked sets, which live in
+    /// <c>screen_score_daily</c> beside every shadow's, so the live set has to arrive from
+    /// configuration. **It must not be inferred from the id**, which is a naming convention
+    /// standing in for a config value and would count a promoted screen as a shadow with
+    /// nothing failing [phase 4 sign-off].
+    /// </param>
     public static async Task<IReadOnlyList<DoneWhenLine>> MeasureAsync(
-        string connectionString, DateOnly from, DateOnly to, CancellationToken ct = default)
+        string connectionString, DateOnly from, DateOnly to,
+        IReadOnlyCollection<string> live, double megacapShareMax, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(live);
+
         var data = new StageData(
             connectionString,
             new DeclaredAccess(
@@ -51,7 +70,7 @@ public static class SelectionDistributions
 
         var found = new List<DoneWhenLine>();
 
-        foreach (var (line, sql, verdict) in Queries(from, to))
+        foreach (var (line, sql, verdict) in Queries(from, to, live, megacapShareMax))
         {
             var rows = await data.ReadAsync("candidate_set", sql, ct).ConfigureAwait(false);
             found.Add(verdict(line, rows));
@@ -64,11 +83,13 @@ public static class SelectionDistributions
     /// One line's statement, for the assertions that hold a query against how it was
     /// asked to be written rather than against what it returned.
     /// </summary>
-    public static string SqlFor(string line, DateOnly from, DateOnly to)
-        => Queries(from, to).Single(q => string.Equals(q.Line, line, StringComparison.Ordinal)).Sql;
+    public static string SqlFor(
+        string line, DateOnly from, DateOnly to, IReadOnlyCollection<string> live, double megacapShareMax)
+        => Queries(from, to, live, megacapShareMax)
+            .Single(q => string.Equals(q.Line, line, StringComparison.Ordinal)).Sql;
 
     private static IEnumerable<(string Line, string Sql, Func<string, IReadOnlyList<IReadOnlyList<object?>>, DoneWhenLine> Verdict)>
-        Queries(DateOnly from, DateOnly to)
+        Queries(DateOnly from, DateOnly to, IReadOnlyCollection<string> live, double megacapShareMax)
     {
         var f = Literal(from);
         var t = Literal(to);
@@ -135,7 +156,7 @@ public static class SelectionDistributions
         // ----------------------------------------------------------- three ---
 
         yield return (
-            "megacap share sits under a third, including inside the 2022 drawdown",
+            "megacap share sits under a third including inside the 2022 drawdown",
             $"""
             WITH labelled AS (
                 SELECT c.size_bucket, m.regime_label
@@ -163,12 +184,20 @@ public static class SelectionDistributions
                 // closed to risk_on, risk_off and mixed by `0005`, so `risk_off` is this
                 // corpus's own name for the condition rather than a range picked to suit
                 // the answer [D-80].
+                //
+                // **The bound is `monitor.megacap_share_max` and not a literal third**
+                // [phase 4 sign-off]. C28 alerts on that key and this line scores the same
+                // guarantee, so a literal here is one bound stated twice and the two could
+                // be moved apart with nothing failing [`CLAUDE.md` §8].
+                var max = megacapShareMax;
+
                 return new DoneWhenLine(
                     line,
                     "whole range " + Pct(whole) + ", risk_off dates " +
                     (riskOffRows == 0 ? "no rows" : Pct(riskOff) + " over " + Count(rows[0][2]) + " rows") +
-                    ", " + Count(rows[0][3]) + " candidate rows on dates with no regime label",
-                    whole < 1d / 3d && (riskOffRows == 0 || riskOff < 1d / 3d));
+                    ", " + Count(rows[0][3]) + " candidate rows on dates with no regime label" +
+                    ", against monitor.megacap_share_max at " + Pct(max),
+                    whole < max && (riskOffRows == 0 || riskOff < max));
             });
 
         // ------------------------------------------------------------ four ---
@@ -220,30 +249,60 @@ public static class SelectionDistributions
         // ------------------------------------------------------------ five ---
 
         yield return (
-            "overlap between screens falls somewhere near 10 to 20 percent",
+            "overlap between screens is read on both of its readings, allocated candidates and ranked sets",
             $"""
+            WITH allocated AS (
+                SELECT
+                    count(*) FILTER (WHERE cardinality(screens_surfacing) > 1)::numeric
+                        / NULLIF(count(*), 0) AS shared,
+                    count(*)::bigint AS rows,
+                    avg(cardinality(screens_surfacing))::numeric AS mean_screens
+                FROM candidate_set
+                WHERE date BETWEEN {f} AND {t}
+            ),
+            ranked AS (
+                SELECT date, ticker, count(DISTINCT screen_id)::int AS screens
+                FROM screen_score_daily
+                WHERE date BETWEEN {f} AND {t}
+                  AND rank_within_screen IS NOT NULL
+                  AND screen_id IN ({Ids(live)})
+                GROUP BY date, ticker
+            ),
+            over_ranked AS (
+                SELECT
+                    count(*) FILTER (WHERE screens > 1)::numeric / NULLIF(count(*), 0) AS shared,
+                    count(*)::bigint AS names,
+                    avg(screens)::numeric AS mean_screens
+                FROM ranked
+            )
             SELECT
-                count(*) FILTER (WHERE cardinality(screens_surfacing) > 1)::numeric
-                    / NULLIF(count(*), 0) AS shared,
-                count(*)::bigint AS rows,
-                avg(cardinality(screens_surfacing))::numeric AS mean_screens
-            FROM candidate_set
-            WHERE date BETWEEN {f} AND {t};
+                allocated.shared, allocated.rows, allocated.mean_screens,
+                over_ranked.shared, over_ranked.names, over_ranked.mean_screens
+            FROM allocated, over_ranked;
             """,
             (line, rows) =>
             {
-                var shared = Number(rows[0][0]);
-
-                // **Measured as the share of candidate rows more than one live screen
-                // surfaced**, which is the only overlap `screens_surfacing` can answer
-                // and the one §06 states a range for. `candidate_set` carries live
-                // screens alone, so a shadow agreeing with a live screen is not counted
-                // here [D-85].
+                // **Both readings, because the plan asks for both and the two are
+                // different quantities** [Q.9]. A live screen ranks about forty-four names
+                // above its floor and seats eight of them, so an overlap over ranked sets
+                // draws from roughly five times the population an overlap over seats does.
+                // `candidate_set` carries live screen ids alone [D-85]; the ranked reading
+                // is filtered to the same set, which is why it needs the live ids passed in.
+                //
+                // **No verdict.** The clause states what near-independence looks like
+                // rather than a bound to clear, and the independence figure is what the two
+                // are read against: five screens each ranking the top two percent of their
+                // own scored population put a name in two sets with probability near four
+                // percent [D-9].
                 return new DoneWhenLine(
                     line,
-                    Pct(shared) + " of " + Count(rows[0][1]) + " candidate rows carry more than one " +
-                    "live screen, mean " + Fixed(Number(rows[0][2]), 2) + " screens a row",
-                    shared >= 0.10d && shared <= 0.20d);
+                    "over allocated candidates, " + Pct(Number(rows[0][0])) + " of " + Count(rows[0][1]) +
+                    " rows carry more than one live screen, mean " + Fixed(Number(rows[0][2]), 2) +
+                    " screens a row; over ranked sets, " + Pct(Number(rows[0][3])) + " of " +
+                    Count(rows[0][4]) + " ranked name-dates, mean " + Fixed(Number(rows[0][5]), 2) +
+                    " screens. Both against the roughly 4 percent five independent " +
+                    "top-two-percent rankings would give",
+                    null);
             });
 
         // ------------------------------------------------------------- six ---
@@ -328,55 +387,20 @@ public static class SelectionDistributions
     }
 
     /// <summary>
-    /// The same overlap taken over the ranked sets rather than over the allocated seats.
+    /// The live screen ids as a SQL list, ordinal-ordered so two runs emit byte-identical
+    /// SQL [`CLAUDE.md` §6].
     ///
-    /// **Why both are measured.** §06 states overlap at 10 to 15 percent, and the phase's
-    /// done-when line at 10 to 20, without saying which set it is over. Those are two
-    /// different quantities and they differ by more than a rounding: a live screen ranks
-    /// roughly forty-four names above its floor and seats eight of them, so an overlap
-    /// over ranked sets draws from about five times the population an overlap over seats
-    /// does.
-    ///
-    /// **The seats reading is what the done-when line is scored on**, because
-    /// `candidate_set` is what §06's own diagram puts the figure beside and what the line
-    /// says "between screens" of. This one is reported next to it so a reader can see
-    /// whether the estimate was wrong about the design or right about a different set.
-    ///
-    /// Live screens only, since a shadow writes no `candidate_set` row and cannot overlap
-    /// in the sense the line means [D-85].
+    /// **An empty live set fails rather than producing `IN ()`.** A range with no live
+    /// screen has no overlap to report, and a statement that silently matched nothing would
+    /// print 0.0 percent of 0 names, which reads exactly like five screens that never agree.
     /// </summary>
-    public static async Task<(double Share, long Names, double MeanScreens)> RankedOverlapAsync(
-        string connectionString, DateOnly from, DateOnly to,
-        IReadOnlyCollection<string> live, CancellationToken ct = default)
-    {
-        var data = new StageData(
-            connectionString,
-            new DeclaredAccess("SelectionDistributions", ["screen_score_daily"], []));
-
-        var ids = string.Join(", ", live.OrderBy(id => id, StringComparer.Ordinal).Select(Quote));
-
-        var rows = await data.ReadAsync(
-            "screen_score_daily",
-            $"""
-            WITH ranked AS (
-                SELECT date, ticker, count(DISTINCT screen_id)::int AS screens
-                FROM screen_score_daily
-                WHERE date BETWEEN {Literal(from)} AND {Literal(to)}
-                  AND rank_within_screen IS NOT NULL
-                  AND screen_id IN ({ids})
-                GROUP BY date, ticker
-            )
-            SELECT
-                count(*) FILTER (WHERE screens > 1)::numeric / NULLIF(count(*), 0) AS share,
-                count(*)::bigint AS names,
-                avg(screens)::numeric AS mean_screens
-            FROM ranked;
-            """, ct).ConfigureAwait(false);
-
-        return (Number(rows[0][0]),
-                Convert.ToInt64(rows[0][1], CultureInfo.InvariantCulture),
-                Number(rows[0][2]));
-    }
+    private static string Ids(IReadOnlyCollection<string> live)
+        => live.Count == 0
+            ? throw new InvalidOperationException(
+                "No live screen was passed to the overlap line. The ranked reading is over the " +
+                "live screens' ranked sets and an empty set would report 0.0 percent of 0 names, " +
+                "which is indistinguishable from screens that never agree [CLAUDE.md section 1].")
+            : string.Join(", ", live.OrderBy(id => id, StringComparer.Ordinal).Select(Quote));
 
     private static double Number(object? value)
         => value is null or DBNull ? 0d : Convert.ToDouble(value, CultureInfo.InvariantCulture);

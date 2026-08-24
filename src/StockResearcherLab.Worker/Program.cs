@@ -1,6 +1,7 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using StockResearcherLab.Core.Config;
+using StockResearcherLab.Core.Screens;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data;
 using StockResearcherLab.Data.Eodhd;
@@ -192,8 +193,29 @@ async Task<int> DistributionsAsync()
     Console.WriteLine($"distributions  {from:yyyy-MM-dd}..{to:yyyy-MM-dd}");
     Console.WriteLine();
 
+    // **The live screen set is read from `screens.<id>.state` and never from the id**
+    // [phase 4 sign-off]. It was a prefix test on the id until then, which is a naming
+    // convention standing in for a config value: a shadow promoted under
+    // SCREEN_LIFECYCLE.md section 6 would keep an X- id and be counted as a shadow, and
+    // the figure it feeds is in ARCHITECTURE.html section 06.
+    //
+    // Resolved as of the range end, config being resolved as of a date and never as of
+    // now [INVARIANT 13]. The range end is what a report over the range is asked about.
+    var config = new ConfigStore(RequireConnectionString());
+
+    var live = (await ScreenRegistry.LoadLiveAsync(config, to).ConfigureAwait(false))
+        .Select(s => s.ScreenId)
+        .ToList();
+
+    var megacapShareMax = ConfigValue.Double(
+        await config.RequireAsync("monitor.megacap_share_max", to).ConfigureAwait(false));
+
+    Console.WriteLine(
+        $"  live screens as of {to:yyyy-MM-dd}, from screens.<id>.state: {string.Join(", ", live)}");
+    Console.WriteLine();
+
     var lines = await SelectionDistributions
-        .MeasureAsync(RequireConnectionString(), from, to).ConfigureAwait(false);
+        .MeasureAsync(RequireConnectionString(), from, to, live, megacapShareMax).ConfigureAwait(false);
 
     foreach (var line in lines)
     {
@@ -209,8 +231,12 @@ async Task<int> DistributionsAsync()
         Console.WriteLine();
     }
 
-    // Not a done-when line. It exists because the overlap line can fail two ways that
-    // a share alone cannot separate, and a finding without its cause gets buried.
+    // Not a done-when line. It exists because a low overlap has two possible causes that
+    // a share alone cannot separate, five screens that never agree or forty seats of which
+    // thirty are ever filled, and a finding without its cause gets buried.
+    //
+    // The overlap line prints both of its readings itself, so nothing is repeated here.
+    // Two producers of one figure is what the same sign-off found in the done-when list.
     Console.WriteLine("  seats filled per screen, which is not a done-when line");
 
     var seats = await SelectionDistributions
@@ -223,17 +249,6 @@ async Task<int> DistributionsAsync()
             $"{perDate.ToString("F2", CultureInfo.InvariantCulture)} a date");
     }
 
-    var live = seats.Select(s => s.ScreenId).Where(id => !id.StartsWith('X')).ToList();
-
-    var ranked = await SelectionDistributions
-        .RankedOverlapAsync(RequireConnectionString(), from, to, live).ConfigureAwait(false);
-
-    Console.WriteLine();
-    Console.WriteLine("  the same overlap over ranked sets rather than allocated seats");
-    Console.WriteLine(
-        $"    {(ranked.Share * 100d).ToString("F1", CultureInfo.InvariantCulture)} percent of " +
-        $"{ranked.Names:N0} ranked name-dates carry more than one live screen, mean " +
-        $"{ranked.MeanScreens.ToString("F2", CultureInfo.InvariantCulture)} screens");
     Console.WriteLine();
 
     return 0;

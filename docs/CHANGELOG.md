@@ -2371,3 +2371,62 @@ branch is a disjunction, so removing it could only shrink what the gate admits.
 **S5's composition is not changed and the question is filed with S3's.**
 `BUILD_PLAN.md` gains a second `4 → 8` carried obligation beside Q.10's, carrying the
 two-stage measurement and the two config keys that have never been measured.
+
+## 2026-08-24, phase 4 sign-off, S3's first stage corrected to the whole range
+
+**`ARCHITECTURE.html` §05's S3 note and `BUILD_PLAN.md`'s `4 → 8` S3 obligation**
+[phase 4 sign-off]. Human-directed. Both are read to know the current state, so both are
+clean edits and the prior wordings are here.
+
+> that covered population is already **47.0 percent** large against a universe at 31.3, so
+> most of the tilt is decided by which names carry enough news coverage to be scored at all
+> rather than by anything the screen ranks on. **Then, ranking.** The ranked set tilts
+> further, to **57.8 percent** large.
+
+> Its three inputs compute for **1,067 of 2,819** names, and that covered population is
+> already **47.0 percent** large against a universe at 31.3, so the screen is large-tilted
+> before it ranks anything; the ranking then carries it from 47.0 to 57.8.
+
+**Both now read 55.0 percent, and the ranking stage is 2.8 points rather than 10.8.** The
+sign-off review found that 47.0 is S3's covered-population large share over **2026 to
+date**, stated under a heading naming 2021-01-11 to 2026-08-12. Over the range the note
+names it is **55.0**, measured by the instrument that reproduces 47.04 for 2026 to date.
+2026 is also the lowest of the six years in the range: 57.1, 55.2, 61.8, 66.8, 50.0 and
+47.0.
+
+**The correction strengthens the finding it sits under rather than weakening it**, and both
+documents now say so. Q.10's point is that S3's tilt has two stages and the first is the
+larger; at 55.0 against a universe of 31.3 the first stage is larger still and the ranking
+stage nearly disappears. Almost the whole of S3's tilt is decided by which names carry
+enough news coverage to be scored at all, which is the stage recomposing the ranking cannot
+reach.
+
+**Nothing else moved.** The Size-tilt cell still reads "Tilts large, in two stages", the
+57.8 is unchanged, the 1,067 of 2,819 is unchanged, and S3's composition is not changed.
+The `4 → 8` obligation still holds the same three open answers.
+
+## 2026-08-24, phase 4 sign-off, §4.6's justification cites the measurement
+
+**`SCREEN_LIFECYCLE.md` §4.6** [phase 4 sign-off]. Human-directed. §4.6 is specification
+and is read to know the current state, so this is a clean edit and the prior wording is
+here.
+
+> That happens whenever a live screen and a shadow both surface the same name, which is the
+> ordinary case rather than the exception given §06 puts screen overlap at 10 to 15 percent
+> normally and higher in a drawdown.
+
+**The rule is unchanged and only its justification moves.** The two filters still do
+different work and conflating them is still the trap. What the paragraph rested on was
+§06's estimate of 10 to 15 percent, which Q.9 withdrew against measurement, so the
+paragraph was citing a figure that no longer exists in the document it cites.
+
+**It now cites the measurement: 1,223 of the 34,932 frozen candidate rows carry a shadow
+id, which is 3.5 percent.** No withdrawn number is restated as a comparison.
+
+**Why the rule's case is stronger at the lower figure, which the section now states.** The
+screens are near-independent, 0.5 percent of allocated candidates carrying more than one
+live screen against the roughly 4 percent five independent top-two-percent rankings would
+give, so a name two screens both surface is uncommon and therefore informative. A
+per-screen report that groups on every id in `screens_surfacing` is not diluting a common
+case; it opens a calibration bucket for a shadow out of exactly the rows carrying the most
+signal.

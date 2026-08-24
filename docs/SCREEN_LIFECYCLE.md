@@ -305,9 +305,20 @@ drift from the table again without failing.
 ### 4.6 The two filters are different, and conflating them is the trap
 
 A **candidate** row can carry a shadow screen id in `screens_surfacing`. That happens
-whenever a live screen and a shadow both surface the same name, which is the ordinary
-case rather than the exception given §06 puts screen overlap at 10 to 15 percent
-normally and higher in a drawdown.
+whenever a live screen and a shadow both surface the same name, and it is common enough
+to be met by anyone reading the table rather than rare enough to ignore: **1,223 of the
+34,932 candidate rows frozen over 2021-01-11 to 2026-08-12 carry a shadow id, which is
+3.5 percent** [phase 4 sign-off].
+
+**The lower the co-surfacing rate, the more a reader who conflates the two filters gets
+wrong, not less.** The screens are near-independent, 0.5 percent of allocated candidates
+carrying more than one live screen against the roughly 4 percent five independent
+top-two-percent rankings would give [§06], so a name two screens both surface is an
+uncommon and therefore informative event. A per-screen report that groups on every id in
+`screens_surfacing` does not dilute a common case; it opens a calibration bucket for a
+shadow out of exactly the rows that carry the most signal. This paragraph cited §06's
+estimate of 10 to 15 percent until the phase 4 sign-off review, and that estimate was
+withdrawn against measurement at Q.9.
 
 So there are two filters and they do different work:
 

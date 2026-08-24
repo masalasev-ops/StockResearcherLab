@@ -47,7 +47,7 @@ cannot reach them.
 | 2 Compute | IN PROGRESS | 68aafa4 | Every checkpoint 2.1 to 2.15 landed, 221 tests. Five components built: C08, C09, C10, C11 and C35. All eleven definition-of-done lines met on 2026-08-11, with `run-night` completing twelve stages on the blessed date 2026-08-07 and the compute layer digesting identically on re-run. Two components had never executed before this phase ran them and both were broken at the write, which is the phase's largest finding. `METRICS.md` is still the unauthored draft 2.1 produced and all nine of its PROPOSAL entries are now running code |
 | 3 Backfill | **SIGNED OFF** | 7764dfe | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b`, 314 with D-98's implementation, 324 with its two open items closed, 326 with the backfill driver, 332 with range-scoped resumption and 338 with the frontier position and the connection retry, `ci.ps1` green at each, then 336 at `5be4d33` when the frontier's four tests were replaced by two, 336 again at `3fcdd57` and `cf42116`, and **342 at `7c25f13`** where D-100 replaced the intermittent retry test with two and added five at the provider client. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built, and ~~3.6 has been run once: it failed at 58 percent after 2h10m, leaving `price_daily` at 78 million rows and 12 GB~~ **3.6 completed on 2026-08-13**, after three failed attempts, a vacuum, and its resumption rebuilt onto `price_fetch_attempt` [D-99, 0010]: 33,359,792 bars over 18,812 tickers in 108.4 minutes, the pool covered at 50,737 attempt rows, and `price_daily` at 109.6 million rows and 18.3 GB. ~~3.7 to 3.10 are unrun and the phase's remaining sweeps spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them.~~ The open findings are the table at the foot of this file rather than a second list here; ~~**item 24 blocks 3.7 and every nightly run against the backfilled store**~~ [closed, item 24]. ~~**Every checkpoint 3.1 to 3.16 is built as of 2026-08-17, at 429 tests, 416 before 3.16, `ci.ps1` green at `e619ba7`.**~~ ~~What is built and what has been run are different lines and the difference is the phase's remaining work. **Run:** 3.6, 3.7, 3.8 and 3.10 swept and completed, and 3.11 filled `security_daily`. **Built and unrun:** 3.9, which is the last owed sweep at roughly three days of allowance, and the whole of stage D, so `indicator_daily` and `valuation_daily` still carry phase 2's nightly rows. **3.16 spends nothing to build and its first invocation is a spending decision**, C05's sweep being inside the order. 3.17 and 3.18 are outstanding and 3.17's timing line is owed against a stage D run.~~ **Restated 2026-08-22 at `126f5d8`, the paragraph above having gone four days and about fourteen commits stale.** Every checkpoint 3.1 to 3.18 is built, at **441 tests**, `guards.ps1` green. What is built and what has been run are different lines and the difference is what remains. **Run and complete:** every ingest sweep, 3.6, 3.7, 3.8, 3.9 and 3.10; 3.11's `security_daily` fill; and stage D except its last component, C08, C09, C10, C11 and C35 all carrying a range `run_log` row. **3.9 completed 2026-08-22 at `run_log` 1760**, 2,864 of 2,864 members, once item 59 turned out to be the pager rather than the ticker. ~~**Outstanding:** C34 over the range [item 55], the sequence driver 3.16 never having been invoked once, 3.17's `run-night` replay half [item 44], and the three sign-off blockers that need an authored decision rather than a build, items 51, 52 and 60.~~ **Restated 2026-08-22 at the close of the day's work, at `718a43f` plus the run.** Items 51, 52, 57 and 60 all closed, at 451 tests, `ci.ps1` green at every one of the day's seven commits and **GitHub CI green on the branch at `aae9464`**, which is sign-off step 1's first half. **The compute half re-ran whole over the corrected range** 2021-01-04..2026-08-12 in 98.81 minutes, and **the replay reproduced 2026-08-12 byte for byte across all five compute tables**, zero rows differing in either direction. **Two done-when lines are half evidenced and are recorded as half rather than claimed whole.** 3.16: the compute half ran through the same `BackfillRun` the sequence uses, so the work and the `run_log` rows are the sequence's, but the driver's own ordering and fall-through was not exercised, because at the corrected range end C03 and C05 re-dispatch whole for about 440,000 units [item 62]. 3.17: the replay is the compute half rather than the literal evening order, the five ingest stages skipped deliberately, because a full `run-night` would have C02 give 2026-08-13 real bars and item 60's stale rows there would stop being identifiable by their thin date. **The timing done-when is measured and not met**, 170.35 minutes with C01 against "minutes rather than hours", which is a finding rather than a bound to move [`CLAUDE.md` section 11]. ~~**What phase 3 still needs is three authored decisions and a review**: the timing verdict, item 44 with item 62, and a decision number for item 60's refuse-not-clamp rule.~~ **Two of the three are taken as of 2026-08-22.** **D-105** numbers the frontier rule and closes item 60. **The timing verdict** is recorded: 170.35 minutes is not met, the bound is not moved, and it closes as a measured finding because nothing depends on the rebuild being fast, D-88 and `SCREEN_LIFECYCLE.md` §6.7 bundling every rebuild-forcing change into one gated boundary. **What remains is one authored decision and the review**: the item 44 split, D-99's own named remedy, now merged with item 62 and carrying three named triggers. Sign-off step 2 must run in a session that has not committed here, and the four partial lines are listed in the handover note at the head of this file | ~~BUILD COMPLETE, AWAITING SIGN-OFF~~ **PHASE 3 SIGNED OFF, 2026-08-22.** **Step 1, CI green:** `ci.ps1` green at every commit and GitHub CI green on the branch at `cb327d0`, the branch head at the time, verified independently rather than taken. **Step 2, the review:** run in a session that had not committed here, recorded in full below, reproducing 451 tests and re-measuring every store-side line against the database. It returned four exceptions and all four are now closed: the two wrong figures corrected with their mechanisms, item 52's fixture on the forward list, item 44's column split built and proved, and the timing line resolved on a consumer search. **3.16 closes MET**, `BackfillSequence.ExecuteAsync` having run once end to end at `run_log` 1775 to 1786, twelve sources, 54,452,165 rows, exit 0. **The rebuild is 121.30 minutes** measured as one command in one process, and the done-when is still NOT met on that figure; it closes because no consumer of it exists, not because the figure was argued down. **454 tests.** ~~Two things are owed and neither is a build session's~~ **Both are now authored, 2026-08-22.** **D-106** states the sweep-marker rule and closes items 44 and 62. **`first_seen` means first retained**, stated in `SCHEMA.md`, closing item 51; `_verify_security_before` is decided gone with the reasoning recorded, and the drop itself is the one step still owed a hand. **One qualification on the sign-off, stated rather than left to be found: the session that reviewed this phase then built the `0013` split inside it**, so that migration and its two components have not been read by a session that did not write them. `BUILD_PLAN.md`'s two-step sign-off assumes those are different sessions and here they were not. It is covered by 454 tests including both halves of the split and by a real-store run, and it is named here because a reader should decide about it rather than inherit it. **The `price_daily` sizes here are pre-prune** [item 51]: the size the 2026-08-20 prune left is in the prune record and the current ticker count is in the phase 3.5 record, neither restated here. |
 | 3.5 The record for one name on one date | ~~**BUILD COMPLETE, AWAITING SIGN-OFF**~~ **PHASE 3.5 SIGNED OFF, 2026-08-23.** **Step 1:** GitHub CI green at `0e8ca25` and `ci.ps1` re-run independently there and at `75ed6b0`. **Step 2:** the review ran in a session that had not committed here, re-measured every store-side line against the database, and returned nine exceptions; **eight are closed** and the corrections are recorded below. **One survives, named rather than carried quietly:** `RecordInspector` holds a second copy of the as-of membership pick, agreeing with `Universe.AsOf` today with nothing holding it so, and closing it is a change to a statement six components read. It blocks nothing in phase 4 | ~~`54da3d5`~~ `75ed6b0` | Checkpoints 3.5.1 to 3.5.4 built, and the sign-off corrections after them. ~~495 tests~~ **498 tests**, the three added by the panel correction. `C36 RecordInspector` at `/record?ticker=&date=`, four panels, reading fourteen stores through the same guarded route a stage uses and behind an empty write set. D-107, D-108 and D-109 authored. Migrations 0014, 0015 and 0016. Both range passes run: C01 over 292 evaluation dates in 14.94 minutes, C11 over 1,462 trading dates in 48.54 minutes, both at zero provider units. ~~495 tests. Sign-off step 2 must run in a session that has not committed here~~ [both superseded at the head of this cell] |
-| 4 Screens and selection | NOT STARTED | | |
+| 4 Screens and selection | **BUILT, 4.1 TO 4.14, THE FOUR OWED ITEMS CLOSED AT Q.8 TO Q.11, AND REVIEWED AT SIGN-OFF STEP 2. THE RECORD HAS STARTED. NOT SIGNED OFF: ITEM 42 IS OPEN** | `cd8310d` at the run | Checkpoints 4.1 to 4.13, then `Q.1` to `Q.7` closing the nine reported items as D-121 to D-129, then 4.14, then `Q.8` to `Q.11`. Components: C12, C13, C14 and C28. Migrations `0017` to `0021`. **4.14 froze 74,767 attribution rows** over 1,457 sessions in 12.72 minutes, 34,932 of them candidates and 39,835 shadow, beside 3,812,120 gate rows and 28 alerts. `RUNBOOK.md`'s prohibition is operative. ~~**Five done-when lines hold and one does not**: screen overlap measures 0.5 percent against §06's 10 to 15, which is what near-independent ranking produces and is reported unadjusted [`CLAUDE.md` §11]. Two items reported and not closed, both §3 Writes cells.~~ **The overlap line is amended to the measurement at Q.9** and the done-when moves with it, all three readings named; **the two §3 Writes cells are amended at Q.8**; **§05's S3 tilt and S5 fill sentences are corrected at Q.10 and Q.11**, with both composition questions filed to phase 8. Nothing was re-measured and no screen changed. ~~**Sign-off step 2 is owed and needs a session that has not committed here**~~ **Step 2 ran 2026-08-24 in a session that had not committed here.** It re-ran `ci.ps1` at `c4e782d`, re-ran `distributions` and `persistence` over the frozen range, and queried the store directly; every recorded figure reproduced except one. **It returned six exceptions and six smaller items.** Five exceptions and four of the smaller items are closed in the pass recorded below, at **722 tests** and `ci.ps1` green at `d09ef2e`. **Three things are open and all three are the operator's**: item 42, what a session is, which 54 days in the frozen range turn on and which two measurements now size; and §16's `screen_score_daily` size against the measured 305 MB with the database-size row beside it, both belonging with the `3 → 3 sign-off` obligation. ~~**SIX OF SIX DONE-WHEN LINES HOLD**~~ **The done-when now reads four holding and two stating no bound**, the overlap clause having become a description at Q.9 and the measure having gone on scoring it as a bound until the review found it. Every figure is unchanged. **The phase is not signed off**: that call is the operator's and item 42 is under it |
 | 5 Digest chain | NOT STARTED | | |
 | 6 Researcher | NOT STARTED | | |
 | 7 Risk and execution | NOT STARTED | | |
@@ -107,8 +107,8 @@ them here rather than editing the architecture, and note the gap where it is lar
 | Figure | Estimated | Measured | Date |
 |---|---|---|---|
 | Universe size | ~2,000 | **2,433 to 2,864 active per evaluation date**, 4,290 distinct ever-members across 292 weekly dates | 2026-08-21, phase 3 |
-| Candidates per night | 26-30 | | |
-| Screen overlap | 10-15% | | |
+| Candidates per night | 26-30 | **29.9 a night over the 1,169 dates that produced any**, smallest 1 and largest 33. Measured over the frozen record 2021-01-11..2026-08-12 and reproduced at sign-off. The smallest is 1 rather than 0 because eight of the dates that produced a candidate are days the exchange was shut, one candidate each [phase 4 sign-off] | 2026-08-24, phase 4 |
+| Screen overlap | 10-15% | **0.5 %** of 34,932 allocated candidates carry more than one live screen, and **2.2 %** of 186,038 ranked name-dates are ranked by more than one, mean 1.02 screens. Both readings miss the estimate the same way, so the gap is not definitional. 2.2 percent is what near-independent ranking produces: five screens each ranking the top two percent of their own scored population would put a name in two sets with probability near 4 percent, and the five do not rank one population. **The estimate is corrected at Q.9 rather than the measurement explained**, all three readings named, `ARCHITECTURE.html` §06 and `BUILD_PLAN.md`'s done-when moving together | 2026-08-24, phase 4, over 4.14's frozen record |
 | Cache hit rate | >90% | | |
 | Annual cost | ~$50 | | |
 | Database size after backfill | ~5 GB | ~~18.3 GB in `price_daily` alone, 3.6 complete and 3.7 to 3.10 unrun~~ ~~superseded by the 2026-08-20 prune. `price_daily` is 1,273 MB. The database is 26 GB of which 18 GB is `price_daily_old`, the retained rollback copy; 8,149 MB without it. Step 2's `valuation_daily` prune is outstanding and takes it to about 5.4 GB~~ **MEASURED 7,381 MB, 2026-08-22, the prune completed.** `price_daily_old` was dropped, its retention condition having been the prune's verification and the universe half of that verification having been held for item 51, which closed the same day. The four compute tables the 3.16 sequence bloated were then `VACUUM FULL`ed, autovacuum having reclaimed for reuse rather than for the disk: `valuation_daily` 3,595 to 2,210 MB, `indicator_daily` 1,543 to 827, `sentiment_derived_daily` 795 to 427, `security_daily` 158 to 58, dead tuples zero on all four. 28 GB to 7,381 MB in 2.4 minutes. **The `valuation_daily` prune is deliberately not run and the estimate is not reached because of it.** It would delete 7,494,824 of 13,700,917 rows, every one for a ticker absent from `security_daily`, and two things are wrong with that: C09's pool is every ticker with a readable quarterly filing, 9,673 against the universe's 4,290, so the next range run rewrites them; and narrowing C09 to the universe is the phase 2 carried obligation, which says in terms that it needs an authored amendment to that Reads cell rather than a change here, because **narrowing downstream of the universe definition is what INVARIANT 1 forbids**. The rows cost storage and nothing else, C11 joining `security` itself so they are never ranked. **So ~5 GB is reachable only through an authored decision, and 7,381 MB is the floor without one** | 2026-08-13, corrected 2026-08-21, measured 2026-08-22, phase 3 |
@@ -9634,3 +9634,1335 @@ copy of the as-of membership pick.** It agrees with `Universe.AsOf` today, nothi
 it so, and closing it is a change to a statement six components read. It blocks nothing in
 phase 4, which does not use the reader, and it is the first thing to settle if that
 statement is touched again.
+
+---
+
+## Phase 4, screens and candidate selection
+
+Checkpoints 4.1 to 4.12 built. **676 tests**, `guards.ps1` green, `ci.ps1` green at 4.1
+to 4.5 and at `7516d8b`; it has not been re-run since. HEAD at the time of writing is
+`3702496` for 4.11, with 4.12 following.
+
+### What was measured
+
+Every figure here is a measurement against the populated store or the suite, not a design
+estimate.
+
+| Figure | Value | Where |
+|---|---|---|
+| The warm-up night, members labelled by C12 | 2,819 | `run-selection 2026-08-07` |
+| Scores written by C13 | 14,095, being 2,819 x 5 | same run |
+| Candidates written by C14 | **0**, and correct | same run |
+| Alerts raised by C28 | 0 | same run |
+| Names passing every gate | 1,893 of 2,819 | `gate_result` on that date |
+| Gated for earnings blackout | 912 | same |
+| Gated for gap, at `gates.gap_pct` 8 | 64 | same |
+| Gated for halt | 9 | same |
+| `gate_state` | `passed_partial` on all 2,819 | same |
+| Reasons unevaluable on a live date | `already_held`, `cooldown` | C12's run log line |
+| S1 names scored, min_inputs 5 of 7 | 2,352 of 2,819 | `screen_score_daily` |
+| S2 names scored, min_inputs 4 of 5 | 2,819 of 2,819 | same |
+| S3 names scored, min_inputs 3 of 3 | 1,757 of 2,819 | same |
+| S4 names scored, min_inputs 2 of 2 | 2,473 of 2,819 | same |
+| **S5 names scored, past its gate** | **3 of 2,819** | same |
+| Names ranked by any screen | 0, no floor existing yet | same |
+| Bucket drift, 2022-06-15 against today | 1,117 of 2,568 members | 4.11's measurement |
+| Large share, point in time | 28.97 percent | same |
+| Large share, from `security` | 32.09 percent | same |
+
+**S5 scoring three names of 2,819 is the gate working and matches the design estimate.**
+`ARCHITECTURE.html` §05 gives mean reversion a typical fill of "0 to 5, median 3". That
+agreement is a coincidence at one date rather than evidence, and it is recorded because a
+reader meeting three rows in a table of 14,095 would otherwise read it as a fault.
+
+**The bucket drift figure is 4.11's whole argument as a number.** Forty-three percent of
+the 2022 universe sits in a different size bucket today than it did then, and the large
+share moves 3.1 points on the universe. C28 reads `security_daily` as of the candidate's
+own date for exactly that reason [D-92, D-74].
+
+### Reported, not closed
+
+Nine items. None blocks 4.13. Every one is the operator's rather than a build session's.
+
+| # | Item |
+|---|---|
+| 1 | **`ARCHITECTURE.html` §05's S4 Ranks-on cell still names `inst_ownership_change`**, which D-118 drops. Configuration follows the register and 4.6's divergence table carries the difference with the decision beside it, failing when the cell is amended |
+| 2 | **Three Reads-cell amendments were taken during the build**, beyond the four authorised at adoption and the fifth taken at 4.5. C13 gains `sentiment_daily` for S5's article count [4.7]; C12 gains `security_daily` for the membership it labels [4.8]. Both prior wordings are in `CHANGELOG.md` and both were forced rather than chosen |
+| 3 | **`gate_state`'s computation is not sited anywhere in the corpus.** D-117 says what it means and never says which component works it out. Migration `0019` puts the column on `gate_result` and C12 writes it; the two alternatives and why they are worse are in the migration's own header. **Reversible until 4.14** |
+| 4 | **The evaluability reading behind `passed_partial` is also a build decision.** A reason is evaluable when the store it reads holds something bearing on the date, per date rather than per ticker, which is D-117's own wording |
+| 5 | **The halt condition is unauthored.** Nothing defines it operationally; `CONFIG_REFERENCE.md` says only that it carries no threshold key. Implemented as the one reading `price_daily` supports: no bar for the session, or a bar with no volume. It fired on 9 of 2,819 names |
+| 6 | **`candidate_set.slot_filled` has no stated meaning anywhere** and is written null |
+| 7 | **`screens.slot_ceiling` has no reader.** `CONFIG_REFERENCE.md` names CandidateAllocator as its consumer, and once `screens.<id>.slots` exists the ceiling cannot also be a cap without contradicting D-43's cap of twelve |
+| 8 | **The two `alert_type` strings and C28's twenty-date megacap window are unauthored.** `SCHEMA.md` gives `alert.alert_type` no vocabulary |
+| 9 | **`SCREEN_LIFECYCLE.md` §4.5 says eight readers mean "candidate" against a table that marks seven.** Reported before this phase and unchanged by it |
+
+### Five config keys were documented and seeded by nothing
+
+Found five separate times, every one by a resolve failing rather than by a count, which is
+the same shape 4.5 first met. The seeder went from 44 keys to 84 across this phase.
+
+| Keys | Found at | Documented since |
+|---|---|---|
+| `screens.slot_ceiling`, `screens.floor_percentile`, `screens.floor_lookback_days` | 4.5 | the first corpus, D-7 and D-9 |
+| `s5.stabilisation_z_max`, `s5.sentiment_delta_min`, `s5.news_gate_min_articles` | 4.7 | the first corpus, D-13 and D-14 |
+| `tuner.slot_floor`, `tuner.slot_cap` | 4.9 | the first corpus, D-43 |
+| `monitor.megacap_share_max`, `monitor.distinct_tickers_60d_min` | 4.11 | the first corpus, D-7 |
+
+The `screens.*`, `gates.*` and `screens.S5.*` keys this phase authored are the rest of the
+difference.
+
+### Defects this phase found in its own work
+
+| Where | What |
+|---|---|
+| 4.5, corrected at `7516d8b` | The trailing floor window took a calendar span of twice the lookback, which is about 344 trading dates at a lookback of 250. Every floor after the gate fired would have been drawn over a third more history than D-9 states. It passed 4.5's tests because every fixture used consecutive calendar days, where a span and a count of dates are the same thing. No floor had been written to the real store |
+| 4.6 | The §05 cell parse stripped tags and kept their text, so the D-58 chip between two of S4's metrics left `D-58` glued to `distinct_buyer_count`, which then failed to look like a metric and vanished. S4 read as having one input where it has two |
+| 4.7 | S5's gate arm was `WHEN NOT (gate) THEN NULL`. In three-valued logic that arm is not taken when the gate is NULL, so a name whose quality composite could not be computed at all fell through and was ranked. It scored 95 in the fixture and nothing about the number looked wrong |
+| 4.9 | `candidate_set` was written with `ON CONFLICT` alone, so a re-run updated the names it surfaced and left behind the ones it no longer did. A gated name stayed a candidate through the second run |
+| Pre-existing, found at 4.10 | `StageRunnerTests` read its own `run_log` row out of `RecentAsync(500)`, which orders by `run_date` first. Once more than five hundred rows carried a later run date than the fixture's clock, the row fell out of the window and `Single` found nothing |
+
+### What 4.13 stops for
+
+**4.13 computes the pre-registered persistence measure, records it per screen with each
+screen's own chance baseline, and stops.** §5 of the phase prompt pre-registers three
+readings and 4.14 does not begin until one is taken. If a screen reads near-chance or as a
+size proxy, the call is the operator's: a changed composition under a new
+`config_version`, a screen withdrawn, or the reading accepted. A weight must not move
+until a number improves [`CLAUDE.md` §11].
+
+**4.14 is this phase's largest irreversible act.** It freezes roughly 34,000 attribution
+rows that no later pass may rewrite [INVARIANT 4, D-40, `RUNBOOK.md`]. Items 3, 4, 5 and 6
+above all reach a frozen column and are reversible only before it runs.
+
+---
+
+## Phase 4, checkpoint 4.13: the range run and the pre-registered persistence measure
+
+**4.14 has not run and does not begin until the reading below is taken.** §5 of
+`prompts/BuildPlans/phase-4-screens-and-selection.md` pre-registers three readings and
+says in terms what stopping looks like. The build session reports and waits.
+
+### The two-pass range run
+
+| Figure | Value |
+|---|---|
+| Pass one, sessions attempted over 2021-01-04..2026-08-12 | 1,462 |
+| Pass one, sessions written | **1,457** |
+| Pass one, rows | 19,060,600 |
+| Pass one, wall clock | **14.02 minutes** |
+| Pass two, range | 2021-01-11..2026-08-12, 1,457 sessions |
+| Pass two, rows ranked | 190,142 |
+| Pass two, wall clock | **30.71 minutes** |
+| Both passes together | 44.73 minutes |
+| C11's measured pass over the same dates, for comparison | 48.54 minutes |
+| `screen_score_daily` measured size, five screens | **1,526 MB** |
+| `ARCHITECTURE.html` §16's estimate | ~280 MB per registered screen, so ~1,400 MB |
+
+**The size estimate holds.** 1,526 MB over five screens is 305 MB each against an
+estimated 280, which is 9 percent high and includes the partial index `0017` added.
+
+**Pass two's refusal fired on its first real use, and the cause was not an
+interruption.** Pass one over the window covered 1,457 of 1,462 sessions and pass two
+refused. `security_daily`'s first evaluation date is 2021-01-10, C01 building weekly on a
+Sunday, so the five sessions from 2021-01-04 to 2021-01-08 have no universe membership at
+all and C13 correctly wrote nothing for them. **The range a selection pass can cover
+starts at 2021-01-11 and not at `backfill.window_start`**, and the guard is what said so.
+The range was corrected rather than the guard weakened.
+
+**A second consequence follows and is recorded rather than left to be met later.** D-115
+says candidate history begins around 2022-01-03, computed as 250 sessions from the window
+start. ~~From 2021-01-11 the 250th session is later, and the measured first date any screen
+ranked anything is **2022-01-11**.~~ **Both halves are wrong and are corrected at the phase
+4 sign-off review, which re-measured them: the first date any screen ranked anything is
+2021-12-24, on all eight screens, and the first `candidate_set` and `attribution` date is
+2021-12-27.** So candidate history begins earlier than D-115's estimate and not later, and
+the direction of the conclusion above inverts. The cause is not arithmetic: 2021-12-24 is
+Christmas observed and is one of the 54 days in the range that the session list holds and
+the exchange did not trade, so the 250th entry in each screen's lookback arrived on a day
+the market was shut. On a calendar of open dates only the 250th is 2022-01-05, which is
+what D-115 was reaching for. The exception and the measurement behind it are in the review.
+
+### The persistence measure, per screen, over 2021-01-11..2026-08-12
+
+Mean Jaccard overlap of each screen's ranked set against the set it ranked one, five and
+twenty-one **sessions** earlier. Reads no forward return and no `attribution` row, so it
+does not touch `CLAUDE.md` §11 [§5].
+
+| Screen | Dates ranked | of scored | Pairs | Mean ranked | Mean scored | Chance | D-1 | D-5 | D-21 | Large |
+|---|---|---|---|---|---|---|---|---|---|---|
+| S1 | 1,208 | 1,457 | 1,207 | 44.4 | 2,165.9 | 0.0104 | 0.8784 | 0.7683 | 0.5581 | 33.7 % |
+| S2 | 1,208 | 1,457 | 1,207 | 52.1 | 2,612.9 | 0.0101 | 0.5902 | 0.2694 | 0.0145 | 30.1 % |
+| S3 | 1,207 | 1,457 | 1,205 | 21.1 | 1,067.5 | 0.0100 | 0.0888 | 0.0259 | 0.0122 | 57.8 % |
+| S4 | 1,208 | 1,457 | 1,207 | 39.7 | 1,960.3 | 0.0102 | 0.9155 | 0.7060 | 0.3899 | 30.8 % |
+| S5 | **70** | 1,457 | **43** | 1.0 | 2.4 | 0.2574 | 0.9767 | 0.8947 | 0.9091 | 32.9 % |
+
+Chance is per screen, computed from its own ranked-set size against its own scored
+population as `k / (2n - k)`, which is the closed form for two independent uniform draws.
+
+**One internal check, because a table of numbers deserves one.** Every screen's mean
+ranked set is 1.98 to 2.05 percent of its own mean scored population. That is the 98th
+percentile floor working exactly, and it is the same for all five, which is what D-9 says
+it should be.
+
+### The size comparison, measured rather than assumed
+
+| Population | Large share |
+|---|---|
+| The universe, active rows over 2022-01-11..2026-08-12 | **31.3 %** |
+| S1's scored population, 2026 to date | 36.9 % |
+| S2's scored population, 2026 to date | 33.2 % |
+| S3's scored population, 2026 to date | **47.0 %** |
+| S4's scored population, 2026 to date | 33.6 % |
+| S5's scored population, 2026 to date | 42.7 % |
+
+The scored-population column is 2026 to date and the ranked column in the table above is
+the whole range, so they are indicative against each other rather than exact. **Four
+screens rank smaller than the population they rank out of** (S1 33.7 against 36.9, S2 30.1
+against 33.2, S4 30.8 against 33.6, S5 32.9 against 42.7). **S3 ranks larger than its own
+scored population**, 57.8 against 47.0, and its scored population is itself far larger
+than the universe.
+
+### The readings, named against §5's table
+
+**This names which shape each screen's figures match. It does not take the decision, which
+§5 reserves and which 4.14 waits on.**
+
+**S1 and S4 read as slow decay from a high base**, which is the one of the three readings
+the design expects. D-1 high, D-5 lower, D-21 materially lower, and the ranked set tilted
+slightly *smaller* than the population it is drawn from. S1 loses 36 percent of its set
+over 21 sessions and S4 loses 57 percent, against a chance floor of about 1 percent. Both
+rank on quarterly fundamentals and 90-day insider windows respectively, so slow movement
+is the property rather than an artefact.
+
+**S2 lands in a shape §5's table does not have a cell for, and that is reported rather
+than forced into one.** D-1 is 0.59, which is 58 times chance and not near-chance. D-21 is
+0.0145 against a chance of 0.0101, which is at chance. So it is fast decay from a moderate
+base: neither of the two failing readings and not the passing one either. Its inputs are
+change-of-change metrics over 21 and 63 day windows, so a 21-session half-life is arguably
+what the screen is for. Whether that is the intended behaviour is an authored question and
+§5 did not anticipate the shape.
+
+**S3 is the closest of the five to near-chance and it also carries the large tilt.** D-5 at
+0.0259 is 2.6 times chance and D-21 at 0.0122 is 1.2 times chance, which is at chance. D-1
+at 0.0888 is 8.9 times chance, so it is not literally "close to chance at D-1" as §5's
+first reading states, but it reaches chance sooner than any other screen. Beside that it
+ranks 57.8 percent large against a scored population of 47.0 percent and a universe of
+31.3 percent. §5's size-proxy reading pairs a large tilt with **high** persistence and S3
+pairs it with the lowest, so it matches neither failing reading cleanly and is outside the
+passing one.
+
+**And `ARCHITECTURE.html` §05 says S3 "tilts small".** It tilts large, measurably, in two
+stages: its inputs are computable for only 1,067 of 2,819 names and that covered
+population is already 47 percent large, and the ranking then tilts further to 57.8. This
+is a contradiction between the design document and the measurement, reported here.
+
+**S5 has no meaningful persistence figure because it has almost no ranked set.** It ranked
+anything at all on **70 of 1,457 sessions**, one name each time, and only 43 of those were
+consecutive sessions. Its scored population averages **2.4 names**, so the gate admits two
+or three names on a typical date and the floor over a trailing distribution that small
+ranks one of them rarely. §05 gives mean reversion a typical fill of "0 to 5, median 3";
+the measured contribution is one name on five percent of sessions. The 0.9767 D-1 overlap
+means that when it does rank on consecutive days it is the same name, which is a statement
+about a set of size one rather than about persistence.
+
+### A defect found in the measure itself, before the figures were recorded
+
+The first form of the statement filtered to dates carrying a ranked set **before** taking
+the lag, so D-1 meant "the previous date this screen ranked anything". For S1 to S4 that
+is the previous session and the figures were unaffected. For S5, ranking on a twentieth of
+the window, it was weeks, and the statement reported that gap as one-day persistence:
+0.7536 rather than the 0.9767 recorded above, over 69 apparent pairs rather than the 43
+real ones. **It would have flattered exactly the screen with the least to say.** The lag
+is now taken over every scored date and the pairs are filtered afterwards, which is what
+§5's wording asks for.
+
+### What 4.14 is waiting on
+
+Two of five screens read as the design expects. Two land outside §5's three readings in
+ways the table did not anticipate, and one contributes almost nothing. Per §5 the next
+step is a human's call on an authored decision: a changed composition under a new
+`config_version`, a screen withdrawn, or the reading accepted and 4.14 released. **No
+weight has been moved and none will be until the call is taken**, which would be
+result-shopping whatever the reasoning said [`CLAUDE.md` §11].
+
+---
+
+## Phase 4, corrective pass Q: the nine reported items closed, and the shadow family registered
+
+**Taken on the operator's direction 2026-08-23, between 4.13 and 4.14 and deliberately so.**
+Four of the nine items reach a column 4.14 freezes, and the shadow registration reaches the
+same column from the other side. A pass run after 4.14 could have closed none of the five.
+
+Numbered `Q.1` to `Q.7` under phase 4, which is the form `Phase 4 / O.1` already used on this
+branch for a correction pass inside a phase.
+
+### The nine, and what closed each
+
+| # | Item | Closed by |
+|---|---|---|
+| 1 | `ARCHITECTURE.html` §05's S4 Ranks-on cell still named `inst_ownership_change` | **Q.2.** The cell and the §05 diagram node above it both amended, D-118 joining the existing chip at the point of change. Prior wording to `CHANGELOG.md` |
+| 2 | Three Reads-cell amendments taken during the build | **Q.3, D-125.** All three ratified. The finding recorded with them is the rate rather than the third instance |
+| 3 | `gate_state`'s computation sited nowhere in the corpus | **Q.1, D-121.** C12 computes it and `gate_result` carries it, with the two alternatives recorded as rejected rather than as unconsidered |
+| 4 | The evaluability reading behind `passed_partial` | **Q.1, D-122.** Per date, and the consequence stated rather than discovered: every row 4.14 freezes reads `passed_partial` |
+| 5 | The halt condition unauthored | **Q.1, D-123.** No bar for the session, or a bar with no volume |
+| 6 | `candidate_set.slot_filled` has no stated meaning | **Q.1, D-124.** Null confirmed and recorded as a column with no writer, so a later reader meets a decision rather than an oversight |
+| 7 | `screens.slot_ceiling` has no reader | **Q.5, D-127.** Retired. Removed from the seeder and the reference, not deleted from the store |
+| 8 | The two `alert_type` strings and the twenty-date window unauthored | **Q.4, D-126**, and **half of it was wrong**. See below |
+| 9 | `SCREEN_LIFECYCLE.md` §4.5's reader count | **Q.6, D-128.** Settled at seven, which is what its own table marks, and now held against it by a test |
+
+### One reported item was wrong, and the build raised it
+
+**§18's failure table states "Megacap share above a third over 20 days".** The twenty is
+authored and 4.11 reported it as unauthored. Found with the pattern
+`Megacap\s+share\s+above\s+a\s+third\s+over\s+20\s+days` against the document with its tags
+stripped and its whitespace collapsed, which is stated because a line-anchored pattern over
+hard-wrapped HTML fails silently [`CLAUDE.md` §7, N.11].
+
+**No config key was renamed**, which is what the wrong finding would have led to.
+`SectionEighteenStatesBothWindows` now holds both of C28's window constants against the
+document rather than against a comment, so the claim cannot be made again without failing.
+
+**What is genuinely open is narrower and is recorded rather than ratified**: §18 states both
+windows in "days" and C28 measures both in candidate dates.
+
+### §3's Writes column had no check, and building it found two
+
+`WriteDeclarationConformanceTests` holds every registered component's `WriteSet` against its
+§3 Writes cell in both directions [Q.3]. It is the check the `0006` carried obligation says
+nobody built, and that obligation predicted where it would bite: a component gaining a
+second write while its cell does not move.
+
+**It found two on its first run.** C04 SentimentIngestor writes `sentiment_fetch_attempt`
+and C06 EventsIngestor writes `event_fetch_attempt`, and neither §3 cell names its table.
+
+**Why nothing had reported them.** Both tables are in `SCHEMA.md` and in §16's store list;
+write ownership is asserted against `SCHEMA.md`, and the store matrix is asserted against
+`SCHEMA.md`. Every check that existed passed. Their three sibling tables
+`price_fetch_attempt`, `fundamental_fetch_attempt` and `flow_fetch_attempt` are named in
+C02's, C03's and C05's cells, so this is a pattern with two holes in it rather than a
+different design.
+
+**Reported and not closed**, `ARCHITECTURE.html` being human-edited. They sit in
+`CellsShortOfTheCode`, a list separate from the other direction's because the asymmetry is
+deliberate: `DeclaredAccess` refuses a write to an undeclared table before the connection
+opens and `WriteOwnershipConformanceTests` holds the registry against `SCHEMA.md`, so an
+undeclared write cannot reach a store and what drifts is only the narrative. Each entry
+fails the moment its cell is amended.
+
+**The Reads column drift, recorded as a rate rather than as a third instance** [D-125].
+§3's Reads cells have been amended on **twelve recorded occasions across phases 2, 3 and 4**,
+six of them inside phase 4 and three of those six on C13's cell alone. The `CHANGELOG.md`
+running count read fifth, sixth and seventh; it counted §16's store row among four Reads
+cells that were three, and is corrected to fourth, fifth and sixth.
+
+### The ordering D-119 did not mention, and the decision taken on it
+
+`attribution`'s key is `(ticker, date)` with `score_per_screen` one jsonb object across
+screens, so **a screen registered after 4.14 can never carry a backfilled row**: it could
+gain one only by updating a frozen row, which `RUNBOOK.md` prohibits. D-119 put the
+registration decision at sign-off, which falls after 4.14, and that sequence removes the
+option rather than deferring it.
+
+**D-129 registers X-NSI, X-ACC and X-FM before 4.14.** D-119's own condition is met rather
+than bypassed: it defers so the decision is taken by someone holding §5's persistence
+figures, and those have existed since 4.13. **X-PEAD is not registered**, D-90 being `OPEN`
+for it alone, so an open fork is not answered by side effect.
+
+### The shadows' range run
+
+| Figure | Value |
+|---|---|
+| Pass one, three shadows over 2021-01-11..2026-08-12 | 1,457 sessions, **11,436,360 rows, 7.78 minutes** |
+| Rows per shadow | 3,812,120 |
+| Rows per live screen, from 4.13's 19,060,600 over five | **3,812,120, identical** |
+| Pass two, three shadows | 1,457 sessions, **184,431 ranked, 22.67 minutes** |
+| `screens.<id>.slots` for each shadow | 12, being `tuner.slot_cap` [§2.1] |
+
+**The per-screen row count matching to the row is the check that the restriction wrote what
+it was meant to and nothing else.**
+
+### The persistence measure over all eight registered screens
+
+Same measure, same range, same per-screen chance baseline as 4.13 [§5].
+
+| Screen | State | Dates ranked | of scored | Pairs | Mean ranked | Mean scored | Chance | D-1 | D-5 | D-21 | Large |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| S1 | live | 1,208 | 1,457 | 1,207 | 44.4 | 2,165.9 | 0.0104 | 0.8784 | 0.7683 | 0.5581 | 33.7 % |
+| S2 | live | 1,208 | 1,457 | 1,207 | 52.1 | 2,612.9 | 0.0101 | 0.5902 | 0.2694 | 0.0145 | 30.1 % |
+| S3 | live | 1,207 | 1,457 | 1,205 | 21.1 | 1,067.5 | 0.0100 | 0.0888 | 0.0259 | 0.0122 | 57.8 % |
+| S4 | live | 1,208 | 1,457 | 1,207 | 39.7 | 1,960.3 | 0.0102 | 0.9155 | 0.7060 | 0.3899 | 30.8 % |
+| S5 | live | 70 | 1,457 | 43 | 1.0 | 2.4 | 0.2574 | 0.9767 | 0.8947 | 0.9091 | 32.9 % |
+| X-ACC | shadow | 1,208 | 1,457 | 1,207 | 51.1 | 2,566.8 | 0.0101 | 0.9577 | 0.8178 | 0.5989 | 32.1 % |
+| X-FM | shadow | 1,208 | 1,457 | 1,207 | 49.7 | 2,491.7 | 0.0101 | 0.9503 | 0.7998 | 0.5459 | 33.1 % |
+| X-NSI | shadow | 1,208 | 1,457 | 1,207 | 51.9 | 2,606.7 | 0.0101 | 0.9554 | 0.8203 | 0.5889 | 33.0 % |
+
+**The five live rows are byte-identical to 4.13's, measured three times**: once after the
+shadows' pass one, once after their pass two, and once at 4.13. That is the restricted pass
+proven rather than asserted.
+
+**All three shadows read as slow decay from a high base with an unremarkable size
+distribution**, which is the one of §5's three readings the design expects. D-1 above 0.95,
+D-21 between 0.54 and 0.60, and 32.1 to 33.1 percent large against a universe of 31.3
+percent. Each ranks on a quarterly fundamental, so slow movement is the property rather
+than an artefact, and this is the same shape S1 and S4 read at.
+
+**Naming the reading is not taking a decision on it.** These are shadows: they hold no
+slots, write no `candidate_set` row, and D-86 reads prospective observations only for a
+promotion. The figures are recorded because §5 asks that they be recorded for every
+registered screen.
+
+**One thing the table shows that is worth a later look rather than an action now.** The
+three shadows' figures sit within 0.008 of each other at D-1 and within 0.06 at D-21, and
+all three rank on quarterly fundamentals. Whether they are three mechanisms or one is a
+question for the paired comparison C22 runs in phase 8 against `screen_evaluation`, which is
+where §7's statistical treatments live. Nothing here answers it and nothing here should.
+
+### A fixture defect the registration surfaced
+
+**Four fixtures retired the seeded screens with a hardcoded `S1` to `S5` and tore down with
+`LIKE 'screens.S%.state'`.** The pattern never matched `X-NSI`, `X-ACC` or `X-FM`, so once
+three shadows existed the retire rows for them survived the fixture and every later test in
+the same database read them as retired. It surfaced as three unrelated failures, two of them
+in `ConfigResolutionTests`, which is what a shared test database does with residue.
+
+`SeededScreens.Ids()` and `SeededScreens.AnyStateVersionTwo` are one list read off the
+seeder, and all four fixtures now use both halves. **The teardown was the half that actually
+broke**, and a fixture whose setup is derived while its teardown is hardcoded is the same
+second-list defect with only one end fixed.
+
+### One hazard the registration surfaced, and what was built for it
+
+**Pass one upserts `rank_within_screen` alongside the score and always writes it null**, so
+an unrestricted second pass one over a store that is already floored clears every rank in
+it. Pass two would put them back twenty minutes later, which is what makes it worth a
+parameter rather than a note: **the window where the store is wrong looks exactly like the
+window where it is right.**
+
+`ScreenRangeRun` gained an optional screen subset on both passes, and **the refusal narrowed
+with it rather than loosening.** It counted distinct dates over the range, which any one
+screen covering the range satisfies however short another is; it now requires every screen
+in scope to cover every session, so a pass one that completed for four screens and died on
+the fifth is caught where it was not before. A subset naming no registered screen fails
+rather than running over nothing.
+
+### What 4.14 now inherits
+
+**The frozen row count will be materially above the ~34,000 estimated for five screens.**
+Three shadows recorded at `tuner.slot_cap` add up to 36 seats a night under §8.1's
+proportion, and a name surfaced only by a shadow is a new `attribution` row carrying
+`surfaced_as = 'shadow'`. It is measured at 4.14 rather than estimated here.
+
+**A name surfaced by a live screen and a shadow is one row reading `candidate`**, carrying
+both ids in `screens_surfacing` and both entries in `score_per_screen`. `AttributionSql`
+groups by ticker and takes `bool_or(is_live)`, so this does not depend on insert order and
+`ON CONFLICT (ticker, date) DO NOTHING` is protecting INVARIANT 4 rather than picking a
+winner. Read at Q.7 rather than assumed, because §4.6 calls it the ordinary case and it is
+the one shape a wrong answer would look entirely normal in.
+
+---
+
+## Phase 4, checkpoint 4.14: the record starts
+
+**`RUNBOOK.md`'s prohibition on re-running the attribution write is operative from this
+point.** The rows below carry scores frozen as they stood on the night and no later pass
+may rewrite them [INVARIANT 4, D-40].
+
+### The run
+
+| Figure | Value |
+|---|---|
+| Range | 2021-01-11..2026-08-12, **1,457 sessions** |
+| Sequence | C12 GateEngine, C14 CandidateAllocator, C28 ConcentrationMonitor |
+| `gate_result` rows | **3,812,120** |
+| `candidate_set` rows | **34,932** |
+| `attribution` rows, **frozen** | **74,767** |
+| of which `surfaced_as = 'candidate'` | 34,932 |
+| of which `surfaced_as = 'shadow'` | 39,835 |
+| Alerts raised by C28 | 28, every one the warm-up ramp. See below |
+| Wall clock | **12.72 minutes** |
+| HEAD at the run | `cd8310d` |
+
+**All 28 alerts are the warm-up ramp and none is a concentration finding**, measured at the
+phase 4 sign-off review and recorded here so the figure above is not met bare. Every one is
+`distinct_tickers_60d` and none is `megacap_share`, and all 28 fall on consecutive dates
+from 2021-12-27 to 2022-02-02, which are the first 28 dates that produced any candidate.
+Each says so in its own detail: "32 distinct tickers over the last 1 candidate dates, below
+250", then 2 dates, then 3, up to 27. **C28 does not require a full window and the done-when
+line does**, which is why the same guarantee reads as breached 28 times here and as holding
+at 288 in the table below: the distributions query filters to windows with 60 dates behind
+them and C28 measures whatever is behind it. Neither is wrong and nothing is changed.
+
+**The gate row count equals one live screen's score count exactly**, 3,812,120 against
+3,812,120, which is INVARIANT 1 visible as an identity: C12 labels every active member and
+C13 scores every active member, so the two counts are the same count reached two ways.
+
+**Candidates came in at 34,932 against the ~34,000 the phase plan estimated**, which is the
+one figure in this phase that was an estimate and is now a measurement.
+
+**C13 is not in the sequence and the halt it owns was rebuilt for the range.** 4.13 filled
+`screen_score_daily`, so re-running C13 would rewrite thirty million rows to the same values
+while its pass-one upsert wrote `rank_within_screen` null. §18's data-fault halt lives in
+C13, so `SelectionRangeRun.EnsureNotADataFaultAsync` reads the same condition out of
+`screen_history` and `screen_score_daily` and halts on the dates C13 would have. **It fired
+on none of the 1,457.**
+
+### Phase 4's definition of done, measured
+
+Every line runs as `Worker distributions <from> <to>` and reads nothing this run wrote that
+a re-run would change, so these figures are reproducible rather than recorded [D-67].
+
+| Line | Measured | Holds |
+|---|---|---|
+| A night yields roughly 26 to 30 candidates | **29.9** a night over 1,169 dates that produced any, smallest 1, largest 33 | **yes** |
+| The 2/3/3 size distribution holds | large **26.5 %** against 25.0, mid **38.7 %** against 37.5, small **34.8 %** against 37.5 | no bound stated |
+| Megacap share under a third, including inside the drawdown | whole range **26.5 %**, `risk_off` dates **26.1 %** over 5,233 rows | **yes** |
+| Distinct tickers over any 60-day window exceed 250 | smallest full 60-session window holds **288**, over 1,110 such windows | **yes** |
+| Overlap between screens near 10 to 20 percent | **0.5 %** of 34,932 candidate rows carry more than one live screen | **NO** |
+| Attribution rows for every candidate, config version stamped | 34,932 candidates, **34,932** carrying a row, **0** without one, **0** unstamped | **yes** |
+
+**The size split is reported against D-89's proportion and carries no verdict, deliberately.**
+The quota is a ceiling per screen and not a floor, and D-8 says an unfilled slot stays empty
+rather than being backfilled from a larger bucket, so the measured split sits at or below the
+target in whichever bucket runs short. Small at 34.8 against 37.5 is that rule visible: the
+small bucket is the one that runs out of names clearing a floor.
+
+**The drawdown segment reads `regime_label` and not a date window.** `market_context_daily`
+carries an authored label closed to `risk_on`, `risk_off` and `mixed` by migration `0005`, so
+the segment is this corpus's own name for the condition rather than a range a build session
+picked. Every candidate row fell on a labelled date; none was unlabelled.
+
+### The one line that does not hold, and what it is
+
+**Screen overlap measures 0.5 percent against §06's stated 10 to 15 and the plan's 10 to
+20.** `ARCHITECTURE.html` §06 states it as "A name surfaced twice appears once, tagged with
+both. Overlap runs 10 to 15 percent normally and higher in a drawdown", so the quantity is
+the share of candidate rows carrying more than one live screen and the reading is not in
+doubt.
+
+**Nothing was adjusted.** `CLAUDE.md` §11 forbids loosening a bound because a measurement
+missed it, and the number is reported as it stands.
+
+**The cause is measured rather than guessed.** Per live screen, seats actually filled over
+the range:
+
+| Screen | Seats | Dates | A date |
+|---|---|---|---|
+| S1 | 9,288 | 1,161 | 8.00 |
+| S2 | 9,265 | 1,169 | 7.93 |
+| S3 | 7,202 | 1,160 | 6.21 |
+| S4 | 9,285 | 1,161 | 8.00 |
+| S5 | **68** | **68** | 1.00 |
+| X-ACC | 13,949 | 1,175 | 11.87 |
+| X-FM | 13,937 | 1,171 | 11.90 |
+| X-NSI | 13,956 | 1,176 | 11.87 |
+
+The five live screens filled **35,108 seats** and those collapsed to **34,932 distinct
+names**, so across five years the live screens picked the same name on the same date **176
+times**. The seats are close to full: S1, S2 and S4 sit at their eight, S3 at 6.21 because
+its scored population is the narrowest, and S5 at one on 68 dates. **So the shortfall is not
+unfilled seats. It is that the screens do not agree.**
+
+**Measured a second way, in case the estimate was about a different set.** A live screen
+ranks about forty-four names above its floor and seats eight of them, so overlap over ranked
+sets draws from roughly five times the population overlap over seats does. Over ranked sets
+it is **2.2 percent of 186,038 ranked name-dates**, mean 1.02 screens. The estimate misses on
+both readings, so the difference is not definitional.
+
+**What 2.2 percent is close to is statistical independence.** Each screen ranks the top two
+percent of its own scored population [D-9]. If five screens ranked independently, a name in
+at least one set would be in two with probability about `C(5,2) x 0.02^2 / (1 - 0.98^5)`,
+which is roughly 4 percent, and the screens do not all rank the same population: S3 scores
+1,067 names and S5 scores 2.4. **The measured overlap is what near-independent ranking
+produces**, and §06's figure would require the five screens to agree more often than
+independence implies.
+
+**This is reported and not resolved, and it is the operator's.** Three readings are open and
+the build session takes none of them. The estimate may simply be wrong, in which case §06 is
+amended and the done-when line with it. The screens may be more orthogonal than intended, in
+which case that is a finding about the design and not a defect. Or the line may be measuring
+the wrong thing, in which case what it should measure is authored. **What must not happen is
+the bound moving because the measurement missed it** [`CLAUDE.md` §11].
+
+### What is still owed
+
+~~**S3's coverage tilt and S5's fill are unchanged and both are now in the frozen record.**~~
+4.13 recorded that §05 says S3 "tilts small" while it measurably tilts large, and that S5
+ranked on 70 of 1,457 sessions against §05's "0 to 5, median 3". S5's 68 seats over 68 dates
+above is the same fact seen from the allocator: **S5 contributed 68 of 35,108 live seats,
+which is 0.19 percent.** Neither was changed before the run, as directed. **Both §05
+sentences are corrected at Q.10 and Q.11**, human-directed, with the prior wordings in
+`CHANGELOG.md` [D-73]. Neither screen is changed: both composition questions are carried
+obligations to phase 8. The measurements themselves stand as recorded above.
+
+~~**Two items reported at Q.3 and not closed**, both §3 Writes cells: C04 SentimentIngestor
+writes `sentiment_fetch_attempt` and C06 EventsIngestor writes `event_fetch_attempt`, and
+neither cell names its table.~~ **Both cells amended at Q.8**, human-directed, with the
+prior wordings in `CHANGELOG.md` [D-73]. The section below records what closed them.
+
+**The Consumer column is filled for every key this phase wired up.** Twenty-three keys under
+`screens.*`, `s5.*`, `gates.*`, `tuner.*` and `monitor.*` read `verified 4.x`. Four keys in
+those namespaces remain `unverified` and correctly so, their consumers being phase 5 to 8
+components that do not exist: `s5.no_digest_disqualifier_min_articles_90d`,
+`tuner.shrinkage_old`, `tuner.benchmark_column` and `monitor.cache_hit_rate_min`.
+
+---
+
+## Phase 4, corrective pass Q, checkpoints Q.8 to Q.11: the four items 4.14 left owed
+
+Four items the 4.14 record carries as owed, closed against the measurements 4.13 and 4.14
+took rather than against new ones. Documents and two catalogue cells. No component moved,
+no migration was written, and nothing was run against the frozen record [`RUNBOOK.md`].
+
+### Q.8: §3's C04 and C06 Writes cells now name their attempt records
+
+**Both cells are amended, human-directed**, as clean edits under D-73 with the prior
+wordings in `CHANGELOG.md` and D-99 at the point of change. C04's now reads
+`sentiment_daily, sentiment_fetch_attempt` and C06's `events, event_fetch_attempt`. The
+diff over `ARCHITECTURE.html` is those two cells and nothing else, two lines of a
+1,000-line file.
+
+**D-99 rather than a checkpoint number is the citation**, matching C02's cell, which
+carries D-99 for `price_fetch_attempt`, and C03's and C05's, which carry D-91 and D-95.
+The two migrations are `0011` and `0012` and both tables were already in `SCHEMA.md` and
+in §16's store list.
+
+**Each cell landed with its own test passing, in this commit.** `CellsShortOfTheCode` held
+the two as recorded gaps and `EveryRecordedDeviationIsStillADeviation` fails the moment a
+cell is amended, which is the mechanism Q.3 built for closing them rather than for
+remembering them. Both entries are deleted and the list is empty again. **The C06 cell was
+reverted and the suite re-run before the entries went**: one failure, of
+`EveryTableAComponentWritesIsNamedInItsWritesCell`, which is the assertion that now carries
+that cell with no exemption beneath it. Six of six green in
+`WriteDeclarationConformanceTests` afterwards.
+
+**These are the sixth and seventh drifts of the Writes column in four phases and they are
+added to that count**, after C03 under D-91, C05 under D-95, C01 under D-92, C03 again
+under D-96, and C03 and C05 under D-98. Nothing new is opened. The `0006` carried
+obligation in `BUILD_PLAN.md` is where the pattern lives and it now records the closure.
+
+**What separates these two from the five before them is how they were found.** The five
+were noticed by a reader, one at a time, over phases 2 and 3. These were returned by a
+check on its first run, which is the difference D-125's argument turns on: a column
+amended at a rate is answered by a test rather than by a count of instances, and the count
+now stops being the thing that has to be maintained.
+
+**One tension is reported rather than resolved.** This checkpoint's own scope says the
+diff touches no source file, and closing the two entries requires editing
+`WriteDeclarationConformanceTests.cs`, because the check is built so that an amended cell
+fails until its entry goes. The test edit is deletion of two tuples and the comment above
+them; no assertion, helper or count moved. The two directions cannot both be satisfied and
+the instruction to land each cell with its test passing is the narrower one, so it was
+followed.
+
+### Q.9: §06's overlap figure is amended against the measurement
+
+**The node reads 0.5 and 2.2 percent and §06 gains three notes.** Human-directed, clean
+edits under D-73 with the prior wordings in `CHANGELOG.md`. `BUILD_PLAN.md`'s phase 4
+done-when clause moved in the same commit rather than after it, so the plan and the
+narrative do not disagree about what was asked for. Both prior wordings are recorded.
+
+**The figures are 4.14's and nothing was re-run to produce them.** 0.5 percent of 34,932
+allocated candidates carry more than one live screen; 2.2 percent of 186,038 ranked
+name-dates are ranked by more than one, mean 1.02 screens. Both are already in this file
+under 4.14 and are cited rather than recomputed.
+
+**Why the prior figure was inconsistent with the design it sat in.** Each screen ranks the
+top two percent of its own scored population [D-9]. Five independent rankings put a name in
+at least two sets with probability near 4 percent, and the five do not rank one population:
+S3 scores 1,067 names and S5 scores 2.4. So 10 to 15 required the five screens to agree
+substantially more often than independence implies, which is the opposite of what five
+disjoint metric families under INVARIANT 2 produce. **This is not the bound-loosening
+`CLAUDE.md` §11 forbids**, and the distinction is worth stating rather than assuming: §11
+forbids moving a threshold a result has to clear, and this figure never was one. It
+described what the design would do and it described a different design.
+
+**The three readings, and which the numbers support.** 4.14 left all three open and took
+none:
+
+| Reading | Verdict |
+|---|---|
+| The estimate is wrong | **Supported.** What the amendment takes |
+| The screens are more orthogonal than intended | **Not supported.** 2.2 percent sits at near-independence, not beyond it. INVARIANT 2 asks for independence and the screens deliver it, so there is no design finding underneath |
+| The line measures the wrong thing | **Closed.** 4.14 measured it both ways, over allocated candidates and over ranked sets, and it misses on both, so the gap is not definitional |
+
+**The order matters and is why this reads as a correction rather than a fit.** The third
+reading was closed by 4.14's second measurement before any amendment was contemplated, and
+the second is closed by where the number sits rather than by the fact that it is
+inconvenient. Only then is the first what remains. Had 2.2 percent come in above 4 percent,
+the second reading would have been the live one and the amendment a different one.
+
+**The shortfall is not unfilled seats and the notes say so.** S1, S2 and S4 fill their
+eight, S3 averages 6.21, and 35,108 filled seats collapsed to 34,932 distinct names, so in
+five years the live screens picked the same name on the same date 176 times. The screens do
+not agree, which is the design working.
+
+### Q.10: §05's S3 sentence states the measured tilt, in its two stages
+
+**The cell read "Tilts small" and now reads "Tilts large, in two stages"**, human-directed,
+a clean edit under D-73 with the prior wording in `CHANGELOG.md`. §05 gains a note under the
+screens table carrying the figures, because a table cell holds three words and the useful
+part of this is which stage the tilt happens in.
+
+**The two stages, both measured at 4.13 and neither recomputed here.**
+
+| Stage | Figure |
+|---|---|
+| The universe it is drawn from | **31.3 %** large |
+| Names its three inputs compute for | **1,067 of 2,819**, and that covered population is **47.0 %** large |
+| What it ranks | **57.8 %** large |
+
+**The first stage is the larger one and it is not about ranking at all.** The screen is
+already 47.0 percent large before it scores anything, because a name needs enough news
+coverage for `article_count_z_own_90d`, `sentiment_delta_7v30` and `sentiment_7d_level` to
+compute, and coverage is what large caps have. The ranking then adds 10.8 points. S3 is the
+only one of the five that ranks larger than its own scored population; S1, S2, S4 and S5
+each rank smaller than theirs.
+
+**Why separating the stages matters rather than being tidy.** A screen that ranks large out
+of a large population and a screen that ranks large out of a representative one need
+different answers, and a single "tilts large" would not distinguish them. Recomposing the
+ranking cannot move the 47.0, which is set by which names have coverage at all.
+
+**The composition is not changed and the question is filed forward.** `BUILD_PLAN.md` gains
+a `4 → 8` carried obligation naming the three answers that are open, recompose, rebase the
+ranking against the covered population, or accept the screen as the reading it is, with the
+two-stage measurement as its evidence. Phase 8 is where it lands because C22 ScreenTuner
+allocates slots on peer-relative performance and S3's peer population is not the other four
+screens', and because D-42's peer-relative column is what would hide that. S3's persistence
+figures being the closest of the five to chance [4.13] puts the two questions on the same
+screen, so they are answered together.
+
+**One adjacent observation, filed and not acted on.** §05 gives S4 "Tilts small and mid" and
+S4 ranks 30.8 percent large against a universe at 31.3, which is at the universe rather than
+below it. It does rank smaller than its own scored population, 30.8 against 33.6, so the
+cell is defensible on the reading S3's was not. Recorded here so the next reader of that
+column has the number, not raised as an item.
+
+### Q.11: S5's fill measured, and the causes separated as far as the store allows
+
+**The measurement, against §05's estimate.**
+
+| | Value |
+|---|---|
+| §05's stated typical fill | 0 to 5, median 3 |
+| Live seats S5 filled, 2021-01-11 to 2026-08-12 | **68** |
+| Live seats filled by all five screens | 35,108 |
+| S5's share | **0.19 %** |
+| Dates it seated anything | 68, one name each |
+| Dates it ranked anything | 70 of 1,457 |
+| Its mean scored population a date | **2.4** |
+
+**The two ranked dates that did not become seats are the same gap every screen shows**
+between ranking and seating: S1 ranks on 1,208 dates and fills seats on 1,161, the
+allocator running over fewer dates than the screens ranked on. Stated as the reading that
+fits rather than as a figure taken.
+
+**What the store separates: the gate stage from the floor stage.** `screen_score_daily`
+carries a non-null score exactly for the names S5's gate admitted, and `screen_history`
+carries that day's floor and trailing count beside it, so the two stages are readable
+against each other without recomputing anything.
+
+- **The gate admits 2.4 names a date.** That is already below §05's median of 3 before
+  anything is ranked, so the estimate was missed at the gate and not at the floor.
+- **The floor then ranks one name on 70 of 1,457 sessions.** The floor is the 98th
+  percentile of the screen's own trailing distribution [D-9], and two percent of a
+  population averaging 2.4 is what produces one name on a twentieth of dates.
+
+So the gate is the binding stage and the floor takes it the rest of the way. That split is
+in the record and needed no new measurement.
+
+**What the store does not separate: which gate condition is doing it.** A name that fails
+carries a null score and nothing else, and `IS NOT TRUE` in `ScreenEngine.EligibleSql`
+collapses a failed condition and an unevaluable composite into that same null, deliberately
+[4.7]. Four conditions reduce to one bit per name-date. Of the three causes open:
+
+| Cause | Separable |
+|---|---|
+| The quintile thresholds, `screens.S5.quality_quintile_min` at 80 and `screens.S5.technical_quintile_max` at 20, never measured | **No.** Inside the bit |
+| The two composites' composition | **No.** Inside the bit, and indistinguishable from the thresholds within it |
+| The two news conditions failing open | **Excluded, on the gate's shape rather than on the record.** `ScreenEngine.NewsSettled` is a disjunction: below `s5.news_gate_min_articles` both tests are satisfied. Removing that branch could only shrink what the gate admits, so it cannot produce a fill below the estimate |
+
+**Two of the three are not picked between, and that is the report.** Separating them needs
+the gate re-evaluated condition by condition over the window, which is a measurement rather
+than a query against what phase 4 produced, and a build session does not add one to its own
+scope [`CLAUDE.md` §3]. The inputs all still exist in their stores, so the measurement is
+available to whoever authors the decision; what is not available is an answer read off the
+frozen record.
+
+**The exclusion of the third is a read of the code and is marked as one.** It rests on the
+expression being an `OR`, not on any count of how many names took that branch. How much the
+fail-open widens the gate is not measured and is not claimed.
+
+**§05's cell is corrected and the composition is not changed.** The cell reads "0 on all
+but 68 dates in five years", a clean edit under D-73 with the prior wording in
+`CHANGELOG.md`, and two notes under the gate section carry the stages and the
+inseparability. `BUILD_PLAN.md` gains a second `4 → 8` carried obligation beside Q.10's.
+**It is filed as a slot question before a composition one**: a screen contributing 0.19
+percent of seats is something §8.1's proportion and D-43's floor of four decide on before
+anyone reweights a composite.
+
+### Sign-off step 1 for the Q.8 to Q.11 pass
+
+**`ci.ps1` green at `5de9727`**, the last commit of the pass, over a worktree of tracked
+files at that sha. Seven results: `guards.ps1` exit 0 with 5 checks over **182 files**,
+four greps finding none of what they look for and one schema assertion over the migrations;
+restore ok; build **0 warnings, 0 errors**; no secrets file present; migrate from an empty
+server applying **21 migrations**; migrate again with nothing to apply; and
+`dotnet test --no-build` at **718 passed, 0 failed**.
+
+**The test count did not move over this pass and that is the expected result.** The only
+source edit was deleting two entries from `CellsShortOfTheCode`, which is data a test reads
+rather than a test, so `WriteDeclarationConformanceTests` still runs its six.
+
+**The five commits.** `Q.8` the two Writes cells and the test list; `Q.9` the overlap figure
+and the done-when; `Q.10` S3's tilt and its carried obligation; `Q.11` S5's fill, the cause
+separation and its carried obligation; then a `chore` archiving the prompt.
+
+**What the diff touches.** `ARCHITECTURE.html`, `BUILD_PLAN.md`, `CHANGELOG.md`,
+`PROGRESS.md`, one archived prompt, and
+`src/StockResearcherLab.Tests/Stages/WriteDeclarationConformanceTests.cs`. **No migration
+and no component.** The one source file is the tension recorded under Q.8: the pass's own
+scope says no source file, and the check is built so an amended cell fails until its
+recorded entry is deleted.
+
+**`FIXTURES.md` and `CONFIG_REFERENCE.md` are unchanged and correctly so.** No fixture was
+added and no config key was wired up; phase 4's Consumer column was filled at 4.14 and
+nothing here reads a key.
+
+**Sign-off step 2 is still owed** and still needs a session that has not committed here.
+This session has committed, so it does not run it [`CLAUDE.md` §3].
+
+**Re-run at `1793f2d` and again at `73a1efe`**, the second being the commit that archives
+the phase 4 plan, both with the same seven results: guards 5 checks over 182 files, 0
+warnings, 21 migrations, **718 passed, 0 failed**. Recorded three times because the record of
+a run is itself a commit, and naming only the first sha would leave the branch head
+unchecked. Every commit after `73a1efe` is documentation or an archived prompt, and none is
+a code path.
+
+### The phase 4 plan is archived, and two prompts are not recoverable
+
+**`prompts/spent/phase-4-screens-and-selection.md` exists as of 2026-08-24.** Its body is
+byte-identical to `prompts/BuildPlans/phase-4-screens-and-selection.md` from §Context
+onward, and its header carries what landed: §4's eleven decisions all authored as D-110 to
+D-120, §6's fourteen checkpoints all reaching `BUILD_PLAN.md` and all fourteen landing as
+commits, §3's scope question answered on the wide reading, and §8's findings closed through
+the `Q` pass. **This is what that plan's own header instructed**, which said it goes to
+`prompts/spent/` as implemented and not before, and it is the shape phase 3's archive has.
+
+**The archive reads `Status: SPENT` where the plan reads `DRAFT`.** §8 of the plan reports
+that three files in `prompts/spent/` carry a status `prompts/README.md` does not list, and
+says of this one that the correction is a line in a header. The three existing `DRAFT`
+archives are untouched and stay an authored call.
+
+**Two prompts issued during phase 4 were never archived and cannot be now.** The prompt that
+drove `Q.1` to `Q.7` and the prompt that drove 4.14 were issued in sessions whose text is not
+in this repository, and reconstructing either would be a paraphrase, which is the one thing a
+spent prompt must not be [D-63]. **This is phase 2's gap repeating**, that archive recording
+in its own header that an earlier session's prompt "was never archived and is not recoverable
+from this one". What survives of both is the commit bodies and the sections above. The
+`Q.8` to `Q.11` prompt is archived, at
+`prompts/spent/phase-4-Q.8-to-Q.11-four-owed-items.md`.
+
+**`prompts/BuildPlans/` holds five plans and four are now archived.** `phase-2-compute.md`,
+`phase-3-backfill.md`, `phase-3.5-record-inspector.md` and `design-screen-lifecycle.md` each
+have a counterpart in `spent/`, and `phase-4-screens-and-selection.md` now does too. **There
+is no phase 5 plan and there should not be yet**: `BUILD_PLAN.md` authors the next phase's
+detail at the previous phase's sign-off, and sign-off step 2 is owed.
+
+---
+
+## Phase 4, the review at sign-off, 2026-08-24
+
+Run in a session that had not committed in this repository, which is what
+`BUILD_PLAN.md`'s step 2 asks for. **It corrects nothing**, including the three figures
+below that did not reproduce and the open item this phase read without answering. Every
+store-side figure was re-measured against the developer database rather than read, and
+both commands the record names as its own producers were re-run over the frozen range.
+
+### Step 1, CI green, verified rather than taken
+
+`ci.ps1` re-run here at `c4e782d`, the branch head, with the seven results the record
+states at three shas: `guards.ps1` exit 0 with **5 checks over 182 files**, restore ok,
+build **0 warnings and 0 errors**, no secrets file present, migrate from an empty server
+applying **21 migrations**, migrate again with nothing to apply, and **718 passed, 0
+failed**. Nothing moved.
+
+**What CI does not cover is the definition of done, and this file does not say so.** Step
+1 asks that the definition of done run in CI or that `PROGRESS.md` name the line CI does
+not cover and why. All six lines are measured by `Worker distributions` against the
+populated store, which no CI job has. `SelectionDistributionsTests` covers their shape and
+deliberately not their figures, and says so in its own summary rather than here. Phase 3
+walked its done-when line by line with the CI coverage of each stated; this phase does not.
+
+### What reproduced exactly
+
+| Figure | Recorded | Re-measured 2026-08-24 |
+|---|---|---|
+| The six done-when lines | 4.14's table | identical line for line: 29.9 a night over 1,169 dates, smallest 1 and largest 33; large 26.5, mid 38.7, small 34.8; whole range 26.5 and `risk_off` 26.1 over 5,233 rows with 0 unlabelled; 288 in the smallest full window over 1,110 windows; 34,932 attributed, 0 without, 0 unstamped |
+| Seats per screen, all eight | 4.14's table | identical, S1 9,288 through X-NSI 13,956 |
+| Overlap over ranked sets | 2.2 percent of 186,038, mean 1.02 | identical |
+| The persistence measure, eight screens | Q.7's table | **identical in every column to four decimals**, including S5's 43 pairs and 0.9767 |
+| `gate_result` rows | 3,812,120 | identical |
+| `attribution` rows | 74,767, being 34,932 and 39,835 | identical |
+| `screen_score_daily` rows | 19,060,600 live plus 11,436,360 shadow | **30,496,960**, which is the sum exactly |
+| Alerts | 28 | identical |
+| The universe's large share | 31.3 percent | 31.29 over 2022-01-11..2026-08-12, 31.32 over the frozen range |
+| S3's scored population, 2026 to date | 47.0 percent large | **47.04**, so the method used here is the method that produced it |
+
+**Two invariant identities hold as identities rather than as claims.** `gate_result`'s
+3,812,120 equals one live screen's score count exactly, which is INVARIANT 1 reached two
+ways. And `gate_state` reads `passed_partial` on all 74,767 frozen rows with no second
+value, which is D-122's consequence stated in advance and now measured; `config_version`
+reads 3 on all 74,767 with no nulls, one version being in force across the whole window
+because nothing in the store changed inside it [INVARIANT 13].
+
+**The other four invariants this phase names were read in the code rather than measured.**
+INVARIANT 2 holds through `ScreenConfigFacade` refusing another screen's key and S5
+carrying its own two metric lists, with
+`ScreenGateTests.S5ScoresWithS1AbsentFromTheRegistryEntirely` as the proof. INVARIANT 3
+holds because `CandidateAllocator.Sql` numbers seats inside `PARTITION BY screen_id,
+size_bucket` and joins a per-bucket seat count, so no expression in the statement can move
+a seat between buckets; small measuring 34.8 against a target of 37.5 is that rule visible.
+INVARIANT 4 holds through an `attribution` write set carrying `Insert` alone, `ON CONFLICT
+DO NOTHING`, and `SelectionRangeRun` refusing a range whose attribution has started.
+INVARIANT 10 holds through `WriteDeclarationConformanceTests` in both directions with
+`CellsShortOfTheCode` now empty.
+
+### Exception 1: item 42 names this phase in terms, and this phase read it without answering it
+
+**Item 42 in the open items table reads "what it needs now is an authored decision about
+what a session is, before phase 4 reads any of it."** It is not struck and no decision
+answers it. **Nothing in the phase 4 record from 4.1 to Q.11 mentions it**, and phase 4
+read all of it: the gate, the screens, the floors, the allocator and the frozen
+`attribution` table all ran over the session list item 42 describes.
+
+**Measured here: 54 of the 1,457 dates the record calls sessions are days the US exchanges
+were shut.** Each carries between 1 and 18 `price_daily` bars against a median of about
+18,000, and every one reads off as a market holiday or its observance: MLK, Presidents',
+Good Friday, Memorial, Juneteenth, Independence, Labor, Thanksgiving, Christmas, New Year,
+and 2025-01-09, the national day of mourning. `TradingCalendar.SessionsAsync` takes the
+dates a range evaluates from `price_daily` itself, so a handful of bars is enough to make a
+closed day a session.
+
+**Item 57's closure argued this could not recur, and the argument is true as written and
+does not cover this case.** It says a date with **zero** bars is never in the session list.
+These 54 are not zero-bar dates.
+
+**What actually happened on them, measured on three of the 54 against the sessions either
+side.**
+
+| Date | S1 rows | S1 scored | S1 ranked |
+|---|---|---|---|
+| 2021-12-23 | 2,676 | 2,208 | 0, no floor yet |
+| **2021-12-24**, closed | 2,676 | **1,216** | **22** |
+| 2021-12-27 | 2,690 | 2,217 | 46 |
+| 2022-01-14 | 2,636 | 2,177 | 47 |
+| **2022-01-17**, closed | 2,624 | **1,187** | **21** |
+| 2022-01-18 | 2,624 | 2,176 | 49 |
+| 2023-07-03 | 2,578 | 2,152 | 35 |
+| **2023-07-04**, closed | 2,578 | **1,175** | **10** |
+| 2023-07-05 | 2,578 | 2,152 | 35 |
+
+So C13 scores roughly half its usual population on a closed day and each screen still ranks
+names on it. **The halt gate is what contains it**: on 2022-01-17 C12 labelled 2,623 of
+2,624 members `halt`, which is the one reason `price_daily` can evaluate on a day with no
+bar, so the allocator seated nothing. **Eight candidates over the 54 dates got through
+anyway**, one each on 2022-07-04, 2024-01-15, 2024-02-19, 2024-11-28, 2025-01-01,
+2025-01-09, 2025-02-17 and 2025-11-27. They are the "smallest 1" the done-when line's own
+output reports.
+
+**The frozen rows on those dates are ~~eight~~ 57, and the correction is this review's
+own.** The eight above are `candidate_set` rows and the sentence first written here read
+them as the whole of `attribution`, which also carries a row for a name only a shadow
+surfaced. Measured across the 54: **141,721 `gate_result` rows, 1,133,768
+`screen_score_daily` rows and 57 `attribution` rows**, the 57 being the eight candidates
+and 49 shadows. The gate and score rows are rewritable and the 57 are not [INVARIANT 4].
+
+**What is measured and what is not.** Measured: the 54 dates, their bar counts, the halved
+score population, the ranks written on them, the 57 frozen rows. Not measured:
+whether including about ten half-populated dates in every screen's 250-date trailing window
+moves any floor, and whether the persistence measure's D-1, D-5 and D-21 lags move when
+those dates leave the session list. Both are queries against what exists rather than new
+instruments, and neither is taken here. **Both were taken on 2026-08-24 on the operator's
+direction and are in the section below.**
+
+**Why it is the largest of these exceptions.** Item 57 records the reason in its own words:
+"phase 4 counts forward returns in trading days, and a row standing on a non-session date
+makes that count wrong while erroring on nothing." C21 has not run, so the 57 rows do not
+carry wrong returns yet; they will. And `attribution` rows cannot be rewritten
+[INVARIANT 4, `RUNBOOK.md`], so whatever is decided about what a session is, these 57 stay.
+
+### Exception 2: 4.13's first ranked date is wrong, and the conclusion it supports inverts
+
+**4.13 records "the measured first date any screen ranked anything is 2022-01-11".
+Measured here it is 2021-12-24, on all eight screens.** Every screen's first scored date is
+2021-01-11 and every one has 1,457 scored dates, both of which reproduce; the first
+**ranked** date does not.
+
+The sentence around the figure says D-115 puts candidate history at "around 2022-01-03,
+computed as 250 sessions from the window start", and concludes "from 2021-01-11 the 250th
+session is later". **The first `candidate_set` date and the first `attribution` date are
+both 2021-12-27**, so candidate history begins earlier than D-115's estimate rather than
+later, and the direction of that conclusion is the wrong way round.
+
+**The two exceptions are one fact.** 2021-12-24 is Christmas observed and is one of
+exception 1's 54 dates, so the 250th entry in each screen's lookback arrived on a day the
+exchange was shut. That is why the arithmetic came out eleven days from where a real
+session count puts it.
+
+### Exception 3: §05's 47.0 percent is a 2026-to-date figure stated under a whole-range heading
+
+**Q.10 wrote into `ARCHITECTURE.html` §05 that, "measured over 2021-01-11 to 2026-08-12",
+S3's covered population "is already 47.0 percent large".** Over the range that sentence
+names it is **55.0 percent**. 47.0 is the 2026-to-date figure, which 4.13 recorded as
+2026-to-date and qualified in terms: "the scored-population column is 2026 to date and the
+ranked column in the table above is the whole range, so they are indicative against each
+other rather than exact." Q.10 carried the number forward and dropped the qualification.
+
+| S3's scored population, large share | Value |
+|---|---|
+| 2021 | 57.1 % |
+| 2022 | 55.2 % |
+| 2023 | 61.8 % |
+| 2024 | 66.8 % |
+| 2025 | 50.0 % |
+| 2026 to date | **47.0 %** |
+| **The whole frozen range** | **55.0 %** |
+
+The method is the one that reproduces 47.04 for 2026 to date, so 55.0 is measured by the
+same instrument rather than by a different reading.
+
+**What changes and what does not.** The two-stage claim survives: 55.0 against a universe
+at 31.3 still puts most of S3's tilt in coverage rather than in ranking. **The second stage
+does not.** §05 and the `4 → 8` carried obligation both say the ranking "adds 10.8 points",
+being 57.8 less 47.0. Over one range it adds **2.8**. 2026 to date is also the lowest of
+the six years, so the figure chosen is the one most favourable to the size of the ranking
+stage.
+
+### Exception 4: the overlap done-when line was amended at Q.9 and the measure that scores it was not
+
+**`BUILD_PLAN.md`'s phase 4 done-when clause moved at Q.9 to the near-independence reading.
+`SelectionDistributions` still carries the retired wording and the retired bound**, scoring
+the line as `shared >= 0.10 && shared <= 0.20`. Re-run here at the branch head, the measure
+prints:
+
+```
+  [DOES NOT HOLD]  overlap between screens falls somewhere near 10 to 20 percent
+             0.5 percent of 34,932 candidate rows carry more than one live screen
+```
+
+**So the phase status row's "SIX OF SIX DONE-WHEN LINES HOLD" is not reproducible by the
+command this file names as what makes those figures reproducible** [D-67]. Every figure
+reproduces; the verdict on line five does not, because the code scores it against a bound
+the plan no longer states.
+
+`SelectionDistributionsTests.Lines` pins the retired wording, and that class's own summary
+says each line "names the plan's own wording", which is no longer true. It is why nothing
+failed: the list is held against a copy inside the test rather than against
+`BUILD_PLAN.md`. **This is the second-list shape this corpus has closed four times
+elsewhere**, and it is the one place a done-when line can go stale with no test noticing.
+
+Two smaller readings sit in the same file. The megacap line's verdict compares against a
+literal `1d / 3d` where `monitor.megacap_share_max` states the same bound at 0.333 and C28
+reads it, so the two can diverge. And the done-when's "60-day window" is read as 60
+candidate dates, which is the looser of its two readings; the reading is named in this
+file's 4.14 table but not beside the query, where the other two loose lines name theirs.
+
+### Exception 5: `SCREEN_LIFECYCLE.md` §4.6 rests on the figure Q.9 withdrew
+
+§4.6 says a candidate row carrying a shadow id is "the ordinary case rather than the
+exception **given §06 puts screen overlap at 10 to 15 percent normally and higher in a
+drawdown**". §06 no longer puts it there. Q.9 amended §06 and `BUILD_PLAN.md` and did not
+sweep for other citations of the retired figure.
+
+**Measured on the frozen record: 1,223 of 34,932 candidate rows carry a shadow id, which is
+3.5 percent.** The rule §4.6 states is unaffected and the two filters still do different
+work. What is affected is the justification, which now cites a withdrawn number and is
+contradicted by the record it would be checked against.
+
+### Exception 6: all 28 alerts are the warm-up ramp, and the record does not say so
+
+4.14 records "Alerts raised by C28 | 28" beside the run. **All 28 are
+`distinct_tickers_60d` and none is `megacap_share`**, and all 28 fall on consecutive dates
+from 2021-12-27 to 2022-02-02, which are the first 28 dates that produced any candidate.
+Their own detail says why: "32 distinct tickers over the last 1 candidate dates, below
+250", then 2 dates, then 3, up to 27.
+
+**C28 does not require a full window and the done-when line does.** The distributions query
+filters to `dates_behind >= 60` and reports the smallest full window at 288; C28 measures
+whatever is behind it. So one guarantee reads as holding comfortably and as breached 28
+times, and the whole difference is the partial window. Neither component is wrong. What is
+missing is the sentence saying the 28 are the ramp, without which a reader meets 28
+unexplained concentration alerts standing in the record beside a done-when line that holds.
+
+### Smaller things, filed rather than raised
+
+- **`Program.cs` derives the live screen set for the ranked-overlap reading as
+  `!id.StartsWith('X')`.** A screen is a row and its state is `screens.<id>.state`; a
+  promotion under `SCREEN_LIFECYCLE.md` §6 would leave that figure counting a live screen
+  as a shadow with nothing failing. It is right today because the five live ids begin `S`
+  and the three shadows begin `X-`. The figure it feeds is now in §06 [Q.9].
+- **The estimates table at the head of this file still has "Candidates per night | 26-30"
+  with no measured column**, and 29.9 has been measured. Screen overlap in the same table
+  was filled at Q.9.
+- **§16 still states `screen_score_daily` at "~280 MB per registered screen"**, which 4.13
+  measured at 305 and called 9 percent high. The `3 → 3 sign-off` carried obligation asks
+  that §16's sizes be restated from measurement and say that they are measured.
+- **The "Database size after backfill" row was measured 2026-08-22**, before this phase
+  added `screen_score_daily`, `gate_result` and `attribution`. 4.13 measured 1,526 MB for
+  the five live screens alone.
+- **`CandidateAllocator`'s `ReadSet` comment says `market_context_daily` is "declared and
+  not yet read"**, which stopped being true at 4.10, when `AttributionSql` began selecting
+  `regime_label` from it.
+- **The `SL → 4` carried obligation "D-90 is answered before the family is registered" is
+  not closed.** Three of the four members were registered at Q.7 with D-90 still `OPEN` for
+  X-PEAD. The build reported that reasoning at D-129 rather than passing over it, so this
+  is an obligation that carries forward rather than an unreported one.
+
+### What this review did not find
+
+No breach of any invariant this phase names. No figure in the 4.13, Q.7 or 4.14 tables that
+failed to reproduce, except the first ranked date at exception 2. No sign that a screen
+definition, a floor or a slot allocation moved after a number was seen: the persistence
+figures were recorded before 4.14 ran, the overlap shortfall was reported unadjusted at
+4.14, and both composition questions were filed to phase 8 rather than acted on
+[`CLAUDE.md` §11].
+
+**Sign-off is the operator's.** Exceptions 1 and 2 concern the frozen table and cannot be
+undone by a later pass. Exceptions 3 to 6 are documents, one measure and one test list.
+
+---
+
+## Phase 4, the two measurements item 42's decision is sized on, 2026-08-24
+
+**Taken on the operator's direction after the sign-off review and before any decision.**
+They exist to size decision 1 and **nothing was changed on account of them**. No code was
+touched to take them: both are statements against the store as 4.13 and 4.14 left it, and
+the persistence one mirrors `PersistenceMeasure.Sql` clause for clause with the closed
+dates removed from its `sets` CTE, which removes them from both sides of every lag because
+`lag()` then runs over what remains.
+
+**The 54 closed dates are a literal list in both statements**, taken from the review's own
+measurement rather than re-derived, so neither statement scans `price_daily` and both are
+deterministic. Checked before use: the list is 54, and all 54 carry `screen_score_daily`
+rows, so every one of them is a date the record calls a session.
+
+### Where the record would start if the 54 were never sessions
+
+| | Value |
+|---|---|
+| Dates the record calls sessions | 1,457 |
+| Of those, days the exchange traded | **1,403** |
+| First floor, as recorded | 2021-12-24, itself one of the 54 |
+| First floor on an open-dates-only calendar | **2022-01-05** |
+
+So the record would start eight sessions later, and its first date would be a day the
+exchange was open. 2022-01-05 is also what D-115's "around 2022-01-03, computed as 250
+sessions from the window start" was reaching for.
+
+### Measurement one: do the floors move
+
+Each live screen's floor recomputed as the p98 over the 250 **open** dates ending on the
+same date, against `screen_history.floor_score` as it stands. **Sampled every twentieth
+open date, which is 58 dates a screen and 290 floors, and the sample is stated rather than
+implied**: a floor is a percentile over roughly 250 dates by 2,600 names, so the full 1,208
+per screen is about 3.9 billion rows read and the sample answers the question the decision
+turns on at a hundredth of that.
+
+| Screen | Floors compared | Moved | Mean floor | Mean absolute move | Worst move | Mean, as percent of the floor | Worst, as percent |
+|---|---|---|---|---|---|---|---|
+| S1 | 58 | 57 | 76.762 | 0.0295 | 0.1164 | 0.038 % | 0.152 % |
+| S2 | 58 | 57 | 78.159 | 0.0567 | 0.1776 | 0.073 % | 0.226 % |
+| S3 | 58 | 57 | 83.637 | 0.0627 | 0.1386 | 0.075 % | 0.165 % |
+| S4 | 58 | 33 | 96.462 | 0.0120 | 0.0712 | 0.012 % | 0.074 % |
+| S5 | 58 | 12 | 99.630 | 0.0167 | 0.2553 | 0.017 % | 0.255 % |
+
+**Almost every floor moves and almost none of them moves by anything.** The mean move is
+between 0.012 and 0.075 percent of the floor and the worst single sampled date is 0.255
+percent. A 250-date window holds roughly 650,000 scores and the 54 contribute about two
+percent of them, so the closed dates are noise in the window rather than a population it
+is carrying.
+
+**The consequence, which is the figure the decision actually turns on: does a moved floor
+change which names rank.** Same 58 dates, counting names at or above each floor.
+
+| Screen | Mean ranked, recorded | Mean ranked, recomputed | Dates the set size changes | Mean names changed | Worst date |
+|---|---|---|---|---|---|
+| S1 | 45.67 | 45.57 | 7 of 58 | 0.138 | 2 |
+| S2 | 52.41 | 52.59 | 23 of 58 | 0.655 | 4 |
+| S3 | 21.14 | 21.38 | 11 of 58 | 0.241 | 2 |
+| S4 | 40.36 | 40.34 | 3 of 58 | 0.052 | 1 |
+| S5 | 0.05 | 0.05 | 0 of 58 | 0.000 | 0 |
+
+**So the floors carry the closed dates and it does not reach the ranked set.** At most four
+names on the worst sampled date, under one name a date on average for every screen, against
+ranked sets of 21 to 52. S5, the screen with the least to lose, loses nothing at all.
+
+### Measurement two: do the persistence figures move
+
+`PersistenceMeasure.Sql` with the 54 removed. Dates ranked falls from 1,208 to 1,161 and
+pairs from 1,207 to 1,160 on the four live screens that rank daily, so **47 of the 54
+closed dates carried a ranked set**.
+
+| Screen | D-1 recorded | D-1 open only | D-5 recorded | D-5 open only | D-21 recorded | D-21 open only |
+|---|---|---|---|---|---|---|
+| S1 | 0.8784 | **0.9344** | 0.7683 | **0.8093** | 0.5581 | 0.5844 |
+| S2 | 0.5902 | 0.5756 | 0.2694 | 0.2595 | 0.0145 | 0.0130 |
+| S3 | 0.0888 | 0.0878 | 0.0259 | 0.0258 | 0.0122 | 0.0130 |
+| S4 | 0.9155 | 0.9128 | 0.7060 | 0.6987 | 0.3899 | 0.3794 |
+| S5 | 0.9767 | 0.9762 | 0.8947 | 0.8947 | 0.9091 | **0.7778** |
+| X-ACC | 0.9577 | 0.9561 | 0.8178 | 0.8133 | 0.5989 | 0.5904 |
+| X-FM | 0.9503 | 0.9485 | 0.7998 | 0.7949 | 0.5459 | 0.5347 |
+| X-NSI | 0.9554 | 0.9538 | 0.8203 | 0.8155 | 0.5889 | 0.5781 |
+
+**Two figures move and the rest do not.** Twenty of the twenty-four move by 0.0130 or less,
+which at three digits is the same reading. The two that move are S1 and S5.
+
+**S1's D-1 rises 0.0560, from 0.8784 to 0.9344, and its D-5 rises 0.0410.** The mechanism is
+the one the review measured: on a closed day S1 ranks about 22 names where it ranks about
+46 on the sessions either side, so every closed date sits in two low-overlap pairs, and
+removing it lifts the average. **This is the one place the session list is carrying a figure
+rather than adding noise to it**, and it is a live screen's headline persistence number.
+
+**S5's D-21 falls 0.1313, from 0.9091 to 0.7778, and it means very little.** That figure is
+an average over 42 pairs of a set whose size is one, so a handful of pairs moves it several
+points. It is recorded rather than read.
+
+**No reading in §5's table changes.** S1 still reads as slow decay from a high base and
+reads as it more strongly; S2 still lands in the shape §5 has no cell for; S3 is still the
+closest of the five to chance, D-5 at 2.6 times chance and D-21 at 1.3 rather than 1.2; the
+three shadows still read as slow decay with an unremarkable size distribution.
+
+### What these two size, stated without taking the decision
+
+- **The frozen `attribution` rows are not the exposure.** 57 rows over five years, of which
+  8 are candidates, is the part that cannot be undone, and the ranked sets those dates
+  produced differ by under a name a date from what an open-only calendar would have given.
+- **The floors are sound as they stand.** Nothing here argues for recomputing them.
+- **One recorded figure is affected enough to state**, S1's D-1 and D-5, and it is affected
+  in the direction that makes the screen look better rather than worse, which is the
+  direction that gets believed without checking.
+- **What is not sized here** is what a redefinition costs upstream. `TradingCalendar` is
+  read by every compute range execution, so a change to what a session is reaches C08, C09,
+  C10, C11 and C35 as well as the selection layer, and that is a phase 2 and 3 surface
+  rather than a phase 4 one.
+
+---
+
+## Phase 4, the sign-off review's exceptions closed, 2026-08-24
+
+**Six exceptions and six smaller items were returned by the review above. Decision 1 is
+the operator's and is open; the other five exceptions and four of the smaller items are
+closed here.** The two measurements decision 1 is sized on were taken first, on the
+operator's direction, and **nothing was changed on account of them**.
+
+**No component moved and no migration was written.** The one behaviour change is that the
+overlap done-when line stopped scoring, which the plan asked for at Q.9 and the measure
+had not followed. Nothing was re-run against the frozen record [`RUNBOOK.md`].
+
+### What closed each
+
+| Exception | Closed by |
+|---|---|
+| 1, item 42 and the 54 non-session dates | **Open.** An authored decision about what a session is, sized by the two measurements above and not taken here |
+| 2, 4.13's first ranked date | The figure struck in place at 4.13 and corrected to 2021-12-24, with the first `candidate_set` and `attribution` date at 2021-12-27 and the cause named |
+| 3, §05's 47.0 percent | Corrected to 55.0 over the range the note names, in §05 and in `BUILD_PLAN.md`'s `4 → 8` obligation, with both prior wordings in `CHANGELOG.md` |
+| 4, the overlap line still scoring a retired bound | The line prints both readings with no verdict, and the six lines are now held against `BUILD_PLAN.md` |
+| 5, `SCREEN_LIFECYCLE.md` §4.6 | The rule unchanged and its justification moved onto the measurement |
+| 6, the 28 alerts | Named as the warm-up ramp where the figure sits, with why the same guarantee reads two ways |
+| The live set by id prefix | Reads `screens.<id>.state`, resolved as of the range end |
+| The megacap literal third | Reads `monitor.megacap_share_max`, and the bound in force is printed beside the figure |
+| The estimates table's blank row | Filled with 29.9 |
+| `CandidateAllocator`'s Reads comment | Corrected; 4.10 made that table read |
+| §16's size estimate, the database-size row | **Open**, both being authored figures that belong with the `3 → 3 sign-off` obligation |
+| The `SL → 4` D-90 obligation | **Open**, as the review recorded: reported at D-129 rather than passed over |
+
+### The done-when now runs to completion, which it did not before
+
+Re-run at the branch head over 2021-01-11..2026-08-12. Four lines hold, two state no
+bound, and none contradicts the plan.
+
+```
+  live screens as of 2026-08-12, from screens.<id>.state: S1, S2, S3, S4, S5
+
+  [holds]            a night yields roughly 26 to 30 candidates
+  [no bound stated]  the 2/3/3 size distribution holds
+  [holds]            megacap share sits under a third including inside the 2022 drawdown
+  [holds]            distinct tickers over any 60-day window exceed 250
+  [no bound stated]  overlap between screens is read on both of its readings, allocated
+                     candidates and ranked sets
+  [holds]            attribution rows exist for every candidate with the config version stamped
+```
+
+**Every figure is unchanged.** 29.9 a night over 1,169 dates; large 26.5, mid 38.7, small
+34.8; whole range 26.5 and `risk_off` 26.1 over 5,233 rows against
+`monitor.megacap_share_max` at 33.3; 288 in the smallest full window; 0.5 percent of 34,932
+allocated and 2.2 percent of 186,038 ranked, mean 1.01 and 1.02 screens; 34,932 attributed
+with 0 unstamped. The measure changed and the measurements did not.
+
+### Why the overlap line carries no verdict
+
+**Q.9 turned that clause from a bound into a description**, and a description has nothing
+to fail against. The clause it replaced asked for 10 to 15 percent and described a
+different design; setting a new bound now would be a bar fitted to the measurement that
+produced it, which is what `CLAUDE.md` §11 forbids from the other direction. So the line
+reports both readings and the independence figure they are read against, which is the
+roughly 4 percent five screens each ranking the top two percent of their own scored
+population would give [D-9], and takes no verdict.
+
+**The second reading moved inside the line rather than being printed beside it.** It was a
+separate call and a separate block in `Program.cs`, which made two producers of one figure
+now that §06 carries it [Q.9]; `RankedOverlapAsync` is gone and the line's own statement
+computes both.
+
+### The mechanism, which is worth more than the wording it corrects
+
+**`SelectionDistributionsTests` held the six lines against a copy of them inside itself.**
+That is why Q.9 could amend the plan and leave the measure scoring a retired bound with
+nothing failing: the only thing the measure was checked against was the copy, and the copy
+had not moved either.
+
+**It now reads `BUILD_PLAN.md`.** The phase 4 done-when paragraph is found by its
+`**Done when:**` marker, bounded by the blank line that ends it, whitespace-collapsed
+because the document is hard-wrapped [`CLAUDE.md` §7], and split on its semicolons. Each
+measure line must be a substring of the clause in its own position, so the plan may say
+more about a clause than the label carries and cannot say something the label does not.
+
+**The count is asserted on both sides and against each other.** The likely repair when the
+text disagrees is deleting from whichever failed, and a measure and a plan that had each
+quietly lost the same line would still match.
+
+**It fails on a document it cannot read rather than reporting nothing**, and it was proved
+to fail rather than assumed to: one line's wording was perturbed by a single digit,
+`EveryLineNamesTheClauseThePlanStatesInThatPosition` failed on it, and the perturbation was
+reverted.
+
+### The live screen set and the megacap bound
+
+**`Program.cs` derived the live set as `!id.StartsWith('X')`.** It now resolves
+`screens.<id>.state` through `ScreenRegistry.LoadLiveAsync` as of the range end, config
+being resolved as of a date and never as of now [INVARIANT 13], and prints what it
+resolved. A promotion under `SCREEN_LIFECYCLE.md` §6 would have left a promoted screen
+counted as a shadow with nothing failing, in a figure §06 now carries.
+
+**An empty live set fails rather than reporting no overlap.** A range with no live screen
+would have printed 0.0 percent of 0 names, which reads exactly like five screens that never
+agree [`CLAUDE.md` §1].
+
+**The megacap line scored against a literal `1d / 3d` while C28 alerted on
+`monitor.megacap_share_max`.** One bound stated twice, and the two could have been moved
+apart with nothing failing [`CLAUDE.md` §8]. The line now reads the key, prints the bound in
+force beside the figure, and a fixture drives the verdict from both ends of the range to
+prove the key reaches the comparison rather than only the text.
+
+### Test count and what it covers
+
+**722 tests**, from 718. The four are `SelectionDistributionsTests`: the plan-clause check,
+the count check, the no-verdict check on the overlap line, the configured-bound check and
+the empty-live-set refusal, against the three the class carried before.
+
+**`ci.ps1` green at `d09ef2e`**, the head of this pass, over a worktree of tracked files at
+that sha. Seven results: `guards.ps1` exit 0 with 5 checks over **182 files**; restore ok;
+build **0 warnings, 0 errors**; no secrets file present; migrate from an empty server
+applying **21 migrations**; migrate again with nothing to apply; and `dotnet test
+--no-build` at **722 passed, 0 failed**.

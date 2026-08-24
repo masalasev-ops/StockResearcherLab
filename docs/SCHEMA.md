@@ -678,19 +678,43 @@ individually under "Columns that are not money".
 ### gate_result
 Grain: ticker by day. **Writer: GateEngine.**
 
-`ticker`, `date`, `passed`, `reasons`.
+`ticker`, `date`, `passed`, `reasons`, `gate_state`.
 
 Records every failing reason, not the first.
+
+**The reason vocabulary is closed by a CHECK and not only by an enum.** `reasons` may
+hold `earnings_blackout`, `gap`, `halt`, `already_held` and `cooldown`, which are §03's
+five in §03's order, and the constraint arrives with migration `0018` at checkpoint 4.8.
+A vocabulary closed in code alone leaves the column able to hold a string no reader can
+interpret, which would then fail at read time one night later and one component away from
+whatever wrote it.
+
+**`passed` is `cardinality(reasons) = 0` and is written in the same statement**, so the
+flag and the array cannot disagree.
+
+**`gate_state` is `passed` or `passed_partial` and never `gated`, and it is a property of
+the date rather than of the name** [D-117]. `passed_partial` means at least one gate
+reason was structurally unevaluable on that date: `position` and `trade_outcome` hold no
+rows until phase 7 and earnings are deliberately not backfilled, so over the backfill
+window three of the five reasons cannot fire at all. It is what stops a backfilled night
+reading identically to a live one. C14 carries the value onto the `attribution` row, so
+the component that reads the three stores is the component that records what it found;
+the column arrives with migration `0019` at checkpoint 4.10 and is `text NOT NULL` with a
+CHECK and no `DEFAULT`. `gated` is absent from the vocabulary because a gated name has no
+attribution row to carry a state.
 
 ### screen_score_daily
 Grain: ticker by screen by day. **Writer: ScreenEngine.**
 
 `ticker`, `screen_id`, `date`, `score`, `rank_within_screen`, `config_version`.
 
-Larger than the price data it derives from, because every ticker is scored by all
-five screens every day. That is necessary rather than wasteful: the floor is the
-98th percentile of the screen's own trailing distribution and you cannot know the
-distribution without scoring everyone [D-9].
+Larger than the price data it derives from, because every ticker is scored by every
+registered screen every day, which is five live and three shadow since Q.7 [D-129]. That
+is necessary rather than wasteful: the floor is the 98th percentile of the screen's own
+trailing distribution and you cannot know the distribution without scoring everyone [D-9].
+
+**A shadow is scored exactly like a live screen and is allocated nothing** [D-84, D-85].
+It reaches this table and `screen_history`; it does not reach `candidate_set`.
 
 ### screen_history
 Grain: screen by day. **Writer: ScreenEngine.**
@@ -702,14 +726,50 @@ Grain: ticker by day. **Writer: CandidateAllocator.**
 
 `ticker`, `date`, `screens_surfacing`, `size_bucket`, `slot_filled`.
 
+**`slot_filled` is written null and has no writer** [D-124]. Nothing in this corpus says
+what a `true` in it means, and three readings are each defensible: that the candidate
+occupied a slot, that its slot was fillable, or that its bucket reached its quota. A guess
+stamped on a row no later pass may rewrite is worse than an absence, because null says
+unknown truthfully.
+
+**The allocator deletes the date before it rebuilds it**, and both operations are its
+own, so INVARIANT 10 read per operation is untouched. An insert with `ON CONFLICT` alone
+updates the names a re-run surfaces and leaves behind the ones it no longer does, so a
+night re-run after a name was gated would keep that name in the set. Two runs of a stage
+over one date must produce identical output and with the stale row surviving they did
+not [4.9].
+
+**`slot_filled` has no stated meaning anywhere in this corpus and is written null.** The
+grain is one row per candidate and a candidate is a name that took a slot, so a column
+saying so would be true of every row; a column about the slots that stayed empty cannot
+be carried at this grain, there being no row for them. Null is what the column means
+until something states otherwise, which is the rule for an absent value rather than a
+placeholder [`CLAUDE.md` §6]. Reported at 4.9.
+
 ### attribution
 Grain: ticker by day surfaced. **Writers: CandidateAllocator inserts,
 ForwardReturnFiller updates.**
 
-`ticker`, `date`, `screens_surfacing`, `score_per_screen`, `size_bucket`,
-`sector`, `regime`, `gate_state`, `config_version`, `digest_provider`,
-`return_5d_raw`, `return_5d_vs_spy`, `return_5d_vs_peers`, and the same triple at
-21 and 63 days.
+`ticker`, `date`, `screens_surfacing`, `score_per_screen`, `surfaced_as`,
+`size_bucket`, `sector`, `regime`, `gate_state`, `config_version`,
+`digest_provider`, `return_5d_raw`, `return_5d_vs_spy`, `return_5d_vs_peers`, and
+the same triple at 21 and 63 days.
+
+**`surfaced_as` and `score_per_screen`'s object shape arrive with migration `0017` at
+checkpoint 4.1 and are not in the database yet** [D-110]. They are stated here rather
+than at the migration because the operator adopted phase 4's authored items ahead of
+its first checkpoint; D-110 asks that this document gain the column in the same
+checkpoint as the migration, and this note is the divergence made visible rather than
+left to be found. Neither is a `real` column, so neither enters the not-money
+declaration below and no check reads them before `0017` lands.
+
+`surfaced_as` is `text NOT NULL` with `CHECK (surfaced_as IN ('candidate','shadow'))`
+and no `DEFAULT`, so a writer that has not decided fails at the column rather than
+taking a value nobody chose. `score_per_screen` is screen id to an object of score and
+rank, held by a `jsonb` CHECK asserting every top-level value is an object, so the flat
+shape cannot be written at all. The `candidate_attribution` view selects
+`surfaced_as = 'candidate'` and every reader meaning candidate reads the view [D-110,
+D-85].
 
 Two components, one operation each [INVARIANT 10 as amended]. **CandidateAllocator
 owns the insert**, writing the row with scores frozen and return columns empty.
@@ -863,6 +923,20 @@ is a hallucination measure worth watching independently of returns.
 Grain: per alert. **Writer: ConcentrationMonitor.**
 
 `date`, `alert_type`, `detail`, `acknowledged`.
+
+**The type vocabulary is closed by a CHECK and not only by a constant** [D-126].
+`alert_type` may hold `megacap_share` and `distinct_tickers_60d`, which are §18's two
+conditions for this writer, and the constraint arrives with migration `0021` at
+checkpoint Q.4. This is `gate_result.reasons` closed the same way for the same reason: a
+vocabulary held in code alone leaves the column able to carry a string no reader can
+interpret.
+
+**§18 names four further conditions whose row reads "Alert" and whose owner is C07, C03,
+C13 or C26.** None of those components declares a write to this table and no document
+says how their alerts are recorded, so their type strings are deliberately not in the
+vocabulary. A phase that gives one of them a writer adds the name and extends the
+constraint in the same checkpoint, which is the rule §attribution's `surfaced_as` already
+follows [D-110].
 
 ### local_model_config
 Grain: one row per provider in the chain. **Writer: the UI, via the single permitted

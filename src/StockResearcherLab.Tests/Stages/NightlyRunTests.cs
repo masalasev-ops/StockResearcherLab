@@ -232,13 +232,15 @@ public sealed class NightlyRunTests
     {
         var order = NightlyRun.EveningOrder;
 
-        Assert.Equal(12, order.Length);
+        Assert.Equal(16, order.Length);
 
         Assert.True(
             Array.IndexOf(order, "MarketContextEngine") > Array.IndexOf(order, "IndicatorEngine"),
             "C10 counts breadth off indicator_daily, so it cannot run before C08 wrote it.");
 
-        Assert.Equal("PercentileEngine", order[^1]);
+        // C11 was last until 4.12 put the selection layer behind it. It is still last of
+        // the compute layer, which is what this assertion was always about.
+        Assert.Equal("ConcentrationMonitor", order[^1]);
 
         foreach (var engine in new[]
                  {
@@ -248,6 +250,53 @@ public sealed class NightlyRunTests
             Assert.True(
                 Array.IndexOf(order, engine) < Array.IndexOf(order, "PercentileEngine"),
                 $"C11 ranks what {engine} writes, so it cannot run before it.");
+        }
+
+        foreach (var selection in new[]
+                 {
+                     "GateEngine", "ScreenEngine", "CandidateAllocator", "ConcentrationMonitor",
+                 })
+        {
+            Assert.True(
+                Array.IndexOf(order, selection) > Array.IndexOf(order, "PercentileEngine"),
+                $"{selection} reads the percentile store, so it cannot run before C11 wrote it.");
+        }
+
+        // C13 scores on what C11 ranked and C14 allocates what C13 ranked. C12 is before
+        // C13 because section 04 puts it there, and never after: C13 does not read
+        // gate_result and must not [D-117].
+        Assert.True(Array.IndexOf(order, "GateEngine") < Array.IndexOf(order, "ScreenEngine"));
+        Assert.True(Array.IndexOf(order, "ScreenEngine") < Array.IndexOf(order, "CandidateAllocator"));
+        Assert.True(
+            Array.IndexOf(order, "CandidateAllocator") < Array.IndexOf(order, "ConcentrationMonitor"),
+            "C28 measures the candidate set, so it cannot run before C14 wrote it.");
+    }
+
+    /// <summary>
+    /// Checkpoint 4.12. The selection order is the tail of the evening order and not a
+    /// second opinion about it.
+    ///
+    /// **A separate constant rather than a slice**, because a slice is an index into a
+    /// list whose contents change. What must not drift is which stages a range run
+    /// touches, so the two lists are held against each other here instead.
+    /// </summary>
+    [Fact]
+    public void TheSelectionOrderIsTheTailOfTheEveningOrder()
+    {
+        Assert.Equal(
+            NightlyRun.EveningOrder[^BackfillSequence.SelectionOrder.Length..],
+            BackfillSequence.SelectionOrder);
+
+        // And every name in it exists, which is 4.12's own done-when: the selection order
+        // names only components that exist.
+        var declared = PipelineComposition
+            .AllOwnersForConformance(TestDatabase.ConnectionString)
+            .Select(o => o.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var name in BackfillSequence.SelectionOrder)
+        {
+            Assert.Contains(name, declared);
         }
     }
 

@@ -1,4 +1,4 @@
-# CONFIG_REFERENCE.md
+﻿# CONFIG_REFERENCE.md
 
 Every configuration key, its default, and the component that actually consumes it.
 
@@ -317,34 +317,182 @@ regime keys are verified at `MarketContextEngine.cs:56-57`.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `screens.slot_ceiling` | 8 | D-7 | CandidateAllocator | unverified |
-| `screens.quota_large` | 2 | D-7 | CandidateAllocator | unverified |
-| `screens.quota_mid` | 3 | D-7 | CandidateAllocator | unverified |
-| `screens.quota_small` | 3 | D-7 | CandidateAllocator | unverified |
-| `screens.floor_percentile` | 98 | D-9 | ScreenEngine | unverified |
-| `screens.floor_lookback_days` | 250 | D-9 | ScreenEngine | unverified |
-| `screens.<id>.metrics` | per screen | D-6 | ScreenEngine | unverified |
-| `screens.<id>.slots` | 8 each at start | D-43 | CandidateAllocator | unverified |
+| `screens.floor_percentile` | 98 | D-9 | `ScreenEngine.ExecuteAsync`, `ScreenEngine.cs` | verified 4.5 |
+| `screens.floor_lookback_days` | 250 | D-9 | `ScreenEngine.ExecuteAsync`, `ScreenEngine.cs` | verified 4.5 |
+| `screens.<id>.metrics` | per screen | D-6 | `ScreenRegistry.LoadOneAsync` via the screen's own facade, `ScreenRegistry.cs` | verified 4.7 |
+| `screens.<id>.slots` | 8 for each live screen, 12 for each shadow | D-43, D-129 | `CandidateAllocator.Validated`, `CandidateAllocator.cs` | verified 4.9, and see below on shadows |
+| `screens.<id>.state` | `live` for S1 to S5, `shadow` for X-NSI, X-ACC and X-FM | D-84, D-119, D-129 | `ScreenRegistry.IdsAsync` and `.LoadOneAsync`, `ScreenRegistry.cs` | verified 4.7 |
+| `screens.<id>.min_inputs` | S1 5, S2 4, S3 3, S4 2, S5 1 | D-112 | `ScreenEngine.ScoreSql`, `ScreenEngine.cs` | verified 4.7 |
+| `screens.S5.quality_metrics` | S1's list, copied | D-120 | `ScreenRegistry.LoadEligibilityAsync`, `ScreenRegistry.cs` | verified 4.7 |
+| `screens.S5.technical_metrics` | `dist_200dma`, `dist_52w_high`, `rs_change_63d`, each high | D-120 | `ScreenRegistry.LoadEligibilityAsync`, `ScreenRegistry.cs` | verified 4.7 |
+| `screens.S5.quality_min_inputs` | 5 | D-112, D-120 | `ScreenEngine.Composite`, `ScreenEngine.cs` | verified 4.7 |
+| `screens.S5.technical_min_inputs` | 3 | D-112, D-120 | `ScreenEngine.Composite`, `ScreenEngine.cs` | verified 4.7 |
+| `screens.S5.quality_quintile_min` | 80 | D-120 | `ScreenEngine.EligibleSql`, `ScreenEngine.cs` | verified 4.7 |
+| `screens.S5.technical_quintile_max` | 20 | D-120 | `ScreenEngine.EligibleSql`, `ScreenEngine.cs` | verified 4.7 |
 
 Screen definitions are rows rather than code, so a sixth screen is an insert and not
 a deployment.
+
+**`screens.<id>.metrics` is an array of objects, each carrying the metric, the direction
+and the weight** [D-113]. A bonus entry carries `kind` and `points` instead of a
+direction and is applied after the weighted mean [D-114]:
+
+```
+[{"metric": "net_debt_ebitda", "direction": "low", "weight": 1},
+ {"metric": "base_breakout_flag", "kind": "bonus", "points": 10}]
+```
+
+Direction `low` is applied as 100 minus the stored percentile. An unrecognised direction
+or kind fails the stage closed rather than defaulting, because a default of `high` would
+invert three of S1's seven inputs and score plausibly.
+
+**The screen ids in these keys are uppercase, `screens.S5.quality_metrics` rather than
+`screens.s5.`** D-120 writes the composite keys lowercase and writes `screens.S1.metrics`
+uppercase in the same clause, so the decision is not internally consistent about the
+case. Uppercase is used because S1 to S5 is how every other document in this corpus names
+a screen, and because the facade compares the id in the key against the screen's own id.
+The four older `s5.*` keys below keep their existing names and are unchanged; the facade
+treats that form as screen-scoped too, so they are reachable by S5 and by nothing else.
+
+**`screens.slot_ceiling` is retired and is no longer seeded** [D-127]. D-7 gave a ceiling
+of eight slots per screen; `screens.<id>.slots` is what a screen actually has and what the
+tuner moves, and the ceiling could not also cap that without contradicting D-43's cap of
+twelve. C14 validates against `tuner.slot_floor` and `tuner.slot_cap`. The rows already
+inserted stay, config being append-only, so nothing resolves the key and nothing removes
+it. Same shape and same reasoning as D-116's retirement of the three quota keys.
+
+**These three shared keys were documented here and seeded by nothing until 4.5.**
+`screens.slot_ceiling`, `screens.floor_percentile` and `screens.floor_lookback_days` had
+carried values, decisions and a Consumer column since the first corpus, and
+`ConfigSeeder.Keys` had no row for any of them. The first of the three is retired at Q.5
+[D-127] and this paragraph keeps its name, because what it records is how the gap was
+found rather than which keys are current. It was found by C13 failing to resolve the
+lookback rather than by an audit, which is the direction this document's own rule does not
+cover: an unverified entry is worse than an absent one, and an entry for a key with no row
+at all is worse than both. `ConfigSeeder.Keys` moves 74 to 77.
+
+**`screens.quota_large`, `quota_mid` and `quota_small` are retired** [D-116]. D-89's
+proportion is the only quota arithmetic and nothing reads the three keys once it
+exists. Config is append-only, so the rows already inserted stay where they are: the
+retirement is a removal from the seeder and from this document rather than a delete.
+Prior wording in `CHANGELOG.md`.
+
+**`screens.<id>.state` is seeded `live` for S1 to S5 and `shadow` for X-NSI, X-ACC and
+X-FM** [D-129]. It carried no shadow row until Q.7, on D-119's deferral. The registration
+is taken before 4.14 and not at sign-off, because `attribution`'s key is `(ticker, date)`
+with `score_per_screen` one object across screens, so a screen registered after the
+attribution write can never carry a backfilled row.
+
+**X-PEAD is not registered and D-90 is `OPEN` for it alone.** Its input has no backfillable
+history, so registering it here would answer an open fork by side effect
+[`SCREEN_LIFECYCLE.md` §7.5].
+
+**A shadow's `slots` is twelve and the allocator never reads it.** `tuner.slot_cap` is
+twelve and that is the depth `SCREEN_LIFECYCLE.md` §2.1 records a shadow at: it holds no
+slots, so what is recorded is what it would have surfaced at the largest count a promotion
+could ever give it. C14 reads the cap directly for a shadow, and `Validated` applies to live
+screens only, so the value is what a promotion would start from rather than something acted
+on today [D-129].
+
+**`screens.<id>.min_inputs` is set per screen, and the values were chosen against
+measured coverage rather than picked** [D-112]. Read on 2026-08-12 over the 2,865 active
+members, counting non-null `_pctile` inputs per name per screen:
+
+| Screen | Inputs | Floor | Members scorable at that floor |
+|---|---|---|---|
+| S1 quality | 7 | 5 | 2,356 of 2,865, 82.2% |
+| S2 trend | 5 | 4 | 2,865 of 2,865, 100% |
+| S3 sentiment | 3 | 3 | 1,763 of 2,865, 61.5% |
+| S4 flow | 2 | 2 | 2,517 of 2,865, 87.9% |
+| S5 quality composite | 7 | 5 | 2,356 of 2,865, 82.2% |
+| S5 technical composite | 3 | 3 | 2,865 of 2,865, 100% |
+
+**S1 is the only screen where this key is a real dial.** Its coverage is graded: 33.1% of
+members carry all seven inputs, 61.2% carry six, 82.2% five and 93.4% four. A floor of
+seven would draw S1's 98th percentile over 947 names, and S1 is the screen the design's
+argument against a megacap tilt leans on hardest. S3 and S4 are near-binary instead, a
+name either carrying the sentiment or flow row or not, so 3.4% and 0.3% of members
+respectively hold a partial row and lowering either floor buys almost nothing.
+
+**The same read on 2022-06-15 is the reason these are not tuned to one date.** S1 is
+better there, 45.4% at all seven against 33.1%; S3 is worse at 39.6% and S4 at 68.3%. The
+floors are unchanged across both, and the range run at 4.13 is what says whether the
+scored population moves enough over the window to matter [`CLAUDE.md` §11].
 
 ## Mean reversion stabilisation
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `s5.stabilisation_z_max` | 1.0 | D-13 | ScreenEngine | unverified |
-| `s5.sentiment_delta_min` | 0 | D-13 | ScreenEngine | unverified |
-| `s5.news_gate_min_articles` | 3 | D-14 | ScreenEngine | unverified |
+| `s5.stabilisation_z_max` | 1.0 | D-13 | `ScreenEngine.NewsSettled`, `ScreenEngine.cs` | verified 4.7 |
+| `s5.sentiment_delta_min` | 0 | D-13 | `ScreenEngine.NewsSettled`, `ScreenEngine.cs` | verified 4.7 |
+| `s5.news_gate_min_articles` | 3 | D-14 | `ScreenEngine.NewsSettled`, `ScreenEngine.cs` | verified 4.7 |
 | `s5.no_digest_disqualifier_min_articles_90d` | 12 | D-60 | rubric prefix | unverified |
 
 `s5.news_gate_min_articles` is the fail-open threshold. Below three articles in seven
 days the two news conditions are treated as satisfied rather than failed.
 
+**The seven days are calendar days and the count comes from `sentiment_daily`.** No store
+carries the count as a column: `sentiment_derived_daily.article_count_z_own_90d` is a
+z-score and cannot say how many articles there were. A day with no `sentiment_daily` row
+is a day with no articles rather than a day nobody looked, so a name with no rows at all
+is below the threshold and fails open, which is the thinly covered small cap the rule
+exists for [`SCHEMA.md`]. Calendar days rather than sessions, because news arrives on days
+the exchange is shut.
+
+**The first three of these were documented here and seeded by nothing until 4.7**, the
+same gap the three shared screen keys had at 4.5 and found the same way, by the gate
+failing to resolve one. They are seeded at the values above, which are the ones this
+document and `ARCHITECTURE.html` §05 already carried; nothing was chosen. The fourth is
+the rubric's and is not a screen threshold, so it stays unseeded until phase 5.
+
 `s5.no_digest_disqualifier_min_articles_90d` is the same asymmetry applied at the
 rubric rather than the gate. The no-digest disqualifier only bites where the ticker
 carried at least twelve articles in ninety days, roughly one a week, because below
 that an absence of news is the ordinary state rather than a signal [D-60].
+
+## Gates
+
+C12 GateEngine's thresholds [D-117].
+
+| Key | Default | Set by | Consumer | Verified |
+|---|---|---|---|---|
+| `gates.gap_pct` | 8 | D-117 | `GateEngine.Gap`, `GateEngine.cs` | verified 4.8 |
+| `gates.earnings_blackout_days_before` | 5 | D-117 | `GateEngine.EarningsBlackout`, `GateEngine.cs` | verified 4.8 |
+| `gates.earnings_blackout_days_after` | 2 | D-117 | `GateEngine.EarningsBlackout`, `GateEngine.cs` | verified 4.8 |
+| `gates.cooldown_days` | 30 | D-117 | `GateEngine.Cooldown`, `GateEngine.cs` | verified 4.8 |
+
+**Halt and already-held carry no key.** They are conditions rather than thresholds: a
+name is halted or it is not, and an open `position` row is the already-held test itself.
+D-117 asks for one key per threshold and these two have none to state.
+
+**All four values are unconstrained by anything in this corpus, and that is recorded
+rather than glossed.** `ARCHITECTURE.html` §3 gives C12 thirteen words and no width,
+percentage or day count; D-117 settles where the gate applies and what `gate_state` means
+over history and sets no number. Nothing here was reasoned to from a measurement, and the
+three seeded so the engine is whole are seeded for that reason and not because a value was
+derived [`CLAUDE.md` §8, §11].
+
+**`gates.gap_pct` is the only one 4.8's distribution can speak to.** Three of the five
+reasons are structurally unevaluable across the whole backfill window: `position` and
+`trade_outcome` hold no rows until phase 7, so already-held and cooldown can never fire,
+and `events.earnings_backward_days` is 7 with earnings deliberately not backfilled, so the
+blackout has no calendar to read on a historical date [D-117]. Gap is therefore the one
+threshold whose value changes a row in this phase, and the firing distribution at 4.8 is
+the only evidence any of these four has.
+
+**8 rather than a looser figure, for what the gate is for.** It excludes a name that has
+already made the move, and the ordinary "the news already happened" case is a 5 to 10
+percent overnight gap. A 15 percent threshold is a rare event on a mid or large cap, so it
+would pass almost everything and produce a firing distribution of nearly all zeroes, which
+is a threshold that cannot be read at 4.8. 8 is arbitrary in the same sense as the other
+three; the difference is that it produces a distribution worth reading.
+
+**One interaction is recorded as seen and accepted rather than discovered in phase 7.**
+`gates.cooldown_days` is 30 calendar days and `risk.time_stop_days` is 40 [D-34], so a
+name can be re-surfaced as a candidate before a position that ran its full time stop would
+have closed. The two keys are not in conflict today, `position` and `trade_outcome` being
+empty and the cooldown gate inert for the whole of phase 4. It first matters in phase 7,
+which is where the two are reconciled if they need to be.
 
 ## Risk
 
@@ -409,8 +557,8 @@ The chain is an ordered list, so adding a third link is an insert.
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
 | `tuner.shrinkage_old` | 0.8 | D-43 | ScreenTuner | unverified |
-| `tuner.slot_floor` | 4 | D-43 | ScreenTuner | unverified |
-| `tuner.slot_cap` | 12 | D-43 | ScreenTuner | unverified |
+| `tuner.slot_floor` | 4 | D-43 | ScreenTuner, and `CandidateAllocator.Validated` from 4.9 | verified 4.9 |
+| `tuner.slot_cap` | 12 | D-43 | ScreenTuner, and `CandidateAllocator.ExecuteAsync` for the shadow quota | verified 4.10 |
 | `tuner.benchmark_column` | vs_peers | D-42 | ScreenTuner | unverified |
 | `lessons.min_sample` | 30 | D-44 | LessonWriter | unverified |
 | `lessons.expiry_months` | 6 | D-44 | LessonWriter | unverified |
@@ -424,8 +572,8 @@ value, but changing it to `vs_spy` is a defect and not a tuning option [INVARIAN
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
 | `validator.rejection_rate_alert` | 0.05 | — | ProposalValidator | unverified |
-| `monitor.megacap_share_max` | 0.333 | D-7 | ConcentrationMonitor | unverified |
-| `monitor.distinct_tickers_60d_min` | 250 | — | ConcentrationMonitor | unverified |
+| `monitor.megacap_share_max` | 0.333 | D-7 | `ConcentrationMonitor.ExecuteAsync`, `ConcentrationMonitor.cs` | verified 4.11 |
+| `monitor.distinct_tickers_60d_min` | 250 | — | `ConcentrationMonitor.ExecuteAsync`, `ConcentrationMonitor.cs` | verified 4.11 |
 | `monitor.cache_hit_rate_min` | 0.80 | — | CostLedger | unverified |
 | `cost.annual_budget` | 100 | — | CostLedger | unverified |
 | `freshness.row_count_abort_below` | 40000 | D-59 | FreshnessGuard | verified 2026-08-09 |

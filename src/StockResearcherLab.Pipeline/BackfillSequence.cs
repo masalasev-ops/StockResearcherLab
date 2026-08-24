@@ -97,6 +97,29 @@ public sealed class BackfillSequence
         "PercentileEngine",     // C11, last, because it ranks what the four above wrote [3.15]
     ];
 
+    /// <summary>
+    /// The selection layer, for a range run over a store the sources have already
+    /// filled [4.12, 4.13].
+    ///
+    /// **A second constant rather than a slice of the first**, and the two orders are
+    /// about different things rather than two halves of one. `SourceOrder` sweeps a range
+    /// per source, each stage implementing <c>IBackfillStage</c> and covering the whole
+    /// window in one pass. These four have no range mode and never will: a screen's floor
+    /// is the 98th percentile of its own trailing distribution, so a date has to be scored
+    /// before the next date's floor can be drawn, and a range run over them is a loop over
+    /// dates rather than a sweep [D-9, D-115].
+    ///
+    /// It is the tail of <see cref="NightlyRun.EveningOrder"/>, and a test holds the two
+    /// against each other so neither can drift.
+    /// </summary>
+    public static readonly string[] SelectionOrder =
+    [
+        "GateEngine",           // C12 [4.8]
+        "ScreenEngine",         // C13 [4.4, 4.5]
+        "CandidateAllocator",   // C14 [4.9, 4.10]
+        "ConcentrationMonitor", // C28 [4.11]
+    ];
+
     private readonly StageRegistry _registry;
     private readonly BackfillRun _run;
     private readonly Action<string> _say;

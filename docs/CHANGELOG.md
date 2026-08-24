@@ -1,4 +1,4 @@
-# CHANGELOG.md
+﻿# CHANGELOG.md
 
 Corpus versions. Appended to, never rewritten.
 
@@ -2026,3 +2026,407 @@ What the corrected sentence states instead is what was measured: 4,326 tickers, 
 them carrying a bar inside the window, and the 2026-08-20 prune as what left the table at
 that count. The floors reading is unchanged, being right for the reason the wrong
 sentence gave badly.
+
+## 2026-08-23, phase 4's authored items
+
+Four clean edits to `ARCHITECTURE.html` under D-73, made on the operator's explicit
+authorisation when phase 4's authored items were adopted. The first three close
+findings B1, B2 and B3 in `prompts/BuildPlans/phase-4-screens-and-selection.md` §8;
+the fourth follows D-111. No code and no migration accompanied them, phase 4 having
+no checkpoint landed at the time.
+
+**`ARCHITECTURE.html` §3, C13 ScreenEngine's Reads cell** [B1, D-74]. Prior wording:
+
+> Percentiles, `config_rows`, `screen_history`
+
+"Percentiles" is bare prose, and `ArchitectureDocument` takes `code` elements only and
+intersects them with `SCHEMA.md`'s tables, so the catalogue yielded two tables where the
+component needs seven. The five now named are `PercentileEngine.Sources`' four ranked
+stores plus `security_daily`, which is the one table `Universe.AsOf` reads and therefore
+where C13's population comes from. Both were read in the code rather than inferred.
+
+**`ARCHITECTURE.html` §3, C14 CandidateAllocator's Reads cell** [B2, D-74, D-92]. Prior
+wording:
+
+> `screen_score_daily`, `gate_result`
+
+This was not markup. §3 and `SCHEMA.md` disagreed about what the component does: C14
+must write `candidate_set.size_bucket` and `attribution.size_bucket`, `sector` and
+`regime`, and neither source table was in the cell while `screen_score_daily` carries
+none of them.
+
+**`ARCHITECTURE.html` §3, C28 ConcentrationMonitor's Reads cell** [B3, D-74, D-92]. Prior
+wording:
+
+> `candidate_set`, `position`, `security`
+
+`security` holds one row per ticker carrying today's bucket. D-92 moved point-in-time
+bucket and market cap to `security_daily` for exactly this reason, and a megacap share
+over a 2022 window computed from `security` classifies 2022 with 2026 buckets. That is
+the defect D-92 exists to prevent, arriving in the one component whose job is to notice a
+wrong number that looks right.
+
+**`ARCHITECTURE.html` §16, the `screen_score_daily` store row** [D-111]. Prior wording:
+
+> ticker × registered screen × day
+
+D-111 reorders the key to `(date, screen_id, ticker)` and range-partitions the table by
+date, one partition a year with no default partition. The grain is restated in the key's
+own order so the row says what the table is rather than what it was. The size column is
+untouched and still carries the D-84 estimate, which 4.13 is where it is measured.
+
+**`CONFIG_REFERENCE.md` §Screens, the three quota keys** [D-116]. Prior wording:
+
+> | `screens.quota_large` | 2 | D-7 | CandidateAllocator | unverified |
+> | `screens.quota_mid` | 3 | D-7 | CandidateAllocator | unverified |
+> | `screens.quota_small` | 3 | D-7 | CandidateAllocator | unverified |
+
+D-89's proportion is the only quota arithmetic and is integral at every slot count from
+four to twelve, where the three keys are that proportion's output at eight alone. Kept as
+its inputs they are three numbers that must sum to `slots`, can be set so they do not, and
+nothing would notice. The config rows already inserted are untouched, config being
+append-only: this is a removal from the seeder and from the reference, not a delete.
+
+**`SCHEMA.md` §attribution, the column list** [D-110]. Prior wording:
+
+> `ticker`, `date`, `screens_surfacing`, `score_per_screen`, `size_bucket`,
+> `sector`, `regime`, `gate_state`, `config_version`, `digest_provider`,
+> `return_5d_raw`, `return_5d_vs_spy`, `return_5d_vs_peers`, and the same triple at
+> 21 and 63 days.
+
+`surfaced_as` is inserted after `score_per_screen`. **The column is not in the database
+and the document says so at the point of change.** D-110 asks that `SCHEMA.md` gain it in
+the same checkpoint as migration `0017` and not before; it is here ahead of that because
+the operator adopted phase 4's authored items before its first checkpoint, and the note in
+the section is that divergence made visible rather than left to be found. Neither
+`surfaced_as` nor `score_per_screen` is a `real` column, so neither enters the not-money
+declaration and no check reads either before `0017` lands.
+
+## 2026-08-23, phase 4 checkpoint 4.5
+
+**`ARCHITECTURE.html` §3, C13 ScreenEngine's Reads cell, a second time** [4.5, D-74,
+D-115]. Prior wording, being 4.1's corrected cell before this checkpoint:
+
+> `indicator_daily`, `valuation_daily`, `flow_daily`, `sentiment_derived_daily` for the
+> ranked percentiles, `security_daily` for the membership it scores, `config_rows`,
+> `screen_history`
+
+**`screen_score_daily` is added, and this amendment was forced rather than chosen.** The
+same cell's own description says C13 "maintains each screen's trailing 250-day
+distribution for its floor", and that distribution is the score table. So the component
+provably must read what it writes, and the cell named every input except the one the
+floor is drawn from.
+
+**It could not be recorded as a deviation instead.** `RecordedDeviations` exempts the
+cell-names-what-the-code-does-not direction. This is the other one, which
+`ReadDeclarationConformanceTests` deliberately gives no exemption list because it is the
+direction that hid the fundamentals pool closing over itself [D-74]. The two remaining
+options were a stage that cannot open the table it needs, or a declaration that lies
+about what the code reads.
+
+This is a ~~fifth~~ [corrected, Q.3] **fourth** Reads-cell amendment, going beyond the
+four edits the operator authorised when phase 4's authored items were adopted. Three of
+those four were Reads cells and the fourth was §16's store row, so this is the fourth such
+amendment and not the fifth; the running count below inherited the error and is corrected
+with it. It is the same cell and the same class of defect that
+`prompts/BuildPlans/phase-4-screens-and-selection.md` §8 reports as B1, and it is
+recorded here rather than folded into that authorisation.
+
+## 2026-08-23, phase 4 checkpoint 4.7
+
+**`ARCHITECTURE.html` §3, C13 ScreenEngine's Reads cell, a third time** [4.7, D-74,
+D-120]. Prior wording, being 4.5's cell before this checkpoint:
+
+> `indicator_daily`, `valuation_daily`, `flow_daily`, `sentiment_derived_daily` for the
+> ranked percentiles, `security_daily` for the membership it scores, `config_rows`,
+> `screen_history`, `screen_score_daily` for the trailing distribution its floor is the
+> 98th percentile of
+
+**`sentiment_daily` is added, and this amendment was forced in the same way the last
+one was.** §05 states S5's fail-open rule against the seven-day article count: below
+`s5.news_gate_min_articles` articles in seven days both news conditions are treated as
+satisfied. No store carries that count as a column. `sentiment_derived_daily` carries
+`article_count_z_own_90d`, which is a z-score and cannot say how many articles there
+were, and `sentiment_daily.article_count` is the only place the count exists
+[`SCHEMA.md`]. So the component provably must read it to implement the rule the
+architecture states, and the two remaining options were the same two as last time: a
+stage that cannot open the table it needs, or a declaration that lies about what the
+code reads.
+
+The direction is again code-reads-what-the-cell-does-not, which
+`ReadDeclarationConformanceTests` gives no exemption list by design [D-74].
+
+This is a ~~sixth~~ [corrected, Q.3] **fifth** Reads-cell amendment, and the second taken
+during the build rather than at adoption. Both are the same cell.
+
+**`ARCHITECTURE.html` §05's S4 Ranks-on cell is NOT amended and needs to be.** D-118 is
+`ACTIVE` and drops `inst_ownership_change` from S4; the cell still names it. The build
+follows the register, and 4.6's divergence table carries the difference with the decision
+beside it so the seeded two-input list does not read as the design. Recorded here so the
+amendment is not lost between the two documents.
+
+## 2026-08-23, phase 4 checkpoint 4.8
+
+**`ARCHITECTURE.html` §3, C12 GateEngine's Reads cell** [4.8, D-74]. Prior wording:
+
+> `events`, `price_daily`, `position`, `trade_outcome`
+
+**`security_daily` is added**, and this is the same defect as B1 and B2 in
+`prompts/BuildPlans/phase-4-screens-and-selection.md` §8 rather than a new kind. §3 gives
+C12 four stores and the component's own rule is that every active member gets a row,
+which requires the table the membership is read from. The cell named four stores and not
+that one, so it could not be satisfied as written.
+
+The wording follows the idiom five other cells already use for the same table, C04's
+"`security_daily` for the universe it iterates" among them.
+
+This is a ~~seventh~~ [corrected, Q.3] **sixth** Reads-cell amendment, and the third taken
+during the build. It is the first on a cell other than C13's.
+
+## 2026-08-23, corrective pass Q, checkpoint Q.2
+
+**`ARCHITECTURE.html` §05's S4 Ranks-on cell and the §05 diagram node above it** [Q.2,
+D-118]. Prior wording of the cell:
+
+> `insider_net_90d_usd` · `distinct_buyer_count` <span class="rmv">D-58</span> ·
+> `inst_ownership_change`
+
+Prior wording of the node:
+
+> Insider net buying, distinct buyers <span class="rmv">D-58</span>, institutional
+> ownership change
+
+**`inst_ownership_change` is removed from both and D-118 joins the existing chip at the
+point of change**, which is the idiom five other cells already use for a second removal
+at one place. D-118 has been `ACTIVE` since the phase 4 plan and drops the input; the two
+§05 statements had not moved with it, so the narrative and the register disagreed about
+what S4 ranks on and configuration was following the register alone.
+
+The 4.6 divergence table's S4 entry is deleted with it. That entry was the one item in
+that list which was a report rather than a record, and
+`EveryRecordedDivergenceIsStillTrueOfTheDocument` failed on this amendment exactly as its
+own summary said it would, which is what closed the item rather than anyone remembering
+to.
+
+**§07's dossier block for S4 still reads "Distinct insider buyer count, largest
+transaction, ownership change" and is deliberately not touched here.** D-118 decides what
+S4 ranks on. What the dossier shows the researcher is a different question in a different
+section, `flow_daily.inst_ownership_change` is still computed by C34 and still exists, and
+D-118's independent argument that the metric cannot separate composition change from
+ownership change bears on it without settling it. Reported rather than taken [`CLAUDE.md`
+§13].
+
+## 2026-08-23, corrective pass Q, checkpoint Q.5
+
+**`CONFIG_REFERENCE.md` §Screens, the `screens.slot_ceiling` row** [Q.5, D-127]. Prior
+wording:
+
+> | `screens.slot_ceiling` | 8 | D-7 | **no reader** | see below, 4.9 |
+
+**The row is removed and the paragraph below it now states the retirement rather than the
+absent reader.** Prior wording of that paragraph:
+
+> **`screens.slot_ceiling` has no reader and this row records that rather than an assumed
+> one.** D-7 gives a ceiling of eight slots per screen; `screens.<id>.slots` is what a
+> screen actually has and what the tuner moves. The ceiling cannot also be a cap on that,
+> because D-43's cap is twelve and a ceiling of eight would make the tuner's range
+> unreachable, and D-116's proportion is what turns a slot count into a quota, so there is
+> nothing left for the key to do. C14 validates against `tuner.slot_floor` and
+> `tuner.slot_cap` instead. It is the same shape D-116 retired `screens.quota_large`,
+> `quota_mid` and `quota_small` for, and retiring it is an authored decision rather than a
+> build session's. Reported at 4.9; the key is still seeded, config being append-only.
+
+The paragraph recording how the three unseeded shared keys were found keeps naming
+`screens.slot_ceiling`, because what it records is the direction the gap was found in and
+not which keys are current.
+
+## 2026-08-24, corrective pass Q, checkpoint Q.8
+
+**`ARCHITECTURE.html` §3's C04 and C06 Writes cells** [Q.8, D-99]. Human-directed.
+`ARCHITECTURE.html` is a spec under D-73, so both are clean edits and the prior wordings
+are here.
+
+Prior wording of the C04 cell:
+
+> sentiment_daily
+
+Prior wording of the C06 cell:
+
+> events
+
+**Each now names its attempt record, with D-99 at the point of change**, which is the
+citation C02's cell already carries for `price_fetch_attempt` and the decision the
+sweep-resumption shape comes from. `sentiment_fetch_attempt` arrives with migration `0011`
+and `event_fetch_attempt` with `0012`, both already in `SCHEMA.md` and both already in
+§16's store list. `git diff docs/ARCHITECTURE.html` touches those two cells and nothing
+else, two lines of a 1,000-line file.
+
+**Nothing else in either row moved.** Both Reads cells still name their endpoint,
+`security_daily` and `price_daily` [D-74, D-101], and neither names the attempt record: a
+stage may read what it writes, which is what `DeclaredAccess.CanRead` says and what C02's,
+C03's and C05's cells already rely on.
+
+**These are the sixth and seventh drifts of this column in four phases**, after C03 under
+D-91, C05 under D-95, C01 under D-92, C03 again under D-96 and C03 and C05 under D-98.
+They are added to that count rather than opened as a new finding. What separates them from
+the five is that they were found by a check rather than by a reader: `Q.3` built
+`WriteDeclarationConformanceTests` and they were what it returned on its first run.
+
+**Each cell was landed with its own test passing.** `CellsShortOfTheCode` held the two as
+recorded gaps and `EveryRecordedDeviationIsStillADeviation` fails the moment a cell is
+amended, so the entries are deleted in the same commit and the list is empty again. The
+C06 amendment was reverted and re-run before the entry went: one failure of
+`EveryTableAComponentWritesIsNamedInItsWritesCell`, which is the assertion that now carries
+the cell with no exemption under it.
+
+## 2026-08-24, corrective pass Q, checkpoint Q.9
+
+**`ARCHITECTURE.html` §06's deduplication node, and `BUILD_PLAN.md`'s phase 4 done-when
+line** [Q.9]. Human-directed. Both documents are specs under D-73, so both are clean edits
+and the prior wordings are here.
+
+Prior wording of the node:
+
+> A name surfaced twice appears once, tagged with both. Overlap runs 10 to 15 percent
+> normally and higher in a drawdown.
+
+Prior wording of the done-when clause:
+
+> overlap between screens falls somewhere near 10 to 20 percent
+
+**The node now carries the measured figure and §06 gains three notes under the board**,
+which is where the reasoning goes because a diagram node holds a sentence and this is a
+bound corrected against evidence. The figures are 4.14's, taken over the frozen record from
+2021-01-11 to 2026-08-12: 0.5 percent of 34,932 allocated candidates carry more than one
+live screen, and 2.2 percent of 186,038 ranked name-dates are ranked by more than one.
+
+**The prior figure was not loosened and could not have been** [`CLAUDE.md` §11]. It was a
+design estimate rather than a bound, and it asked for the opposite of what the design
+produces: each screen ranks the top two percent of its own scored population [D-9], five
+independent rankings put a name in two sets with probability near 4 percent, and 10 to 15
+required the five to agree substantially more often than independence implies. Five
+disjoint metric families under INVARIANT 2 produce the other thing.
+
+**All three readings open at 4.14 are named in the notes and the numbers pick one.** The
+third, that the line measured the wrong quantity, is closed by the measurement having been
+taken twice over two different sets and missing on both. The second, that the screens are
+more orthogonal than intended, is not supported: 2.2 percent sits at near-independence
+rather than beyond it. The first, that the estimate was wrong, is what remains.
+
+**The done-when line moves with the figure rather than after it.** It now names the
+quantity, both readings of it and the independence baseline it is read against, so it
+states a check that runs rather than a range that was never derived from anything.
+
+## 2026-08-24, corrective pass Q, checkpoint Q.10
+
+**`ARCHITECTURE.html` §05's S3 Size-tilt cell** [Q.10]. Human-directed.
+`ARCHITECTURE.html` is a spec under D-73, so this is a clean edit and the prior wording is
+here.
+
+> Tilts small
+
+**The cell now reads "Tilts large, in two stages" and §05 gains a note under the screens
+table carrying the measurement.** S3 ranks **57.8 percent** large over 2021-01-11 to
+2026-08-12, against a universe at 31.3. The two stages are separable and only the second is
+about ranking: its three inputs compute for **1,067 of 2,819** names and that covered
+population is already **47.0 percent** large, so the screen is large-tilted before it ranks
+anything, and the ranking carries it from 47.0 to 57.8.
+
+**Nothing else in the row moved.** The Ranks-on cell still names the three inputs and the
+Typical fill cell still reads "0 to 8, median 5", which the measured 6.21 seats a date sits
+inside.
+
+**S3's composition is deliberately not changed**, and that is filed rather than left
+implicit. `BUILD_PLAN.md` gains a `4 → 8` carried obligation holding the question and the
+two-stage measurement as its evidence, phase 8 being where C22 ScreenTuner and the paired
+comparison would read it. A correction to a document that describes a screen is not a
+change to the screen, and the second is a decision on its own.
+
+## 2026-08-24, corrective pass Q, checkpoint Q.11
+
+**`ARCHITECTURE.html` §05's S5 Typical-fill cell** [Q.11]. Human-directed.
+`ARCHITECTURE.html` is a spec under D-73, so this is a clean edit and the prior wording is
+here.
+
+> 0 to 5, median 3
+
+**The cell now reads "0 on all but 68 dates in five years" and §05's gate section gains two
+notes.** S5 filled **68 of 35,108** live seats over 2021-01-11 to 2026-08-12, which is 0.19
+percent. Nothing else in the row moved: the gate and ranking description is unchanged and
+the Size-tilt cell still reads "Regime dependent", S5 ranking 32.9 percent large against a
+universe at 31.3.
+
+**The first note records the two stages, because the store separates them.** The gate
+admits a mean of 2.4 names a date, already below the estimate's median before anything is
+ranked, and the 98th-percentile floor over a trailing distribution that small then ranks
+one name on 70 of 1,457 sessions, 68 of which reach a seat.
+
+**The second note records what the store cannot separate, rather than picking a cause.** A
+name failing the gate carries a null score and unknown is collapsed into failed at the same
+point, so the four conditions are one bit per name-date. Of the three causes open, the
+quintile thresholds and the two composites' composition are both inside that bit. The two
+news conditions failing open are excluded on the gate's shape and not on the record: that
+branch is a disjunction, so removing it could only shrink what the gate admits.
+
+**S5's composition is not changed and the question is filed with S3's.**
+`BUILD_PLAN.md` gains a second `4 → 8` carried obligation beside Q.10's, carrying the
+two-stage measurement and the two config keys that have never been measured.
+
+## 2026-08-24, phase 4 sign-off, S3's first stage corrected to the whole range
+
+**`ARCHITECTURE.html` §05's S3 note and `BUILD_PLAN.md`'s `4 → 8` S3 obligation**
+[phase 4 sign-off]. Human-directed. Both are read to know the current state, so both are
+clean edits and the prior wordings are here.
+
+> that covered population is already **47.0 percent** large against a universe at 31.3, so
+> most of the tilt is decided by which names carry enough news coverage to be scored at all
+> rather than by anything the screen ranks on. **Then, ranking.** The ranked set tilts
+> further, to **57.8 percent** large.
+
+> Its three inputs compute for **1,067 of 2,819** names, and that covered population is
+> already **47.0 percent** large against a universe at 31.3, so the screen is large-tilted
+> before it ranks anything; the ranking then carries it from 47.0 to 57.8.
+
+**Both now read 55.0 percent, and the ranking stage is 2.8 points rather than 10.8.** The
+sign-off review found that 47.0 is S3's covered-population large share over **2026 to
+date**, stated under a heading naming 2021-01-11 to 2026-08-12. Over the range the note
+names it is **55.0**, measured by the instrument that reproduces 47.04 for 2026 to date.
+2026 is also the lowest of the six years in the range: 57.1, 55.2, 61.8, 66.8, 50.0 and
+47.0.
+
+**The correction strengthens the finding it sits under rather than weakening it**, and both
+documents now say so. Q.10's point is that S3's tilt has two stages and the first is the
+larger; at 55.0 against a universe of 31.3 the first stage is larger still and the ranking
+stage nearly disappears. Almost the whole of S3's tilt is decided by which names carry
+enough news coverage to be scored at all, which is the stage recomposing the ranking cannot
+reach.
+
+**Nothing else moved.** The Size-tilt cell still reads "Tilts large, in two stages", the
+57.8 is unchanged, the 1,067 of 2,819 is unchanged, and S3's composition is not changed.
+The `4 → 8` obligation still holds the same three open answers.
+
+## 2026-08-24, phase 4 sign-off, §4.6's justification cites the measurement
+
+**`SCREEN_LIFECYCLE.md` §4.6** [phase 4 sign-off]. Human-directed. §4.6 is specification
+and is read to know the current state, so this is a clean edit and the prior wording is
+here.
+
+> That happens whenever a live screen and a shadow both surface the same name, which is the
+> ordinary case rather than the exception given §06 puts screen overlap at 10 to 15 percent
+> normally and higher in a drawdown.
+
+**The rule is unchanged and only its justification moves.** The two filters still do
+different work and conflating them is still the trap. What the paragraph rested on was
+§06's estimate of 10 to 15 percent, which Q.9 withdrew against measurement, so the
+paragraph was citing a figure that no longer exists in the document it cites.
+
+**It now cites the measurement: 1,223 of the 34,932 frozen candidate rows carry a shadow
+id, which is 3.5 percent.** No withdrawn number is restated as a comparison.
+
+**Why the rule's case is stronger at the lower figure, which the section now states.** The
+screens are near-independent, 0.5 percent of allocated candidates carrying more than one
+live screen against the roughly 4 percent five independent top-two-percent rankings would
+give, so a name two screens both surface is uncommon and therefore informative. A
+per-screen report that groups on every id in `screens_surfacing` is not diluting a common
+case; it opens a calibration bucket for a shadow out of exactly the rows carrying the most
+signal.

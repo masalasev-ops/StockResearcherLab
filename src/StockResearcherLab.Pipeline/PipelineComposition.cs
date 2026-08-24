@@ -4,6 +4,7 @@ using StockResearcherLab.Data;
 using StockResearcherLab.Data.Eodhd;
 using StockResearcherLab.Pipeline.Compute;
 using StockResearcherLab.Pipeline.Ingest;
+using StockResearcherLab.Pipeline.Select;
 
 namespace StockResearcherLab.Pipeline;
 
@@ -61,6 +62,20 @@ public static class PipelineComposition
             new SentimentEngine(),
             new MarketContextEngine(),
             new PercentileEngine(),
+
+            // Layer 3. Selection derives from the percentile store and calls no
+            // provider either, so it registers on the same terms as layer 2.
+            //
+            // C12 is in this layer too. Section 04 puts it in the Select band at
+            // 18:20, before C13 at 18:25, and it reads gate_result in nothing after:
+            // C13 does not read that table and must not [D-117].
+            new GateEngine(),
+            new ScreenEngine(),
+            new CandidateAllocator(),
+
+            // Outside the layers with RunLog, per section 02, and registered here
+            // because it reads stores the pipeline wrote and calls nothing.
+            new ConcentrationMonitor(),
         };
 
         if (eodhd is not null)

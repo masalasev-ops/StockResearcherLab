@@ -22,14 +22,19 @@ definitions in `0001_snapshot.sql` [`CLAUDE.md` §7].
 checkpoints in §6 are phase scope and are authored into `BUILD_PLAN.md` by a human rather than
 from here, as are the eleven decision clauses in §4 [`CLAUDE.md` §13].
 
-**This plan is not archived to `prompts/spent/` yet, and archiving it now would be the wrong
+~~**This plan is not archived to `prompts/spent/` yet, and archiving it now would be the wrong
 thing.** Nothing has been issued from it, none of §4's eleven decisions is authored, and no
-checkpoint has landed, so there is no record of what was asked to keep. It goes to
+checkpoint has landed, so there is no record of what was asked to keep.~~ **Archived on
+2026-08-24, at `Q.11`, once every checkpoint had landed.** It goes to
 `prompts/spent/` **as implemented**, which is `CLAUDE.md` §3's wording and is what phase 3's
 archive is: the same document carrying, in its header, that D-92 to D-95 were authored and
 that the eighteen checkpoints reached `BUILD_PLAN.md`. Phase 2's archive is the other shape,
 the prompt issued to the build session at `Status: SPENT`. §8 carries the drift that made this
-worth stating.
+worth stating. **The archive is `prompts/spent/phase-4-screens-and-selection.md`**, its body
+byte-identical to this document from §Context onward and its header carrying what landed. It
+reads `Status: SPENT` rather than `DRAFT`, which is the one-line correction §8 says is this
+plan's to make; the three existing `DRAFT` archives §8 names are untouched and stay an
+authored call. **This document remains the plan and stays `DRAFT`.**
 
 ---
 

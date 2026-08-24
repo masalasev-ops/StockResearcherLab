@@ -320,7 +320,42 @@ public sealed class ConfigResolutionTests
         // literal for the reason section 8 gives: the two windows the same panel shows
         // are already owned elsewhere, and bars are the one thing it bounds that no
         // component does.
-        Assert.Equal(44, ConfigSeeder.Keys.Count);
+        //
+        // Seventy-four at 4.3, which adds thirty: four per screen for the five live
+        // screens, six for S5's two composites and their floors and quintiles, and four
+        // gate thresholds. The count is asserted rather than described because a key
+        // with nothing behind it is exactly what this catches [D-112 to D-120].
+        //
+        // Seventy-seven at 4.5, which adds the three shared screen rules. They are not
+        // new: screens.slot_ceiling, screens.floor_percentile and
+        // screens.floor_lookback_days have been in CONFIG_REFERENCE.md since the first
+        // corpus with D-7 and D-9 behind them, and no seeder row. This assertion is the
+        // check for a key with nothing behind it and the gap was the other way round,
+        // which is why 4.5 found it by failing to resolve rather than by counting.
+        //
+        // Eighty at 4.7, which adds S5's three stabilisation thresholds. Same gap and
+        // same direction as the three above: s5.stabilisation_z_max,
+        // s5.sentiment_delta_min and s5.news_gate_min_articles have been in
+        // CONFIG_REFERENCE.md since the first corpus with D-13 and D-14 behind them, and
+        // no seeder row. Found the same way, by the gate failing to resolve one.
+        //
+        // Eighty-two at 4.9, which adds tuner.slot_floor and tuner.slot_cap. C14
+        // validates a screen's slot count against them before C22 exists, and they had
+        // the same documented-and-unseeded gap as the five above.
+        //
+        // Eighty-four at 4.11, which adds C28's two bounds.
+        //
+        // Eighty-three at Q.5, which retires screens.slot_ceiling [D-127]. The count goes
+        // down for the first time, and it is the one direction this assertion was not
+        // written for: it catches a key with nothing behind it, and this is the opposite,
+        // a key with nothing in front of it. The seeded row already inserted is untouched,
+        // config being append-only.
+        //
+        // Ninety-five at Q.7, which registers the three shadows: four keys each for
+        // X-NSI, X-ACC and X-FM [D-129]. A screen is a row and registering one is an
+        // insert, which is what CLAUDE.md section 5 means and what 4.6 proved with a
+        // fabricated sixth. These three are the first registration that is meant to last.
+        Assert.Equal(95, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)

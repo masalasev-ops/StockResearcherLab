@@ -124,14 +124,25 @@ public sealed class SchemaParityTests
     }
 
     /// <summary>`real` and `double precision`, as `table.column`.</summary>
+    /// <summary>
+    /// **The partition predicate is why this joins `pg_class`.** A partition child
+    /// carries a full copy of its parent's columns in `information_schema.columns`, so
+    /// `screen_score_daily`'s seven yearly children each reported `score` as an
+    /// undeclared `real` column the moment `0017` applied. Declaring them in
+    /// `SCHEMA.md` would be declaring storage rather than a store, and the parent
+    /// already declares the column once [D-111, 0017].
+    /// </summary>
     private static async Task<IReadOnlyList<string>> ApproximateColumnsAsync()
         => await QueryAsync(
             """
-            SELECT table_name || '.' || column_name
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND (data_type IN ('real', 'double precision')
-                   OR (data_type = 'ARRAY' AND udt_name IN ('_float4', '_float8')))
+            SELECT c.table_name || '.' || c.column_name
+            FROM information_schema.columns c
+            JOIN pg_namespace n ON n.nspname = c.table_schema
+            JOIN pg_class pc ON pc.relname = c.table_name AND pc.relnamespace = n.oid
+            WHERE c.table_schema = 'public'
+              AND NOT pc.relispartition
+              AND (c.data_type IN ('real', 'double precision')
+                   OR (c.data_type = 'ARRAY' AND c.udt_name IN ('_float4', '_float8')))
             ORDER BY 1;
             """).ConfigureAwait(false);
 
@@ -140,12 +151,20 @@ public sealed class SchemaParityTests
         // The same pattern guards.ps1 runs, against the column name and never the
         // table's: `price_daily.date` matched once because its table carries the
         // word, and the check reported on rows that had nothing to do with money.
+        // The partition predicate is here for ApproximateColumnsAsync's reason, and it
+        // is here even though no partitioned table carries a monetary-named column
+        // today: the count below is asserted exactly, so a future partitioned table
+        // with one would inflate it by its child count and read as a schema change
+        // [D-111, D-83].
         var rows = await QueryAsync(
             """
-            SELECT table_name || '.' || column_name, data_type
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND column_name ~ '(_usd|price|value|cap|cost|equity|pnl|dollar|amount)'
+            SELECT c.table_name || '.' || c.column_name, c.data_type
+            FROM information_schema.columns c
+            JOIN pg_namespace n ON n.nspname = c.table_schema
+            JOIN pg_class pc ON pc.relname = c.table_name AND pc.relnamespace = n.oid
+            WHERE c.table_schema = 'public'
+              AND NOT pc.relispartition
+              AND c.column_name ~ '(_usd|price|value|cap|cost|equity|pnl|dollar|amount)'
             ORDER BY 1;
             """, columns: 2).ConfigureAwait(false);
 

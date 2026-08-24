@@ -74,6 +74,28 @@ public static class ConfigValue
                 $"Config key '{row.Key}' resolved to '{row.Value}', which is not a whole number.");
     }
 
+    /// <summary>
+    /// A key that may carry a fraction, such as a percentile threshold or a z-score
+    /// bound.
+    ///
+    /// **A whole number is accepted here and a fraction is not accepted by
+    /// <see cref="Long"/>**, which is the asymmetry the two keys need: `1.0` and `1` are
+    /// the same threshold written two ways, while `2.5` articles is not a count. So a
+    /// threshold seeded as `80` reads here and a count seeded as `3.5` fails there.
+    /// </summary>
+    public static double Double(ConfigRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        using var doc = Parse(row);
+
+        return doc.RootElement.ValueKind == JsonValueKind.Number
+               && doc.RootElement.TryGetDouble(out var value)
+            ? value
+            : throw new InvalidOperationException(
+                $"Config key '{row.Key}' resolved to '{row.Value}', which is not a number.");
+    }
+
     private static JsonDocument Parse(ConfigRow row)
     {
         try

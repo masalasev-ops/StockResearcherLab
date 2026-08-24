@@ -40,11 +40,7 @@ public sealed class StageRunnerTests
 
         Assert.Equal(0, result.RowsWritten);
 
-        var rows = (await runLog.RecentAsync(500, ct).ConfigureAwait(true))
-            .Where(r => string.Equals(r.Stage, stageName, StringComparison.Ordinal))
-            .ToList();
-
-        var latest = Assert.Single(rows);
+        var latest = Assert.Single(await RowsForAsync(stageName, ct));
         Assert.Equal("ok", latest.Status);
 
         // Zero rows is a legitimate result and not an error on its own. It is
@@ -71,8 +67,7 @@ public sealed class StageRunnerTests
             () => new StageRunner(registry, runLog, Clock, cs)
                 .RunAsync(stageName, Clock.Today, configVersion: 1, ct)).ConfigureAwait(true);
 
-        var row = (await runLog.RecentAsync(500, ct).ConfigureAwait(true))
-            .Single(r => string.Equals(r.Stage, stageName, StringComparison.Ordinal));
+        var row = Assert.Single(await RowsForAsync(stageName, ct));
 
         Assert.Equal("failed", row.Status);
         Assert.Contains("does not declare", row.Error!, StringComparison.Ordinal);
@@ -80,6 +75,45 @@ public sealed class StageRunnerTests
         // Unknown, not zero. The stage threw partway and how many rows it wrote is
         // not something anyone knows [CLAUDE.md section 6].
         Assert.Null(row.RowsWritten);
+    }
+
+    /// <summary>
+    /// This stage's own <c>run_log</c> rows, read by name.
+    ///
+    /// **Not `RecentAsync`, and the reason is a real failure rather than taste.**
+    /// `RecentAsync` orders by `run_date` first, so the window of most recent rows is a
+    /// window over run dates and not over write times. These fixtures use a 2026-08-06
+    /// clock, the suite's database persists between local runs, and once more than the
+    /// window's worth of rows carried a later run date this stage's own row fell out of
+    /// it and `Single` found nothing. Filtering by the name the fixture generated is
+    /// what the assertion always meant.
+    /// </summary>
+    private static async Task<IReadOnlyList<RunLogEntry>> RowsForAsync(string stage, CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
+        await using var cmd = new Npgsql.NpgsqlCommand(
+            "SELECT run_log_id, run_date, stage, status, started_at, duration_ms, rows_written, error " +
+            "FROM run_log WHERE stage = @s ORDER BY run_log_id;", conn);
+
+        cmd.Parameters.AddWithValue("s", stage);
+
+        var found = new List<RunLogEntry>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(true);
+
+        while (await reader.ReadAsync(ct).ConfigureAwait(true))
+        {
+            found.Add(new RunLogEntry(
+                reader.GetInt64(0),
+                DateOnly.FromDateTime(reader.GetDateTime(1)),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.GetFieldValue<DateTimeOffset>(4),
+                reader.IsDBNull(5) ? null : reader.GetInt64(5),
+                reader.IsDBNull(6) ? null : reader.GetInt64(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7)));
+        }
+
+        return found;
     }
 
     [Fact]

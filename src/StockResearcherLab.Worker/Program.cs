@@ -1,10 +1,12 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using StockResearcherLab.Core.Config;
+using StockResearcherLab.Core.Screens;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data;
 using StockResearcherLab.Data.Eodhd;
 using StockResearcherLab.Pipeline;
+using StockResearcherLab.Pipeline.Select;
 
 // The host that runs the nightly pipeline and the backfill. At phase 0 it does
 // two things: apply the schema, and run one stage. migrate.ps1 is a wrapper over
@@ -33,6 +35,21 @@ switch (command)
     case "run-night":
         return await RunNightAsync().ConfigureAwait(false);
 
+    case "run-selection":
+        return await RunNightAsync(BackfillSequence.SelectionOrder).ConfigureAwait(false);
+
+    case "range-screens":
+        return await RangeScreensAsync().ConfigureAwait(false);
+
+    case "persistence":
+        return await PersistenceAsync().ConfigureAwait(false);
+
+    case "range-selection":
+        return await RangeSelectionAsync().ConfigureAwait(false);
+
+    case "distributions":
+        return await DistributionsAsync().ConfigureAwait(false);
+
     case "backfill":
         return await BackfillAsync().ConfigureAwait(false);
 
@@ -46,6 +63,39 @@ switch (command)
         Console.WriteLine("  stages                list the registered components and what each writes.");
         Console.WriteLine("  run <stage> [date]    run one stage. Date defaults to today, US Eastern.");
         Console.WriteLine("  run-night [date]      run the evening sequence in order, halting on the first failure.");
+        Console.WriteLine("  run-selection [date]  run the selection half of that sequence over the store as it");
+        Console.WriteLine("                        stands: C12, C13, C14 and C28, and no ingest. This is the");
+        Console.WriteLine("                        night a backfilled date gets, the sources having already");
+        Console.WriteLine("                        filled it, and it calls no provider [4.12].");
+        Console.WriteLine("  range-screens <from> <to> [pass] [screen ...]");
+        Console.WriteLine("                        C13 over a range in two passes. Pass one scores every");
+        Console.WriteLine("                        session and ranks nothing; pass two writes floors and");
+        Console.WriteLine("                        ranks and REFUSES unless pass one covered the calendar's");
+        Console.WriteLine("                        every session. Pass is `score`, `floor` or both by");
+        Console.WriteLine("                        default. BOTH DATES ARE REQUIRED [4.13].");
+        Console.WriteLine("                        Naming screens restricts both passes to them. A pass one");
+        Console.WriteLine("                        over a screen that is already floored clears its ranks");
+        Console.WriteLine("                        until pass two puts them back, so a screen registered");
+        Console.WriteLine("                        later is scored by naming it [Q.7].");
+        Console.WriteLine("  persistence <from> <to>");
+        Console.WriteLine("                        section 5's pre-registered persistence measure, per");
+        Console.WriteLine("                        screen, with each screen's own chance baseline. Reads no");
+        Console.WriteLine("                        forward return and no attribution row. 4.14 does not");
+        Console.WriteLine("                        begin until this is recorded in PROGRESS.md [4.13].");
+        Console.WriteLine("  distributions <from> <to>");
+        Console.WriteLine("                        phase 4's six done-when lines, measured against the");
+        Console.WriteLine("                        record range-selection froze. Reads and writes nothing,");
+        Console.WriteLine("                        so re-running it at sign-off reproduces the recorded");
+        Console.WriteLine("                        figures or contradicts them [4.14].");
+        Console.WriteLine("  range-selection <from> <to>");
+        Console.WriteLine("                        C12, C14 and C28 over a range whose scores and floors");
+        Console.WriteLine("                        range-screens has already written. C13 is NOT in the");
+        Console.WriteLine("                        sequence: 4.13 filled the score table and re-running it");
+        Console.WriteLine("                        would rewrite thirty million rows [4.14].");
+        Console.WriteLine("                        THIS IS WHERE THE RECORD STARTS. It writes attribution");
+        Console.WriteLine("                        rows that no later pass may rewrite, so it REFUSES if");
+        Console.WriteLine("                        attribution already holds a row in the range. The");
+        Console.WriteLine("                        truncate is an explicit and separate act.");
         Console.WriteLine("  backfill <from> <to>  run every source over a range, in order, each finishing");
         Console.WriteLine("                        before the next begins. Sources already swept report");
         Console.WriteLine("                        `covered` and fall through, so re-issuing the identical");
@@ -94,7 +144,7 @@ async Task<int> MigrateAsync()
     return 0;
 }
 
-async Task<int> RunNightAsync()
+async Task<int> RunNightAsync(IReadOnlyList<string>? order = null)
 {
     var clock = new SystemClock();
     var date = args.Length > 1
@@ -112,18 +162,207 @@ async Task<int> RunNightAsync()
     var configVersion = await new ConfigStore(connectionString)
         .RequireVersionAsync(date).ConfigureAwait(false);
 
-    Console.WriteLine($"run-night  {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}  config v{configVersion}");
+    var label = order is null ? "run-night" : "run-selection";
+
+    Console.WriteLine(
+        $"{label}  {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}  config v{configVersion}");
 
     var night = NightlyRun.For(
         connectionString, config["Eodhd:ApiToken"], clock, Console.WriteLine);
 
-    var result = await night.ExecuteAsync(date, configVersion).ConfigureAwait(false);
+    var result = await night.ExecuteAsync(date, configVersion, order).ConfigureAwait(false);
 
     Console.WriteLine($"  {result.Summary()}");
 
     // Non-zero when the night halted, so an unattended run is visible as a failure
     // rather than as a quiet short night.
     return result.Completed ? 0 : 1;
+}
+
+async Task<int> DistributionsAsync()
+{
+    if (args.Length < 3)
+    {
+        Console.Error.WriteLine("distributions needs both dates.");
+        return 2;
+    }
+
+    var from = DateOnly.ParseExact(args[1], "yyyy-MM-dd", CultureInfo.InvariantCulture);
+    var to = DateOnly.ParseExact(args[2], "yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    Console.WriteLine($"distributions  {from:yyyy-MM-dd}..{to:yyyy-MM-dd}");
+    Console.WriteLine();
+
+    // **The live screen set is read from `screens.<id>.state` and never from the id**
+    // [phase 4 sign-off]. It was a prefix test on the id until then, which is a naming
+    // convention standing in for a config value: a shadow promoted under
+    // SCREEN_LIFECYCLE.md section 6 would keep an X- id and be counted as a shadow, and
+    // the figure it feeds is in ARCHITECTURE.html section 06.
+    //
+    // Resolved as of the range end, config being resolved as of a date and never as of
+    // now [INVARIANT 13]. The range end is what a report over the range is asked about.
+    var config = new ConfigStore(RequireConnectionString());
+
+    var live = (await ScreenRegistry.LoadLiveAsync(config, to).ConfigureAwait(false))
+        .Select(s => s.ScreenId)
+        .ToList();
+
+    var megacapShareMax = ConfigValue.Double(
+        await config.RequireAsync("monitor.megacap_share_max", to).ConfigureAwait(false));
+
+    Console.WriteLine(
+        $"  live screens as of {to:yyyy-MM-dd}, from screens.<id>.state: {string.Join(", ", live)}");
+    Console.WriteLine();
+
+    var lines = await SelectionDistributions
+        .MeasureAsync(RequireConnectionString(), from, to, live, megacapShareMax).ConfigureAwait(false);
+
+    foreach (var line in lines)
+    {
+        var verdict = line.Holds switch
+        {
+            true => "holds",
+            false => "DOES NOT HOLD",
+            _ => "no bound stated",
+        };
+
+        Console.WriteLine($"  [{verdict}]  {line.Line}");
+        Console.WriteLine($"             {line.Measured}");
+        Console.WriteLine();
+    }
+
+    // Not a done-when line. It exists because a low overlap has two possible causes that
+    // a share alone cannot separate, five screens that never agree or forty seats of which
+    // thirty are ever filled, and a finding without its cause gets buried.
+    //
+    // The overlap line prints both of its readings itself, so nothing is repeated here.
+    // Two producers of one figure is what the same sign-off found in the done-when list.
+    Console.WriteLine("  seats filled per screen, which is not a done-when line");
+
+    var seats = await SelectionDistributions
+        .SeatsByScreenAsync(RequireConnectionString(), from, to).ConfigureAwait(false);
+
+    foreach (var (screenId, filled, dates, perDate) in seats)
+    {
+        Console.WriteLine(
+            $"    {screenId,-6} {filled,9:N0} seats over {dates,6:N0} dates, " +
+            $"{perDate.ToString("F2", CultureInfo.InvariantCulture)} a date");
+    }
+
+    Console.WriteLine();
+
+    return 0;
+}
+
+async Task<int> RangeSelectionAsync()
+{
+    if (args.Length < 3)
+    {
+        Console.Error.WriteLine(
+            "range-selection needs both dates. This is the checkpoint where the record starts and " +
+            "a defaulted `to` moves at midnight [4.14].");
+
+        return 2;
+    }
+
+    var from = DateOnly.ParseExact(args[1], "yyyy-MM-dd", CultureInfo.InvariantCulture);
+    var to = DateOnly.ParseExact(args[2], "yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    var run = new SelectionRangeRun(RequireConnectionString(), new SystemClock(), Console.WriteLine);
+
+    Console.WriteLine($"range-selection  {from:yyyy-MM-dd}..{to:yyyy-MM-dd}  C12, C14, C28");
+
+    var result = await run.RunAsync(from, to).ConfigureAwait(false);
+
+    Console.WriteLine(
+        $"  {result.Dates:N0} sessions, {result.Gated:N0} gate rows, {result.Candidates:N0} candidates, " +
+        $"{result.Attributed:N0} attribution rows, {result.Alerts:N0} alerts, " +
+        $"{result.Elapsed.TotalMinutes:0.00} minutes");
+
+    return 0;
+}
+
+async Task<int> RangeScreensAsync()
+{
+    if (args.Length < 3)
+    {
+        Console.Error.WriteLine(
+            "range-screens needs both dates. A rebuild spans days and a defaulted `to` moves at " +
+            "midnight, which is the same reason `backfill` requires both.");
+
+        return 2;
+    }
+
+    var from = DateOnly.ParseExact(args[1], "yyyy-MM-dd", CultureInfo.InvariantCulture);
+    var to = DateOnly.ParseExact(args[2], "yyyy-MM-dd", CultureInfo.InvariantCulture);
+    var pass = args.Length > 3 ? args[3] : "both";
+
+    // Every argument after the pass is a screen id, and none means every registered
+    // screen. Restricting the pass is what lets a screen registered later be scored
+    // without re-scoring the ones already floored, which would clear their ranks for as
+    // long as pass two took to put them back [Q.7].
+    string[]? only = args.Length > 4 ? args[4..] : null;
+
+    var run = new ScreenRangeRun(RequireConnectionString(), Console.WriteLine);
+
+    Console.WriteLine(
+        $"range-screens  {from:yyyy-MM-dd}..{to:yyyy-MM-dd}  pass {pass}  " +
+        (only is null ? "every registered screen" : "screens " + string.Join(" ", only)));
+
+    if (pass is "both" or "score")
+    {
+        var one = await run.ScoreAsync(from, to, only).ConfigureAwait(false);
+        Console.WriteLine($"  pass one  {one.Detail}, {one.Elapsed.TotalMinutes:0.00} minutes");
+    }
+
+    if (pass is "both" or "floor")
+    {
+        var two = await run.FloorAsync(from, to, only).ConfigureAwait(false);
+        Console.WriteLine($"  pass two  {two.Detail}, {two.Elapsed.TotalMinutes:0.00} minutes");
+    }
+
+    return 0;
+}
+
+async Task<int> PersistenceAsync()
+{
+    if (args.Length < 3)
+    {
+        Console.Error.WriteLine("persistence needs both dates.");
+        return 2;
+    }
+
+    var from = DateOnly.ParseExact(args[1], "yyyy-MM-dd", CultureInfo.InvariantCulture);
+    var to = DateOnly.ParseExact(args[2], "yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    var measured = await PersistenceMeasure
+        .MeasureAsync(RequireConnectionString(), from, to).ConfigureAwait(false);
+
+    Console.WriteLine($"persistence  {from:yyyy-MM-dd}..{to:yyyy-MM-dd}");
+    Console.WriteLine(
+        "| Screen | Dates ranked | of scored | Pairs | Mean ranked | Mean scored | Chance | " +
+        "D-1 | D-5 | D-21 | Large |");
+    Console.WriteLine("|---|---|---|---|---|---|---|---|---|---|---|");
+
+    foreach (var s in measured)
+    {
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"| {s.ScreenId} | {s.DatesRanked:N0} | {s.DatesScored:N0} | {s.Pairs:N0} | " +
+            $"{s.MeanRankedSize:0.0} | {s.MeanScoredSize:0.0} | {s.Chance:0.0000} | " +
+            $"{s.Lag1:0.0000} | {s.Lag5:0.0000} | {s.Lag21:0.0000} | {s.LargeShare:P1} |"));
+    }
+
+    // The reading is a human's and this prints the numbers rather than naming one. Section
+    // 5 pre-registers three readings and says what stopping looks like; a driver that
+    // chose between them would be the build session taking the decision the plan reserves.
+    Console.WriteLine();
+    Console.WriteLine(
+        "Section 5's three readings are near-chance persistence, high persistence with a large-cap");
+    Console.WriteLine(
+        "tail, and slow decay from a high base. The reading is the operator's and 4.14 does not");
+    Console.WriteLine("begin until it and these figures are in PROGRESS.md.");
+
+    return 0;
 }
 
 /// <summary>

@@ -79,6 +79,37 @@ public sealed class ConfigStore : IConfigStore
 
         return rows;
     }
+
+    /// <summary>
+    /// Every key beginning with <paramref name="prefix"/>, at the version in force on
+    /// <paramref name="asOf"/>, ordered by key.
+    ///
+    /// **The whole store is read and filtered here rather than filtered in SQL**, which
+    /// is the same shape <see cref="ResolveVersionAsync"/> already uses. Resolution is
+    /// <see cref="ConfigResolution.Resolve"/>'s and not a second `MAX(version)` written
+    /// in a `WHERE` clause: one implementation of "in force on this date" is what makes
+    /// INVARIANT 13 checkable, and a prefix query with its own version pick would be a
+    /// second one that can disagree.
+    ///
+    /// Ordinal ordering, so two runs over one date enumerate screens identically
+    /// [`CLAUDE.md` §6].
+    /// </summary>
+    public async Task<IReadOnlyList<ConfigRow>> ResolveByPrefixAsync(
+        string prefix, DateOnly asOf, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
+
+        var all = await ReadAsync(null, ct).ConfigureAwait(false);
+
+        return [.. all
+            .Select(r => r.Key)
+            .Where(k => k.StartsWith(prefix, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(k => k, StringComparer.Ordinal)
+            .Select(k => ConfigResolution.Resolve(all, k, asOf))
+            .Where(r => r is not null)
+            .Select(r => r!)];
+    }
 }
 
 /// <summary>
@@ -340,6 +371,177 @@ public sealed class ConfigSeeder
         ("backfill.weight_form4_page", "10"),
         ("backfill.weight_splits", "1"),
         ("backfill.weight_dividends", "1"),
+
+        // The shared screen rules, which are one rule for every screen rather than any
+        // screen's property. **These were documented in CONFIG_REFERENCE.md from the
+        // first corpus and seeded by nothing until 4.5**, which found it by failing to
+        // resolve the lookback: keys with values, decisions and a Consumer column behind
+        // them, and no row in the store [D-7, D-9].
+        //
+        // screens.slot_ceiling was seeded here from 4.5 until Q.5 and is retired [D-127].
+        // It never had a reader: screens.<id>.slots is what a screen has and what the
+        // tuner moves, and a ceiling of eight cannot also cap that without contradicting
+        // D-43's cap of twelve. The rows already inserted stay, config being append-only,
+        // so this is a removal from the seeder and from the reference rather than a
+        // delete. Same shape as D-116's retirement of the three quota keys.
+        ("screens.floor_percentile", "98"),
+        ("screens.floor_lookback_days", "250"),
+
+        // Screens, as config rows. The set of screens is discovered from these keys
+        // and never from a list in code, which is what CLAUDE.md section 5 means by a
+        // screen being a row: a sixth screen is an insert, not a deployment.
+        //
+        // Direction lives here and no _inv column exists. Percentiles are ascending
+        // always, so the word says what the screen rewards rather than how anything
+        // sorts, and section 05's three _inv names are seeded as "low" [D-113].
+        //
+        // min_inputs was chosen against measured coverage rather than picked; the
+        // table and both dates it was read on are in CONFIG_REFERENCE.md [D-112].
+        // S1 Quality at a fair price. Seven ranked inputs, three of them read low.
+        ("screens.S1.metrics", """[{"metric":"fcf_yield","direction":"high","weight":1},{"metric":"ev_ebit_vs_own_5y","direction":"low","weight":1},{"metric":"roic_4q_change","direction":"high","weight":1},{"metric":"gross_margin_4q_change","direction":"high","weight":1},{"metric":"net_debt_ebitda","direction":"low","weight":1},{"metric":"accruals","direction":"low","weight":1},{"metric":"share_count_change","direction":"low","weight":1}]"""),
+        ("screens.S1.min_inputs", "5"),
+        ("screens.S1.state", "\"live\""),
+        ("screens.S1.slots", "8"),
+        // S2 Trend. Five ranked inputs plus base_breakout_flag as a bonus outside the mean [D-114].
+        ("screens.S2.metrics", """[{"metric":"rs_21d_63d_change","direction":"high","weight":1},{"metric":"dist_200dma","direction":"high","weight":1},{"metric":"adx14","direction":"high","weight":1},{"metric":"ma50_200_slope","direction":"high","weight":1},{"metric":"dist_52w_high_20d_change","direction":"high","weight":1},{"metric":"base_breakout_flag","kind":"bonus","points":10}]"""),
+        ("screens.S2.min_inputs", "4"),
+        ("screens.S2.state", "\"live\""),
+        ("screens.S2.slots", "8"),
+        // S3 Sentiment inflection.
+        ("screens.S3.metrics", """[{"metric":"article_count_z_own_90d","direction":"high","weight":1},{"metric":"sentiment_delta_7v30","direction":"high","weight":1},{"metric":"sentiment_7d_level","direction":"high","weight":1}]"""),
+        ("screens.S3.min_inputs", "3"),
+        ("screens.S3.state", "\"live\""),
+        ("screens.S3.slots", "8"),
+        // S4 Flow. Two inputs: inst_ownership_change is not a ranking input [D-118].
+        ("screens.S4.metrics", """[{"metric":"insider_net_90d_usd","direction":"high","weight":1},{"metric":"distinct_buyer_count","direction":"high","weight":1}]"""),
+        ("screens.S4.min_inputs", "2"),
+        ("screens.S4.state", "\"live\""),
+        ("screens.S4.slots", "8"),
+        // S5 Mean reversion. Ranks on distance below the 200-day average [D-120].
+        ("screens.S5.metrics", """[{"metric":"dist_200dma","direction":"low","weight":1}]"""),
+        ("screens.S5.min_inputs", "1"),
+        ("screens.S5.state", "\"live\""),
+        ("screens.S5.slots", "8"),
+
+        // ------------------------------------------------ the shadow family ---
+        //
+        // Three shadows, registered at Q.7 and before 4.14 [D-129]. C13 scores them
+        // like any other screen and C14 writes their attribution rows and no
+        // candidate_set row, which is D-84 and D-85 and needs no code here: the
+        // mechanism was built at 4.9 and 4.10 against a fixture screen and this is
+        // the first registration that means anything.
+        //
+        // **They are registered before 4.14 and not at sign-off, and the ordering is
+        // the whole reason.** attribution's key is (ticker, date) with score_per_screen
+        // one jsonb object across screens, so a screen added after 4.14 could only gain
+        // a backfilled row by updating a frozen one, which RUNBOOK.md forbids outright.
+        // D-119 put the registration decision at sign-off, which falls after 4.14, and
+        // that sequence would have removed the option without anyone choosing to give it
+        // up [D-129].
+        //
+        // **X-PEAD is not here and that is D-90's open fork, not an omission.** Its
+        // input has no backfillable history: events.earnings_backward_days is 7 and
+        // announced_date is null for earnings, so its backfilled distribution would come
+        // from a different population than its live one, which is what D-58 removed
+        // short interest for [SCREEN_LIFECYCLE.md section 7.5].
+        //
+        // Each ranks on one valuation_daily column that C09 already writes and C11
+        // already percentiles, so the whole cost is these rows and their share of
+        // section 9.1's storage.
+        //
+        // X-NSI, an extraction from S1. Net share issuance is a management action rather
+        // than an accounting outcome, and as one of seven S1 inputs it can be outvoted by
+        // six valuation and quality measures on exactly the names where dilution is the
+        // whole story [section 7.2]. Direction low: a company retiring shares is the good
+        // case, which is why S1's cell names the input share_count_change_inv [D-113].
+        ("screens.X-NSI.metrics", """[{"metric":"share_count_change","direction":"low","weight":1}]"""),
+        ("screens.X-NSI.min_inputs", "1"),
+        ("screens.X-NSI.state", "\"shadow\""),
+        ("screens.X-NSI.slots", "12"),
+
+        // X-ACC, an extraction from S1. Accruals measure the divergence between
+        // accounting earnings and cash, and S1's own rubric names accruals as its
+        // characteristic failure while six other inputs can outvote it [section 7.2].
+        // Direction low, as S1's accruals_inv names.
+        ("screens.X-ACC.metrics", """[{"metric":"accruals","direction":"low","weight":1}]"""),
+        ("screens.X-ACC.min_inputs", "1"),
+        ("screens.X-ACC.state", "\"shadow\""),
+        ("screens.X-ACC.slots", "12"),
+
+        // X-FM, an addition. Fundamental momentum is the trajectory of the business
+        // rather than its level, which is D-11's principle applied to revenue rather than
+        // to returns. It drops gross_margin_4q_change deliberately: that column is an S1
+        // ranking input and including it would make one screen an extraction and an
+        // addition at once, which is two statistical treatments on one screen
+        // [section 7.3].
+        ("screens.X-FM.metrics", """[{"metric":"revenue_growth_4q_trend","direction":"high","weight":1}]"""),
+        ("screens.X-FM.min_inputs", "1"),
+        ("screens.X-FM.state", "\"shadow\""),
+        ("screens.X-FM.slots", "12"),
+
+        // The slot count is twelve because that is tuner.slot_cap, which is the depth
+        // section 2.1 records a shadow at: it holds no slots, so what is recorded is what
+        // it would have surfaced at the largest count a promotion could ever give it. C14
+        // reads the cap directly for a shadow and never this key, and Validated() applies
+        // only to live screens, so the value is what a promotion would start from rather
+        // than something the allocator acts on today.
+
+        // S5's two composites, held as metric lists of S5's own. The quality list is
+        // the same content as S1's, copied, and the copy is deliberate: removing it is
+        // what INVARIANT 2 forbids. What holds it is the per-screen facade, which
+        // throws when asked for another screen's key [D-120].
+        ("screens.S5.quality_metrics", """[{"metric":"fcf_yield","direction":"high","weight":1},{"metric":"ev_ebit_vs_own_5y","direction":"low","weight":1},{"metric":"roic_4q_change","direction":"high","weight":1},{"metric":"gross_margin_4q_change","direction":"high","weight":1},{"metric":"net_debt_ebitda","direction":"low","weight":1},{"metric":"accruals","direction":"low","weight":1},{"metric":"share_count_change","direction":"low","weight":1}]"""),
+        ("screens.S5.technical_metrics", """[{"metric":"dist_200dma","direction":"high","weight":1},{"metric":"dist_52w_high","direction":"high","weight":1},{"metric":"rs_change_63d","direction":"high","weight":1}]"""),
+        ("screens.S5.quality_min_inputs", "5"),
+        ("screens.S5.technical_min_inputs", "3"),
+        ("screens.S5.quality_quintile_min", "80"),
+        ("screens.S5.technical_quintile_max", "20"),
+
+        // S5's three stabilisation thresholds, in the older top-level namespace where
+        // CONFIG_REFERENCE.md has documented them since the first corpus [D-13, D-14].
+        // **Documented and seeded by nothing until 4.7**, which is the third time this
+        // has been found: the same held for the three shared screens.* keys at 4.5.
+        // Kept at their documented names rather than moved under screens.S5, a rename
+        // being an authored change to a spec document for no gain.
+        //
+        // news_gate_min_articles is the fail-open threshold and is the one rule here
+        // that must not be tidied into a fail-closed one. Below three articles in seven
+        // days both news conditions are treated as satisfied, because thinly covered
+        // names are what this screen's small slots exist to find [ARCHITECTURE.html
+        // section 05].
+        ("s5.stabilisation_z_max", "1.0"),
+        ("s5.sentiment_delta_min", "0"),
+        ("s5.news_gate_min_articles", "3"),
+
+        // Gates. Every threshold is a key and no literal sits at a call site
+        // [D-117, CLAUDE.md section 8]. All four values are unconstrained by anything
+        // in the corpus and CONFIG_REFERENCE.md records that; only gap_pct fires over
+        // the backfill window, the other three reasons being structurally unevaluable
+        // until phase 7. Halt and already-held carry no key, being conditions.
+        ("gates.gap_pct", "8"),
+        ("gates.earnings_blackout_days_before", "5"),
+        ("gates.earnings_blackout_days_after", "2"),
+        ("gates.cooldown_days", "30"),
+
+        // The tuner's slot range, which C14 reads before C22 exists. D-43 gives the
+        // tuner a floor of four and a cap of twelve and D-89's proportion holds its
+        // megacap bound and its small-cap floor over exactly that range, so a screen's
+        // slot count is validated against these two rather than clamped [D-43, D-116].
+        //
+        // **Documented in CONFIG_REFERENCE.md since the first corpus and seeded by
+        // nothing until 4.9**, which is the fourth time this gap has been found and the
+        // fourth time it was found by a resolve failing rather than by a count. The
+        // other two tuner keys stay unseeded: nothing reads them before phase 8.
+        ("tuner.slot_floor", "4"),
+        ("tuner.slot_cap", "12"),
+
+        // C28's two bounds, which are the two diversity guarantees stated as numbers.
+        // megacap_share_max is D-7's third and distinct_tickers_60d_min is the phase's
+        // own done-when. **Documented and unseeded until 4.11**, the fifth instance and
+        // the fifth found by a resolve failing. The other three monitor and cost keys
+        // stay unseeded: nothing reads them before phase 6.
+        ("monitor.megacap_share_max", "0.333"),
+        ("monitor.distinct_tickers_60d_min", "250"),
     ];
 
     private readonly string _connectionString;

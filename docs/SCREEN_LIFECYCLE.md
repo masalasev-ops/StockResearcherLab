@@ -1,4 +1,4 @@
-# SCREEN_LIFECYCLE.md
+﻿# SCREEN_LIFECYCLE.md
 
 How a screen enters this system, how it is judged while it is in, and how it leaves.
 Registration, shadow running, promotion and retirement, in a form someone who was not
@@ -289,17 +289,36 @@ column, §15's screen table, §15's figure 11 read path, and §12's abstention n
 | `RUNBOOK.md`, never re-run the attribution write | n/a | everything surfaced | Applies to shadow rows identically and needs no wording change. A re-run would apply today's screen definitions to a past date whether the screen holds slots or not |
 | `WORKED_EXAMPLE.md` | n/a | candidates | Traces one candidate. Unaffected, and its attribution row would carry `surfaced_as = 'candidate'` |
 
-**Eight readers mean "candidate" and would be wrong without a filter. Three mean
-everything surfaced. Three that a reader would expect to appear do not read the table
-at all.** Stating the third group is deliberate: a reader auditing this later needs to
-know they were checked rather than missed.
+~~**Eight readers mean "candidate"**~~ [corrected, Q.6] **Seven readers mean "candidate"
+and would be wrong without a filter. Three mean everything surfaced. Three that a reader
+would expect to appear do not read the table at all.** Stating the third group is
+deliberate: a reader auditing this later needs to know they were checked rather than
+missed.
+
+**The table above is the specification and the count is read off it** [D-128]. The
+enumeration marks seven rows "candidates": C23, C24, U2, U7, the abstention analysis,
+`VALIDITY.md` §3's counts and `WORKED_EXAMPLE.md`. The other two figures in this sentence
+were right, which is what made the wrong one hard to see. `ScreenLifecycleCountTests`
+now counts the Means column and holds both sentences against it, so the prose cannot
+drift from the table again without failing.
 
 ### 4.6 The two filters are different, and conflating them is the trap
 
 A **candidate** row can carry a shadow screen id in `screens_surfacing`. That happens
-whenever a live screen and a shadow both surface the same name, which is the ordinary
-case rather than the exception given §06 puts screen overlap at 10 to 15 percent
-normally and higher in a drawdown.
+whenever a live screen and a shadow both surface the same name, and it is common enough
+to be met by anyone reading the table rather than rare enough to ignore: **1,223 of the
+34,932 candidate rows frozen over 2021-01-11 to 2026-08-12 carry a shadow id, which is
+3.5 percent** [phase 4 sign-off].
+
+**The lower the co-surfacing rate, the more a reader who conflates the two filters gets
+wrong, not less.** The screens are near-independent, 0.5 percent of allocated candidates
+carrying more than one live screen against the roughly 4 percent five independent
+top-two-percent rankings would give [§06], so a name two screens both surface is an
+uncommon and therefore informative event. A per-screen report that groups on every id in
+`screens_surfacing` does not dilute a common case; it opens a calibration bucket for a
+shadow out of exactly the rows that carry the most signal. This paragraph cited §06's
+estimate of 10 to 15 percent until the phase 4 sign-off review, and that estimate was
+withdrawn against measurement at Q.9.
 
 So there are two filters and they do different work:
 
@@ -317,8 +336,9 @@ filters only at the point of allocating slots. That is §6.5.
 
 ### 4.7 Making the filter structural rather than remembered
 
-Eight readers that must each remember a `WHERE` clause is eight chances to forget one,
-and forgetting it produces no error. A view is the mechanism that removes the choice:
+~~Eight readers~~ [corrected, Q.6] Seven readers that must each remember a `WHERE` clause
+is seven chances to forget one, and forgetting it produces no error. A view is the
+mechanism that removes the choice:
 
 ```
 CREATE VIEW candidate_attribution AS

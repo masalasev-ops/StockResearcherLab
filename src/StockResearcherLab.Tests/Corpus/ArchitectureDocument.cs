@@ -71,24 +71,81 @@ public static class ArchitectureDocument
     public static IReadOnlyDictionary<string, IReadOnlySet<string>> ReadTablesByComponent()
     {
         var tables = SchemaDocument.Tables().ToHashSet(StringComparer.Ordinal);
-        var html = File.ReadAllText(Path);
 
+        // Cells rather than a per-column regex, because the name cell carries nested
+        // spans and the Reads cell carries `code` and `rmv` spans, while no cell ever
+        // contains another cell.
+        return CatalogueCells(cells => CodeElement.Matches(cells[2])
+            .Select(m => m.Groups[1].Value)
+            .Where(tables.Contains)
+            .ToHashSet(StringComparer.Ordinal));
+    }
+
+
+    /// <summary>
+    /// Component name to the tables its Writes cell names [Q.3].
+    ///
+    /// **Why this exists.** Write ownership has been asserted against `SCHEMA.md` since
+    /// 0.4 and against the registry's own component names since 1.11, and §3's Writes
+    /// column has been read by nothing at all. The carried obligation raised at code
+    /// review `0006` says exactly that and predicts where it bites: C03 was the first
+    /// component to gain a second write and its cell drifted immediately, and D-85 gives
+    /// C14 a second write in phase 4 and D-87 gives C22 one in phase 8. C14's landed at
+    /// 4.10, so the predicted case has arrived and this is the check that was owed.
+    ///
+    /// **A table reference in the Writes column is bare text in a `mono` cell**, which is
+    /// the opposite of the Reads column's typography and is why this cannot reuse
+    /// <see cref="ReadTablesByComponent"/>'s extraction. The cell is comma-separated and
+    /// its whole content is table names by construction, so the split is on commas and
+    /// the intersection with `SCHEMA.md` is what removes everything that is not a table.
+    ///
+    /// **What the intersection removes, listed so that a silent drop is a known one.**
+    /// C07 and C32 write "via C27", C30 and C36 write "nothing", C31 writes "read
+    /// models", and C16 names "via C26" beside a real table. None is a table and all
+    /// drop out.
+    ///
+    /// **One limit, stated rather than discovered.** C17 ProposalValidator's cell reads
+    /// `proposal.status`, which is a column and does not match the table `proposal`, so
+    /// this parse gives C17 nothing. Nothing registers C17 before phase 6; when it does,
+    /// the check reports `proposal` as declared and unnamed, and the fix is the markup
+    /// rather than the assertion. This is the same shape as C15's bare `calibration` in
+    /// the Reads cell and is recorded for the same reason.
+    /// </summary>
+    public static IReadOnlyDictionary<string, IReadOnlySet<string>> WriteTablesByComponent()
+    {
+        var tables = SchemaDocument.Tables().ToHashSet(StringComparer.Ordinal);
+
+        return CatalogueCells(cells => StripTags(cells[3])
+            .Split(',')
+            .Select(t => t.Trim())
+            .Where(tables.Contains)
+            .ToHashSet(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The catalogue walked once, with the cell selection left to the caller.
+    ///
+    /// Shared by the Reads and the Writes parse because the row shape check and the
+    /// component-name read are the same work, and two copies of a guard that throws on a
+    /// malformed row is one copy that can stop throwing.
+    /// </summary>
+    private static IReadOnlyDictionary<string, IReadOnlySet<string>> CatalogueCells(
+        Func<string[], IReadOnlySet<string>> select)
+    {
+        var html = File.ReadAllText(Path);
         var found = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
 
         foreach (Match row in CatalogueRow.Matches(html))
         {
             var id = row.Groups["id"].Value;
 
-            // Cells rather than a per-column regex, because the name cell carries
-            // nested spans and the Reads cell carries `code` and `rmv` spans, while
-            // no cell ever contains another cell.
             var cells = row.Groups["cells"].Value.Split("</td>");
-            if (cells.Length < 4)
+            if (cells.Length < 5)
             {
                 throw new InvalidOperationException(
                     $"Catalogue row {id} has {cells.Length - 1} cell(s) after the id. Section 3 is " +
-                    "ID, Component, Runs, Reads, Writes, and this reads the fourth. A row of another " +
-                    "shape means the table changed and this parser did not.");
+                    "ID, Component, Runs, Reads, Writes, and this reads the fourth and the fifth. A " +
+                    "row of another shape means the table changed and this parser did not.");
             }
 
             var name = LeadingName.Match(cells[0]);
@@ -99,14 +156,27 @@ public static class ArchitectureDocument
                     "recognise as a name: " + cells[0]);
             }
 
-            found[name.Groups["name"].Value] = CodeElement.Matches(cells[2])
-                .Select(m => m.Groups[1].Value)
-                .Where(tables.Contains)
-                .ToHashSet(StringComparer.Ordinal);
+            found[name.Groups["name"].Value] = select(cells);
         }
 
         return found;
     }
+
+    /// <summary>
+    /// The whole document with its tags removed and its whitespace collapsed to single
+    /// spaces, for the assertions that hold a component against a sentence rather than
+    /// against a table.
+    ///
+    /// **Prose in this corpus is hard-wrapped and this document is HTML besides**, so a
+    /// phrase that breaks across a line or carries an inline tag will not match a literal
+    /// and the failure is silent: the assertion reports no hit and reads as a pass. This
+    /// flattening is what makes a whitespace-tolerant pattern actually tolerant
+    /// [`CLAUDE.md` §7, N.11].
+    /// </summary>
+    public static string FlattenedText()
+        => Whitespace.Replace(Tag.Replace(File.ReadAllText(Path), " "), " ");
+
+    private static readonly Regex Whitespace = new(@"\s+", RegexOptions.Compiled);
 
     /// <summary>
     /// One catalogue row, whole. Singleline is deliberately off: a row that lost its
@@ -199,6 +269,102 @@ public static class ArchitectureDocument
 
         return rows;
     }
+
+    // ------------------------------------------ section 05, the screen table ---
+
+    /// <summary>One row of §05's screen table.</summary>
+    /// <param name="Id">The screen id, which is also its config id segment.</param>
+    /// <param name="Name">The screen's name, as the document gives it.</param>
+    /// <param name="RanksOn">
+    /// The Ranks-on cell split on its own separator, tags stripped. A token that is
+    /// a bare lower-case identifier is a metric; anything else is prose, which is
+    /// what S5's cell is entirely.
+    /// </param>
+    public readonly record struct ScreenRow(string Id, string Name, IReadOnlyList<string> RanksOn)
+    {
+        /// <summary>The tokens that are metric names rather than prose, ordinal.</summary>
+        public IReadOnlySet<string> Metrics
+            => RanksOn.Where(IsMetricToken).ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// §05's screen table, from the document.
+    ///
+    /// **Why this exists.** A screen is a configuration row, so the only thing holding
+    /// the seeded rows to the design is a reader who remembers what §05 says. That is
+    /// the second list this repository keeps finding, one copy of it being prose and
+    /// therefore never diffed. `screens.S3.metrics` could lose an input to a bad edit
+    /// and every downstream number would stay plausible.
+    ///
+    /// **The separator is the document's own middle dot**, which is what the Ranks-on
+    /// cells are written with. Splitting on it rather than on whitespace is what keeps
+    /// `gate: S1 top quintile AND technical bottom quintile AND stabilising` one token
+    /// instead of eight.
+    ///
+    /// **A decision chip inside the cell is dropped whole, tags and text together.**
+    /// S4's cell carries one between two of its metrics, and stripping only the tags
+    /// leaves `D-58` glued to `distinct_buyer_count`, which then fails to look like a
+    /// metric and vanishes from the set. The screen would read as having one input where
+    /// it has two, and the check would pass or fail for the wrong reason. Found by this
+    /// check disagreeing with the seeded configuration on S4.
+    /// </summary>
+    public static IReadOnlyList<ScreenRow> ScreenTable() => ScreenTableIn(File.ReadAllText(Path));
+
+    /// <summary>
+    /// §05's screen table, from arbitrary markup, so the check can be run against a
+    /// deliberately altered copy. A conformance test that has never failed has not been
+    /// tested [`StoreMatrixIn`'s own reasoning].
+    /// </summary>
+    public static IReadOnlyList<ScreenRow> ScreenTableIn(string html)
+    {
+        ArgumentNullException.ThrowIfNull(html);
+
+        var rows = new List<ScreenRow>();
+
+        foreach (Match row in ScreenTableRow.Matches(html))
+        {
+            rows.Add(new ScreenRow(
+                row.Groups["id"].Value,
+                StripTags(row.Groups["name"].Value).Trim(),
+                [.. StripTags(row.Groups["ranks"].Value)
+                    .Split(RanksSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)]));
+        }
+
+        if (rows.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "ARCHITECTURE.html section 05 has no screen table rows. This check reads that table and " +
+                "would otherwise pass over an empty set, which is the failure it exists to prevent.");
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// A Ranks-on token that is a metric name rather than prose. Lower-case, digits and
+    /// underscores only, which is `METRICS.md`'s own naming and excludes every prose
+    /// token in the table including S5's two whole clauses.
+    /// </summary>
+    private static bool IsMetricToken(string token)
+        => token.Length > 0 && token.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c) || c == '_');
+
+    private static string StripTags(string cell)
+        => Tag.Replace(DecisionChip.Replace(cell, string.Empty), string.Empty);
+
+    // Singleline off, for the reason CatalogueRow gives.
+    private static readonly Regex ScreenTableRow = new(
+        @"<tr><td class=""mono""><b>(?<id>S\d+)</b></td><td>(?<name>.*?)</td>"
+        + @"<td class=""wrapmono"">(?<ranks>.*?)</td>",
+        RegexOptions.Compiled);
+
+    private static readonly Regex Tag = new(@"<[^>]*>", RegexOptions.Compiled);
+
+    /// <summary>A decision citation, which is this document's markup rather than cell text.</summary>
+    private static readonly Regex DecisionChip = new(
+        @"<span class=""rmv"">[^<]*</span>",
+        RegexOptions.Compiled);
+
+    private static readonly char[] RanksSeparator = ['·'];
 
     /// <summary>The marker a store carries while §16 names it and `SCHEMA.md` does not declare it.</summary>
     public const string NotYetInSchemaMarker = "<span class=\"tag\">NOT YET IN SCHEMA</span>";

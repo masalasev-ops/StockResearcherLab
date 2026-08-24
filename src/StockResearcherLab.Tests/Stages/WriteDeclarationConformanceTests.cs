@@ -49,23 +49,18 @@ public sealed class WriteDeclarationConformanceTests
     /// <summary>
     /// The other direction: a component writes a table its Writes cell does not name.
     ///
-    /// **Two entries, both found by this check on the first run it ever had, and both
-    /// reported rather than closed** [Q.3]. `ARCHITECTURE.html` is human-edited, so a
-    /// build session amending a cell to match what it found is the inversion
-    /// `CLAUDE.md` section 13 exists to prevent.
+    /// **Empty at Q.8, and it held two entries for the five checkpoints before it.** C04
+    /// SentimentIngestor writing `sentiment_fetch_attempt` and C06 EventsIngestor writing
+    /// `event_fetch_attempt` were what this check found on the first run it ever had
+    /// [Q.3]. Both were recorded here rather than corrected, `ARCHITECTURE.html` being
+    /// human-edited, and both cells were amended on the operator's direction at Q.8 with
+    /// the prior wordings in `CHANGELOG.md` [D-73]. The entries are deleted because the
+    /// assertion below had started failing on them, which is the closure working.
     ///
-    /// **This is the `0006` carried obligation's own prediction arriving.** That item
-    /// says the Writes column has no check and that C03 drifted the moment it gained a
-    /// second write. C04 and C06 each gained one too, and neither cell moved.
-    ///
-    /// **The tables are not undocumented and that is what makes this quiet.**
-    /// `sentiment_fetch_attempt` and `event_fetch_attempt` are both in `SCHEMA.md` and
-    /// both in section 16's store list, so every check that existed before this one
-    /// passed: write ownership is asserted against `SCHEMA.md` and the store matrix is
-    /// asserted against `SCHEMA.md`, and section 3's Writes cells were read by nothing.
-    /// Their three sibling tables `price_fetch_attempt`, `fundamental_fetch_attempt` and
-    /// `flow_fetch_attempt` are named in C02's, C03's and C05's cells, so the two
-    /// missing ones are a gap in a pattern rather than a different design.
+    /// **They were the `0006` carried obligation's own prediction arriving**, that item
+    /// saying the Writes column has no check and that C03 drifted the moment it gained a
+    /// second write. They were also the sixth and seventh drifts of that column in four
+    /// phases, after D-91, D-95, D-92, D-96 and D-98.
     ///
     /// **A separate list from <see cref="RecordedDeviations"/> and deliberately so.**
     /// The Reads check gives this direction no exemption at all, because a stage reading
@@ -77,13 +72,9 @@ public sealed class WriteDeclarationConformanceTests
     /// recording and is not worth failing the suite over. The asymmetry is stated here
     /// rather than inherited by accident.
     ///
-    /// Both entries fail the moment the cells are amended, which is what closes them.
+    /// An entry fails the moment its cell is amended, which is what closes it.
     /// </summary>
-    private static readonly (string Component, string Table)[] CellsShortOfTheCode =
-    [
-        ("SentimentIngestor", "sentiment_fetch_attempt"),
-        ("EventsIngestor", "event_fetch_attempt"),
-    ];
+    private static readonly (string Component, string Table)[] CellsShortOfTheCode = [];
 
     [Fact]
     public void TheWritesCellParseFindsTablesRatherThanNothing()

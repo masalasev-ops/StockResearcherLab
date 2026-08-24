@@ -2239,3 +2239,42 @@ absent reader.** Prior wording of that paragraph:
 The paragraph recording how the three unseeded shared keys were found keeps naming
 `screens.slot_ceiling`, because what it records is the direction the gap was found in and
 not which keys are current.
+
+## 2026-08-24, corrective pass Q, checkpoint Q.8
+
+**`ARCHITECTURE.html` §3's C04 and C06 Writes cells** [Q.8, D-99]. Human-directed.
+`ARCHITECTURE.html` is a spec under D-73, so both are clean edits and the prior wordings
+are here.
+
+Prior wording of the C04 cell:
+
+> sentiment_daily
+
+Prior wording of the C06 cell:
+
+> events
+
+**Each now names its attempt record, with D-99 at the point of change**, which is the
+citation C02's cell already carries for `price_fetch_attempt` and the decision the
+sweep-resumption shape comes from. `sentiment_fetch_attempt` arrives with migration `0011`
+and `event_fetch_attempt` with `0012`, both already in `SCHEMA.md` and both already in
+§16's store list. `git diff docs/ARCHITECTURE.html` touches those two cells and nothing
+else, two lines of a 1,000-line file.
+
+**Nothing else in either row moved.** Both Reads cells still name their endpoint,
+`security_daily` and `price_daily` [D-74, D-101], and neither names the attempt record: a
+stage may read what it writes, which is what `DeclaredAccess.CanRead` says and what C02's,
+C03's and C05's cells already rely on.
+
+**These are the sixth and seventh drifts of this column in four phases**, after C03 under
+D-91, C05 under D-95, C01 under D-92, C03 again under D-96 and C03 and C05 under D-98.
+They are added to that count rather than opened as a new finding. What separates them from
+the five is that they were found by a check rather than by a reader: `Q.3` built
+`WriteDeclarationConformanceTests` and they were what it returned on its first run.
+
+**Each cell was landed with its own test passing.** `CellsShortOfTheCode` held the two as
+recorded gaps and `EveryRecordedDeviationIsStillADeviation` fails the moment a cell is
+amended, so the entries are deleted in the same commit and the list is empty again. The
+C06 amendment was reverted and re-run before the entry went: one failure of
+`EveryTableAComponentWritesIsNamedInItsWritesCell`, which is the assertion that now carries
+the cell with no exemption under it.

@@ -10173,12 +10173,62 @@ ranked on 70 of 1,457 sessions against §05's "0 to 5, median 3". S5's 68 seats 
 above is the same fact seen from the allocator: **S5 contributed 68 of 35,108 live seats,
 which is 0.19 percent.** Neither was changed before the run, as directed.
 
-**Two items reported at Q.3 and not closed**, both §3 Writes cells: C04 SentimentIngestor
+~~**Two items reported at Q.3 and not closed**, both §3 Writes cells: C04 SentimentIngestor
 writes `sentiment_fetch_attempt` and C06 EventsIngestor writes `event_fetch_attempt`, and
-neither cell names its table.
+neither cell names its table.~~ **Both cells amended at Q.8**, human-directed, with the
+prior wordings in `CHANGELOG.md` [D-73]. The section below records what closed them.
 
 **The Consumer column is filled for every key this phase wired up.** Twenty-three keys under
 `screens.*`, `s5.*`, `gates.*`, `tuner.*` and `monitor.*` read `verified 4.x`. Four keys in
 those namespaces remain `unverified` and correctly so, their consumers being phase 5 to 8
 components that do not exist: `s5.no_digest_disqualifier_min_articles_90d`,
 `tuner.shrinkage_old`, `tuner.benchmark_column` and `monitor.cache_hit_rate_min`.
+
+---
+
+## Phase 4, corrective pass Q, checkpoints Q.8 to Q.11: the four items 4.14 left owed
+
+Four items the 4.14 record carries as owed, closed against the measurements 4.13 and 4.14
+took rather than against new ones. Documents and two catalogue cells. No component moved,
+no migration was written, and nothing was run against the frozen record [`RUNBOOK.md`].
+
+### Q.8: §3's C04 and C06 Writes cells now name their attempt records
+
+**Both cells are amended, human-directed**, as clean edits under D-73 with the prior
+wordings in `CHANGELOG.md` and D-99 at the point of change. C04's now reads
+`sentiment_daily, sentiment_fetch_attempt` and C06's `events, event_fetch_attempt`. The
+diff over `ARCHITECTURE.html` is those two cells and nothing else, two lines of a
+1,000-line file.
+
+**D-99 rather than a checkpoint number is the citation**, matching C02's cell, which
+carries D-99 for `price_fetch_attempt`, and C03's and C05's, which carry D-91 and D-95.
+The two migrations are `0011` and `0012` and both tables were already in `SCHEMA.md` and
+in §16's store list.
+
+**Each cell landed with its own test passing, in this commit.** `CellsShortOfTheCode` held
+the two as recorded gaps and `EveryRecordedDeviationIsStillADeviation` fails the moment a
+cell is amended, which is the mechanism Q.3 built for closing them rather than for
+remembering them. Both entries are deleted and the list is empty again. **The C06 cell was
+reverted and the suite re-run before the entries went**: one failure, of
+`EveryTableAComponentWritesIsNamedInItsWritesCell`, which is the assertion that now carries
+that cell with no exemption beneath it. Six of six green in
+`WriteDeclarationConformanceTests` afterwards.
+
+**These are the sixth and seventh drifts of the Writes column in four phases and they are
+added to that count**, after C03 under D-91, C05 under D-95, C01 under D-92, C03 again
+under D-96, and C03 and C05 under D-98. Nothing new is opened. The `0006` carried
+obligation in `BUILD_PLAN.md` is where the pattern lives and it now records the closure.
+
+**What separates these two from the five before them is how they were found.** The five
+were noticed by a reader, one at a time, over phases 2 and 3. These were returned by a
+check on its first run, which is the difference D-125's argument turns on: a column
+amended at a rate is answered by a test rather than by a count of instances, and the count
+now stops being the thing that has to be maintained.
+
+**One tension is reported rather than resolved.** This checkpoint's own scope says the
+diff touches no source file, and closing the two entries requires editing
+`WriteDeclarationConformanceTests.cs`, because the check is built so that an amended cell
+fails until its entry goes. The test edit is deletion of two tuples and the comment above
+them; no assertion, helper or count moved. The two directions cannot both be satisfied and
+the instruction to land each cell with its test passing is the narrower one, so it was
+followed.

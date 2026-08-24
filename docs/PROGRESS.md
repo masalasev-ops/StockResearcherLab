@@ -11059,3 +11059,128 @@ source file.
 and every one has a counterpart in `prompts/spent/`, checked by name rather than assumed.
 There is no phase 5 plan yet, which is correct: `BUILD_PLAN.md` authors the next phase's
 checkpoints at the previous phase's sign-off, and that is now due.
+
+---
+
+## Phase 5, checkpoint 5.1: the sweep
+
+Run 2026-08-24 from a scratch file-based app outside the repository, as phase P's probe was
+and as 1.9 and 3.1 were. Transcript at `docs/evidence/phase-5/sweep-20260824.txt`, 227 lines,
+checked for token leakage before committing: the EODHD token appears zero times, no
+`api_token=` appears, and the one `sk-ant` is the prose saying the Anthropic key does not
+begin with it.
+
+**The population is the 32 candidates on 2026-08-12**, the most recent candidate date in the
+frozen record, taken from `candidate_set` rather than chosen. Eight large, twelve mid, twelve
+small. Their 90-day article coverage runs 9 to 335, so the sweep spans the range C29 will
+actually meet.
+
+### Row 1, the payload
+
+**`content` carries a real article body.** 275 rows over the seven days ending 2026-08-12,
+**275 of them with a body and none without.** The teaser reading that would have halted the
+build before 5.2 did not occur, and 5.2 proceeds.
+
+The field set is `content`, `date`, `link`, `sentiment`, `symbols`, `tags`, `title`, each
+present on all 275 rows.
+
+**Three of the 32 candidates returned nothing in the window** and five returned fewer than
+D-133's cap of three. That is the no-article outcome D-134 exists for, and it is 9 percent
+of a night rather than a rarity.
+
+### Row 2, body length, and the reading that fires the stopping rule
+
+Characters over 275 bodies: min 146, p25 4,018, **median 5,365**, p75 8,481, p95 20,527, max
+60,589.
+
+**Real tokens, counted by the model that would do the digesting** rather than estimated at
+four characters each. Twenty bodies through `qwen3.6:latest`: min 566, median 1,186, max
+2,870, at **4.30 characters per token**. The whole distribution at that ratio: min 34, p25
+935, **median 1,248**, p75 1,974, p95 4,777, max 14,099.
+
+**`ARCHITECTURE.html` §07 says five to eight hundred tokens an article. The measurement says
+1,248 at the median**, which is 1.6 times the top of that range, and the tail is worse: the
+longest body in the window is an earnings-call transcript at 14,099 tokens.
+
+**Three articles at the median is 3,745 tokens against D-133's derived 1,800.** The stopping
+rule fires on the above-800 branch: **report and wait, the cap is a decision rather than a
+seeded value.** Nothing was seeded and no cap was chosen.
+
+**What it does to §07's two cost figures, recomputed rather than asserted.** The instruction
+is about 800 tokens, so a real candidate prompt is roughly 4,500 input tokens rather than
+1,800. A full year run entirely on the secondary is then about **$37** rather than $18, and
+the rotation about **$2.70 a year** rather than $1.30. Both are small in absolute terms and
+the derivation is what broke, not the budget. **The figures are not proposed as replacements
+for §07's**, which is authored: they are what this measurement implies and the operator
+decides what follows.
+
+### Row 3, the unit cost
+
+**Five units per `news` call**, read off `/api/user` either side: 8,556 to 8,716 over 32
+calls. **A night therefore costs 160 units** against a daily limit of 100,000, which is
+0.16 percent and is not a constraint. The call did not page at `limit=1000`.
+
+### Row 4, the local inference server, and the finding that is not in the plan
+
+**It is Ollama on `localhost:11434` serving `qwen3.6:latest`, not LM Studio on 1234.** §07's
+table names LM Studio; the phase 5 scope line and D-136 both say the OpenAI-compatible
+endpoint, which is what Ollama exposes and what the client is written against. Recorded
+rather than treated as a discrepancy, and `local_model_config.endpoint` is a row precisely so
+the server can differ.
+
+Latency over ten completions at a 7,498-token prompt: min 1,948 ms, median 1,960, max 6,336.
+**32 sequential calls at the median is 62.7 s against the 120 s `RUNBOOK.md` allows between
+18:33 and 18:35.** It fits, with the caveat that this is one model on one machine.
+
+**And then the finding.** Every one of those ten calls returned `finish_reason: length`,
+`completion_tokens: 150`, and **zero characters of content**. The 150 tokens went into a
+`reasoning` field. `qwen3.6` is a reasoning model and the OpenAI-compatible response carries
+`role`, `content` and `reasoning`, with the digest never reached.
+
+**Five calls establish the cause rather than supposing it**, in part two of the transcript.
+At `max_tokens` 150 the content is empty and 575 characters of reasoning are returned. At
+`max_tokens` 2000 the content is **still** empty and the reasoning reaches 7,397 characters,
+so this is not a cap that is merely too small. `chat_template_kwargs.enable_thinking = false`
+is accepted and ignored, byte-identical to the call without it. **`reasoning_effort: "none"`
+works**: 243 characters of content, `finish_reason: stop`, 74 completion tokens. The native
+`/api/chat` surface with `think: false` produces the identical 243 characters.
+
+**Why this matters more than a parameter.** Under D-137 an empty response is malformed, so
+the chain would retry once, get another empty response, mark the local link unhealthy for the
+run, and digest every candidate on the secondary. **Every night. With the local server
+running and reporting healthy.** The record would not be silent, `news_digest.provider` saying
+`haiku` on all 32 rows being exactly what D-29 exists for, but nothing would raise anything
+and the year's cost would be the full-secondary figure rather than the local one. This is the
+failure class `CLAUDE.md` §1 describes: the run completes, the numbers look plausible, and
+what was actually measured is different.
+
+**`digest.max_tokens` at 150 turns out to be two quantities.** The digest's length, which is
+what §07 and `CONFIG_REFERENCE.md` mean, and the completion's length, which is what the API
+parameter caps. On a non-reasoning model they are the same number and on this one they are
+not.
+
+### Rows 5 and 6, the secondary link
+
+**Blocked.** The Anthropic key in `appsettings.Secrets.json` is 18 characters and does not
+begin `sk-ant`, so it is a placeholder rather than a key. Row 5 would have measured the
+`usage` block D-140's cost row is shaped against; row 6 was D-53's sanity read, which no
+decision cites. **Neither blocks 5.2. Both block 5.6 and 5.14.**
+
+### One more thing the payload settles, and it is a schema question
+
+**`headline.source` has no input.** The `news` payload carries no source field. `title` maps
+from `title`, `url` from `link`, `published_at` from `date`, and `content` from `content`
+[D-131], and nothing maps to `source`. The host of `link` is derivable and deriving it is a
+choice rather than a read, so this is `slot_filled`'s shape a third time [D-124, D-135] and
+the answer is the same one unless someone decides otherwise. **Reported, not resolved.**
+
+`sentiment` and `tags` are two fields the payload carries that `headline` has no column for.
+Per-article sentiment is not the same measurement as `sentiment_daily`'s aggregate from the
+`sentiments` endpoint, and nothing in this corpus asks for it. Named so a later reader knows
+it was seen and left.
+
+### What 5.1 leaves
+
+`ci.ps1` is not run for this checkpoint and does not need to be: nothing under `src/` changed
+and the commit is a transcript and this record. The baseline it was measured against is
+**722 tests green at `edb1c2d`**.

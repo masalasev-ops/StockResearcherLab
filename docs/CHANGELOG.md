@@ -2430,3 +2430,29 @@ give, so a name two screens both surface is uncommon and therefore informative. 
 per-screen report that groups on every id in `screens_surfacing` is not diluting a common
 case; it opens a calibration bucket for a shadow out of exactly the rows carrying the most
 signal.
+
+---
+
+## 2026-08-24, phase 5 checkpoint 5.2, `SCHEMA.md`'s `headline` section
+
+**`SCHEMA.md` §headline** [5.2, D-131, D-132]. `SCHEMA.md` is read to know the current
+state, so this is a clean edit and the prior wording is here.
+
+> ### headline
+> Grain: candidate by day. **Writer: HeadlineIngestor.**
+>
+> `ticker`, `date`, `published_at`, `title`, `source`, `url`.
+
+**Two changes and neither removes a fact.** The column list gains `content`, which
+migration `0022` adds and which is the column the digest actually reads: §07 prices local
+enrichment against articles of five to eight hundred tokens and this table could not hold
+one [D-131]. The writer line gains that C29 owns the delete as well as the insert, which
+is D-132's run-scope idempotence and which the one-word form could not carry.
+
+**What the section gains beyond the two lines**, all of it new rather than replacing
+anything: why `content` is nullable and what null means there; why the grain is a run
+scope rather than a row identity; and that `source` has no input in the `news` payload
+and is written null, measured at 5.1 over 275 rows.
+
+`news_digest` and `attribution` gain paragraphs in the same checkpoint and neither loses
+a line, so neither is restated here.

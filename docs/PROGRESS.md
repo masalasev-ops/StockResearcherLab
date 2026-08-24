@@ -10550,11 +10550,18 @@ names on it. **The halt gate is what contains it**: on 2022-01-17 C12 labelled 2
 2,624 members `halt`, which is the one reason `price_daily` can evaluate on a day with no
 bar, so the allocator seated nothing. **Eight candidates over the 54 dates got through
 anyway**, one each on 2022-07-04, 2024-01-15, 2024-02-19, 2024-11-28, 2025-01-01,
-2025-01-09, 2025-02-17 and 2025-11-27, and those eight `attribution` rows are frozen. They
-are the "smallest 1" the done-when line's own output reports.
+2025-01-09, 2025-02-17 and 2025-11-27. They are the "smallest 1" the done-when line's own
+output reports.
+
+**The frozen rows on those dates are ~~eight~~ 57, and the correction is this review's
+own.** The eight above are `candidate_set` rows and the sentence first written here read
+them as the whole of `attribution`, which also carries a row for a name only a shadow
+surfaced. Measured across the 54: **141,721 `gate_result` rows, 1,133,768
+`screen_score_daily` rows and 57 `attribution` rows**, the 57 being the eight candidates
+and 49 shadows. The gate and score rows are rewritable and the 57 are not [INVARIANT 4].
 
 **What is measured and what is not.** Measured: the 54 dates, their bar counts, the halved
-score population, the ranks written on them, the eight frozen candidates. Not measured:
+score population, the ranks written on them, the 57 frozen rows. Not measured:
 whether including about ten half-populated dates in every screen's 250-date trailing window
 moves any floor, and whether the persistence measure's D-1, D-5 and D-21 lags move when
 those dates leave the session list. Both are queries against what exists rather than new
@@ -10562,10 +10569,9 @@ instruments, and neither is taken here.
 
 **Why it is the largest of these exceptions.** Item 57 records the reason in its own words:
 "phase 4 counts forward returns in trading days, and a row standing on a non-session date
-makes that count wrong while erroring on nothing." C21 has not run, so the eight rows do
-not carry wrong returns yet; they will. And `attribution` rows cannot be rewritten
-[INVARIANT 4, `RUNBOOK.md`], so whatever is decided about what a session is, these eight
-stay.
+makes that count wrong while erroring on nothing." C21 has not run, so the 57 rows do not
+carry wrong returns yet; they will. And `attribution` rows cannot be rewritten
+[INVARIANT 4, `RUNBOOK.md`], so whatever is decided about what a session is, these 57 stay.
 
 ### Exception 2: 4.13's first ranked date is wrong, and the conclusion it supports inverts
 

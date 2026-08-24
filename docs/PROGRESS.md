@@ -10274,3 +10274,45 @@ the second reading would have been the live one and the amendment a different on
 eight, S3 averages 6.21, and 35,108 filled seats collapsed to 34,932 distinct names, so in
 five years the live screens picked the same name on the same date 176 times. The screens do
 not agree, which is the design working.
+
+### Q.10: §05's S3 sentence states the measured tilt, in its two stages
+
+**The cell read "Tilts small" and now reads "Tilts large, in two stages"**, human-directed,
+a clean edit under D-73 with the prior wording in `CHANGELOG.md`. §05 gains a note under the
+screens table carrying the figures, because a table cell holds three words and the useful
+part of this is which stage the tilt happens in.
+
+**The two stages, both measured at 4.13 and neither recomputed here.**
+
+| Stage | Figure |
+|---|---|
+| The universe it is drawn from | **31.3 %** large |
+| Names its three inputs compute for | **1,067 of 2,819**, and that covered population is **47.0 %** large |
+| What it ranks | **57.8 %** large |
+
+**The first stage is the larger one and it is not about ranking at all.** The screen is
+already 47.0 percent large before it scores anything, because a name needs enough news
+coverage for `article_count_z_own_90d`, `sentiment_delta_7v30` and `sentiment_7d_level` to
+compute, and coverage is what large caps have. The ranking then adds 10.8 points. S3 is the
+only one of the five that ranks larger than its own scored population; S1, S2, S4 and S5
+each rank smaller than theirs.
+
+**Why separating the stages matters rather than being tidy.** A screen that ranks large out
+of a large population and a screen that ranks large out of a representative one need
+different answers, and a single "tilts large" would not distinguish them. Recomposing the
+ranking cannot move the 47.0, which is set by which names have coverage at all.
+
+**The composition is not changed and the question is filed forward.** `BUILD_PLAN.md` gains
+a `4 → 8` carried obligation naming the three answers that are open, recompose, rebase the
+ranking against the covered population, or accept the screen as the reading it is, with the
+two-stage measurement as its evidence. Phase 8 is where it lands because C22 ScreenTuner
+allocates slots on peer-relative performance and S3's peer population is not the other four
+screens', and because D-42's peer-relative column is what would hide that. S3's persistence
+figures being the closest of the five to chance [4.13] puts the two questions on the same
+screen, so they are answered together.
+
+**One adjacent observation, filed and not acted on.** §05 gives S4 "Tilts small and mid" and
+S4 ranks 30.8 percent large against a universe at 31.3, which is at the universe rather than
+below it. It does rank smaller than its own scored population, 30.8 against 33.6, so the
+cell is defensible on the reading S3's was not. Recorded here so the next reader of that
+column has the number, not raised as an item.

@@ -2316,3 +2316,28 @@ rather than beyond it. The first, that the estimate was wrong, is what remains.
 **The done-when line moves with the figure rather than after it.** It now names the
 quantity, both readings of it and the independence baseline it is read against, so it
 states a check that runs rather than a range that was never derived from anything.
+
+## 2026-08-24, corrective pass Q, checkpoint Q.10
+
+**`ARCHITECTURE.html` §05's S3 Size-tilt cell** [Q.10]. Human-directed.
+`ARCHITECTURE.html` is a spec under D-73, so this is a clean edit and the prior wording is
+here.
+
+> Tilts small
+
+**The cell now reads "Tilts large, in two stages" and §05 gains a note under the screens
+table carrying the measurement.** S3 ranks **57.8 percent** large over 2021-01-11 to
+2026-08-12, against a universe at 31.3. The two stages are separable and only the second is
+about ranking: its three inputs compute for **1,067 of 2,819** names and that covered
+population is already **47.0 percent** large, so the screen is large-tilted before it ranks
+anything, and the ranking carries it from 47.0 to 57.8.
+
+**Nothing else in the row moved.** The Ranks-on cell still names the three inputs and the
+Typical fill cell still reads "0 to 8, median 5", which the measured 6.21 seats a date sits
+inside.
+
+**S3's composition is deliberately not changed**, and that is filed rather than left
+implicit. `BUILD_PLAN.md` gains a `4 → 8` carried obligation holding the question and the
+two-stage measurement as its evidence, phase 8 being where C22 ScreenTuner and the paired
+comparison would read it. A correction to a document that describes a screen is not a
+change to the screen, and the second is a decision on its own.

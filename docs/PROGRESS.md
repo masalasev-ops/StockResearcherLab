@@ -10382,3 +10382,34 @@ inseparability. `BUILD_PLAN.md` gains a second `4 → 8` carried obligation besi
 **It is filed as a slot question before a composition one**: a screen contributing 0.19
 percent of seats is something §8.1's proportion and D-43's floor of four decide on before
 anyone reweights a composite.
+
+### Sign-off step 1 for the Q.8 to Q.11 pass
+
+**`ci.ps1` green at `5de9727`**, the last commit of the pass, over a worktree of tracked
+files at that sha. Seven results: `guards.ps1` exit 0 with 5 checks over **182 files**,
+four greps finding none of what they look for and one schema assertion over the migrations;
+restore ok; build **0 warnings, 0 errors**; no secrets file present; migrate from an empty
+server applying **21 migrations**; migrate again with nothing to apply; and
+`dotnet test --no-build` at **718 passed, 0 failed**.
+
+**The test count did not move over this pass and that is the expected result.** The only
+source edit was deleting two entries from `CellsShortOfTheCode`, which is data a test reads
+rather than a test, so `WriteDeclarationConformanceTests` still runs its six.
+
+**The five commits.** `Q.8` the two Writes cells and the test list; `Q.9` the overlap figure
+and the done-when; `Q.10` S3's tilt and its carried obligation; `Q.11` S5's fill, the cause
+separation and its carried obligation; then a `chore` archiving the prompt.
+
+**What the diff touches.** `ARCHITECTURE.html`, `BUILD_PLAN.md`, `CHANGELOG.md`,
+`PROGRESS.md`, one archived prompt, and
+`src/StockResearcherLab.Tests/Stages/WriteDeclarationConformanceTests.cs`. **No migration
+and no component.** The one source file is the tension recorded under Q.8: the pass's own
+scope says no source file, and the check is built so an amended cell fails until its
+recorded entry is deleted.
+
+**`FIXTURES.md` and `CONFIG_REFERENCE.md` are unchanged and correctly so.** No fixture was
+added and no config key was wired up; phase 4's Consumer column was filled at 4.14 and
+nothing here reads a key.
+
+**Sign-off step 2 is still owed** and still needs a session that has not committed here.
+This session has committed, so it does not run it [`CLAUDE.md` §3].

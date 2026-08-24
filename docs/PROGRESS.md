@@ -10846,3 +10846,117 @@ three shadows still read as slow decay with an unremarkable size distribution.
   read by every compute range execution, so a change to what a session is reaches C08, C09,
   C10, C11 and C35 as well as the selection layer, and that is a phase 2 and 3 surface
   rather than a phase 4 one.
+
+---
+
+## Phase 4, the sign-off review's exceptions closed, 2026-08-24
+
+**Six exceptions and six smaller items were returned by the review above. Decision 1 is
+the operator's and is open; the other five exceptions and four of the smaller items are
+closed here.** The two measurements decision 1 is sized on were taken first, on the
+operator's direction, and **nothing was changed on account of them**.
+
+**No component moved and no migration was written.** The one behaviour change is that the
+overlap done-when line stopped scoring, which the plan asked for at Q.9 and the measure
+had not followed. Nothing was re-run against the frozen record [`RUNBOOK.md`].
+
+### What closed each
+
+| Exception | Closed by |
+|---|---|
+| 1, item 42 and the 54 non-session dates | **Open.** An authored decision about what a session is, sized by the two measurements above and not taken here |
+| 2, 4.13's first ranked date | The figure struck in place at 4.13 and corrected to 2021-12-24, with the first `candidate_set` and `attribution` date at 2021-12-27 and the cause named |
+| 3, §05's 47.0 percent | Corrected to 55.0 over the range the note names, in §05 and in `BUILD_PLAN.md`'s `4 → 8` obligation, with both prior wordings in `CHANGELOG.md` |
+| 4, the overlap line still scoring a retired bound | The line prints both readings with no verdict, and the six lines are now held against `BUILD_PLAN.md` |
+| 5, `SCREEN_LIFECYCLE.md` §4.6 | The rule unchanged and its justification moved onto the measurement |
+| 6, the 28 alerts | Named as the warm-up ramp where the figure sits, with why the same guarantee reads two ways |
+| The live set by id prefix | Reads `screens.<id>.state`, resolved as of the range end |
+| The megacap literal third | Reads `monitor.megacap_share_max`, and the bound in force is printed beside the figure |
+| The estimates table's blank row | Filled with 29.9 |
+| `CandidateAllocator`'s Reads comment | Corrected; 4.10 made that table read |
+| §16's size estimate, the database-size row | **Open**, both being authored figures that belong with the `3 → 3 sign-off` obligation |
+| The `SL → 4` D-90 obligation | **Open**, as the review recorded: reported at D-129 rather than passed over |
+
+### The done-when now runs to completion, which it did not before
+
+Re-run at the branch head over 2021-01-11..2026-08-12. Four lines hold, two state no
+bound, and none contradicts the plan.
+
+```
+  live screens as of 2026-08-12, from screens.<id>.state: S1, S2, S3, S4, S5
+
+  [holds]            a night yields roughly 26 to 30 candidates
+  [no bound stated]  the 2/3/3 size distribution holds
+  [holds]            megacap share sits under a third including inside the 2022 drawdown
+  [holds]            distinct tickers over any 60-day window exceed 250
+  [no bound stated]  overlap between screens is read on both of its readings, allocated
+                     candidates and ranked sets
+  [holds]            attribution rows exist for every candidate with the config version stamped
+```
+
+**Every figure is unchanged.** 29.9 a night over 1,169 dates; large 26.5, mid 38.7, small
+34.8; whole range 26.5 and `risk_off` 26.1 over 5,233 rows against
+`monitor.megacap_share_max` at 33.3; 288 in the smallest full window; 0.5 percent of 34,932
+allocated and 2.2 percent of 186,038 ranked, mean 1.01 and 1.02 screens; 34,932 attributed
+with 0 unstamped. The measure changed and the measurements did not.
+
+### Why the overlap line carries no verdict
+
+**Q.9 turned that clause from a bound into a description**, and a description has nothing
+to fail against. The clause it replaced asked for 10 to 15 percent and described a
+different design; setting a new bound now would be a bar fitted to the measurement that
+produced it, which is what `CLAUDE.md` §11 forbids from the other direction. So the line
+reports both readings and the independence figure they are read against, which is the
+roughly 4 percent five screens each ranking the top two percent of their own scored
+population would give [D-9], and takes no verdict.
+
+**The second reading moved inside the line rather than being printed beside it.** It was a
+separate call and a separate block in `Program.cs`, which made two producers of one figure
+now that §06 carries it [Q.9]; `RankedOverlapAsync` is gone and the line's own statement
+computes both.
+
+### The mechanism, which is worth more than the wording it corrects
+
+**`SelectionDistributionsTests` held the six lines against a copy of them inside itself.**
+That is why Q.9 could amend the plan and leave the measure scoring a retired bound with
+nothing failing: the only thing the measure was checked against was the copy, and the copy
+had not moved either.
+
+**It now reads `BUILD_PLAN.md`.** The phase 4 done-when paragraph is found by its
+`**Done when:**` marker, bounded by the blank line that ends it, whitespace-collapsed
+because the document is hard-wrapped [`CLAUDE.md` §7], and split on its semicolons. Each
+measure line must be a substring of the clause in its own position, so the plan may say
+more about a clause than the label carries and cannot say something the label does not.
+
+**The count is asserted on both sides and against each other.** The likely repair when the
+text disagrees is deleting from whichever failed, and a measure and a plan that had each
+quietly lost the same line would still match.
+
+**It fails on a document it cannot read rather than reporting nothing**, and it was proved
+to fail rather than assumed to: one line's wording was perturbed by a single digit,
+`EveryLineNamesTheClauseThePlanStatesInThatPosition` failed on it, and the perturbation was
+reverted.
+
+### The live screen set and the megacap bound
+
+**`Program.cs` derived the live set as `!id.StartsWith('X')`.** It now resolves
+`screens.<id>.state` through `ScreenRegistry.LoadLiveAsync` as of the range end, config
+being resolved as of a date and never as of now [INVARIANT 13], and prints what it
+resolved. A promotion under `SCREEN_LIFECYCLE.md` §6 would have left a promoted screen
+counted as a shadow with nothing failing, in a figure §06 now carries.
+
+**An empty live set fails rather than reporting no overlap.** A range with no live screen
+would have printed 0.0 percent of 0 names, which reads exactly like five screens that never
+agree [`CLAUDE.md` §1].
+
+**The megacap line scored against a literal `1d / 3d` while C28 alerted on
+`monitor.megacap_share_max`.** One bound stated twice, and the two could have been moved
+apart with nothing failing [`CLAUDE.md` §8]. The line now reads the key, prints the bound in
+force beside the figure, and a fixture drives the verdict from both ends of the range to
+prove the key reaches the comparison rather than only the text.
+
+### Test count and what it covers
+
+**722 tests**, from 718. The four are `SelectionDistributionsTests`: the plan-clause check,
+the count check, the no-verdict check on the overlap line, the configured-bound check and
+the empty-live-set refusal, against the three the class carried before.

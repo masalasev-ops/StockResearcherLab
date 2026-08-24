@@ -2109,6 +2109,86 @@ C05. Both halves are asserted: a range run stamps the marker and leaves the orde
 untouched, and a nightly attempt moves the ordering and leaves the marker untouched.
 One alone is satisfied by a component that writes neither.
 
+**D-130 A session is a date the exchange traded, read from the exchange calendar rather
+than inferred from the store.** `ACTIVE`, closing item 42 and the half of item 41 the two
+share. Authored 2026-08-24 on the operator's direction, at phase 4's sign-off.
+
+`TradingCalendar.SessionsAsync` takes a range's dates from `price_daily`, on the reasoning
+that a calendar walk would write a row of nulls on a day the exchange did not trade,
+indistinguishable from a name with no history. **That reasoning holds for the walk and not
+for the source.** Taking the dates from the store means a handful of stray bars makes a
+closed day a session.
+
+**The surplus is measured and it is entirely non-sessions.** 1,584 distinct dates over
+2021-01-04..2026-08-12 against roughly 1,409 real US sessions [item 42, 2026-08-18]. The
+distribution is bimodal with three orders of magnitude between the modes: a median of
+18,315 tickers a date against **162 dates below 1,000**, p1 at 3 and p5 at 12, and almost
+nothing between 500 and 1,000. 1,584 less 162 is 1,422 against the estimate's 1,409. The
+thin dates read off as 122 weekends and the US market holiday calendar with its
+observances.
+
+**Item 57's closure does not reach this and its note is amended to say so.** That delete
+removed compute rows on dates `price_daily` holds no bar for at all, and its note argued
+the fault could not recur from the range path because a date with zero bars is never in the
+session list. True as written. **The 54 holidays inside phase 4's frozen range carry 1 to
+18 bars each**, so they were never in scope for it.
+
+**A bar-count threshold is rejected.** No number in this corpus constrains where it would
+sit; it would need revisiting whenever the provider's coverage changes, and the 2025-07-05
+onward weekend rows are that change already visible; and it infers a fact `ExchangeCalendar`
+already holds as data. Reading the answer beats estimating it.
+
+**Item 41's rejected option is not this one, and the distinction is the point.** Option 3
+there was to take the calendar from a single benchmark ticker's series, which would have
+excluded exactly these dates and risked excluding real ones on any gap in that one name.
+The exchange calendar excludes non-sessions without depending on any ticker's coverage.
+
+### What this costs in the record, measured rather than assumed
+
+**The 57 frozen `attribution` rows stay.** They stand on 54 dates the exchange was shut, 8
+of them candidates and 49 shadows, and `attribution` rows are written at shortlist time and
+never reconstructed [INVARIANT 4, D-40, `RUNBOOK.md`]. **What phase 8 owes is an exclusion
+rather than a correction**: C21 skips a non-session date, and the 8 candidate rows are named
+by date in the carried obligation so they are excluded by identity rather than by a rule
+that has to be got right twice.
+
+**The half-populated dates inside every screen's 250-date floor window do not matter.**
+Recomputed over the 250 open dates ending on the same date, sampled every twentieth open
+date across all five live screens, 2026-08-24:
+
+- **Floors move by under 0.1 percent of themselves.** Mean absolute move 0.012 to 0.075
+  percent of the floor, worst single sampled date 0.255 percent.
+- **And it does not reach the ranked set.** Under one name a date on every screen, at most
+  four on the worst sampled date, against ranked sets of 21 to 52. S5 changes on none of
+  its 58.
+
+**Two persistence figures move and both are recorded here so this is not re-opened on
+intuition.** Twenty-two of the twenty-four move by 0.013 or less, which is the same reading
+at three digits. **S1's D-1 rises from 0.8784 to 0.9344 and its D-5 from 0.7683 to 0.8093**
+when the 54 leave both sides of the lag, because S1 ranks about 22 names on a closed day
+against about 46 either side, so every closed date sat in two low-overlap pairs. **The
+recorded figures understate rather than inflate**, which is the direction that gets believed
+without checking, and it is why they are named. S5's D-21 falls from 0.9091 to 0.7778 on 42
+pairs of a set of size one and means very little. No reading in the phase 4 plan's §5 table
+changes.
+
+**On an open-dates-only calendar the record would have started 2022-01-05 rather than
+2021-12-24**, which is what D-115's "around 2022-01-03" was reaching for. 1,403 of the 1,457
+dates are real sessions.
+
+### The code change is not phase 4's
+
+`TradingCalendar.SessionsAsync` is read by every compute range execution, so this reaches
+C08, C09, C10, C11 and C35 as well as the selection layer. **It lands in its own pass
+against whichever phase next touches the calendar**, with the measurements above as its
+evidence, and it is filed as a carried obligation in `BUILD_PLAN.md` naming the component.
+A build session does not widen its own scope to take it [`CLAUDE.md` §3].
+
+**It is rebuild-forcing and therefore bundled.** A changed calendar changes what every
+compute stage evaluates, and `SCREEN_LIFECYCLE.md` §6.7 and `CLAUDE.md` §12 say changes that
+invalidate comparisons across a boundary are bundled into one boundary rather than taken one
+at a time. Cheap to take now, expensive to take repeatedly.
+
 ---
 
 ## Inspection

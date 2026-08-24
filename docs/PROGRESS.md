@@ -10232,3 +10232,45 @@ fails until its entry goes. The test edit is deletion of two tuples and the comm
 them; no assertion, helper or count moved. The two directions cannot both be satisfied and
 the instruction to land each cell with its test passing is the narrower one, so it was
 followed.
+
+### Q.9: §06's overlap figure is amended against the measurement
+
+**The node reads 0.5 and 2.2 percent and §06 gains three notes.** Human-directed, clean
+edits under D-73 with the prior wordings in `CHANGELOG.md`. `BUILD_PLAN.md`'s phase 4
+done-when clause moved in the same commit rather than after it, so the plan and the
+narrative do not disagree about what was asked for. Both prior wordings are recorded.
+
+**The figures are 4.14's and nothing was re-run to produce them.** 0.5 percent of 34,932
+allocated candidates carry more than one live screen; 2.2 percent of 186,038 ranked
+name-dates are ranked by more than one, mean 1.02 screens. Both are already in this file
+under 4.14 and are cited rather than recomputed.
+
+**Why the prior figure was inconsistent with the design it sat in.** Each screen ranks the
+top two percent of its own scored population [D-9]. Five independent rankings put a name in
+at least two sets with probability near 4 percent, and the five do not rank one population:
+S3 scores 1,067 names and S5 scores 2.4. So 10 to 15 required the five screens to agree
+substantially more often than independence implies, which is the opposite of what five
+disjoint metric families under INVARIANT 2 produce. **This is not the bound-loosening
+`CLAUDE.md` §11 forbids**, and the distinction is worth stating rather than assuming: §11
+forbids moving a threshold a result has to clear, and this figure never was one. It
+described what the design would do and it described a different design.
+
+**The three readings, and which the numbers support.** 4.14 left all three open and took
+none:
+
+| Reading | Verdict |
+|---|---|
+| The estimate is wrong | **Supported.** What the amendment takes |
+| The screens are more orthogonal than intended | **Not supported.** 2.2 percent sits at near-independence, not beyond it. INVARIANT 2 asks for independence and the screens deliver it, so there is no design finding underneath |
+| The line measures the wrong thing | **Closed.** 4.14 measured it both ways, over allocated candidates and over ranked sets, and it misses on both, so the gap is not definitional |
+
+**The order matters and is why this reads as a correction rather than a fit.** The third
+reading was closed by 4.14's second measurement before any amendment was contemplated, and
+the second is closed by where the number sits rather than by the fact that it is
+inconvenient. Only then is the first what remains. Had 2.2 percent come in above 4 percent,
+the second reading would have been the live one and the amendment a different one.
+
+**The shortfall is not unfilled seats and the notes say so.** S1, S2 and S4 fill their
+eight, S3 averages 6.21, and 35,108 filled seats collapsed to 34,932 distinct names, so in
+five years the live screens picked the same name on the same date 176 times. The screens do
+not agree, which is the design working.

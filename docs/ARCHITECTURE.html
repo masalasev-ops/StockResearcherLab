@@ -372,7 +372,7 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
   <div class="arrow">↓</div>
   <div class="node n-select" style="max-width:460px"><span class="id">NO BACKFILL</span><div class="nm">An unfillable slot stays empty</div><div class="rl">If nothing small clears a screen's floor, that screen sends fewer names. Backfilling from a larger bucket is how the guarantee leaks back out.</div></div>
   <div class="arrow">↓</div>
-  <div class="node n-select" style="max-width:460px"><span class="id">DEDUPLICATE</span><div class="nm">Union across the live screens <span class="rmv">D-85</span></div><div class="rl">A name surfaced twice appears once, tagged with both. Overlap runs 10 to 15 percent normally and higher in a drawdown.</div></div>
+  <div class="node n-select" style="max-width:460px"><span class="id">DEDUPLICATE</span><div class="nm">Union across the live screens <span class="rmv">D-85</span></div><div class="rl">A name surfaced twice appears once, tagged with both. Overlap measures 0.5 percent of allocated candidates and 2.2 percent over ranked sets, which is what near-independent ranking produces <span class="rmv">Q.9</span>. See the note below.</div></div>
   <div class="arrow">↓</div>
   <div class="row">
     <div class="store"><b>candidate_set</b>26 to 30 typical</div>
@@ -380,6 +380,12 @@ tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--rule)}
   </div>
 </div>
 </div>
+
+<div class="note"><b>Overlap is measured over the frozen record, and the figure above replaced an estimate.</b> <span class="rmv">Q.9</span> Over 2021-01-11 to 2026-08-12: <b>0.5 percent</b> of 34,932 allocated candidates carry more than one live screen, and <b>2.2 percent</b> of 186,038 ranked name-dates are ranked by more than one, a mean of 1.02 screens each. Both readings are given because the estimate never said which set it meant, and the two miss it the same way, so the gap is not definitional. The shortfall is not unfilled seats either: S1, S2 and S4 fill their eight, S3 averages 6.21, and 35,108 filled seats collapsed to 34,932 distinct names, so in five years the live screens picked the same name on the same date 176 times.</div>
+
+<div class="note"><b>The prior figure was 10 to 15 percent normally and higher in a drawdown, and it asked for the opposite of what this design produces.</b> Each screen ranks the top two percent of its own scored population <span class="rmv">D-9</span>, so five independent rankings would put a name in two sets with probability near 4 percent, and the five do not even rank one population: S3 scores 1,067 names on a typical date and S5 scores 2.4. A figure of 10 to 15 therefore required the five screens to agree substantially more often than independence implies, which is the opposite of what five disjoint metric families and INVARIANT 2 produce. <b>Nothing is loosened here.</b> A bound a measurement missed stays where it was [`CLAUDE.md` section 11]; this was a description of what the design would do, and it described a different design.</div>
+
+<div class="note"><b>Three readings were open when this was measured and the numbers support the first.</b> That the estimate was simply wrong; that the screens are more orthogonal than intended; or that the line measured the wrong quantity. <b>The third is closed by the measurement being taken twice</b>, over allocated candidates and over ranked sets, and missing on both. <b>The second is not supported</b>: 2.2 percent sits at near-independence rather than beyond it, so the screens are as orthogonal as INVARIANT 2 requires and not more so, and there is no finding about the design underneath. <b>The first is what remains</b>, so the estimate is corrected to the measurement rather than the measurement reconciled to the estimate. The screens not agreeing is this design working, and the figure now says so.</div>
 
 <div class="split">
 <div class="card"><h4>Megacap bound</h4><p>The large share is at most a quarter of any screen's slots, so at most 10 of the 40 <span class="rmv">D-89</span>. Close to the megacap share of total US market capitalisation, so the bound is defensible rather than arbitrary, and it holds at every live-screen count rather than only at five screens of eight.</p></div>

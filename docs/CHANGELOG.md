@@ -2278,3 +2278,41 @@ amended, so the entries are deleted in the same commit and the list is empty aga
 C06 amendment was reverted and re-run before the entry went: one failure of
 `EveryTableAComponentWritesIsNamedInItsWritesCell`, which is the assertion that now carries
 the cell with no exemption under it.
+
+## 2026-08-24, corrective pass Q, checkpoint Q.9
+
+**`ARCHITECTURE.html` §06's deduplication node, and `BUILD_PLAN.md`'s phase 4 done-when
+line** [Q.9]. Human-directed. Both documents are specs under D-73, so both are clean edits
+and the prior wordings are here.
+
+Prior wording of the node:
+
+> A name surfaced twice appears once, tagged with both. Overlap runs 10 to 15 percent
+> normally and higher in a drawdown.
+
+Prior wording of the done-when clause:
+
+> overlap between screens falls somewhere near 10 to 20 percent
+
+**The node now carries the measured figure and §06 gains three notes under the board**,
+which is where the reasoning goes because a diagram node holds a sentence and this is a
+bound corrected against evidence. The figures are 4.14's, taken over the frozen record from
+2021-01-11 to 2026-08-12: 0.5 percent of 34,932 allocated candidates carry more than one
+live screen, and 2.2 percent of 186,038 ranked name-dates are ranked by more than one.
+
+**The prior figure was not loosened and could not have been** [`CLAUDE.md` §11]. It was a
+design estimate rather than a bound, and it asked for the opposite of what the design
+produces: each screen ranks the top two percent of its own scored population [D-9], five
+independent rankings put a name in two sets with probability near 4 percent, and 10 to 15
+required the five to agree substantially more often than independence implies. Five
+disjoint metric families under INVARIANT 2 produce the other thing.
+
+**All three readings open at 4.14 are named in the notes and the numbers pick one.** The
+third, that the line measured the wrong quantity, is closed by the measurement having been
+taken twice over two different sets and missing on both. The second, that the screens are
+more orthogonal than intended, is not supported: 2.2 percent sits at near-independence
+rather than beyond it. The first, that the estimate was wrong, is what remains.
+
+**The done-when line moves with the figure rather than after it.** It now names the
+quantity, both readings of it and the independence baseline it is read against, so it
+states a check that runs rather than a range that was never derived from anything.

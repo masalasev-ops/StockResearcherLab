@@ -421,8 +421,11 @@ document and is not restated here. Recorded 2026-08-23 on the operator's authori
 **Done when:** a night yields roughly 26 to 30 candidates; the 2/3/3 size
 distribution holds; megacap share sits under a third including inside the 2022
 drawdown; distinct tickers over any 60-day window exceed 250; overlap between
-screens falls somewhere near 10 to 20 percent; attribution rows exist for every
-candidate with the config version stamped.
+screens is read on both of its readings, allocated candidates and ranked sets,
+and sits at near-independence rather than at agreement, which is 0.5 and 2.2
+percent against the roughly 4 percent five independent top-two-percent rankings
+would give [Q.9]; attribution rows exist for every candidate with the config
+version stamped.
 
 **Invariants at risk:** 1, 2, 3, 4, 10, 13.
 

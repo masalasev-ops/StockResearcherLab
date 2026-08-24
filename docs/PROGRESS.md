@@ -10565,7 +10565,8 @@ score population, the ranks written on them, the 57 frozen rows. Not measured:
 whether including about ten half-populated dates in every screen's 250-date trailing window
 moves any floor, and whether the persistence measure's D-1, D-5 and D-21 lags move when
 those dates leave the session list. Both are queries against what exists rather than new
-instruments, and neither is taken here.
+instruments, and neither is taken here. **Both were taken on 2026-08-24 on the operator's
+direction and are in the section below.**
 
 **Why it is the largest of these exceptions.** Item 57 records the reason in its own words:
 "phase 4 counts forward returns in trading days, and a row standing on a non-session date
@@ -10711,3 +10712,119 @@ figures were recorded before 4.14 ran, the overlap shortfall was reported unadju
 
 **Sign-off is the operator's.** Exceptions 1 and 2 concern the frozen table and cannot be
 undone by a later pass. Exceptions 3 to 6 are documents, one measure and one test list.
+
+---
+
+## Phase 4, the two measurements item 42's decision is sized on, 2026-08-24
+
+**Taken on the operator's direction after the sign-off review and before any decision.**
+They exist to size decision 1 and **nothing was changed on account of them**. No code was
+touched to take them: both are statements against the store as 4.13 and 4.14 left it, and
+the persistence one mirrors `PersistenceMeasure.Sql` clause for clause with the closed
+dates removed from its `sets` CTE, which removes them from both sides of every lag because
+`lag()` then runs over what remains.
+
+**The 54 closed dates are a literal list in both statements**, taken from the review's own
+measurement rather than re-derived, so neither statement scans `price_daily` and both are
+deterministic. Checked before use: the list is 54, and all 54 carry `screen_score_daily`
+rows, so every one of them is a date the record calls a session.
+
+### Where the record would start if the 54 were never sessions
+
+| | Value |
+|---|---|
+| Dates the record calls sessions | 1,457 |
+| Of those, days the exchange traded | **1,403** |
+| First floor, as recorded | 2021-12-24, itself one of the 54 |
+| First floor on an open-dates-only calendar | **2022-01-05** |
+
+So the record would start eight sessions later, and its first date would be a day the
+exchange was open. 2022-01-05 is also what D-115's "around 2022-01-03, computed as 250
+sessions from the window start" was reaching for.
+
+### Measurement one: do the floors move
+
+Each live screen's floor recomputed as the p98 over the 250 **open** dates ending on the
+same date, against `screen_history.floor_score` as it stands. **Sampled every twentieth
+open date, which is 58 dates a screen and 290 floors, and the sample is stated rather than
+implied**: a floor is a percentile over roughly 250 dates by 2,600 names, so the full 1,208
+per screen is about 3.9 billion rows read and the sample answers the question the decision
+turns on at a hundredth of that.
+
+| Screen | Floors compared | Moved | Mean floor | Mean absolute move | Worst move | Mean, as percent of the floor | Worst, as percent |
+|---|---|---|---|---|---|---|---|
+| S1 | 58 | 57 | 76.762 | 0.0295 | 0.1164 | 0.038 % | 0.152 % |
+| S2 | 58 | 57 | 78.159 | 0.0567 | 0.1776 | 0.073 % | 0.226 % |
+| S3 | 58 | 57 | 83.637 | 0.0627 | 0.1386 | 0.075 % | 0.165 % |
+| S4 | 58 | 33 | 96.462 | 0.0120 | 0.0712 | 0.012 % | 0.074 % |
+| S5 | 58 | 12 | 99.630 | 0.0167 | 0.2553 | 0.017 % | 0.255 % |
+
+**Almost every floor moves and almost none of them moves by anything.** The mean move is
+between 0.012 and 0.075 percent of the floor and the worst single sampled date is 0.255
+percent. A 250-date window holds roughly 650,000 scores and the 54 contribute about two
+percent of them, so the closed dates are noise in the window rather than a population it
+is carrying.
+
+**The consequence, which is the figure the decision actually turns on: does a moved floor
+change which names rank.** Same 58 dates, counting names at or above each floor.
+
+| Screen | Mean ranked, recorded | Mean ranked, recomputed | Dates the set size changes | Mean names changed | Worst date |
+|---|---|---|---|---|---|
+| S1 | 45.67 | 45.57 | 7 of 58 | 0.138 | 2 |
+| S2 | 52.41 | 52.59 | 23 of 58 | 0.655 | 4 |
+| S3 | 21.14 | 21.38 | 11 of 58 | 0.241 | 2 |
+| S4 | 40.36 | 40.34 | 3 of 58 | 0.052 | 1 |
+| S5 | 0.05 | 0.05 | 0 of 58 | 0.000 | 0 |
+
+**So the floors carry the closed dates and it does not reach the ranked set.** At most four
+names on the worst sampled date, under one name a date on average for every screen, against
+ranked sets of 21 to 52. S5, the screen with the least to lose, loses nothing at all.
+
+### Measurement two: do the persistence figures move
+
+`PersistenceMeasure.Sql` with the 54 removed. Dates ranked falls from 1,208 to 1,161 and
+pairs from 1,207 to 1,160 on the four live screens that rank daily, so **47 of the 54
+closed dates carried a ranked set**.
+
+| Screen | D-1 recorded | D-1 open only | D-5 recorded | D-5 open only | D-21 recorded | D-21 open only |
+|---|---|---|---|---|---|---|
+| S1 | 0.8784 | **0.9344** | 0.7683 | **0.8093** | 0.5581 | 0.5844 |
+| S2 | 0.5902 | 0.5756 | 0.2694 | 0.2595 | 0.0145 | 0.0130 |
+| S3 | 0.0888 | 0.0878 | 0.0259 | 0.0258 | 0.0122 | 0.0130 |
+| S4 | 0.9155 | 0.9128 | 0.7060 | 0.6987 | 0.3899 | 0.3794 |
+| S5 | 0.9767 | 0.9762 | 0.8947 | 0.8947 | 0.9091 | **0.7778** |
+| X-ACC | 0.9577 | 0.9561 | 0.8178 | 0.8133 | 0.5989 | 0.5904 |
+| X-FM | 0.9503 | 0.9485 | 0.7998 | 0.7949 | 0.5459 | 0.5347 |
+| X-NSI | 0.9554 | 0.9538 | 0.8203 | 0.8155 | 0.5889 | 0.5781 |
+
+**Two figures move and the rest do not.** Twenty of the twenty-four move by 0.0130 or less,
+which at three digits is the same reading. The two that move are S1 and S5.
+
+**S1's D-1 rises 0.0560, from 0.8784 to 0.9344, and its D-5 rises 0.0410.** The mechanism is
+the one the review measured: on a closed day S1 ranks about 22 names where it ranks about
+46 on the sessions either side, so every closed date sits in two low-overlap pairs, and
+removing it lifts the average. **This is the one place the session list is carrying a figure
+rather than adding noise to it**, and it is a live screen's headline persistence number.
+
+**S5's D-21 falls 0.1313, from 0.9091 to 0.7778, and it means very little.** That figure is
+an average over 42 pairs of a set whose size is one, so a handful of pairs moves it several
+points. It is recorded rather than read.
+
+**No reading in §5's table changes.** S1 still reads as slow decay from a high base and
+reads as it more strongly; S2 still lands in the shape §5 has no cell for; S3 is still the
+closest of the five to chance, D-5 at 2.6 times chance and D-21 at 1.3 rather than 1.2; the
+three shadows still read as slow decay with an unremarkable size distribution.
+
+### What these two size, stated without taking the decision
+
+- **The frozen `attribution` rows are not the exposure.** 57 rows over five years, of which
+  8 are candidates, is the part that cannot be undone, and the ranked sets those dates
+  produced differ by under a name a date from what an open-only calendar would have given.
+- **The floors are sound as they stand.** Nothing here argues for recomputing them.
+- **One recorded figure is affected enough to state**, S1's D-1 and D-5, and it is affected
+  in the direction that makes the screen look better rather than worse, which is the
+  direction that gets believed without checking.
+- **What is not sized here** is what a redefinition costs upstream. `TradingCalendar` is
+  read by every compute range execution, so a change to what a session is reaches C08, C09,
+  C10, C11 and C35 as well as the selection layer, and that is a phase 2 and 3 surface
+  rather than a phase 4 one.

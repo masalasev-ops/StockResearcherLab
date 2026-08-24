@@ -1,4 +1,4 @@
-# SCREEN_LIFECYCLE.md
+﻿# SCREEN_LIFECYCLE.md
 
 How a screen enters this system, how it is judged while it is in, and how it leaves.
 Registration, shadow running, promotion and retirement, in a form someone who was not
@@ -289,10 +289,18 @@ column, §15's screen table, §15's figure 11 read path, and §12's abstention n
 | `RUNBOOK.md`, never re-run the attribution write | n/a | everything surfaced | Applies to shadow rows identically and needs no wording change. A re-run would apply today's screen definitions to a past date whether the screen holds slots or not |
 | `WORKED_EXAMPLE.md` | n/a | candidates | Traces one candidate. Unaffected, and its attribution row would carry `surfaced_as = 'candidate'` |
 
-**Eight readers mean "candidate" and would be wrong without a filter. Three mean
-everything surfaced. Three that a reader would expect to appear do not read the table
-at all.** Stating the third group is deliberate: a reader auditing this later needs to
-know they were checked rather than missed.
+~~**Eight readers mean "candidate"**~~ [corrected, Q.6] **Seven readers mean "candidate"
+and would be wrong without a filter. Three mean everything surfaced. Three that a reader
+would expect to appear do not read the table at all.** Stating the third group is
+deliberate: a reader auditing this later needs to know they were checked rather than
+missed.
+
+**The table above is the specification and the count is read off it** [D-128]. The
+enumeration marks seven rows "candidates": C23, C24, U2, U7, the abstention analysis,
+`VALIDITY.md` §3's counts and `WORKED_EXAMPLE.md`. The other two figures in this sentence
+were right, which is what made the wrong one hard to see. `ScreenLifecycleCountTests`
+now counts the Means column and holds both sentences against it, so the prose cannot
+drift from the table again without failing.
 
 ### 4.6 The two filters are different, and conflating them is the trap
 
@@ -317,8 +325,9 @@ filters only at the point of allocating slots. That is §6.5.
 
 ### 4.7 Making the filter structural rather than remembered
 
-Eight readers that must each remember a `WHERE` clause is eight chances to forget one,
-and forgetting it produces no error. A view is the mechanism that removes the choice:
+~~Eight readers~~ [corrected, Q.6] Seven readers that must each remember a `WHERE` clause
+is seven chances to forget one, and forgetting it produces no error. A view is the
+mechanism that removes the choice:
 
 ```
 CREATE VIEW candidate_attribution AS

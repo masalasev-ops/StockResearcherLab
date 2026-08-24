@@ -2754,6 +2754,28 @@ down for the first time. That assertion was written to catch a key with nothing 
 and this is the opposite case, a key with nothing in front of it, so it records the
 direction rather than only the number.
 
+**D-128 `SCREEN_LIFECYCLE.md` §4.5's reader count is seven, which is what its own table
+marks, and the table is the specification.** `ACTIVE`
+The section's summary said eight readers mean "candidate" and its table marks seven.
+Authored 2026-08-23 on the operator's direction, settling the count at whichever the
+enumeration supports rather than at whichever sentence was written first.
+
+The seven are C23 LessonWriter, C24 CalibrationReporter, U2 Candidate detail, U7 Primary
+claim, the abstention analysis, `VALIDITY.md` §3's counts and `WORKED_EXAMPLE.md`. The
+same sentence's other two figures were right, three meaning everything surfaced and three
+not reading the table at all, which is what made the wrong one hard to see: a reader
+checking it ticks two and stops.
+
+**A table is checkable and a sentence is not**, so the sentence is held against the table
+rather than the other way round. `ScreenLifecycleCountTests` counts the Means column and
+asserts both prose statements against it, §4.7's "seven chances to forget one" included,
+since that number drifted with §4.5's and would drift again on its own. It also asserts
+that no live sentence in the section still says eight, because a corrected sentence can
+sit beside an uncorrected one and a positive pattern passes over both.
+
+The item was reported before phase 4 and survived the whole of it unchanged, for the
+reason the rest of this corpus keeps finding: nothing read either number.
+
 ---
 
 ## Open

@@ -10413,3 +10413,8 @@ nothing here reads a key.
 
 **Sign-off step 2 is still owed** and still needs a session that has not committed here.
 This session has committed, so it does not run it [`CLAUDE.md` §3].
+
+**Re-run at `1793f2d`**, the commit that carries the paragraph above, with the same seven
+results: guards 5 checks over 182 files, 0 warnings, 21 migrations, **718 passed, 0
+failed**. Recorded because the record of a run is itself a commit, and naming only the
+earlier sha would leave the branch head unchecked. Nothing after `1793f2d` is a code path.

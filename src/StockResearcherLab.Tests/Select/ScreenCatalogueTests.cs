@@ -87,15 +87,16 @@ public sealed class ScreenCatalogueTests
         new("S1", "accruals_inv", "accruals", "D-113, as above."),
         new("S1", "share_count_change_inv", "share_count_change", "D-113, as above."),
 
-        // The one entry here that is a report rather than a record. D-118 is ACTIVE and
-        // section 05 has not been amended to it, so the document and the register
-        // disagree. Configuration follows the register, being the later and more
-        // specific statement, and the amendment is reported rather than taken:
-        // ARCHITECTURE.html is human-edited [CLAUDE.md section 13].
-        new("S4", "inst_ownership_change", null,
-            "D-118 drops it and runs S4 on its two insider inputs. Section 05's Ranks-on cell " +
-            "still names it and needs the amendment; this entry is what keeps that visible " +
-            "rather than letting the seeded two-input list read as the design."),
+        // S4's inst_ownership_change entry stood here until Q.2 and is gone with the
+        // amendment. It was the one entry in this list that was a report rather than a
+        // record: D-118 was ACTIVE and section 05 still named the input, so the document
+        // and the register disagreed and configuration followed the register alone.
+        //
+        // EveryRecordedDivergenceIsStillTrueOfTheDocument failed on the amendment, which
+        // is what closed the item. That is the behaviour this list is built for and the
+        // opposite of how a suppression list usually ages: an entry that stops being a
+        // divergence takes the suite down rather than sitting there being read as one.
+        // Prior wording of both section 05 statements is in CHANGELOG.md [D-73].
     ];
 
     /// <summary>

@@ -1,4 +1,4 @@
-# CHANGELOG.md
+﻿# CHANGELOG.md
 
 Corpus versions. Appended to, never rewritten.
 
@@ -2179,3 +2179,36 @@ The wording follows the idiom five other cells already use for the same table, C
 
 This is a seventh Reads-cell amendment beyond the four the operator authorised, and the
 third taken during the build. It is the first on a cell other than C13's.
+
+## 2026-08-23, corrective pass Q, checkpoint Q.2
+
+**`ARCHITECTURE.html` §05's S4 Ranks-on cell and the §05 diagram node above it** [Q.2,
+D-118]. Prior wording of the cell:
+
+> `insider_net_90d_usd` · `distinct_buyer_count` <span class="rmv">D-58</span> ·
+> `inst_ownership_change`
+
+Prior wording of the node:
+
+> Insider net buying, distinct buyers <span class="rmv">D-58</span>, institutional
+> ownership change
+
+**`inst_ownership_change` is removed from both and D-118 joins the existing chip at the
+point of change**, which is the idiom five other cells already use for a second removal
+at one place. D-118 has been `ACTIVE` since the phase 4 plan and drops the input; the two
+§05 statements had not moved with it, so the narrative and the register disagreed about
+what S4 ranks on and configuration was following the register alone.
+
+The 4.6 divergence table's S4 entry is deleted with it. That entry was the one item in
+that list which was a report rather than a record, and
+`EveryRecordedDivergenceIsStillTrueOfTheDocument` failed on this amendment exactly as its
+own summary said it would, which is what closed the item rather than anyone remembering
+to.
+
+**§07's dossier block for S4 still reads "Distinct insider buyer count, largest
+transaction, ownership change" and is deliberately not touched here.** D-118 decides what
+S4 ranks on. What the dossier shows the researcher is a different question in a different
+section, `flow_daily.inst_ownership_change` is still computed by C34 and still exists, and
+D-118's independent argument that the metric cannot separate composition change from
+ownership change bears on it without settling it. Reported rather than taken [`CLAUDE.md`
+§13].

@@ -10418,3 +10418,33 @@ This session has committed, so it does not run it [`CLAUDE.md` §3].
 results: guards 5 checks over 182 files, 0 warnings, 21 migrations, **718 passed, 0
 failed**. Recorded because the record of a run is itself a commit, and naming only the
 earlier sha would leave the branch head unchecked. Nothing after `1793f2d` is a code path.
+
+### The phase 4 plan is archived, and two prompts are not recoverable
+
+**`prompts/spent/phase-4-screens-and-selection.md` exists as of 2026-08-24.** Its body is
+byte-identical to `prompts/BuildPlans/phase-4-screens-and-selection.md` from §Context
+onward, and its header carries what landed: §4's eleven decisions all authored as D-110 to
+D-120, §6's fourteen checkpoints all reaching `BUILD_PLAN.md` and all fourteen landing as
+commits, §3's scope question answered on the wide reading, and §8's findings closed through
+the `Q` pass. **This is what that plan's own header instructed**, which said it goes to
+`prompts/spent/` as implemented and not before, and it is the shape phase 3's archive has.
+
+**The archive reads `Status: SPENT` where the plan reads `DRAFT`.** §8 of the plan reports
+that three files in `prompts/spent/` carry a status `prompts/README.md` does not list, and
+says of this one that the correction is a line in a header. The three existing `DRAFT`
+archives are untouched and stay an authored call.
+
+**Two prompts issued during phase 4 were never archived and cannot be now.** The prompt that
+drove `Q.1` to `Q.7` and the prompt that drove 4.14 were issued in sessions whose text is not
+in this repository, and reconstructing either would be a paraphrase, which is the one thing a
+spent prompt must not be [D-63]. **This is phase 2's gap repeating**, that archive recording
+in its own header that an earlier session's prompt "was never archived and is not recoverable
+from this one". What survives of both is the commit bodies and the sections above. The
+`Q.8` to `Q.11` prompt is archived, at
+`prompts/spent/phase-4-Q.8-to-Q.11-four-owed-items.md`.
+
+**`prompts/BuildPlans/` holds five plans and four are now archived.** `phase-2-compute.md`,
+`phase-3-backfill.md`, `phase-3.5-record-inspector.md` and `design-screen-lifecycle.md` each
+have a counterpart in `spent/`, and `phase-4-screens-and-selection.md` now does too. **There
+is no phase 5 plan and there should not be yet**: `BUILD_PLAN.md` authors the next phase's
+detail at the previous phase's sign-off, and sign-off step 2 is owed.

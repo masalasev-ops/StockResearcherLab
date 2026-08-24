@@ -18,23 +18,45 @@ read there: `PercentileEngine.Sources` and its statement shape, `StageRegistry`,
 `ArchitectureDocument`'s `code` element parse, `ConfigSeeder.Keys`, and the six table
 definitions in `0001_snapshot.sql` [`CLAUDE.md` §7].
 
-**Status** `DRAFT`, which is the only value this corpus uses for a plan. The numbered
-checkpoints in §6 are phase scope and are authored into `BUILD_PLAN.md` by a human rather than
-from here, as are the eleven decision clauses in §4 [`CLAUDE.md` §13].
+**Status** `SPENT`. **This copy is the archive and it is not `DRAFT`, deliberately.** §8 of
+this plan reports that three files in `prompts/spent/` carry a status `prompts/README.md` does
+not list, and says of this one that correcting it is a line in a header here. `SPENT` is the
+README's value for a prompt that was issued and implemented, and the three existing archives
+are an authored call this does not take. The working copy stays at
+`prompts/BuildPlans/phase-4-screens-and-selection.md`, where it is the plan rather than the
+record.
 
-~~**This plan is not archived to `prompts/spent/` yet, and archiving it now would be the wrong
-thing.** Nothing has been issued from it, none of §4's eleven decisions is authored, and no
-checkpoint has landed, so there is no record of what was asked to keep.~~ **Archived on
-2026-08-24, at `Q.11`, once every checkpoint had landed.** It goes to
-`prompts/spent/` **as implemented**, which is `CLAUDE.md` §3's wording and is what phase 3's
-archive is: the same document carrying, in its header, that D-92 to D-95 were authored and
-that the eighteen checkpoints reached `BUILD_PLAN.md`. Phase 2's archive is the other shape,
-the prompt issued to the build session at `Status: SPENT`. §8 carries the drift that made this
-worth stating. **The archive is `prompts/spent/phase-4-screens-and-selection.md`**, its body
-byte-identical to this document from §Context onward and its header carrying what landed. It
-reads `Status: SPENT` rather than `DRAFT`, which is the one-line correction §8 says is this
-plan's to make; the three existing `DRAFT` archives §8 names are untouched and stay an
-authored call. **This document remains the plan and stays `DRAFT`.**
+**Archived as implemented on 2026-08-24**, which is `CLAUDE.md` §3's wording and the shape
+phase 3's archive has: the same document, its body untouched, its header recording what was
+authored from it and what landed. Nothing below this header is summarised, reordered or
+corrected [D-63].
+
+**§4's eleven decision clauses were all authored.** D-110 to D-120 are in `DECISIONS.md`,
+each `ACTIVE`, authored 2026-08-23 before the checkpoints they block. **§6's fourteen
+checkpoints all reached `BUILD_PLAN.md`** and all fourteen landed as commits, 4.1 to 4.14.
+**§3's scope question was answered wide**, the range running 2021-01-11 to 2026-08-12 over
+1,457 sessions.
+
+**§8's findings were reported and then closed by a correction pass this plan did not
+anticipate.** B1, B2 and B3 became Reads-cell amendments ratified at `Q.3` under D-125,
+which records the finding as a rate rather than as three instances. Nine reported items were
+closed as `Q.1` to `Q.7`, authoring D-121 to D-129, taken between 4.13 and 4.14 because four
+of them reach a column 4.14 freezes. Four further items were closed as `Q.8` to `Q.11` after
+4.14: the two §3 Writes cells this plan's `0006` obligation predicted, §06's overlap figure,
+§05's S3 tilt sentence and §05's S5 fill sentence. **One reported item was wrong** and the
+build raised it, §18's twenty-date window being authored where 4.11 read it as not.
+
+**Two questions this plan raised are carried forward rather than closed.** S3's composition
+and S5's composition are `4 → 8` carried obligations in `BUILD_PLAN.md`, each with its
+measurement as evidence. **`screen_evaluation` stayed phase 8's**, which is the reading §8
+recommended.
+
+**What this plan did not foresee, stated because a plan's value is partly in where it was
+wrong.** It has no `Q` pass in it. Nine decisions were authored during the build rather
+than before it, against §4's eleven authored ahead of it, and the mechanism that found
+the largest group of them, `WriteDeclarationConformanceTests`, was built at `Q.3` from a
+carried obligation this plan cites but does not schedule. §5's persistence measure is
+the part that worked exactly as pre-registered.
 
 ---
 

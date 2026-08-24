@@ -11047,3 +11047,15 @@ authored. The phase status row is restated.
 `attribution` rows over 1,457 dates, 34,932 candidates and 39,835 shadows, scores frozen as
 they stood. What D-130 changes is what a later session will call a session, and what the two
 obligations change is what reads the 57 rows that already exist.
+
+**`ci.ps1` green at `32236ff`**, this pass's only commit, over a worktree of tracked files at
+that sha. Seven results: `guards.ps1` exit 0 with 5 checks over **182 files**; restore ok;
+build **0 warnings, 0 errors**; no secrets file present; migrate from an empty server
+applying **21 migrations**; migrate again with nothing to apply; and **722 passed, 0
+failed**. The count did not move and is not expected to: the diff is three documents and no
+source file.
+
+**D-130 changes no unrun prompt** [`CLAUDE.md` §14]. `prompts/BuildPlans/` holds five plans
+and every one has a counterpart in `prompts/spent/`, checked by name rather than assumed.
+There is no phase 5 plan yet, which is correct: `BUILD_PLAN.md` authors the next phase's
+checkpoints at the previous phase's sign-off, and that is now due.

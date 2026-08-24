@@ -375,9 +375,15 @@ public sealed class ConfigSeeder
         // The shared screen rules, which are one rule for every screen rather than any
         // screen's property. **These were documented in CONFIG_REFERENCE.md from the
         // first corpus and seeded by nothing until 4.5**, which found it by failing to
-        // resolve the lookback: three keys with values, decisions and a Consumer column
-        // behind them, and no row in the store [D-7, D-9].
-        ("screens.slot_ceiling", "8"),
+        // resolve the lookback: keys with values, decisions and a Consumer column behind
+        // them, and no row in the store [D-7, D-9].
+        //
+        // screens.slot_ceiling was seeded here from 4.5 until Q.5 and is retired [D-127].
+        // It never had a reader: screens.<id>.slots is what a screen has and what the
+        // tuner moves, and a ceiling of eight cannot also cap that without contradicting
+        // D-43's cap of twelve. The rows already inserted stay, config being append-only,
+        // so this is a removal from the seeder and from the reference rather than a
+        // delete. Same shape as D-116's retirement of the three quota keys.
         ("screens.floor_percentile", "98"),
         ("screens.floor_lookback_days", "250"),
 

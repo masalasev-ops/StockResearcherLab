@@ -2730,6 +2730,30 @@ wrong at 4.5. The reading is the build's and it is recorded rather than ratified
 the two readings differ by about nine sessions a year on the sixty-day window and neither
 document distinguishes them.
 
+**D-127 `screens.slot_ceiling` is retired.** `ACTIVE`
+It has never had a reader. `CONFIG_REFERENCE.md` named CandidateAllocator as its consumer
+from the first corpus and 4.9 read the composition code and found nothing resolving it,
+which that document's own rule makes worse than an absent entry rather than harmless.
+Authored 2026-08-23 on the operator's direction.
+
+The reason it has no reader is structural. D-7 gives a ceiling of eight slots per screen,
+`screens.<id>.slots` is what a screen actually has and what the tuner moves, and a ceiling
+of eight cannot also cap that without contradicting D-43's cap of twelve. D-116's
+proportion is what turns a slot count into a quota, so nothing is left for the key to do.
+C14 validates a screen's slot count against `tuner.slot_floor` and `tuner.slot_cap`.
+
+**Two keys answering one question with different numbers is D-116's own case**, and the
+per-screen key wins it by having a reader.
+
+The rows already inserted are untouched, config being append-only. This is a removal from
+the seeder and from the reference and not a delete, which is exactly what D-116 did with
+`screens.quota_large`, `quota_mid` and `quota_small`.
+
+`ConfigSeeder.Keys` goes 84 to 83, and the count assertion in `ConfigResolutionTests` moves
+down for the first time. That assertion was written to catch a key with nothing behind it
+and this is the opposite case, a key with nothing in front of it, so it records the
+direction rather than only the number.
+
 ---
 
 ## Open

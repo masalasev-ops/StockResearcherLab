@@ -2215,3 +2215,27 @@ section, `flow_daily.inst_ownership_change` is still computed by C34 and still e
 D-118's independent argument that the metric cannot separate composition change from
 ownership change bears on it without settling it. Reported rather than taken [`CLAUDE.md`
 §13].
+
+## 2026-08-23, corrective pass Q, checkpoint Q.5
+
+**`CONFIG_REFERENCE.md` §Screens, the `screens.slot_ceiling` row** [Q.5, D-127]. Prior
+wording:
+
+> | `screens.slot_ceiling` | 8 | D-7 | **no reader** | see below, 4.9 |
+
+**The row is removed and the paragraph below it now states the retirement rather than the
+absent reader.** Prior wording of that paragraph:
+
+> **`screens.slot_ceiling` has no reader and this row records that rather than an assumed
+> one.** D-7 gives a ceiling of eight slots per screen; `screens.<id>.slots` is what a
+> screen actually has and what the tuner moves. The ceiling cannot also be a cap on that,
+> because D-43's cap is twelve and a ceiling of eight would make the tuner's range
+> unreachable, and D-116's proportion is what turns a slot count into a quota, so there is
+> nothing left for the key to do. C14 validates against `tuner.slot_floor` and
+> `tuner.slot_cap` instead. It is the same shape D-116 retired `screens.quota_large`,
+> `quota_mid` and `quota_small` for, and retiring it is an authored decision rather than a
+> build session's. Reported at 4.9; the key is still seeded, config being append-only.
+
+The paragraph recording how the three unseeded shared keys were found keeps naming
+`screens.slot_ceiling`, because what it records is the direction the gap was found in and
+not which keys are current.

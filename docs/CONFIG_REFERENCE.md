@@ -1,4 +1,4 @@
-# CONFIG_REFERENCE.md
+﻿# CONFIG_REFERENCE.md
 
 Every configuration key, its default, and the component that actually consumes it.
 
@@ -317,7 +317,6 @@ regime keys are verified at `MarketContextEngine.cs:56-57`.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `screens.slot_ceiling` | 8 | D-7 | **no reader** | see below, 4.9 |
 | `screens.floor_percentile` | 98 | D-9 | `ScreenEngine.ExecuteAsync`, `ScreenEngine.cs` | verified 4.5 |
 | `screens.floor_lookback_days` | 250 | D-9 | `ScreenEngine.ExecuteAsync`, `ScreenEngine.cs` | verified 4.5 |
 | `screens.<id>.metrics` | per screen | D-6 | `ScreenRegistry.LoadOneAsync` via the screen's own facade, `ScreenRegistry.cs` | verified 4.7 |
@@ -355,20 +354,19 @@ a screen, and because the facade compares the id in the key against the screen's
 The four older `s5.*` keys below keep their existing names and are unchanged; the facade
 treats that form as screen-scoped too, so they are reachable by S5 and by nothing else.
 
-**`screens.slot_ceiling` has no reader and this row records that rather than an assumed
-one.** D-7 gives a ceiling of eight slots per screen; `screens.<id>.slots` is what a screen
-actually has and what the tuner moves. The ceiling cannot also be a cap on that, because
-D-43's cap is twelve and a ceiling of eight would make the tuner's range unreachable, and
-D-116's proportion is what turns a slot count into a quota, so there is nothing left for
-the key to do. C14 validates against `tuner.slot_floor` and `tuner.slot_cap` instead. It is
-the same shape D-116 retired `screens.quota_large`, `quota_mid` and `quota_small` for, and
-retiring it is an authored decision rather than a build session's. Reported at 4.9; the key
-is still seeded, config being append-only.
+**`screens.slot_ceiling` is retired and is no longer seeded** [D-127]. D-7 gave a ceiling
+of eight slots per screen; `screens.<id>.slots` is what a screen actually has and what the
+tuner moves, and the ceiling could not also cap that without contradicting D-43's cap of
+twelve. C14 validates against `tuner.slot_floor` and `tuner.slot_cap`. The rows already
+inserted stay, config being append-only, so nothing resolves the key and nothing removes
+it. Same shape and same reasoning as D-116's retirement of the three quota keys.
 
 **These three shared keys were documented here and seeded by nothing until 4.5.**
-`screens.slot_ceiling`, `screens.floor_percentile` and `screens.floor_lookback_days` have
+`screens.slot_ceiling`, `screens.floor_percentile` and `screens.floor_lookback_days` had
 carried values, decisions and a Consumer column since the first corpus, and
-`ConfigSeeder.Keys` had no row for any of them. It was found by C13 failing to resolve the
+`ConfigSeeder.Keys` had no row for any of them. The first of the three is retired at Q.5
+[D-127] and this paragraph keeps its name, because what it records is how the gap was
+found rather than which keys are current. It was found by C13 failing to resolve the
 lookback rather than by an audit, which is the direction this document's own rule does not
 cover: an unverified entry is worse than an absent one, and an entry for a key with no row
 at all is worse than both. `ConfigSeeder.Keys` moves 74 to 77.

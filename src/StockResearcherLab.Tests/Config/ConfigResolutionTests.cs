@@ -344,7 +344,13 @@ public sealed class ConfigResolutionTests
         // the same documented-and-unseeded gap as the five above.
         //
         // Eighty-four at 4.11, which adds C28's two bounds.
-        Assert.Equal(84, ConfigSeeder.Keys.Count);
+        //
+        // Eighty-three at Q.5, which retires screens.slot_ceiling [D-127]. The count goes
+        // down for the first time, and it is the one direction this assertion was not
+        // written for: it catches a key with nothing behind it, and this is the opposite,
+        // a key with nothing in front of it. The seeded row already inserted is untouched,
+        // config being append-only.
+        Assert.Equal(83, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)

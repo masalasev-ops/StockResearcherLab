@@ -186,7 +186,6 @@ public sealed class ScreenConfigFacadeTests
     [Theory]
     [InlineData("screens.floor_percentile")]
     [InlineData("screens.floor_lookback_days")]
-    [InlineData("screens.slot_ceiling")]
     [InlineData("gates.gap_pct")]
     [InlineData("tuner.slot_cap")]
     public void SharedKeysAreReachable(string key)

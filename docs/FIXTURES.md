@@ -162,6 +162,8 @@ fail on purpose, because a conformance test that has never failed has not been t
 | A pass one short for one screen of two | Q.7 | One session removed from the second screen alone, so every date in the range still carries rows and a count of distinct dates over the range is unchanged. The guard counted exactly that until Q.7 and saw nothing | `ScreenRangeRunTests.APassOneShortForOneScreenBlocksPassTwoForThatScreen` |
 | A pass restricted to a screen that is not registered | Q.7 | A mistyped screen id, which would otherwise run a pass over no screen, write nothing and report success. Indistinguishable from a screen that scored nothing [`CLAUDE.md` §1] | `ScreenRangeRunTests.ARestrictionNamingNoRegisteredScreenFails` |
 | An alert type outside the closed vocabulary | Q.4 | `not_an_alert` inserted directly, refused by `0021`'s constraint rather than by the writer. A vocabulary held in code alone leaves the column able to carry a string no reader can interpret | `ConcentrationMonitorTests.AnAlertTypeOutsideTheVocabularyFailsTheInsert` |
+| A range whose attribution has started | 4.14 | One row inside the range, refused before any stage runs. Relying on the per-row `ON CONFLICT` alone would leave a run reporting success having written some dates and skipped others, which is the one state a frozen table cannot be pulled back out of | `SelectionRangeRunTests.ARangeWhoseAttributionHasStartedIsRefused` |
+| A selection range naming no session | 4.14 | A range in 1998, before every partition and every price row. It would run nothing, write nothing and report a clean pass, which on the checkpoint that starts the record reads as a record that started | `SelectionRangeRunTests.ARangeWithNoSessionFails` |
 
 ## Fixtures the design already calls for
 

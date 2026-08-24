@@ -43,6 +43,12 @@ switch (command)
     case "persistence":
         return await PersistenceAsync().ConfigureAwait(false);
 
+    case "range-selection":
+        return await RangeSelectionAsync().ConfigureAwait(false);
+
+    case "distributions":
+        return await DistributionsAsync().ConfigureAwait(false);
+
     case "backfill":
         return await BackfillAsync().ConfigureAwait(false);
 
@@ -75,6 +81,20 @@ switch (command)
         Console.WriteLine("                        screen, with each screen's own chance baseline. Reads no");
         Console.WriteLine("                        forward return and no attribution row. 4.14 does not");
         Console.WriteLine("                        begin until this is recorded in PROGRESS.md [4.13].");
+        Console.WriteLine("  distributions <from> <to>");
+        Console.WriteLine("                        phase 4's six done-when lines, measured against the");
+        Console.WriteLine("                        record range-selection froze. Reads and writes nothing,");
+        Console.WriteLine("                        so re-running it at sign-off reproduces the recorded");
+        Console.WriteLine("                        figures or contradicts them [4.14].");
+        Console.WriteLine("  range-selection <from> <to>");
+        Console.WriteLine("                        C12, C14 and C28 over a range whose scores and floors");
+        Console.WriteLine("                        range-screens has already written. C13 is NOT in the");
+        Console.WriteLine("                        sequence: 4.13 filled the score table and re-running it");
+        Console.WriteLine("                        would rewrite thirty million rows [4.14].");
+        Console.WriteLine("                        THIS IS WHERE THE RECORD STARTS. It writes attribution");
+        Console.WriteLine("                        rows that no later pass may rewrite, so it REFUSES if");
+        Console.WriteLine("                        attribution already holds a row in the range. The");
+        Console.WriteLine("                        truncate is an explicit and separate act.");
         Console.WriteLine("  backfill <from> <to>  run every source over a range, in order, each finishing");
         Console.WriteLine("                        before the next begins. Sources already swept report");
         Console.WriteLine("                        `covered` and fall through, so re-issuing the identical");
@@ -156,6 +176,95 @@ async Task<int> RunNightAsync(IReadOnlyList<string>? order = null)
     // Non-zero when the night halted, so an unattended run is visible as a failure
     // rather than as a quiet short night.
     return result.Completed ? 0 : 1;
+}
+
+async Task<int> DistributionsAsync()
+{
+    if (args.Length < 3)
+    {
+        Console.Error.WriteLine("distributions needs both dates.");
+        return 2;
+    }
+
+    var from = DateOnly.ParseExact(args[1], "yyyy-MM-dd", CultureInfo.InvariantCulture);
+    var to = DateOnly.ParseExact(args[2], "yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    Console.WriteLine($"distributions  {from:yyyy-MM-dd}..{to:yyyy-MM-dd}");
+    Console.WriteLine();
+
+    var lines = await SelectionDistributions
+        .MeasureAsync(RequireConnectionString(), from, to).ConfigureAwait(false);
+
+    foreach (var line in lines)
+    {
+        var verdict = line.Holds switch
+        {
+            true => "holds",
+            false => "DOES NOT HOLD",
+            _ => "no bound stated",
+        };
+
+        Console.WriteLine($"  [{verdict}]  {line.Line}");
+        Console.WriteLine($"             {line.Measured}");
+        Console.WriteLine();
+    }
+
+    // Not a done-when line. It exists because the overlap line can fail two ways that
+    // a share alone cannot separate, and a finding without its cause gets buried.
+    Console.WriteLine("  seats filled per screen, which is not a done-when line");
+
+    var seats = await SelectionDistributions
+        .SeatsByScreenAsync(RequireConnectionString(), from, to).ConfigureAwait(false);
+
+    foreach (var (screenId, filled, dates, perDate) in seats)
+    {
+        Console.WriteLine(
+            $"    {screenId,-6} {filled,9:N0} seats over {dates,6:N0} dates, " +
+            $"{perDate.ToString("F2", CultureInfo.InvariantCulture)} a date");
+    }
+
+    var live = seats.Select(s => s.ScreenId).Where(id => !id.StartsWith('X')).ToList();
+
+    var ranked = await SelectionDistributions
+        .RankedOverlapAsync(RequireConnectionString(), from, to, live).ConfigureAwait(false);
+
+    Console.WriteLine();
+    Console.WriteLine("  the same overlap over ranked sets rather than allocated seats");
+    Console.WriteLine(
+        $"    {(ranked.Share * 100d).ToString("F1", CultureInfo.InvariantCulture)} percent of " +
+        $"{ranked.Names:N0} ranked name-dates carry more than one live screen, mean " +
+        $"{ranked.MeanScreens.ToString("F2", CultureInfo.InvariantCulture)} screens");
+    Console.WriteLine();
+
+    return 0;
+}
+
+async Task<int> RangeSelectionAsync()
+{
+    if (args.Length < 3)
+    {
+        Console.Error.WriteLine(
+            "range-selection needs both dates. This is the checkpoint where the record starts and " +
+            "a defaulted `to` moves at midnight [4.14].");
+
+        return 2;
+    }
+
+    var from = DateOnly.ParseExact(args[1], "yyyy-MM-dd", CultureInfo.InvariantCulture);
+    var to = DateOnly.ParseExact(args[2], "yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    var run = new SelectionRangeRun(RequireConnectionString(), new SystemClock(), Console.WriteLine);
+
+    Console.WriteLine($"range-selection  {from:yyyy-MM-dd}..{to:yyyy-MM-dd}  C12, C14, C28");
+
+    var result = await run.RunAsync(from, to).ConfigureAwait(false);
+
+    Console.WriteLine(
+        $"  {result.Dates:N0} sessions, {result.Gated:N0} gate rows, {result.Candidates:N0} candidates, " +
+        $"{result.Attributed:N0} attribution rows, {result.Alerts:N0} alerts, " +
+        $"{result.Elapsed.TotalMinutes:0.00} minutes");
+
+    return 0;
 }
 
 async Task<int> RangeScreensAsync()

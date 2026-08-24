@@ -2663,6 +2663,38 @@ to meet as an oversight: a reader finding an all-null column meets a decision in
 Rejected: drop the column. `SCHEMA.md` and the migrations would both move for a column that
 costs nothing to keep, and the meaning it was reserved for may still be authored.
 
+**D-125 The three Reads-cell amendments taken during phase 4's build are ratified, and
+the drift they are part of is a finding about the column rather than about them.**
+`ACTIVE`
+Authored 2026-08-23 on the operator's direction. C13 gains `screen_history` at 4.5, C13
+gains `sentiment_daily` at 4.7, and C12 gains `security_daily` at 4.8. Prior wordings are
+in `CHANGELOG.md` [D-73].
+
+Each was forced rather than chosen. In every one of the three the component provably had
+to read the store to implement a rule an active decision states, and the two remaining
+options were a stage that cannot open the table it needs or a declaration that lies about
+what the code reads. The direction is code-reads-what-the-cell-does-not, which
+`ReadDeclarationConformanceTests` gives no exemption list by design, so none of the three
+could have been recorded as a deviation instead.
+
+**The finding is the count, not the third instance.** Reads cells in §3 have been amended
+on twelve recorded occasions across phases 2, 3 and 4, six of them within phase 4 alone
+and three of those six on one cell. A column amended that often is either being written
+before the components exist, which it is, or being read by something that keeps
+disagreeing with it, which it also is. Recorded so that the next phase meets a known rate
+rather than a surprise.
+
+**The answer is a check, and the Reads column already has one.** D-74 built it after four
+deviations went unnoticed, and it is what found all six of phase 4's: each one failed the
+suite rather than being noticed by a reader. The column that had no check was Writes,
+which the carried obligation raised at code review `0006` says in terms, and which
+predicted that a component gaining a second write would drift immediately. Q.3 builds it,
+and it found two on its first run.
+
+**Item 2 named two of the three and 4.5's is the same case one checkpoint earlier**, so
+all three are ratified together rather than leaving one unaddressed for a reason that
+would be arbitrary.
+
 ---
 
 ## Open

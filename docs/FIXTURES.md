@@ -1,4 +1,4 @@
-# FIXTURES.md
+﻿# FIXTURES.md
 
 The single registry of test fixtures. Every fixture is registered here and referenced
 from here.
@@ -155,6 +155,8 @@ fail on purpose, because a conformance test that has never failed has not been t
 | A floor that exists and ranks nothing | 4.12 | A full lookback of trailing scores above every score tonight, so a floor exists and nothing clears it. §18 halts here, and the fixture beside it is the warm-up, where no floor exists at all and the same empty candidate set is correct. The two look identical downstream and the document gives them opposite behaviour | `WarmUpNightTests.EveryLiveScreenWithAFloorRankingNothingHaltsTheRun`, `.NoFloorMeansNoCandidateAndTheStageSaysItsZeroWasExpected` |
 | A pass one one session short | 4.13 | One session deleted from a complete score table, which is the smallest interruption there is. A floor drawn over it comes from a population that does not exist and looks entirely normal: a number in the right range, on every date, against a table with the right columns | `ScreenRangeRunTests.AnInterruptedPassOneBlocksPassTwo` |
 | Two absent ranked sets | 4.13 | Two empty arrays and a null one handed to the Jaccard function, which returns null rather than zero. The first 250 sessions of the window have no ranked set at all, and averaging them in as zeroes would drag every screen's persistence figure toward zero and read as near-chance on all five | `ScreenRangeRunTests.AnAbsentSetIsNullRatherThanZero` |
+| A component writing a store its Writes cell does not name | Q.3 | `FreshnessGuard` declaring `run_log` against a cell that reads "via C27". The direction that produces no error at all: `DeclaredAccess` still refuses the write and `SCHEMA.md` still owns it, so what drifts is only the narrative | `WriteDeclarationConformanceTests.BothDirectionsFailOnAComponentThatDisagreesWithTheCatalogue` |
+| A Writes cell naming a store its component does not write | Q.3 | `CandidateAllocator` declaring nothing against a cell that names two. The other direction, and the one that reads as a component still writing something it stopped writing | `WriteDeclarationConformanceTests.BothDirectionsFailOnAComponentThatDisagreesWithTheCatalogue` |
 
 ## Fixtures the design already calls for
 

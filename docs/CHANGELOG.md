@@ -2124,8 +2124,11 @@ direction that hid the fundamentals pool closing over itself [D-74]. The two rem
 options were a stage that cannot open the table it needs, or a declaration that lies
 about what the code reads.
 
-This is a fifth Reads-cell amendment beyond the four the operator authorised when phase
-4's authored items were adopted. It is the same cell and the same class of defect that
+This is a ~~fifth~~ [corrected, Q.3] **fourth** Reads-cell amendment, going beyond the
+four edits the operator authorised when phase 4's authored items were adopted. Three of
+those four were Reads cells and the fourth was §16's store row, so this is the fourth such
+amendment and not the fifth; the running count below inherited the error and is corrected
+with it. It is the same cell and the same class of defect that
 `prompts/BuildPlans/phase-4-screens-and-selection.md` §8 reports as B1, and it is
 recorded here rather than folded into that authorisation.
 
@@ -2153,8 +2156,8 @@ code reads.
 The direction is again code-reads-what-the-cell-does-not, which
 `ReadDeclarationConformanceTests` gives no exemption list by design [D-74].
 
-This is a sixth Reads-cell amendment beyond the four the operator authorised, and the
-second taken during the build rather than at adoption. Both are the same cell.
+This is a ~~sixth~~ [corrected, Q.3] **fifth** Reads-cell amendment, and the second taken
+during the build rather than at adoption. Both are the same cell.
 
 **`ARCHITECTURE.html` §05's S4 Ranks-on cell is NOT amended and needs to be.** D-118 is
 `ACTIVE` and drops `inst_ownership_change` from S4; the cell still names it. The build
@@ -2177,8 +2180,8 @@ that one, so it could not be satisfied as written.
 The wording follows the idiom five other cells already use for the same table, C04's
 "`security_daily` for the universe it iterates" among them.
 
-This is a seventh Reads-cell amendment beyond the four the operator authorised, and the
-third taken during the build. It is the first on a cell other than C13's.
+This is a ~~seventh~~ [corrected, Q.3] **sixth** Reads-cell amendment, and the third taken
+during the build. It is the first on a cell other than C13's.
 
 ## 2026-08-23, corrective pass Q, checkpoint Q.2
 

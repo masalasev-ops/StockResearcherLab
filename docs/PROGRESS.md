@@ -10960,3 +10960,9 @@ prove the key reaches the comparison rather than only the text.
 **722 tests**, from 718. The four are `SelectionDistributionsTests`: the plan-clause check,
 the count check, the no-verdict check on the overlap line, the configured-bound check and
 the empty-live-set refusal, against the three the class carried before.
+
+**`ci.ps1` green at `d09ef2e`**, the head of this pass, over a worktree of tracked files at
+that sha. Seven results: `guards.ps1` exit 0 with 5 checks over **182 files**; restore ok;
+build **0 warnings, 0 errors**; no secrets file present; migrate from an empty server
+applying **21 migrations**; migrate again with nothing to apply; and `dotnet test
+--no-build` at **722 passed, 0 failed**.

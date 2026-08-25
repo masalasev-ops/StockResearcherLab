@@ -12436,7 +12436,14 @@ composition could not supply. That is no longer true for any date on or after 20
 
 ### The finding: a versioned key is compared against an unversioned table
 
-**Every date before 2026-08-25 is now unbuildable, and this was not anticipated.**
+~~**Every date before 2026-08-25 is now unbuildable, and this was not anticipated.**~~
+**Overstated, corrected 2026-08-25 within the hour.** Those dates were not buildable
+through the Worker before this change either, and for a plainer reason: `PipelineComposition`
+supplies exactly one implementation, `[DigestProvider.Local]`, so `TryGetValue(Haiku)`
+fails whatever the enabled flag holds. That is why the 2026-08-12 night went through a
+hand-composed scratch host. **What this change altered is which refusal a past date gives,
+not whether it refuses.** The finding below is real and is not yet biting anything: it
+becomes load-bearing when 5.6 exists and a past date would otherwise run.
 
 ```
 run NewsDigester 2026-08-12
@@ -12450,11 +12457,17 @@ gains a version, every past date sees the old name list beside the current enabl
 the two disagree by construction. Nothing is wrong with either half on its own. The
 comparison across them is what has no consistent as-of.
 
-**What it costs today: the 2026-08-12 night cannot be re-digested** without re-enabling row
+~~**What it costs today: the 2026-08-12 night cannot be re-digested** without re-enabling row
 2, and re-enabling it restores exactly the fall-through this change exists to prevent. The
 run of that night is recorded above and its rows are intact, so nothing is lost; what is
 gone is the ability to reproduce it, which is the property `CLAUDE.md` section 5 says the
-stage pattern exists to give.
+stage pattern exists to give.~~ **Wrong on both halves, corrected 2026-08-25.** Re-enabling
+row 2 does not make that night re-digestible, because the composition still has no haiku
+implementation; it only moves the refusal from the count check to the implementation
+lookup. And no fall-through is restored by it either, for the same reason: there has never
+been a second link to fall through to. **What it costs today is nothing**, the scratch host
+being how that night ran in the first place. What it will cost is stated above: once 5.6
+exists, a past date sees the old name list beside the current enabled set.
 
 **This is reported and not fixed.** D-136 put the name in versioned config and the address
 and enabled flag in an unversioned table, and reconciling them is a decision about which

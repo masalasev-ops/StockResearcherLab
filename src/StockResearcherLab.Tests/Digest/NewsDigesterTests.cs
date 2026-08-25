@@ -26,7 +26,21 @@ public sealed class NewsDigesterTests : IAsyncLifetime
 
     private static readonly DateOnly Date = new(2026, 8, 12);
 
-    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
+    /// <summary>
+    /// **The chain's two rows, seeded here rather than relied on.**
+    ///
+    /// `TestDatabase` seeds the config keys and not `local_model_config` [D-136], so on a
+    /// fresh database that table is empty until some test seeds it. These tests passed
+    /// only because another class had already run, and `ci.ps1` drops both databases
+    /// before every run, so the first ordering that put this class first failed six tests
+    /// at once. Found there rather than here.
+    ///
+    /// `SeedChainAsync` is `ON CONFLICT DO NOTHING`, so calling it per test costs nothing
+    /// and leaves an operator-edited row alone.
+    /// </summary>
+    public async ValueTask InitializeAsync()
+        => await new ConfigSeeder(TestDatabase.ConnectionString)
+            .SeedChainAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// Runs after every test here, passing or failing, which clearing first cannot do:

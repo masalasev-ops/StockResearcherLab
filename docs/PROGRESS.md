@@ -11864,3 +11864,58 @@ candidate, both over the shared database. Teardown after every test rather than 
 before, which is `UniverseRejectionTests`' rule and the same failure it records.
 
 **`ci.ps1` green at the 5.8 commit**, 812 tests.
+
+---
+
+## An environment failure, recorded because it is the fourth and the first with a cause visible
+
+**`ci.ps1` failed at the drop step at `3eca964` and passed on an immediate retry**, nothing
+in the tree having changed between the two. Evidence at
+`docs/evidence/phase-1/ci-failure-20260825-012206.txt`, which is the fourth such file.
+
+**The cause is in the transcript rather than in the evidence file**, and it is not what that
+file's standing text guesses at. The drop step writes a scratch C# file and runs it with
+`dotnet run`; the run failed with
+
+> The process cannot access the file
+> `...\dotnet\runfile\srl-ci-drop-28328\bin\debug\srl-ci-drop-28328.dll` because it is being
+> used by another process.
+
+That is a lock on a file the same command had just written, before anything reached
+Postgres. **`pg_stat_activity` in the evidence file shows nothing attached to the target**,
+so neither of the two candidates the file names, a session on the target or a session on
+`template1`, is what happened here. The three earlier files are about the migrate step and
+this is the drop step, so they are not obviously the same thing.
+
+**It is the third file lock of this shape in one session.** Writing a git object failed with
+`Permission denied` twice, both times succeeding on retry with `git fsck` clean afterwards,
+and this is the third. A scanner holding a newly written file for a moment fits all three
+and nothing here proves it.
+
+**Reported and not acted on.** A retry inside `ci.ps1` would make the script pass over the
+thing it exists to surface, and the right response to an intermittent lock on this machine
+is not a change to the build script [`CLAUDE.md` §15]. What is worth knowing is that a
+`ci.ps1` failure at the drop or create step is now known to have a non-Postgres cause
+available, so occurrence five is read with that in front of it.
+
+### And a defect of mine that only a fresh database could find
+
+**`NewsDigesterTests` passed six times by luck.** `TestDatabase` seeds the config keys and
+not `local_model_config`, which is D-136's split, so on a fresh database that table is empty
+until some test seeds it. These tests reached the chain through `ChainSeedTests` having run
+first, and nothing said so.
+
+**`ci.ps1` drops both databases before every run**, so the first ordering that put this class
+first failed six tests at once. It is the fourth defect this phase found by running rather
+than by reading, and it is the one the local suite could not have found: the working
+database had been seeded hours earlier.
+
+The class now seeds the chain in its own setup. `SeedChainAsync` is `ON CONFLICT DO NOTHING`,
+so a per-test call costs nothing and leaves an operator-edited row alone.
+
+**Two other tests failed in that same run and did not reproduce**,
+`ConfigResolutionTests.TheStoreResolvesAVersionAndRefusesADateBeforeTheSeed` and
+`BackfillRunTests.ARangeExecutionResolvesConfigOncePerDateRatherThanOnceForTheRange`. Both
+passed on a fresh database before and after the fix above. Recorded rather than chased,
+because an unreproduced failure is a thing to watch for rather than a thing to explain, and
+both are about config resolution against a store two keys larger than it was.

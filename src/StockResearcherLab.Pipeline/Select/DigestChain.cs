@@ -222,7 +222,8 @@ public sealed class DigestChain
                     return new ChainAnswer(
                         link.Provider, answer!.Model, answer.Text!,
                         answer.PromptTokens, answer.CompletionTokens,
-                        [.. _passedOver]);
+                        [.. _passedOver],
+                        answer.CacheWriteTokens, answer.CacheReadTokens);
                 }
 
                 if (attempt == Attempts)
@@ -362,4 +363,6 @@ public sealed record ChainAnswer(
     string Text,
     int? PromptTokens,
     int? CompletionTokens,
-    IReadOnlyList<string> PassedOver);
+    IReadOnlyList<string> PassedOver,
+    int? CacheWriteTokens = null,
+    int? CacheReadTokens = null);

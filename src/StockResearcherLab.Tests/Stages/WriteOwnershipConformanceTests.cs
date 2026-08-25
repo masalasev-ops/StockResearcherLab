@@ -81,7 +81,7 @@ public sealed class WriteOwnershipConformanceTests
     /// model. That puts it with the compute and select stages on the unconditional side
     /// of the branch.
     /// </summary>
-    private const int ExpectedOwners = 20;
+    private const int ExpectedOwners = 21;
 
     /// <summary>
     /// The assertion that keeps the rest of this file meaningful. A conformance test
@@ -115,6 +115,13 @@ public sealed class WriteOwnershipConformanceTests
                      // components are named: a registry that lost one should fail by
                      // that one's name and not by a count being off by one.
                      "GateEngine", "ScreenEngine", "CandidateAllocator", "ConcentrationMonitor",
+
+                     // The digest layer, from 5.8 and 5.14. C26 is named here rather than
+                     // left to the count for a reason the others do not have: it is
+                     // registered unconditionally and invoked conditionally, so a
+                     // composition that dropped the invocation would still hold the owner
+                     // and only the name says the owner is meant to be there.
+                     "NewsDigester", "CostLedger",
                  })
         {
             Assert.Contains(owners, o => string.Equals(o.Name, component, StringComparison.Ordinal));

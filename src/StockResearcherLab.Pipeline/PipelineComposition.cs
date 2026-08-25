@@ -62,6 +62,13 @@ public static class PipelineComposition
             // Not a stage. Sits outside the layers and owns run_log.
             new RunLog(connectionString),
 
+            // C26. Not a stage either, and owns cost_ledger for the same reason RunLog
+            // owns run_log: a writer the conformance test cannot see is one INVARIANT 10
+            // is not enforced against. **Registered whether or not a secondary link
+            // exists**, because ownership of the table is a property of the design and
+            // not of whether tonight has a key [5.14].
+            new CostLedger(connectionString, new ConfigStore(connectionString)),
+
             // Layer 2. Every compute stage derives from tables the ingest wrote and
             // calls no provider, so all of them are registered whether or not a token
             // is present.
@@ -125,7 +132,19 @@ public static class PipelineComposition
                         links,
                         ct).ConfigureAwait(false);
                 },
-                () => DigestInstruction.Read(DigestInstructionPath)),
+                () => DigestInstruction.Read(DigestInstructionPath),
+                string.IsNullOrWhiteSpace(anthropicKey)
+                    ? null
+                    : async (context, answer, ct) => await new CostLedger(connectionString, context.Config)
+                        .RecordAsync(
+                            context.Date,
+                            answer.Model ?? await SecondaryModelAsync(context, ct).ConfigureAwait(false),
+                            answer.PromptTokens,
+                            answer.CompletionTokens,
+                            answer.CacheWriteTokens,
+                            answer.CacheReadTokens,
+                            context.Date,
+                            ct: ct).ConfigureAwait(false)),
         };
 
         if (eodhd is not null)

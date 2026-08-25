@@ -12643,3 +12643,68 @@ falls through to the secondary and the fallthrough is visible in the record" req
 secondary enabled and a night's worth of rotated candidates answered.
 
 **That is a spending decision and it is the operator's**, recorded here rather than taken.
+
+---
+
+## Phase 5, checkpoint 5.14, C26's digest half
+
+**`CostLedger` is an `IWriteOwner` and not a stage**, which is the shape C27 RunLog already
+has and which `StageContracts.cs` named this component in before it existed. It sits
+outside the layers in `ARCHITECTURE.html` §03 and owns `cost_ledger`, so it is in the
+registry: a writer the conformance test cannot see is a writer INVARIANT 10 is not
+enforced against.
+
+**C33 does not write `cost_ledger` and must not.** The digester holds a call into C26, the
+same shape the chain has: a collaborator rather than a second writer. The registry now
+holds 21 owners, up from 20, and both digest owners are named in the conformance test
+rather than left to the count.
+
+### Only a paid call is recorded
+
+**The local link never produces a row.** It costs nothing, and a zero row would put a
+night of free calls into a table an operator reads as spend. Absence is the truthful
+record of a call that did not bill, and the branch is on the answering provider rather
+than on which link was preferred.
+
+### One key holds the price table
+
+`cost.price_per_mtok_usd` is a JSON object keyed by model id with four rates each, quoted
+from the provider's published pricing page on 2026-08-25 for `claude-haiku-4-5`: **$1.00
+base input, $5.00 output, $1.25 five-minute cache write, $0.10 cache hit**, per million
+tokens. `ConfigSeeder.Keys.Count` moves from 105 to 106.
+
+**The one-hour cache write rate of $2.00 is deliberately absent.** Nothing here requests a
+one-hour cache, and a rate no call can incur is a value an audit cannot verify.
+
+**An unpriced model throws and so does a missing rate.** Pricing an unknown model at zero
+would hide a model change for as long as it ran, which is `CLAUDE.md` §1's failure shape
+exactly: the run completes, the numbers look plausible, the measurement is worthless.
+
+### D-143's ceiling reproduces exactly, and that is a real check rather than a restatement
+
+**D-143 states the rotation's ceiling as $3.40 a year against §07's $1.30.** That figure
+was derived when `digest.max_input_tokens` was chosen, and nothing since had checked that
+the component prices the way the decision did. Priced through `CostLedger.PriceAsync`:
+
+```
+per call   6,000 x $1.00/M  +  150 x $5.00/M   =  $0.00675
+per year   $0.00675 x 2 rotated x 252 sessions =  $3.402
+```
+
+Registered in `FIXTURES.md` rather than left as an example. If C26 and D-143 ever disagree,
+one of them is wrong and a reader needs to know which.
+
+### What is evidenced and what waits
+
+**Evidenced: eight tests, 884 in total.** The four rates read back off config, decimal end
+to end [INVARIANT 16], an unpriced model and a missing rate both refused, the write set
+declared and owned, and the arithmetic asserted against the real column with the worked sum
+stated in the test rather than recomputed by it. The null-count case is asserted both ways:
+priced as nothing, stored as null, row still written.
+
+**Waiting: the night's actual rotation cost.** 5.14's done-when asks for it annualised
+beside §07's $1.30, and what is above is the **ceiling**, not a measurement. The actual
+figure needs the token counts a live secondary call reports, and no live call has been
+made. **The ceiling is exact and the expectation is not the ceiling**: D-143 says the
+median candidate reaches about 3,700 tokens against the cap of 6,000, so the measured
+figure will come in under $3.40 and how far under is the thing that is not yet known.

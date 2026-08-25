@@ -609,6 +609,18 @@ public sealed class ConfigSeeder
         ("digest.max_input_tokens", "6000"),
         ("digest.max_output_tokens", "150"),
 
+        // **C26's price table, one key rather than four per model** [5.14, D-140].
+        // Quoted from the provider's published pricing page on 2026-08-25 for Claude
+        // Haiku 4.5: $1 base input, $5 output, $1.25 five-minute cache write, $0.10
+        // cache hit, all per million tokens. The one-hour write rate is $2 and is
+        // deliberately absent: nothing in this system requests a one-hour cache, and a
+        // rate no call can incur is a value an audit cannot verify.
+        //
+        // Phase 6 adds its researcher models here rather than adding keys.
+        ("cost.price_per_mtok_usd",
+            "{\"claude-haiku-4-5\": {\"input\": 1.00, \"output\": 5.00, "
+            + "\"cache_write\": 1.25, \"cache_read\": 0.10}}"),
+
         // D-60's no-digest disqualifier, documented since the first corpus and seeded
         // by nothing until now, which `CONFIG_REFERENCE.md` says in terms: "the fourth
         // is the rubric's and is not a screen threshold, so it stays unseeded until

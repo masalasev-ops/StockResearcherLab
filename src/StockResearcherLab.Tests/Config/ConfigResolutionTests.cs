@@ -382,7 +382,7 @@ public sealed class ConfigResolutionTests
         // two names D-143 retires never appeared here, so nothing was removed and the
         // count moves by exactly the two that arrived. `ChainSeedTests` asserts all
         // four names, which is what says which two.
-        Assert.Equal(105, ConfigSeeder.Keys.Count);
+        Assert.Equal(106, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)

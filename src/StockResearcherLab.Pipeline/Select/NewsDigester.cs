@@ -28,6 +28,8 @@ public sealed class NewsDigester : IStage
         ["ticker", "date", "digest_text", "provider", "model_name", "was_rotation"];
 
     private readonly Func<StageContext, CancellationToken, Task<DigestChain>> _chain;
+
+    private readonly Func<StageContext, ChainAnswer, CancellationToken, Task>? _cost;
     private readonly Func<DigestInstruction.Instruction> _instruction;
 
     /// <param name="chain">
@@ -44,12 +46,24 @@ public sealed class NewsDigester : IStage
     /// connection string and no provider, and a constructor that read a file would make
     /// every one of them depend on the working directory.
     /// </param>
+    /// <param name="cost">
+    /// Called once per paid answer, with the run's date, the model that answered and its
+    /// four token counts [5.14, D-140]. **Null records nothing**, which is the case in
+    /// every test that does not assert on spend and in any composition without a
+    /// secondary link.
+    ///
+    /// **C33 does not write `cost_ledger` and must not.** C26 owns that table and this is
+    /// a call into it, the same shape the chain has: a collaborator rather than a second
+    /// writer [INVARIANT 10].
+    /// </param>
     public NewsDigester(
         Func<StageContext, CancellationToken, Task<DigestChain>> chain,
-        Func<DigestInstruction.Instruction> instruction)
+        Func<DigestInstruction.Instruction> instruction,
+        Func<StageContext, ChainAnswer, CancellationToken, Task>? cost = null)
     {
         _chain = chain;
         _instruction = instruction;
+        _cost = cost;
     }
 
     /// <summary>Named once, as C32 is, so a caller outside the pipeline can name it
@@ -161,6 +175,13 @@ public sealed class NewsDigester : IStage
                 ?? throw new InvalidOperationException(
                     $"Every link in the chain failed while digesting {ticker}, so the run halts " +
                     "[INVARIANT 15, D-137]. " + string.Join(" ", chain.PassedOver));
+
+            // **Only a paid answer is recorded** [5.14]. The local link costs nothing, and
+            // a zero row would put free calls into a table an operator reads as spend.
+            if (_cost is not null && answer.Provider != DigestProvider.Local)
+            {
+                await _cost(context, answer, ct).ConfigureAwait(false);
+            }
 
             var text = answer.Text.Trim();
 

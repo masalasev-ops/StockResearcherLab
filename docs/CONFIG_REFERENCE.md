@@ -559,6 +559,7 @@ budget.
 | `digest.secondary_model_id` | `claude-haiku-4-5` | D-140 | PipelineComposition, `SecondaryModelAsync`, passed to `HaikuDigestLink` at construction | **verified 5.6** |
 | `digest.max_input_tokens` | 6000 | D-143 | NewsDigester, `ExecuteAsync`; RecordInspector, `DigestAsync` | **verified 5.9** |
 | `digest.max_output_tokens` | 150 | D-143 | NewsDigester, `ExecuteAsync` | **verified 5.8** |
+| `cost.price_per_mtok_usd` | see below | D-140 | CostLedger, `PriceAsync`, called from `RecordAsync` | **verified 5.14** |
 
 The chain is an ordered list, so adding a third link is an insert.
 
@@ -600,6 +601,21 @@ loads on request, so a probe generous enough to cover a load causes one. 120,000
 a cold load measured at 41 to 52 seconds, which is headroom rather than a measurement of
 its own. Only the Worker reads it, ahead of C33 and never inside a stage, so the chain's
 own health check keeps the short bound and the operator-facing probe gets the long one.
+
+**`cost.price_per_mtok_usd` is one key holding a table rather than four keys per model**
+[5.14]. It is a JSON object keyed by model id, each entry carrying `input`, `output`,
+`cache_write` and `cache_read` as decimal dollars per million tokens. Phase 6 adds its
+researcher models as entries rather than as new keys, which is the difference between one
+row to check against a published price list and sixteen.
+
+Seeded from the provider's published pricing on 2026-08-25 for `claude-haiku-4-5`: $1.00
+base input, $5.00 output, $1.25 five-minute cache write, $0.10 cache hit. **The one-hour
+cache write rate of $2.00 is deliberately absent**, because nothing in this system requests
+a one-hour cache and a rate no call can incur is a value an audit cannot verify.
+
+**A model with no entry throws rather than pricing at zero**, and so does an entry missing
+any one of the four rates. A model change nobody recorded would otherwise run indefinitely
+against a ledger full of free calls.
 
 **A server that is down does not wait for either bound.** A refused connection throws at
 once and reports `the endpoint could not be reached`, so the long bound costs nothing on

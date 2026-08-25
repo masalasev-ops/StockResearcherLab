@@ -12543,9 +12543,19 @@ run NewsDigester  date 2026-08-25  config v25
   ok, 0 row(s) written
 ```
 
-Both input paths were run, attached and with input redirected from the null device, and
+~~Both input paths were run, attached and with input redirected from the null device, and
 both behaved identically with the model resident, which is the correct outcome: the seam
-only matters once the probe fails. **866 tests**, up 13.
+only matters once the probe fails.~~ **Wrong, corrected within the hour.** Both runs were
+redirected. `Console.IsInputRedirected` was then measured directly from the same shell and
+returns True unconditionally, so **no run made from an agent session can reach the prompt
+at all**: every one of them takes the unattended branch by construction. The attached path
+has never been executed and the two runs above were one path run twice. **866 tests**, up 13.
+
+**That is a limit on who can evidence this checkpoint, and it is worth stating plainly.**
+The prompt is reachable only from a terminal a person is sitting at. A session driving the
+Worker through a pipe will always see the unattended branch, will always report it working,
+and will never once exercise the half the checkpoint was asked for. The tests are the only
+mechanical cover the prompt has, and the live half is the operator's to run.
 
 **Then evidenced against a genuinely cold model, the operator having unloaded it.**
 

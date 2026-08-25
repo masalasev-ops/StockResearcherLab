@@ -25,20 +25,51 @@ and `AllOwnersForConformance`, `StageRegistry`, `StageContracts` with `IReadOwne
 `LocalModelClient` or `CostLedger` anywhere under `src/`, and the news row of
 `docs/evidence/phase-1/endpoint-sweep-20260807.txt`.
 
-**Status** `DRAFT`, which is the only value this corpus uses for a plan. The numbered
-checkpoints in §6 are phase scope and are authored into `BUILD_PLAN.md` by a human rather
-than from here, as are the decision clauses in §4 and §12 [`CLAUDE.md` §13].
+**Status** `SPENT`. **This copy is the archive and the plan stays at
+`prompts/BuildPlans/phase-5-digest-chain.md`.** The working copy is the plan; this one is
+the record, and nothing below this header is summarised, reordered or corrected [D-63].
 
-**§4's twelve were adopted 2026-08-24 on the operator's direction and are in
-`DECISIONS.md`. §12's two are not**: D-143 and D-144 were drafted at 5.2, after 5.1
-measured two things this document had assumed, and they are unauthored. The checkpoints
-have begun landing, so this plan is no longer un-issued; it is archived to
-`prompts/spent/` when every checkpoint has landed, as phase 4's was.
+**Archived as implemented on 2026-08-25**, once all fourteen checkpoints had landed, which
+is the condition this plan set for itself in the paragraph this header replaces. `HEAD`
+3c1c84b, **887 tests**, `ci.ps1` green, `guards.ps1` green over 213 files.
 
-**Archived on 2026-08-25**, all fourteen having landed, to
-`prompts/spent/phase-5-digest-chain.md`. Its body is byte-identical to this document from
-§Context onward and its header records what was authored and what landed. §12's two are
-authored: D-143 and D-144. **This document remains the plan and stays `DRAFT`.**
+**Every decision this plan drafted was authored.** §4's twelve were adopted 2026-08-24 on
+the operator's direction as D-131 to D-142. §12's two, drafted at 5.2 after 5.1 measured
+two things this document had assumed, were authored afterwards as D-143 and D-144. The
+header this replaces recorded them as unauthored and that is no longer true.
+
+**All fourteen checkpoints landed, 5.1 to 5.14**, and every one has a `PROGRESS.md` record.
+
+**Three blockers this plan named at §8 are closed, and one was closed by an operator
+rather than by a build.** The measured median article of 1,248 tokens against §07's five
+to eight hundred became D-143. The local model returning zero characters of digest became
+D-144's `request_options`. The Anthropic key was a placeholder and was supplied on
+2026-08-25.
+
+### Two things happened that this plan did not anticipate, and the body does not mention
+
+**5.13 was reshaped from a clock into a precondition**, on operator direction on
+2026-08-25, and §6's row for it in this archive carries the reshaped text rather than the
+drafted text. That is `CLAUDE.md` §14 applied as written: the checkpoint was unrun when the
+decision changed it, so the unrun plan was fixed. A reader comparing this archive against
+the 2026-08-24 draft will find that row changed and this sentence is why. The readiness
+check at `digest.readiness_check_et` no longer exists; the key is seeded and has no
+consumer.
+
+**The digest step does not reach a paid provider, by operator direction on 2026-08-25.**
+`digest.chain` is version 2 at `["local"]` and `local_model_config` row 2 is disabled, so a
+cold local model halts the night rather than falling through. 5.6 was built anyway, which
+was building past a settled decision rather than a call this plan authorised; what it
+produced is kept and made structurally inert, the composition constructing no paid link
+while the chain names none. D-25, D-27 and D-140 stand and the rotation stays in the code.
+**The evaluation is deferred, not cancelled.**
+
+**Two of the phase's done-when lines are deferred rather than met**, both recorded in
+`BUILD_PLAN.md` rather than worked around: the fall-through visible in the record, which
+needs the secondary evaluated, and the halt producing no researcher call and no order,
+which names two things that do not exist until phases 6 and 7 [D-139]. **The phase is not
+signed off at the time of this archive**, and what is owed is listed at the foot of the
+phase 5 record in `PROGRESS.md`.
 
 ---
 

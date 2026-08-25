@@ -583,6 +583,11 @@ async Task<int> SeedAsync()
 
     Console.WriteLine(ConfigSeeder.Describe(inserted, ConfigSeeder.Keys.Count));
     Console.WriteLine($"  {ConfigSeeder.Keys.Count} keys");
+
+    // The chain's two rows, reported on their own line because they are not keys
+    // [D-136, 5.3].
+    var links = await seeder.SeedChainAsync().ConfigureAwait(false);
+    Console.WriteLine(ConfigSeeder.DescribeChain(links, ConfigSeeder.ChainLinks.Count));
     return 0;
 }
 

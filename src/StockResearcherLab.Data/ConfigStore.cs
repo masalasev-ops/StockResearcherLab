@@ -148,7 +148,7 @@ public sealed class ConfigSeeder
         new(2020, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>
-    /// Forty-two keys. The count is asserted rather than left to be miscounted: it
+    /// The count is asserted rather than left to be miscounted: it
     /// was recorded as nine, corrected to eleven at A5, twelve at A10, fourteen at A14, fifteen at 1.4,
     /// seventeen at 1.6, nineteen at 1.7 and twenty-two at 1.8, and every correction was a key that existed with nothing seeding it.
     /// Thirty at 2.4, which is phase 2's seven plus percentile.cell_min_members:
@@ -157,6 +157,18 @@ public sealed class ConfigSeeder
     /// Thirty-two at 2.9, D-80's two breadth thresholds once the rule existed.
     /// Forty-two at 3.3: the window start, the concurrency, the allowance and its
     /// reserve, and one weight for each of the six endpoints a sweep calls.
+    ///
+    /// **The number in the first line of this comment went stale and is now removed
+    /// rather than corrected** [5.3]. It read "forty-two" while the asserted count had
+    /// reached ninety-five, four phases having added keys without touching the word.
+    /// A count stated in two places is a count that can disagree with itself, and the
+    /// one that is asserted is the one in `ConfigResolutionTests`.
+    ///
+    /// **102 at 5.3's first commit**: six `digest.*` keys and D-60's disqualifier.
+    /// Two further keys are deliberately not here and arrive in the second commit,
+    /// D-143 being drafted and unauthored. The count therefore moves twice in one
+    /// checkpoint and its test moves with it both times, which is the visible form of
+    /// a checkpoint that landed in two commits rather than one.
     /// </summary>
     public static IReadOnlyList<(string Key, string Value)> Keys { get; } =
     [
@@ -542,6 +554,78 @@ public sealed class ConfigSeeder
         // stay unseeded: nothing reads them before phase 6.
         ("monitor.megacap_share_max", "0.333"),
         ("monitor.distinct_tickers_60d_min", "250"),
+
+        // The digest chain's decided keys [5.3, first commit]. Every value here is the
+        // one `CONFIG_REFERENCE.md` already documents or one an authored decision
+        // states, so nothing is chosen at this call site.
+        //
+        // **Two keys this namespace is documented with are deliberately absent and
+        // that is the whole shape of this commit.** `digest.max_articles` and
+        // `digest.max_tokens` are not seeded: 5.1 measured the median article at 1,248
+        // real tokens against `ARCHITECTURE.html` section 07's five to eight hundred,
+        // which makes the article cap a decision rather than a documented value, and
+        // D-143 is drafted and unauthored. Config is append-only, so a provisional
+        // value is a config version and a history that must be segmented rather than a
+        // placeholder [CLAUDE.md section 8, section 12]. They arrive in this
+        // checkpoint's second commit as `digest.max_input_tokens` and
+        // `digest.max_output_tokens` once D-143 is in.
+        //
+        // `digest.chain` is seeded at its documented value and its consumer is not
+        // bound here. D-136 gives the chain's order to `local_model_config.provider_order`
+        // filtered on `enabled`, so what this key is for is a question 5.7 answers;
+        // seeding a documented key at its documented value chooses nothing, and
+        // `CONFIG_REFERENCE.md`'s Consumer column stays honest about it [5.3 finding].
+        ("digest.chain", "[\"local\",\"haiku\"]"),
+        ("digest.rotation_count", "2"),
+        ("digest.lookback_days", "7"),
+        ("digest.health_timeout_ms", "5000"),
+        ("digest.readiness_check_et", "\"15:30\""),
+        ("digest.secondary_model_id", "\"claude-haiku-4-5\""),
+
+        // D-60's no-digest disqualifier, documented since the first corpus and seeded
+        // by nothing until now, which `CONFIG_REFERENCE.md` says in terms: "the fourth
+        // is the rubric's and is not a screen threshold, so it stays unseeded until
+        // phase 5". Its consumer is the rubric prefix and is phase 6's to verify. It is
+        // seeded here rather than there because the fact it gates on, whether a digest
+        // was available, is this phase's to produce [D-60, D-134].
+        ("s5.no_digest_disqualifier_min_articles_90d", "12"),
+    ];
+
+    /// <summary>
+    /// The digest chain's rows, which are not config keys and are seeded here anyway
+    /// [D-136].
+    ///
+    /// **`local_model_config` is a table whose declared writer is the UI** [D-51,
+    /// `SCHEMA.md`], and the UI is phase 9. So until then the two rows arrive through
+    /// the seeder alongside the config keys, which is what `seed.ps1`'s own header
+    /// anticipates: the portfolio registry from D-36 and the digest provider chain from
+    /// D-25 are still to come, in the phases that build them.
+    ///
+    /// **This adds no writer to the registry.** `SCHEMA.md` already carries the
+    /// precedent that a table's writer may be configuration rather than a stage, which
+    /// is what `portfolio` is. A seeder is not a component and declares no write set.
+    ///
+    /// **The local endpoint is 5.1's measurement rather than a default.** The machine
+    /// runs an OpenAI-compatible server on `localhost:11434`; `ARCHITECTURE.html` §07
+    /// names LM Studio, which listens on 1234, and there is nothing there. That
+    /// discrepancy is reported in `PROGRESS.md` and is not this row's to settle: the
+    /// endpoint is a row precisely so the server can differ.
+    ///
+    /// **The secondary's endpoint is the vendor's base and the client does not read
+    /// it.** The SDK knows its own address. The column is NOT NULL and one row per link
+    /// is the declared grain, so the honest value is the address the link actually
+    /// reaches rather than an empty string standing for "not applicable".
+    ///
+    /// **`request_options` is absent from these rows and is D-144's**, which is drafted
+    /// and unauthored. Without it the local link returns zero characters of content and
+    /// the chain falls through every night with the server up and healthy, so these
+    /// rows are the chain's addresses rather than a working chain, and 5.5 is where
+    /// that is proved either way.
+    /// </summary>
+    public static IReadOnlyList<(int Order, string Endpoint)> ChainLinks { get; } =
+    [
+        (1, "http://localhost:11434/v1"),
+        (2, "https://api.anthropic.com"),
     ];
 
     private readonly string _connectionString;
@@ -580,8 +664,47 @@ public sealed class ConfigSeeder
         return inserted;
     }
 
+    /// <summary>
+    /// The chain's two rows [D-136]. Separate from <see cref="SeedAsync"/> and
+    /// reported separately, because they are not config keys: they carry no version,
+    /// resolve as of nothing, and a count of them mixed into the key count would make
+    /// both numbers say less than either does alone.
+    ///
+    /// `ON CONFLICT DO NOTHING` on `provider_order`, so a second run changes nothing,
+    /// and so a row the UI has since edited is left exactly as the operator left it
+    /// [D-51].
+    /// </summary>
+    public async Task<int> SeedChainAsync(CancellationToken ct = default)
+    {
+        const string sql = """
+            INSERT INTO local_model_config (provider_order, endpoint, enabled)
+            VALUES (@order, @endpoint, TRUE)
+            ON CONFLICT (provider_order) DO NOTHING;
+            """;
+
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(ct).ConfigureAwait(false);
+
+        var inserted = 0;
+        foreach (var (order, endpoint) in ChainLinks)
+        {
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("order", order);
+            cmd.Parameters.AddWithValue("endpoint", endpoint);
+            inserted += await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
+
+        return inserted;
+    }
+
     public static string Describe(int inserted, int total)
         => inserted == 0
             ? string.Create(CultureInfo.InvariantCulture, $"  nothing to seed, {total} keys already present")
             : string.Create(CultureInfo.InvariantCulture, $"  {inserted} of {total} keys inserted at version 1");
+
+    /// <summary>The chain's own line, kept apart from the key count for the reason <see cref="SeedChainAsync"/> gives.</summary>
+    public static string DescribeChain(int inserted, int total)
+        => inserted == 0
+            ? string.Create(CultureInfo.InvariantCulture, $"  nothing to seed, {total} chain link(s) already present")
+            : string.Create(CultureInfo.InvariantCulture, $"  {inserted} of {total} chain link(s) inserted");
 }

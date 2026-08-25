@@ -355,7 +355,15 @@ public sealed class ConfigResolutionTests
         // X-NSI, X-ACC and X-FM [D-129]. A screen is a row and registering one is an
         // insert, which is what CLAUDE.md section 5 means and what 4.6 proved with a
         // fabricated sixth. These three are the first registration that is meant to last.
-        Assert.Equal(95, ConfigSeeder.Keys.Count);
+        //
+        // **102 at 5.3's first commit, and it moves again in the second.** Six
+        // `digest.*` keys and D-60's disqualifier. Two more, `digest.max_input_tokens`
+        // and `digest.max_output_tokens`, are deliberately absent: D-143 is drafted and
+        // unauthored, and config is append-only, so a provisional value is a config
+        // version and a split history rather than a placeholder [CLAUDE.md section 8].
+        // The count moving twice inside one checkpoint is the visible form of that,
+        // which is why the number is asserted rather than described.
+        Assert.Equal(102, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)

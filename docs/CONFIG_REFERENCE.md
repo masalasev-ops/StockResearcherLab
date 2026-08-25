@@ -445,6 +445,12 @@ failing to resolve one. They are seeded at the values above, which are the ones 
 document and `ARCHITECTURE.html` §05 already carried; nothing was chosen. The fourth is
 the rubric's and is not a screen threshold, so it stays unseeded until phase 5.
 
+**Seeded at 5.3** at the value this document already carried, which is where
+`CONFIG_REFERENCE.md` said it would be: "the fourth is the rubric's and is not a screen
+threshold, so it stays unseeded until phase 5". Its consumer is the rubric prefix and is
+phase 6's to verify. It is seeded here rather than there because the fact it gates on,
+whether a digest was available, is phase 5's to produce [D-134's four outcomes].
+
 `s5.no_digest_disqualifier_min_articles_90d` is the same asymmetry applied at the
 rubric rather than the gate. The no-digest disqualifier only bites where the ticker
 carried at least twelve articles in ninety days, roughly one a week, because below
@@ -544,13 +550,51 @@ budget.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `digest.chain` | local, haiku | D-25 | NewsDigester | unverified |
-| `digest.rotation_count` | 2 | D-27 | NewsDigester | unverified |
-| `digest.max_tokens` | 150 | D-24 | NewsDigester | unverified |
-| `digest.health_timeout_ms` | 5000 | — | LocalModelClient | unverified |
-| `digest.readiness_check_et` | 15:30 | — | LocalModelClient | unverified |
+| `digest.chain` | `["local","haiku"]` | D-25 | NewsDigester | unverified, **seeded 5.3** |
+| `digest.rotation_count` | 2 | D-27 | NewsDigester | unverified, **seeded 5.3** |
+| `digest.lookback_days` | 7 | D-133 | NewsDigester | unverified, **seeded 5.3** |
+| `digest.health_timeout_ms` | 5000 | — | LocalModelClient | unverified, **seeded 5.3** |
+| `digest.readiness_check_et` | 15:30 | — | the chain, not one link [5.3] | unverified, **seeded 5.3** |
+| `digest.secondary_model_id` | `claude-haiku-4-5` | D-140 | the secondary link | unverified, **seeded 5.3** |
+| `digest.max_articles` | 3 | D-133 | NewsDigester | **NOT SEEDED**, see below |
+| `digest.max_tokens` | 150 | D-24 | NewsDigester | **NOT SEEDED**, see below |
 
 The chain is an ordered list, so adding a third link is an insert.
+
+**Two keys in this table are deliberately unseeded and the reason is a measurement**
+[5.1, 5.3]. `digest.max_articles` is 3 because §07's cost figures imply about 1,800 input
+tokens a candidate at five to eight hundred tokens an article. The median article measures
+**1,248 real tokens**, counted by the model that would digest it, with p95 at 4,777 and a
+longest body of 14,099, so three articles is anywhere from roughly 900 to roughly 14,000
+tokens depending which three and the count prices nothing. `digest.max_tokens` is one name
+for two quantities, the digest's length and the completion's, which are the same number
+only on a model that does not reason before answering.
+
+**Both are superseded by D-143, which is drafted and unauthored.** It replaces them with
+`digest.max_input_tokens` at 6,000 and `digest.max_output_tokens` at 150, and this table
+gains those two rows and loses these when it is authored. **Nothing was seeded at a
+provisional value**: config is append-only and versioned, so a placeholder is a config
+version and a history that must be segmented rather than a value that can be corrected
+[`CLAUDE.md` §8, §12].
+
+**`digest.chain`'s consumer is genuinely open and is not merely unbuilt** [5.3 finding].
+D-136 gives the chain's order to `local_model_config.provider_order` filtered on `enabled`,
+so this key does not order the chain. It is seeded at the value this document already
+carried, which chooses nothing, and 5.7 states what reads it or marks it `NOT BOUND`. The
+candidate role, not taken here: config is versioned and `local_model_config` is not, so
+this key is the only thing that could record which links were in the chain on a past date.
+
+**`digest.readiness_check_et`'s consumer was documented as LocalModelClient and the check
+is the chain's** [5.3 finding]. On a night the local server is down and the secondary is
+healthy, a readiness check reporting only the local link reports a problem where there is
+none, and the reverse is worse. 5.13 builds it over the chain and fills this cell from what
+was read.
+
+**`local_model_config` is seeded alongside these keys and is not one of them** [D-136].
+Two rows, `provider_order` 1 at the local endpoint and 2 at the vendor's base, `enabled`
+true, `last_health_check` and `last_loaded_model` null and gaining no writer in this phase.
+It carries no version and resolves as of nothing, which is why its count is reported on its
+own line by `seed.ps1` rather than added to the key count.
 
 ## Learning
 

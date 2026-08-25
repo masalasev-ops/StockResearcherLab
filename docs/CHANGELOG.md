@@ -2517,3 +2517,32 @@ null for the secondary; why null and an empty object are different facts and why
 therefore no `DEFAULT '{}'::jsonb`; why this is a column rather than a `digest.*` key; why
 its shape carries no CHECK where `news_digest.provider`'s vocabulary does; and that it gains
 no writer in this phase.
+
+---
+
+## 2026-08-24, phase 5 checkpoint 5.7, `CONFIG_REFERENCE.md`'s `digest.chain`
+
+**A clean edit, the document being read to know the current state, and the prior wording
+is here** [5.7, D-136].
+
+> **`digest.chain`'s consumer is genuinely open and is not merely unbuilt** [5.3 finding].
+> D-136 gives the chain's order to `local_model_config.provider_order` filtered on
+> `enabled`, so this key does not order the chain. It is seeded at the value this document
+> already carried, which chooses nothing, and 5.7 states what reads it or marks it
+> `NOT BOUND`. The candidate role, not taken here: config is versioned and
+> `local_model_config` is not, so this key is the only thing that could record which links
+> were in the chain on a past date.
+
+**5.7 answered it and the answer is the candidate role the paragraph declined to take.**
+The key names the links and the table orders and addresses them. `local_model_config`
+carries `provider_order`, `endpoint` and `enabled` and no name; `digest.chain` carries the
+name at each position and no address. `DigestChain.BuildAsync` pairs them by position,
+which is what lets a link's identity be versioned config while its address stays an
+operator-editable row, and that split is D-51's and D-136's rather than this checkpoint's.
+
+**The Consumer column moves from unverified to verified**, the binding having been read in
+`DigestChain.BuildAsync` rather than inferred from the name [`CLAUDE.md` §8].
+
+**What the replacement adds beyond the answer**: that a length mismatch fails the run,
+because the key is versioned and the table is not, so the two can disagree; and that a
+name outside the closed vocabulary fails the same way.

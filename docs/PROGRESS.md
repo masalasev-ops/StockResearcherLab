@@ -11693,3 +11693,67 @@ for, and tying it to the digest's length would make a change to the digest silen
 what counts as healthy.
 
 **`ci.ps1` green at the 5.5 commit**, 780 tests.
+
+---
+
+## Phase 5, checkpoint 5.7, the chain
+
+**Nothing in it names a link, and the test that says so is the chain run backwards.** The
+same two implementations in the opposite order, and the same code answers from the other
+one; a branch that knew which link was preferred would answer from the same one both times.
+The fall-through is asserted from either end for the reason §07 asks for a chain rather
+than a primary with a fallback: a dead second link with a healthy first is the case a
+fallback branch never exercises.
+
+**It is not a stage and appears in no registry.** It reads only what C32 already declares
+and writes nothing, and C33 is the stage that composes it. This is a collaborator rather
+than a component, so it gets no §03 row: the chain is how C33 reaches a link, not something
+the pipeline runs.
+
+**It holds run state and is constructed per run**, which is what D-137's "unhealthy for the
+remainder of that run" requires. A dead link costs two calls rather than two per candidate,
+which on 28 candidates is the difference between two and fifty-six, and the test asserts
+the count rather than the behaviour.
+
+### `digest.chain`'s consumer, which 5.3 left open
+
+**The key names the links and the table orders and addresses them, and neither is
+redundant.** `local_model_config` carries `provider_order`, `endpoint` and `enabled` and no
+name; `digest.chain` carries the name at each position and no address. `BuildAsync` pairs
+them by position. That is the candidate role 5.3 recorded and declined to take, and taking
+it is what lets a link's identity be versioned config while its address stays an
+operator-editable row.
+
+**A length mismatch fails the run rather than being reconciled**, the key being versioned
+and the table not. `CONFIG_REFERENCE.md`'s Consumer cell moves to verified, read in
+`BuildAsync` rather than inferred, and the prior wording is in `CHANGELOG.md`.
+
+### D-137, and one place this build is stricter than the decision
+
+Retry once on the same link, then fall through; a link that failed twice is unhealthy for
+the rest of the run; nothing is truncated anywhere. Over-long is asserted on the response
+against `digest.max_output_tokens` rather than trusted from the request, because a provider
+that ignores the cap returns a long answer with a normal status.
+
+**A link that reports no completion token count is refused, and D-137 does not say that.**
+The over-long test is an assertion on the response, so a link that cannot say how long its
+answer was puts the one case D-137 exists for outside the net. Refusing it is the
+fail-closed reading [`CLAUDE.md` §6] and it refuses nothing that currently exists, both
+links reporting usage. **Recorded here because it is a build decision inside an authored
+rule rather than an application of one**, and because the cheap-looking repair, accepting
+an unmeasurable answer, is the one that reopens the hole.
+
+**D-137's register entry named `digest.max_tokens`**, which D-143 retired. The entry is
+struck at that phrase and points at `digest.max_output_tokens`; 150 is unchanged, that
+figure always having been the digest's own length.
+
+### What 5.7 does not do
+
+**It does not probe.** `DigestAsync` tries the first link not already known to have failed;
+it does not run a health check per candidate. The health probe is C32's and the gate that
+halts on no healthy link is 5.11's, which is where the two meet.
+
+**The second link is still fabricated.** 5.6 waits on the credential, so every test here
+uses stub links. That is the right instrument for this checkpoint regardless: the claim
+under test is that nothing knows which link is preferred, and a test against the two real
+links would prove the two real links work and say nothing about the claim.

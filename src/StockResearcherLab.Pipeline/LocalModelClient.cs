@@ -172,6 +172,66 @@ public sealed class LocalModelClient : IDigestLink, IReadOwner
     private LinkHealth Unhealthy(Stopwatch stopwatch, string detail)
         => new(Provider, false, null, stopwatch.ElapsedMilliseconds, detail);
 
+    // ---------------------------------------------------------------- digest ---
+
+    /// <summary>
+    /// One digest call, returning what came back and judging none of it [D-137].
+    ///
+    /// **No timeout of its own.** `digest.health_timeout_ms` bounds a probe, which is a
+    /// fixed 32-token request; a digest is up to `digest.max_output_tokens` over several
+    /// thousand tokens of article and takes as long as it takes. Bounding it with the
+    /// probe's number would mark a working link malformed on its slowest candidate, and
+    /// D-137's fall-through would then run on the wrong evidence.
+    ///
+    /// **A transport failure throws rather than returning an empty answer**, because the
+    /// chain has to tell them apart: D-137 counts both as malformed, and the run log line
+    /// that explains a fall-through is useless if it cannot say whether the link was
+    /// unreachable or merely silent.
+    /// </summary>
+    public async Task<DigestAnswer> DigestAsync(DigestRequest request, CancellationToken ct = default)
+    {
+        var link = await LinkAsync(ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException(
+                "No enabled local_model_config row at provider_order 1, so the local link has no " +
+                "address. The chain selects links from that table [D-136] and should not have " +
+                "reached this one.");
+
+        var model = await LoadedModelAsync(link.Endpoint, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException(
+                $"The endpoint at {link.Endpoint} lists no model, so nothing is loaded to answer with.");
+
+        var body = new JsonObject
+        {
+            ["model"] = model,
+            ["max_tokens"] = request.MaxOutputTokens,
+            ["messages"] = new JsonArray(
+                new JsonObject { ["role"] = "system", ["content"] = request.Instruction },
+                new JsonObject { ["role"] = "user", ["content"] = request.Articles }),
+        };
+
+        Apply(body, link.RequestOptions);
+
+        using var content = new StringContent(
+            body.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
+
+        using var response = await _http
+            .PostAsync(Url(link.Endpoint, "chat/completions"), content, ct).ConfigureAwait(false);
+
+        var answer = await response.Content.ReadFromJsonAsync<JsonNode>(ct).ConfigureAwait(false);
+
+        var message = answer?["choices"] is JsonArray choices && choices.Count > 0
+            ? (choices[0] as JsonObject)?["message"] as JsonObject
+            : null;
+
+        var usage = answer?["usage"] as JsonObject;
+
+        return new DigestAnswer(
+            message?["content"]?.GetValue<string>(),
+            answer?["model"]?.GetValue<string>() ?? model,
+            (int?)usage?["prompt_tokens"],
+            (int?)usage?["completion_tokens"]);
+    }
+
     // ---------------------------------------------------------------- reading ---
 
     /// <summary>The chain row this link is, or null where it is absent or disabled.</summary>

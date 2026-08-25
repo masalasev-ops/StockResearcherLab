@@ -550,7 +550,7 @@ budget.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `digest.chain` | `["local","haiku"]` | D-25 | NewsDigester | unverified, **seeded 5.3** |
+| `digest.chain` | `["local","haiku"]` | D-25 | DigestChain, `BuildAsync` | **verified 5.7** |
 | `digest.rotation_count` | 2 | D-27 | NewsDigester | unverified, **seeded 5.3** |
 | `digest.lookback_days` | 7 | D-133 | NewsDigester | unverified, **seeded 5.3** |
 | `digest.health_timeout_ms` | 5000 | — | LocalModelClient | unverified, **seeded 5.3** |
@@ -581,12 +581,19 @@ seeded to keep a checkpoint whole would have been a config version rather than a
 could be corrected [`CLAUDE.md` §8, §12]. A test asserts both names absent and the two above
 present, which is what says which four names moved.
 
-**`digest.chain`'s consumer is genuinely open and is not merely unbuilt** [5.3 finding].
-D-136 gives the chain's order to `local_model_config.provider_order` filtered on `enabled`,
-so this key does not order the chain. It is seeded at the value this document already
-carried, which chooses nothing, and 5.7 states what reads it or marks it `NOT BOUND`. The
-candidate role, not taken here: config is versioned and `local_model_config` is not, so
-this key is the only thing that could record which links were in the chain on a past date.
+**`digest.chain` names the links and `local_model_config` orders and addresses them, and
+neither is redundant** [5.7, closing the 5.3 finding]. D-136 gives the order to
+`provider_order` filtered on `enabled`, and that table carries no name; this key carries the
+name at each position and no address. `DigestChain.BuildAsync` pairs them by position, which
+is what lets a link's identity be versioned config while its address stays an
+operator-editable row, the split D-51 and D-136 already make. It is also the only thing that
+can record which links were in the chain on a past date.
+
+**A length mismatch fails the run rather than being reconciled.** This key is versioned and
+that table is not, so the two can disagree; a chain with an address nothing can name, or a
+name nothing can reach, is not something to repair silently at 18:33. A name outside the
+`local`, `haiku` vocabulary fails the same way, that list being closed by migration `0022`
+on `news_digest.provider` and by `DigestProviders` in code [D-134].
 
 **`digest.readiness_check_et`'s consumer was documented as LocalModelClient and the check
 is the chain's** [5.3 finding]. On a night the local server is down and the secondary is

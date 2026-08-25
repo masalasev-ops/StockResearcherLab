@@ -3045,9 +3045,15 @@ through to the next. Nothing is truncated.** `ACTIVE`
 §18 states the rule and no document said what malformed or over-long mean, so both are
 stated here rather than left to a call site.
 
-**Over-long** is a response whose token count exceeds `digest.max_tokens`, which is 150. The
-cap is requested on the call and asserted on the response, because a provider that ignores
-it returns a long answer with a normal status.
+**Over-long** is a response whose token count exceeds ~~`digest.max_tokens`~~ [superseded,
+D-143] `digest.max_output_tokens`, which is 150. The cap is requested on the call and
+asserted on the response, because a provider that ignores it returns a long answer with a
+normal status.
+
+**The key this paragraph named was retired by D-143 and the figure is unchanged.** 150 was
+always the digest's own length; what D-143 removed is the name that also stood for the
+completion's, which are the same number only on a model that does not reason before
+answering. Nothing else about this decision moves with it [5.7].
 
 **Malformed** is an empty response, a response that is only whitespace, or a transport
 failure. It is deliberately not a content judgement: a digest that reads oddly is not

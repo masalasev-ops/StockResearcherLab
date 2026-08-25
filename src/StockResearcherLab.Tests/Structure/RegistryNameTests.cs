@@ -122,7 +122,8 @@ public sealed class RegistryNameTests
             .Owners.Select(o => o.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
 
         Assert.Equal(viaToken, viaClient);
-        Assert.Equal(18, viaClient.Count);
+        // 19 at 5.4, which adds C29 HeadlineIngestor to the provider-backed branch.
+        Assert.Equal(19, viaClient.Count);
         Assert.Contains("PriceIngestor", viaClient);
         Assert.Contains("FundamentalsIngestor", viaClient);
     }

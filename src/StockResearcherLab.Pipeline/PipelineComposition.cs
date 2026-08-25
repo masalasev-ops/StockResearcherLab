@@ -87,6 +87,10 @@ public static class PipelineComposition
             owners.Add(new SentimentIngestor(eodhd));
             owners.Add(new FlowIngestor(eodhd));
             owners.Add(new EventsIngestor(eodhd));
+
+            // C29. Provider-backed like the six above, and it is the first stage that
+            // reads a table the select layer wrote rather than a source [5.4].
+            owners.Add(new HeadlineIngestor(eodhd));
         }
 
         return new StageRegistry(owners);

@@ -70,7 +70,12 @@ public sealed class WriteOwnershipConformanceTests
     /// C08, C09, C10, C11 and C35, the last authored at D-78 after this comment
     /// was written and after C34 had already been built early with D-61's ingest.
     /// </summary>
-    private const int ExpectedOwners = 18;
+    /// <summary>
+    /// 19 at 5.4, which adds C29 HeadlineIngestor. Provider-backed like the six ingest
+    /// stages above it, and the first stage that reads a table the select layer wrote
+    /// rather than a source.
+    /// </summary>
+    private const int ExpectedOwners = 19;
 
     /// <summary>
     /// The assertion that keeps the rest of this file meaningful. A conformance test

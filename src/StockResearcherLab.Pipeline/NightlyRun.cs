@@ -167,9 +167,10 @@ public sealed class NightlyRun
 
     /// <summary>Builds the sequence against a real database and registry.</summary>
     public static NightlyRun For(
-        string connectionString, string? apiToken, IClock clock, Action<string>? say = null)
+        string connectionString, string? apiToken, IClock clock, Action<string>? say = null,
+        string? anthropicKey = null)
     {
-        var registry = PipelineComposition.BuildRegistry(connectionString, apiToken, clock);
+        var registry = PipelineComposition.BuildRegistry(connectionString, apiToken, clock, anthropicKey);
         var runLog = new RunLog(connectionString);
         var runner = new StageRunner(registry, runLog, clock, connectionString);
 

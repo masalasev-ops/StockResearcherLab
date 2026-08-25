@@ -169,7 +169,8 @@ async Task<int> RunNightAsync(IReadOnlyList<string>? order = null)
         $"{label}  {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}  config v{configVersion}");
 
     var night = NightlyRun.For(
-        connectionString, config["Eodhd:ApiToken"], clock, Console.WriteLine);
+        connectionString, config["Eodhd:ApiToken"], clock, Console.WriteLine,
+        config["Anthropic:ApiKey"]);
 
     var result = await night.ExecuteAsync(date, configVersion, order).ConfigureAwait(false);
 
@@ -432,7 +433,7 @@ async Task<int> BackfillAsync()
     // minute against one limit of 1,000 [PipelineComposition].
     var eodhd = new EodhdClient(EodhdClient.CreateHttpClient(), token, clock);
 
-    var registry = PipelineComposition.BuildRegistry(connectionString, eodhd);
+    var registry = PipelineComposition.BuildRegistry(connectionString, eodhd, config["Anthropic:ApiKey"]);
     var runLog = new RunLog(connectionString);
 
     var run = new BackfillRun(
@@ -594,7 +595,8 @@ async Task<int> SeedAsync()
 
 int ListStages()
 {
-    var registry = PipelineComposition.BuildRegistry(RequireConnectionString(), config["Eodhd:ApiToken"], new SystemClock());
+    var registry = PipelineComposition.BuildRegistry(
+        RequireConnectionString(), config["Eodhd:ApiToken"], new SystemClock(), config["Anthropic:ApiKey"]);
     Console.WriteLine("registered components");
 
     foreach (var owner in registry.Owners)
@@ -620,7 +622,7 @@ async Task<int> RunStageAsync()
     var connectionString = RequireConnectionString();
     var clock = new SystemClock();
     var registry = PipelineComposition.BuildRegistry(
-        connectionString, config["Eodhd:ApiToken"], clock);
+        connectionString, config["Eodhd:ApiToken"], clock, config["Anthropic:ApiKey"]);
     var runLog = new RunLog(connectionString);
     var runner = new StageRunner(registry, runLog, clock, connectionString);
 

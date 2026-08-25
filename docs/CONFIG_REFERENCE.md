@@ -556,7 +556,7 @@ budget.
 | `digest.health_timeout_ms` | 5000 | — | LocalModelClient, `HealthAsync` | **verified 5.5** |
 | `digest.warm_timeout_ms` | 120000 | — | the Worker's `run` command, `EnsureLocalModelAsync`, through `LocalModelClient.HealthAsync(key)` | **verified 5.13** |
 | `digest.readiness_check_et` | 15:30 | — | none. 5.13 was reshaped from a clock to a precondition and nothing reads it [5.13] | **no consumer, seeded 5.3** |
-| `digest.secondary_model_id` | `claude-haiku-4-5` | D-140 | the secondary link | unverified, **seeded 5.3** |
+| `digest.secondary_model_id` | `claude-haiku-4-5` | D-140 | PipelineComposition, `SecondaryModelAsync`, passed to `HaikuDigestLink` at construction | **verified 5.6** |
 | `digest.max_input_tokens` | 6000 | D-143 | NewsDigester, `ExecuteAsync`; RecordInspector, `DigestAsync` | **verified 5.9** |
 | `digest.max_output_tokens` | 150 | D-143 | NewsDigester, `ExecuteAsync` | **verified 5.8** |
 

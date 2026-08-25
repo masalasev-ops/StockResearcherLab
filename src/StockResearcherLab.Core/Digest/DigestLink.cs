@@ -75,8 +75,23 @@ public sealed record DigestRequest(string Instruction, string Articles, int MaxO
 /// Output tokens the provider reports. This is what D-137's over-long test is made
 /// against, so a link that reports none cannot be checked.
 /// </param>
+/// <param name="CacheWriteTokens">
+/// Tokens written to the provider's prompt cache, for `cost_ledger.cache_write_tokens`
+/// [5.14]. **Null on a link with no cache rather than zero**, because zero is a link
+/// that has one and wrote nothing to it, and the two price differently
+/// [`CLAUDE.md` §6].
+/// </param>
+/// <param name="CacheReadTokens">
+/// Tokens read from the provider's prompt cache, for `cost_ledger.cache_read_tokens`.
+/// Null carries the same meaning as above.
+/// </param>
 public sealed record DigestAnswer(
-    string? Text, string? Model, int? PromptTokens, int? CompletionTokens);
+    string? Text,
+    string? Model,
+    int? PromptTokens,
+    int? CompletionTokens,
+    int? CacheWriteTokens = null,
+    int? CacheReadTokens = null);
 
 /// <summary>
 /// What a health probe found. Reported rather than written: `run_log` keeps one writer

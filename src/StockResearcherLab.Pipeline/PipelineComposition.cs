@@ -24,13 +24,20 @@ public static class PipelineComposition
     /// secret to enumerate the registry would make them unrunnable in CI.
     /// </param>
     /// <param name="clock">Injected; nothing here reads system time [INVARIANT 11].</param>
+    /// <param name="anthropicKey">
+    /// `Anthropic:ApiKey`. Null builds a chain with no secondary link, and
+    /// `DigestChain.BuildAsync` then refuses if `digest.chain` still names one, which is
+    /// the refusal 5.7 exists for rather than a silently shorter chain [D-136].
+    /// </param>
     public static StageRegistry BuildRegistry(
-        string connectionString, string? apiToken = null, IClock? clock = null)
+        string connectionString, string? apiToken = null, IClock? clock = null,
+        string? anthropicKey = null)
         => BuildRegistry(
             connectionString,
             string.IsNullOrWhiteSpace(apiToken)
                 ? null
-                : new EodhdClient(EodhdClient.CreateHttpClient(), apiToken, clock ?? new SystemClock()));
+                : new EodhdClient(EodhdClient.CreateHttpClient(), apiToken, clock ?? new SystemClock()),
+            anthropicKey);
 
     /// <summary>
     /// The same registry over a client the caller already holds.
@@ -47,7 +54,8 @@ public static class PipelineComposition
     /// Null builds a registry whose provider-backed stages are absent, which is the
     /// no-token case above.
     /// </param>
-    public static StageRegistry BuildRegistry(string connectionString, EodhdClient? eodhd)
+    public static StageRegistry BuildRegistry(
+        string connectionString, EodhdClient? eodhd, string? anthropicKey = null)
     {
         var owners = new List<IWriteOwner>
         {
@@ -91,15 +99,32 @@ public static class PipelineComposition
             // declaration on that table would say it reads something it does not
             // [INVARIANT 7, D-109].
             new NewsDigester(
-                (context, ct) => DigestChain.BuildAsync(
-                    new StageData(connectionString, LocalModelClient.Access()),
-                    context.Config,
-                    context.Date,
-                    new Dictionary<DigestProvider, IDigestLink>
+                async (context, ct) =>
+                {
+                    var links = new Dictionary<DigestProvider, IDigestLink>
                     {
                         [DigestProvider.Local] = new LocalModelClient(connectionString, DigestHttp),
-                    },
-                    ct),
+                    };
+
+                    // **The secondary is composed only where a key exists, and its model
+                    // id is resolved as of the run's date rather than read from a literal**
+                    // [D-140, INVARIANT 13]. Without a key the link is absent, and a
+                    // `digest.chain` that still names it fails to build rather than
+                    // running one link shorter than the record says [5.7].
+                    if (!string.IsNullOrWhiteSpace(anthropicKey))
+                    {
+                        links[DigestProvider.Haiku] = new HaikuDigestLink(
+                            anthropicKey,
+                            await SecondaryModelAsync(context, ct).ConfigureAwait(false));
+                    }
+
+                    return await DigestChain.BuildAsync(
+                        new StageData(connectionString, LocalModelClient.Access()),
+                        context.Config,
+                        context.Date,
+                        links,
+                        ct).ConfigureAwait(false);
+                },
                 () => DigestInstruction.Read(DigestInstructionPath)),
         };
 
@@ -130,6 +155,21 @@ public static class PipelineComposition
     /// documents, applied to the wrong one of the two [5.5].
     /// </summary>
     private static readonly HttpClient DigestHttp = new() { Timeout = Timeout.InfiniteTimeSpan };
+
+    /// <summary>
+    /// `digest.secondary_model_id`, resolved as of the run's date and unwrapped from its
+    /// JSON string [INVARIANT 13, D-140]. **Resolved here rather than inside the link**,
+    /// so the link reads no store and stays out of the registry [5.6].
+    /// </summary>
+    private static async Task<string> SecondaryModelAsync(StageContext context, CancellationToken ct)
+    {
+        var row = await context.Config
+            .RequireAsync("digest.secondary_model_id", context.Date, ct).ConfigureAwait(false);
+
+        return System.Text.Json.Nodes.JsonNode.Parse(row.Value)?.GetValue<string>()
+               ?? throw new InvalidOperationException(
+                   $"digest.secondary_model_id resolved to '{row.Value}', which is not a JSON string.");
+    }
 
     /// <summary>
     /// `prompts/digest-instruction.md`, found by walking up from the binary until a

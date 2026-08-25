@@ -12588,3 +12588,58 @@ eight green tests and one successful warm as a live observation of the prompt.
 `CONFIG_REFERENCE.md`'s Consumer column says so rather than carrying one that will not
 arrive. **Retiring the key is a separate decision and is not taken here**, config being
 append-only and a retirement being a version with its own reasoning.
+
+---
+
+## Phase 5, checkpoint 5.6, the secondary link
+
+**Built against the Anthropic SDK, `Anthropic` 12.42.0, added to central package
+management.** `HaikuDigestLink` implements `IDigestLink` and nothing else: no read set, no
+write set, no registry row, which is what 5.6's scope asks for and what follows from it
+having no store to reach.
+
+### The model id is the caller's, and that is the point
+
+**`digest.secondary_model_id` is resolved by `PipelineComposition.SecondaryModelAsync` as
+of the run's date and passed at construction** [INVARIANT 13]. A literal in the link would
+be a second place the model is chosen, and an attribution row's config version would then
+fail to explain a change in what answered. The Consumer column in `CONFIG_REFERENCE.md`
+moves from unverified to verified on that reading.
+
+**The link is composed only where a key exists.** Without one it is absent from the
+implementations dictionary, and a `digest.chain` still naming `haiku` fails to build. That
+is 5.7's refusal doing its job rather than a chain quietly one link shorter than the record
+says.
+
+### `DigestAnswer` gained the two cache counts
+
+`cost_ledger` carries four token counts and the record carried two. `CacheWriteTokens` and
+`CacheReadTokens` are optional parameters, so every existing construction site is
+unchanged, and **they are null on the primary rather than zero**: the local server has no
+prompt cache, and zero would say it has one and used it for nothing. Those price
+differently, which is exactly the distinction 5.14 needs.
+
+### What eleven green tests do and do not prove
+
+**The SDK's `HttpClient` is settable**, so the whole of this link is asserted against a
+stubbed transport: the four token counts off a real response shape, the model recorded
+being the one the provider says answered rather than the one requested, an empty answer
+returned rather than thrown, a long answer not truncated, health as characters of content,
+and a refusal carrying the provider's own message rather than a category chosen here.
+
+**What no stub can prove is that the request the SDK builds is accepted.** The wire shape,
+the model id being reachable on this account, and the key being valid are one live call
+each and the same live call. **5.6 is therefore built and unproven**, and the distinction
+is real rather than pedantic: a stub answers whatever the stub was written to answer.
+
+### The live call has not been made and the reason is not technical
+
+**The operator directed that the secondary must not bill them**, and the chain was reduced
+to one link on 2026-08-25 for that reason: `digest.chain` v2 is `["local"]` and
+`local_model_config` row 2 is disabled. Building this link does not undo that and was not
+meant to. **A single probe call costs a fraction of a cent** and would prove the wire
+shape; **the phase's own done-when needs more than that**, since "stopping the local server
+falls through to the secondary and the fallthrough is visible in the record" requires the
+secondary enabled and a night's worth of rotated candidates answered.
+
+**That is a spending decision and it is the operator's**, recorded here rather than taken.

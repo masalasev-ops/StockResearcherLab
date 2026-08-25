@@ -13,4 +13,8 @@
     <ProjectReference Include="..\StockResearcherLab.Data\StockResearcherLab.Data.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Anthropic" />
+  </ItemGroup>
+
 </Project>

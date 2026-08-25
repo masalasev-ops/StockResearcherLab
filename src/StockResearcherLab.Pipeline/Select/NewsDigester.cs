@@ -77,8 +77,15 @@ public sealed class NewsDigester : IStage
         new TableWrite("news_digest", WriteOperation.Insert, Columns),
     ];
 
-    /// <summary>D-134's escape hatch, exactly as `prompts/digest-instruction.md` defines it.</summary>
-    public const string NoMaterialNews = "NO MATERIAL NEWS";
+    /// <summary>
+    /// D-134's escape hatch, exactly as `prompts/digest-instruction.md` defines it.
+    ///
+    /// **The literal moved to Core at 5.9 and this name reads it from there.** C36's
+    /// digest panel classifies a stored row into the same four states and the Api never
+    /// references Pipeline, so the string had to be visible to both or copied into each.
+    /// It is one constant with two readers rather than two constants that agree today.
+    /// </summary>
+    public const string NoMaterialNews = DigestOutcomes.NoMaterialNewsText;
 
     public async Task<StageResult> ExecuteAsync(StageContext context, CancellationToken ct = default)
     {

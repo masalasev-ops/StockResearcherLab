@@ -48,7 +48,7 @@ cannot reach them.
 | 3 Backfill | **SIGNED OFF** | 7764dfe | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b`, 314 with D-98's implementation, 324 with its two open items closed, 326 with the backfill driver, 332 with range-scoped resumption and 338 with the frontier position and the connection retry, `ci.ps1` green at each, then 336 at `5be4d33` when the frontier's four tests were replaced by two, 336 again at `3fcdd57` and `cf42116`, and **342 at `7c25f13`** where D-100 replaced the intermittent retry test with two and added five at the provider client. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built, and ~~3.6 has been run once: it failed at 58 percent after 2h10m, leaving `price_daily` at 78 million rows and 12 GB~~ **3.6 completed on 2026-08-13**, after three failed attempts, a vacuum, and its resumption rebuilt onto `price_fetch_attempt` [D-99, 0010]: 33,359,792 bars over 18,812 tickers in 108.4 minutes, the pool covered at 50,737 attempt rows, and `price_daily` at 109.6 million rows and 18.3 GB. ~~3.7 to 3.10 are unrun and the phase's remaining sweeps spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them.~~ The open findings are the table at the foot of this file rather than a second list here; ~~**item 24 blocks 3.7 and every nightly run against the backfilled store**~~ [closed, item 24]. ~~**Every checkpoint 3.1 to 3.16 is built as of 2026-08-17, at 429 tests, 416 before 3.16, `ci.ps1` green at `e619ba7`.**~~ ~~What is built and what has been run are different lines and the difference is the phase's remaining work. **Run:** 3.6, 3.7, 3.8 and 3.10 swept and completed, and 3.11 filled `security_daily`. **Built and unrun:** 3.9, which is the last owed sweep at roughly three days of allowance, and the whole of stage D, so `indicator_daily` and `valuation_daily` still carry phase 2's nightly rows. **3.16 spends nothing to build and its first invocation is a spending decision**, C05's sweep being inside the order. 3.17 and 3.18 are outstanding and 3.17's timing line is owed against a stage D run.~~ **Restated 2026-08-22 at `126f5d8`, the paragraph above having gone four days and about fourteen commits stale.** Every checkpoint 3.1 to 3.18 is built, at **441 tests**, `guards.ps1` green. What is built and what has been run are different lines and the difference is what remains. **Run and complete:** every ingest sweep, 3.6, 3.7, 3.8, 3.9 and 3.10; 3.11's `security_daily` fill; and stage D except its last component, C08, C09, C10, C11 and C35 all carrying a range `run_log` row. **3.9 completed 2026-08-22 at `run_log` 1760**, 2,864 of 2,864 members, once item 59 turned out to be the pager rather than the ticker. ~~**Outstanding:** C34 over the range [item 55], the sequence driver 3.16 never having been invoked once, 3.17's `run-night` replay half [item 44], and the three sign-off blockers that need an authored decision rather than a build, items 51, 52 and 60.~~ **Restated 2026-08-22 at the close of the day's work, at `718a43f` plus the run.** Items 51, 52, 57 and 60 all closed, at 451 tests, `ci.ps1` green at every one of the day's seven commits and **GitHub CI green on the branch at `aae9464`**, which is sign-off step 1's first half. **The compute half re-ran whole over the corrected range** 2021-01-04..2026-08-12 in 98.81 minutes, and **the replay reproduced 2026-08-12 byte for byte across all five compute tables**, zero rows differing in either direction. **Two done-when lines are half evidenced and are recorded as half rather than claimed whole.** 3.16: the compute half ran through the same `BackfillRun` the sequence uses, so the work and the `run_log` rows are the sequence's, but the driver's own ordering and fall-through was not exercised, because at the corrected range end C03 and C05 re-dispatch whole for about 440,000 units [item 62]. 3.17: the replay is the compute half rather than the literal evening order, the five ingest stages skipped deliberately, because a full `run-night` would have C02 give 2026-08-13 real bars and item 60's stale rows there would stop being identifiable by their thin date. **The timing done-when is measured and not met**, 170.35 minutes with C01 against "minutes rather than hours", which is a finding rather than a bound to move [`CLAUDE.md` section 11]. ~~**What phase 3 still needs is three authored decisions and a review**: the timing verdict, item 44 with item 62, and a decision number for item 60's refuse-not-clamp rule.~~ **Two of the three are taken as of 2026-08-22.** **D-105** numbers the frontier rule and closes item 60. **The timing verdict** is recorded: 170.35 minutes is not met, the bound is not moved, and it closes as a measured finding because nothing depends on the rebuild being fast, D-88 and `SCREEN_LIFECYCLE.md` §6.7 bundling every rebuild-forcing change into one gated boundary. **What remains is one authored decision and the review**: the item 44 split, D-99's own named remedy, now merged with item 62 and carrying three named triggers. Sign-off step 2 must run in a session that has not committed here, and the four partial lines are listed in the handover note at the head of this file | ~~BUILD COMPLETE, AWAITING SIGN-OFF~~ **PHASE 3 SIGNED OFF, 2026-08-22.** **Step 1, CI green:** `ci.ps1` green at every commit and GitHub CI green on the branch at `cb327d0`, the branch head at the time, verified independently rather than taken. **Step 2, the review:** run in a session that had not committed here, recorded in full below, reproducing 451 tests and re-measuring every store-side line against the database. It returned four exceptions and all four are now closed: the two wrong figures corrected with their mechanisms, item 52's fixture on the forward list, item 44's column split built and proved, and the timing line resolved on a consumer search. **3.16 closes MET**, `BackfillSequence.ExecuteAsync` having run once end to end at `run_log` 1775 to 1786, twelve sources, 54,452,165 rows, exit 0. **The rebuild is 121.30 minutes** measured as one command in one process, and the done-when is still NOT met on that figure; it closes because no consumer of it exists, not because the figure was argued down. **454 tests.** ~~Two things are owed and neither is a build session's~~ **Both are now authored, 2026-08-22.** **D-106** states the sweep-marker rule and closes items 44 and 62. **`first_seen` means first retained**, stated in `SCHEMA.md`, closing item 51; `_verify_security_before` is decided gone with the reasoning recorded, and the drop itself is the one step still owed a hand. **One qualification on the sign-off, stated rather than left to be found: the session that reviewed this phase then built the `0013` split inside it**, so that migration and its two components have not been read by a session that did not write them. `BUILD_PLAN.md`'s two-step sign-off assumes those are different sessions and here they were not. It is covered by 454 tests including both halves of the split and by a real-store run, and it is named here because a reader should decide about it rather than inherit it. **The `price_daily` sizes here are pre-prune** [item 51]: the size the 2026-08-20 prune left is in the prune record and the current ticker count is in the phase 3.5 record, neither restated here. |
 | 3.5 The record for one name on one date | ~~**BUILD COMPLETE, AWAITING SIGN-OFF**~~ **PHASE 3.5 SIGNED OFF, 2026-08-23.** **Step 1:** GitHub CI green at `0e8ca25` and `ci.ps1` re-run independently there and at `75ed6b0`. **Step 2:** the review ran in a session that had not committed here, re-measured every store-side line against the database, and returned nine exceptions; **eight are closed** and the corrections are recorded below. **One survives, named rather than carried quietly:** `RecordInspector` holds a second copy of the as-of membership pick, agreeing with `Universe.AsOf` today with nothing holding it so, and closing it is a change to a statement six components read. It blocks nothing in phase 4 | ~~`54da3d5`~~ `75ed6b0` | Checkpoints 3.5.1 to 3.5.4 built, and the sign-off corrections after them. ~~495 tests~~ **498 tests**, the three added by the panel correction. `C36 RecordInspector` at `/record?ticker=&date=`, four panels, reading fourteen stores through the same guarded route a stage uses and behind an empty write set. D-107, D-108 and D-109 authored. Migrations 0014, 0015 and 0016. Both range passes run: C01 over 292 evaluation dates in 14.94 minutes, C11 over 1,462 trading dates in 48.54 minutes, both at zero provider units. ~~495 tests. Sign-off step 2 must run in a session that has not committed here~~ [both superseded at the head of this cell] |
 | 4 Screens and selection | **SIGNED OFF 2026-08-24.** Built 4.1 to 4.14, the four owed items closed at Q.8 to Q.11, reviewed at step 2, and the review's exceptions closed. The record has started | `cd8310d` at the run | Checkpoints 4.1 to 4.13, then `Q.1` to `Q.7` closing the nine reported items as D-121 to D-129, then 4.14, then `Q.8` to `Q.11`. Components: C12, C13, C14 and C28. Migrations `0017` to `0021`. **4.14 froze 74,767 attribution rows** over 1,457 sessions in 12.72 minutes, 34,932 of them candidates and 39,835 shadow, beside 3,812,120 gate rows and 28 alerts. `RUNBOOK.md`'s prohibition is operative. ~~**Five done-when lines hold and one does not**: screen overlap measures 0.5 percent against §06's 10 to 15, which is what near-independent ranking produces and is reported unadjusted [`CLAUDE.md` §11]. Two items reported and not closed, both §3 Writes cells.~~ **The overlap line is amended to the measurement at Q.9** and the done-when moves with it, all three readings named; **the two §3 Writes cells are amended at Q.8**; **§05's S3 tilt and S5 fill sentences are corrected at Q.10 and Q.11**, with both composition questions filed to phase 8. Nothing was re-measured and no screen changed. ~~**Sign-off step 2 is owed and needs a session that has not committed here**~~ **Step 2 ran 2026-08-24 in a session that had not committed here.** It re-ran `ci.ps1` at `c4e782d`, re-ran `distributions` and `persistence` over the frozen range, and queried the store directly; every recorded figure reproduced except one. **It returned six exceptions and six smaller items.** Five exceptions and four of the smaller items are closed in the pass recorded below, at **722 tests** and `ci.ps1` green at `d09ef2e`. ~~**Three things are open and all three are the operator's**: item 42, what a session is, which 54 days in the frozen range turn on and which two measurements now size; and §16's `screen_score_daily` size against the measured 305 MB with the database-size row beside it, both belonging with the `3 → 3 sign-off` obligation.~~ **All three are authored or filed as of 2026-08-24 and the phase signs off.** **Item 42 closes at D-130**: a session is a date the exchange traded, read from the exchange calendar rather than inferred from the store. Its code change reaches every compute range execution and is filed as a carried obligation naming `TradingCalendar.SessionsAsync`, and phase 8 gains an obligation for C21 to skip a non-session date with the eight frozen rows named by date. **The two size figures ride with the `3 → 3 sign-off` obligation**, both being authored figures. **What survives the sign-off is not an open question but a frozen fact**: 57 `attribution` rows stand on 54 days the exchange was shut, they cannot be rewritten, and what reads them excludes them. ~~**SIX OF SIX DONE-WHEN LINES HOLD**~~ **The done-when now reads four holding and two stating no bound**, the overlap clause having become a description at Q.9 and the measure having gone on scoring it as a bound until the review found it. Every figure is unchanged. ~~**The phase is not signed off**: that call is the operator's and item 42 is under it~~ **Signed off 2026-08-24 on the operator's direction, item 42 having been authored as D-130.** Both sign-off steps are met: step 1 with `ci.ps1` green at the branch head and step 2 in a session that had not committed here |
-| 5 Digest chain | **IN PROGRESS. 5.1, 5.2, 5.3's first commit and 5.4 landed** | `1cdbb5a` | Plan drafted at `edb1c2d` and its authored items adopted 2026-08-24 on the operator's direction: D-131 to D-142, the fourteen checkpoints, and the scope line amended to name C29 HeadlineIngestor, which it had never carried. Two carried obligations closed, one added for phase 9. Baseline `ci.ps1` green at `edb1c2d`, 722 tests, 5 guard checks over 182 files, 21 migrations. **5.1 and 5.2 landed.** 5.1's sweep measured six things over the 32 candidates of 2026-08-12 at 160 provider units; 5.2 is migration `0022`, `DigestProvider`, `SCHEMA.md` and `FIXTURES.md`, **`ci.ps1` green at `a2db04e` with 735 tests, 22 migrations and 5 guard checks over 186 files**. **The phase stops at 5.3 on three blockers, none of them a build session's**: the measured median article is 1,248 tokens against `ARCHITECTURE.html` §07's five to eight hundred, so D-133's cap of three is a decision rather than a seeded value and 5.1's stopping rule fired; the local model is a reasoning model and returns zero characters of digest at any token cap, which under D-137 would run every night on the paid link with the local server healthy; and the Anthropic key is a placeholder. The full statement is in the 5.2 block below. **Two of the three are now drafted as D-143 and D-144**, unauthored, in §12 of the phase plan; the third is a credential the operator is replacing. **5.3's first commit seeded seven decided keys and no provisional value**, four names asserted absent, `ci.ps1` green at `b2e50dc` with 749 tests. **5.4 built C29 HeadlineIngestor** under D-132's run scope, `ci.ps1` green at `1cdbb5a` with **756 tests** and 5 guard checks over 189 files. **D-143 and D-144 were then authored**, and 5.3's second commit, 5.5, 5.7 and 5.8 followed: two keys seeded and `Keys.Count` at 104, migration `0023` for `request_options`, C32 LocalModelClient with a health check that reads content rather than a status, the chain with D-137's retry and fall-through and `digest.chain`'s consumer closed, and C33 NewsDigester writing D-134's four outcomes under D-143's token selection. **`ci.ps1` green at each: `fd152b7` 760 tests and 23 migrations, `bea793f` 780, `84296bb` 798, `da741c5` 812.** 5.6 and 5.14 wait on the Anthropic key; 5.9 is next and is the phase's openable checkpoint |
+| 5 Digest chain | **IN PROGRESS. 5.1, 5.2, 5.3's first commit and 5.4 landed** | `1cdbb5a` | Plan drafted at `edb1c2d` and its authored items adopted 2026-08-24 on the operator's direction: D-131 to D-142, the fourteen checkpoints, and the scope line amended to name C29 HeadlineIngestor, which it had never carried. Two carried obligations closed, one added for phase 9. Baseline `ci.ps1` green at `edb1c2d`, 722 tests, 5 guard checks over 182 files, 21 migrations. **5.1 and 5.2 landed.** 5.1's sweep measured six things over the 32 candidates of 2026-08-12 at 160 provider units; 5.2 is migration `0022`, `DigestProvider`, `SCHEMA.md` and `FIXTURES.md`, **`ci.ps1` green at `a2db04e` with 735 tests, 22 migrations and 5 guard checks over 186 files**. **The phase stops at 5.3 on three blockers, none of them a build session's**: the measured median article is 1,248 tokens against `ARCHITECTURE.html` §07's five to eight hundred, so D-133's cap of three is a decision rather than a seeded value and 5.1's stopping rule fired; the local model is a reasoning model and returns zero characters of digest at any token cap, which under D-137 would run every night on the paid link with the local server healthy; and the Anthropic key is a placeholder. The full statement is in the 5.2 block below. **Two of the three are now drafted as D-143 and D-144**, unauthored, in §12 of the phase plan; the third is a credential the operator is replacing. **5.3's first commit seeded seven decided keys and no provisional value**, four names asserted absent, `ci.ps1` green at `b2e50dc` with 749 tests. **5.4 built C29 HeadlineIngestor** under D-132's run scope, `ci.ps1` green at `1cdbb5a` with **756 tests** and 5 guard checks over 189 files. **D-143 and D-144 were then authored**, and 5.3's second commit, 5.5, 5.7 and 5.8 followed: two keys seeded and `Keys.Count` at 104, migration `0023` for `request_options`, C32 LocalModelClient with a health check that reads content rather than a status, the chain with D-137's retry and fall-through and `digest.chain`'s consumer closed, and C33 NewsDigester writing D-134's four outcomes under D-143's token selection. **`ci.ps1` green at each: `fd152b7` 760 tests and 23 migrations, `bea793f` 780, `84296bb` 798, `da741c5` 812.** 5.6 and 5.14 wait on the Anthropic key. **5.9 landed on 2026-08-25**, C36's fifth panel, with `ARCHITECTURE.html` §03's C36 cell and §20's U8 row amended in the same commit and the prior wordings in `CHANGELOG.md`. **One local night was run first so the panel had something to open**: 32 candidates, 275 headlines over 29 tickers, 32 digests from 81 articles, and D-134's outcomes at 13 prose, 16 `NO MATERIAL NEWS`, 3 null and 0 absent. **Three findings came out of running it**, all recorded below: C33 cannot execute in the composed pipeline until 5.6 exists, because `digest.chain` names a link nothing implements; the article instant was read as an absence, which had been silently reordering D-143's selection since 5.8 and is corrected at the commit before 5.9; and the gate halted a run live on a cold local model, which is INVARIANT 15 observed rather than stubbed. `psql` is at `E:\PostgreSql\v18\bin\psql.exe` and is recorded in `RUNBOOK.md` |
 | 6 Researcher | NOT STARTED | | |
 | 7 Risk and execution | NOT STARTED | | |
 | 8 Learning loops | NOT STARTED | | |
@@ -11954,3 +11954,156 @@ alternative, a scoped config store per test class, is a larger change to how the
 isolates and is a decision rather than a correction.
 
 **`ci.ps1` green at phase 5's O.2 commit**, 812 tests, 23 migrations.
+
+---
+
+## Phase 5, one local night on 2026-08-12, run so that 5.9 had something to open
+
+**Not 5.12, and recorded as what it is.** The evening order is unchanged, no researcher and
+no order exists, and C29 and C33 were run one at a time by hand over the most recent date
+carrying a candidate set. What it produces is a night of real headlines and real digests in
+the development store, which is what makes the digest panel openable rather than a page
+tested against doubles [5.9].
+
+### The composition refuses to run C33 at all, and that is a finding rather than a workaround
+
+**`digest.chain` names two links and `PipelineComposition` supplies one**, so
+`DigestChain.BuildAsync` throws before any candidate is digested: "digest.chain names
+'haiku' at position 2 and no link implements it." The refusal is 5.7's and it is right. Its
+consequence is stronger than "the secondary is unavailable": **C33 cannot execute in the
+composed pipeline at all until 5.6 exists**, and a night on the local link alone is not
+reachable through `run NewsDigester`. That failed attempt is in `run_log` at 2026-08-12
+beside the two that worked.
+
+**The run was made by composing the shipped C33 by hand from a scratch host outside the
+repository**, which is 5.5's instrument, with a stand-in at the chain's second position that
+reports unhealthy and answers nothing. Every digest therefore came from the local link,
+which is the night that was asked for, and the stand-in's only effect is that the
+composition check passes. Nothing about it ships and no config was changed: `digest.chain`
+still names both links and `local_model_config` still holds both rows.
+
+**The rotation is 5.10 and is not built**, so no candidate was routed to the second position
+and `was_rotation` is false on all 32 rows. Nothing here fell through to a dead secondary:
+what that produces is 5.10's observable and this night cannot show it.
+
+### The count chain
+
+| Step | Count |
+|---|---|
+| Candidates on 2026-08-12 | **32** |
+| `headline` rows C29 wrote | **275**, over 29 of the 32 tickers, every one carrying a body |
+| Tickers C29 found no article for | **3** |
+| `news_digest` rows C33 wrote | **32**, one per candidate |
+| Articles sent to the model | **81** |
+| `provider` and `model_name` | `local` and `qwen3.6:latest` on all 32 |
+| `was_rotation` true | **0** |
+
+**D-134's four outcomes, which is the figure phase 6's disqualifier rests on:**
+
+| Outcome | Count | What it is |
+|---|---|---|
+| Prose | **13** | An ordinary digest |
+| `NO MATERIAL NEWS` | **16** | A link read the articles and returned the escape hatch |
+| Null `digest_text` | **3** | A link was selected and there was nothing to send, and D-60 bites here |
+| No row | **0** | Every candidate got a row |
+
+**The no-article case is 3 of 32 on this night and the immaterial case is 16.** Half the
+candidate set produced a digest saying there was nothing material to say. That is one night
+and it is stated as one night, but it is the first measured figure against D-60's
+disqualifier, which fires on the 3 and not on the 16.
+
+**C29 ran in 16.8 seconds and C33 in 127 seconds against a warm model.** The instruction
+hash on both digest runs is `ee6e5f4fec65`.
+
+### Three findings from the night, none of them fixed by changing an authored rule
+
+**A defect of mine that this night found, fixed at the 5.8 correction commit above.** Every
+article reached D-143's selection carrying a null publication instant, because the driver
+returns `timestamptz` as a `DateTime` and `ArticlesAsync` cast it to `DateTimeOffset?`,
+which is null and never throws. The ordering fell through to its tie-breaks and the rendered
+input said "date unknown" on dates the store held. **The first run of this night was under
+that defect and its figures differed**: 86 articles sent rather than 81, and 14 prose against
+15 hatch rather than 13 against 16. The counts above are the re-run after the fix. Nothing
+downstream inherited it, `news_digest` having been rewritten whole by the second run.
+
+**Five of the thirteen prose rows begin with `NO MATERIAL NEWS` and then continue.** D-134
+classifies on an exact match, so an answer that gives the escape hatch and then explains
+itself is prose. Under D-60 those five do not disqualify, which is the same direction the
+exact match was chosen for, but the boundary is thinner than "the model returned the hatch
+or it did not": on this night the model produced the hatch alone 16 times and the hatch
+followed by prose 5 times. Reported rather than acted on, the classification being D-134's.
+
+**The gate fired live, unplanned, and for the reason 5.5 predicted.** A digest run started
+after the model had gone non-resident; the local link's health probe exceeded
+`digest.health_timeout_ms` of 5,000 ms, the stand-in secondary was unhealthy by
+construction, and C33 halted with "No link in the digest chain is healthy". **No row was
+written and the rows already in the table were untouched**, the delete and the insert both
+sitting after the probe. That is INVARIANT 15 and D-139 observed against the shipped
+component rather than against stubs, and it is the strongest evidence yet for 5.13's scope:
+the cold load measured 52,303 ms and 41,352 ms on two occasions today against a 5,000 ms
+probe, beside 5.5's 51,103 ms.
+
+---
+
+## Phase 5, checkpoint 5.9, the digest panel
+
+**C36's fifth panel, and the phase's openable checkpoint.** For one ticker on one date it
+reads `headline` and `news_digest`, declares both, and computes nothing.
+
+**§03's C36 Reads cell and §20's U8 row gained both tables in this same commit**, by hand,
+because `ReadDeclarationConformanceTests` holds the declaration against the catalogue in
+both directions and either half alone is a red build. Both are clean edits under D-73 and
+the prior wordings are in `CHANGELOG.md`.
+
+### What it shows, and the two things it declines to show
+
+**The pool is every row `headline` holds for that ticker and date, unfiltered**, with the
+window marked rather than applied. C33 reads inside `digest.lookback_days` on
+`published_at`; the panel reads everything and lets the statement say which rows the window
+admits. Applying the filter here would be C33's rule written a second time, and a row stored
+outside the window would vanish from the panel with nothing said. `has_body` sits beside it
+for the same reason: a pool of nine articles all carrying null bodies produces a null
+digest, and without that flag the row reads as an unexplained absence [D-131].
+
+**Which articles were sent is not recorded and the panel does not reconstruct them.** D-143
+selects newest-first up to `digest.max_input_tokens` at run time, against an estimate rather
+than a tokenizer, and no column holds the result. The two bounds are shown beside the pool
+and the selection is left unstated. A page that rebuilt it would produce a plausible three
+of nine and read as the record.
+
+**The instruction's version is not shown, and that is the one line of this checkpoint's
+scope the schema cannot satisfy.** C33 puts twelve characters of the instruction hash into
+the night's `run_log` detail, which is a table this reader does not declare, and hashing
+`prompts/digest-instruction.md` as it stands now would put today's instruction beside a
+digest an older one produced. **Closing it is an authored decision rather than a build
+one**: a column on `news_digest`, or `run_log` in C36's read set and the two documents
+amended with it. Reported here rather than taken.
+
+### The four outcomes are named from the row alone
+
+`no_row`, `no_articles`, `no_material_news` and `prose` [D-134]. The vocabulary and the
+classifier live in `Core` because C33 writes those states in the Pipeline and the panel
+names them in the Api, and the Api never references Pipeline [`CLAUDE.md` §4], so the
+alternative was a copy on each side. `NewsDigester.NoMaterialNews` now reads the literal
+from there: one constant with two readers rather than two constants that agree today.
+
+**`no_row` does not say which of its two causes applies**, the ticker not having been a
+candidate or the run having halted before the digest step, because neither is readable from
+the two tables the panel declares.
+
+### Opened on the night above, and all four outcomes are visible
+
+| Name | Outcome | What the panel shows |
+|---|---|---|
+| `ENPH.US` | `prose` | 13 articles, all in window, all with bodies, newest at 2026-08-11T00:37:22Z; the digest cites `[2026-08-11]` and `[2026-08-10]`, which are the two newest |
+| `PAYC.US` | `no_material_news` | 23 articles in window including a Q2 earnings call transcript, and a row whose whole text is the escape hatch |
+| `SAFT.US` | `no_articles` | An empty pool, and a row carrying `local` and `qwen3.6:latest` with a null digest, which is the state D-60 bites on |
+| `AAPL.US` | `no_row` | An empty pool and no row: not a candidate that night |
+
+**No outcome is unshown.** `no_row` is reachable on any name the night did not carry, so the
+fourth did not need a halted run to demonstrate.
+
+**The panel found the 5.8 defect above.** It showed every article published at no time at
+all while the same statement's window expression, reading the same column in Postgres, said
+the row was inside the window. That contradiction is what a panel is for, and it is the
+second time in this corpus that opening something found what tests had passed over.

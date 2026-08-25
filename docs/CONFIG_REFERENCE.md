@@ -552,11 +552,11 @@ budget.
 |---|---|---|---|---|
 | `digest.chain` | `["local","haiku"]` | D-25 | DigestChain, `BuildAsync` | **verified 5.7** |
 | `digest.rotation_count` | 2 | D-27 | NewsDigester | unverified, **seeded 5.3** |
-| `digest.lookback_days` | 7 | D-133 | NewsDigester, `ExecuteAsync`; HeadlineIngestor, `ExecuteAsync` | **verified 5.8** |
+| `digest.lookback_days` | 7 | D-133 | NewsDigester, `ExecuteAsync`; HeadlineIngestor, `ExecuteAsync`; RecordInspector, `DigestAsync` | **verified 5.9** |
 | `digest.health_timeout_ms` | 5000 | — | LocalModelClient, `HealthAsync` | **verified 5.5** |
 | `digest.readiness_check_et` | 15:30 | — | the chain, not one link [5.3] | unverified, **seeded 5.3** |
 | `digest.secondary_model_id` | `claude-haiku-4-5` | D-140 | the secondary link | unverified, **seeded 5.3** |
-| `digest.max_input_tokens` | 6000 | D-143 | NewsDigester, `ExecuteAsync` | **verified 5.8** |
+| `digest.max_input_tokens` | 6000 | D-143 | NewsDigester, `ExecuteAsync`; RecordInspector, `DigestAsync` | **verified 5.9** |
 | `digest.max_output_tokens` | 150 | D-143 | NewsDigester, `ExecuteAsync` | **verified 5.8** |
 
 The chain is an ordered list, so adding a third link is an insert.
@@ -574,11 +574,13 @@ could not promise at any number.
 model that reasons before answering those are different quantities, and one key for both is
 what let them be conflated at 5.1.
 
-**`digest.lookback_days` has two verified consumers and that is not a duplication** [5.8].
-C29 reads it to decide what to fetch and store, and C33 reads it to decide what to send. The
-same seven days answers both, and a re-run of C33 over a night whose `headline` rows came
-from a different lookback gives the same answer as the first because the second read bounds
-the first's output rather than trusting it.
+**`digest.lookback_days` has three verified consumers and that is not a duplication** [5.8,
+5.9]. C29 reads it to decide what to fetch and store, C33 reads it to decide what to send,
+and C36's digest panel reads it to mark which of the stored articles the window admits. The
+same seven days answers all three, and a re-run of C33 over a night whose `headline` rows
+came from a different lookback gives the same answer as the first because the second read
+bounds the first's output rather than trusting it. **The panel marks rather than filters**,
+so a row stored under a different lookback is visible in it rather than absent.
 
 **`digest.health_timeout_ms` bounds a probe and not a digest** [5.5]. A probe is a fixed
 32-token request and a digest is up to `digest.max_output_tokens` over several thousand

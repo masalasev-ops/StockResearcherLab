@@ -20,7 +20,103 @@ public sealed record RecordView(
     MembershipPanel Membership,
     MetricsPanel Metrics,
     InputsPanel Inputs,
-    MarketPanel Market);
+    MarketPanel Market,
+    DigestPanel Digest);
+
+/// <summary>
+/// What the digest step read for this name on this date and what it made of it [D-134,
+/// 5.9].
+///
+/// **The pool is every row `headline` holds for the ticker and date, unfiltered.** The
+/// panel marks which of them fall inside `digest.lookback_days` rather than hiding the
+/// ones that do not, because a page that silently applied C33's window would be a second
+/// copy of that rule and a row C29 stored outside it would vanish with nothing said.
+///
+/// **Which articles were actually sent is not recorded and the panel does not guess.**
+/// D-143 selects newest-first up to `digest.max_input_tokens`, applied at run time
+/// against an estimate rather than a tokenizer, and nothing stores the result. So the
+/// inputs are shown, the two bounds that governed the selection are shown beside them,
+/// and the selection itself is stated as unrecorded rather than reconstructed here.
+///
+/// **The instruction's version is not recorded per row either.** C33 puts the first
+/// twelve characters of its hash in that night's `run_log` detail, which is a table this
+/// reader does not declare, and hashing the file as it stands now would put today's
+/// instruction beside a digest an older one produced.
+/// </summary>
+/// <param name="LookbackDays">
+/// `digest.lookback_days` resolved as of the viewed date, never as of now [D-43,
+/// INVARIANT 13]. It is the window C33 read in, and the panel marks the pool against it.
+/// </param>
+/// <param name="MaxInputTokens">
+/// `digest.max_input_tokens` as of the viewed date. Shown because it is the other half of
+/// what decided which articles were sent, and without it the pool is a list with no
+/// explanation of why three of nine went.
+/// </param>
+/// <param name="Pool">
+/// Every `headline` row for this ticker and date, newest first, nulls last. Empty means
+/// C29 stored nothing, which is a different state from a night it never ran.
+/// </param>
+/// <param name="Digest">The `news_digest` row, or null where there is none.</param>
+/// <param name="Outcome">
+/// Which of D-134's four states this is, as `no_row`, `no_articles`, `no_material_news`
+/// or `prose`. **`no_row` does not say which of its two causes applies**: the ticker was
+/// not a candidate that night, or the run halted before the digest step, and neither is
+/// readable from the two tables this panel declares.
+/// </param>
+public sealed record DigestPanel(
+    int LookbackDays,
+    int MaxInputTokens,
+    IReadOnlyList<DigestArticle> Pool,
+    DigestRow? Digest,
+    string Outcome);
+
+/// <summary>
+/// One article as `headline` holds it.
+/// </summary>
+/// <param name="PublishedAt">
+/// The article's own instant, which is what the window is drawn on and is not the run's
+/// date [D-133]. Null is inside no window: guessing one would put an article into a
+/// window it may not belong to.
+/// </param>
+/// <param name="InWindow">
+/// Whether this row falls inside `digest.lookback_days` of the viewed date, computed by
+/// the statement from the stored instant rather than by this page. A false here on a row
+/// C29 stored is the ordinary consequence of a re-run under a different lookback.
+/// </param>
+/// <param name="HasBody">
+/// Whether `content` is present. **This is the field that separates D-134's first two
+/// outcomes**: a pool of nine articles every one of which carries a null body produces a
+/// null digest, and without this the row reads as an unexplained absence [D-131].
+/// </param>
+/// <param name="Body">The article text as stored, whole and never cut.</param>
+public sealed record DigestArticle(
+    DateTimeOffset? PublishedAt,
+    bool InWindow,
+    string? Title,
+    string? Source,
+    string? Url,
+    bool HasBody,
+    string? Body);
+
+/// <summary>
+/// The stored digest.
+/// </summary>
+/// <param name="Text">
+/// Null where a link was selected and there was nothing to send, which is D-134's second
+/// state and not its third [`CLAUDE.md` §6].
+/// </param>
+/// <param name="Provider">
+/// Which link answered, from the closed vocabulary the column's CHECK holds [D-134].
+/// </param>
+/// <param name="ModelName">
+/// The model the link said answered, non-null and non-blank by CHECK, because which model
+/// produced each digest is what separates a later shift in results from a change in the
+/// evidence [D-29].
+/// </param>
+/// <param name="WasRotation">
+/// Whether this candidate was one of the night's rotation to the secondary [D-27, D-138].
+/// </param>
+public sealed record DigestRow(string? Text, string Provider, string ModelName, bool WasRotation);
 
 /// <summary>
 /// The market on that date, on one line.

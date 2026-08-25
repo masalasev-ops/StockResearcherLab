@@ -2546,3 +2546,40 @@ operator-editable row, and that split is D-51's and D-136's rather than this che
 **What the replacement adds beyond the answer**: that a length mismatch fails the run,
 because the key is versioned and the table is not, so the two can disagree; and that a
 name outside the closed vocabulary fails the same way.
+
+---
+
+## 2026-08-25, phase 5 checkpoint 5.9, `ARCHITECTURE.html` §03's C36 cell and §20's U8 row
+
+**Both are clean edits, `ARCHITECTURE.html` being a spec under D-73, and the prior wordings
+are here** [5.9, D-134, D-143].
+
+> `security`, `security_daily`, `universe_rejection` D-108, `indicator_daily`,
+> `valuation_daily`, `flow_daily`, `sentiment_derived_daily`, `percentile_cell_daily`,
+> `percentile_cell_coverage` D-107, `price_daily`, `fundamental_snapshot`,
+> `sentiment_daily`, `insider_transaction`, `market_context_daily`
+
+> Four panels. **Membership:** ... **Market context:** breadth, regime label and the name's
+> sector composite on one line. **Nothing here is computed**: where a figure would have to
+> be derived the panel shows the inputs and says so.
+
+> security, security_daily, universe_rejection, the four metric stores,
+> percentile_cell_daily, price_daily, fundamental_snapshot, sentiment_daily,
+> insider_transaction, market_context_daily
+
+**§03's C36 Reads cell gains `headline` and `news_digest`**, and §20's U8 row gains the same
+two tables and the panel that reads them. The cell and the declaration land in one commit
+because `ReadDeclarationConformanceTests` holds them against each other in both directions,
+so either alone is a red build.
+
+**U8 now says five panels and describes the fifth.** Every article `headline` holds for that
+name and date with its publication instant and body, each marked for whether the lookback
+admits it and whether it carries a body; the digest text with the provider and model that
+produced it; and which of D-134's four outcomes the row is.
+
+**The sentence added beyond the description is the one that keeps the panel honest.** Which
+articles were sent is not recorded anywhere: D-143 selects newest-first up to
+`digest.max_input_tokens` at run time, against an estimate rather than a tokenizer, and no
+column holds the result. So the two bounds that governed the selection are shown beside the
+pool and the selection itself is left unstated. A page that reconstructed it would produce a
+plausible three of nine and read as the record.

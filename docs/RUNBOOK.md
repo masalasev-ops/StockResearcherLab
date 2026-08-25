@@ -46,6 +46,28 @@ timeline shows a waiting state rather than a stall.
 model being down, and is more likely.** Decide deliberately whether this box stays
 on, because missed nights are silent and the run log is the only place they appear.
 
+### Reaching the store by hand
+
+**`psql` is at `E:\PostgreSql\v18\bin\psql.exe` and is not on `PATH`.** The server is the
+`postgresql-x64-18` service and its binaries sit under `E:\PostgreSql\v18`, while
+`C:\Program Files\PostgreSQL\18` holds only `lib` and `share`. So `which psql` finds nothing
+and the client reads as absent when it is installed. The path is recorded here because it has
+been looked for more than once and worked around instead.
+
+```
+"E:\PostgreSql\v18\bin\psql.exe" -h localhost -p 5432 -U postgres -d stockresearcherlab
+```
+
+The password is the one inside the `Postgres` connection string in the running project's
+`appsettings.Secrets.json`. Read it out of that file into `PGPASSWORD` rather than typing it,
+so it reaches neither a shell history nor a transcript [D-55].
+
+**Four database names exist on this server and only the first is the development store.**
+`stockresearcherlab` is what the Worker runs against, `stockresearcherlab_tests` is what the
+local suite derives for itself by appending its suffix, and `ci.ps1` creates and drops
+`stockresearcherlab_ci` and `stockresearcherlab_ci_tests` on every run. A hand query against
+the wrong one of these reports an empty table that is empty for the ordinary reason.
+
 ---
 
 ## Failure table

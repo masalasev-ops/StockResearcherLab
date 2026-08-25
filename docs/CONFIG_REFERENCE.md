@@ -552,12 +552,12 @@ budget.
 |---|---|---|---|---|
 | `digest.chain` | `["local","haiku"]` | D-25 | DigestChain, `BuildAsync` | **verified 5.7** |
 | `digest.rotation_count` | 2 | D-27 | NewsDigester | unverified, **seeded 5.3** |
-| `digest.lookback_days` | 7 | D-133 | NewsDigester | unverified, **seeded 5.3** |
-| `digest.health_timeout_ms` | 5000 | — | LocalModelClient | unverified, **seeded 5.3** |
+| `digest.lookback_days` | 7 | D-133 | NewsDigester, `ExecuteAsync`; HeadlineIngestor, `ExecuteAsync` | **verified 5.8** |
+| `digest.health_timeout_ms` | 5000 | — | LocalModelClient, `HealthAsync` | **verified 5.5** |
 | `digest.readiness_check_et` | 15:30 | — | the chain, not one link [5.3] | unverified, **seeded 5.3** |
 | `digest.secondary_model_id` | `claude-haiku-4-5` | D-140 | the secondary link | unverified, **seeded 5.3** |
-| `digest.max_input_tokens` | 6000 | D-143 | NewsDigester | unverified, **seeded 5.3** |
-| `digest.max_output_tokens` | 150 | D-143 | NewsDigester | unverified, **seeded 5.3** |
+| `digest.max_input_tokens` | 6000 | D-143 | NewsDigester, `ExecuteAsync` | **verified 5.8** |
+| `digest.max_output_tokens` | 150 | D-143 | NewsDigester, `ExecuteAsync` | **verified 5.8** |
 
 The chain is an ordered list, so adding a third link is an insert.
 
@@ -573,6 +573,24 @@ could not promise at any number.
 **`digest.max_output_tokens` is the digest's own length and is not the completion's.** On a
 model that reasons before answering those are different quantities, and one key for both is
 what let them be conflated at 5.1.
+
+**`digest.lookback_days` has two verified consumers and that is not a duplication** [5.8].
+C29 reads it to decide what to fetch and store, and C33 reads it to decide what to send. The
+same seven days answers both, and a re-run of C33 over a night whose `headline` rows came
+from a different lookback gives the same answer as the first because the second read bounds
+the first's output rather than trusting it.
+
+**`digest.health_timeout_ms` bounds a probe and not a digest** [5.5]. A probe is a fixed
+32-token request and a digest is up to `digest.max_output_tokens` over several thousand
+tokens of article. Bounding the second with the first would mark a working link malformed on
+its slowest candidate and set D-137's fall-through running on the wrong evidence.
+
+**A cold local model answers in about 51 seconds against this 5,000** [5.5, measured]. Warm
+it answers in about 700 milliseconds. That is not an argument for a larger value: a timeout
+wide enough to absorb a cold load is wide enough to hide one. It means the local link is
+unhealthy on any night the model is not resident, which is what
+`digest.readiness_check_et` at 15:30 exists to catch three hours earlier, and 5.13 is built
+against the measurement.
 
 **Neither name D-143 retires was ever seeded** [5.3]. `digest.max_articles` and
 `digest.max_tokens` reached no config row, so there is no version carrying either and no

@@ -122,3 +122,40 @@ and then explaining itself. D-134 classifies on an exact match, so they are pros
   AAPL.US  no_row            empty pool, no row: not a candidate that night
 
 lookbackDays 7 and maxInputTokens 6000 on all four, resolved as of the viewed date.
+
+================================================================================
+7. The same night re-digested after 5.10, with the rotation present
+================================================================================
+
+The stand-in at the second position now answers with nothing rather than throwing, which
+is what an unbuilt link looks like to the chain: D-137 refuses an empty answer, retries
+once, and falls through.
+
+  digest night  date 2026-08-12  config v3
+    ok, 32 row(s)
+    32 digest(s) over 32 candidate(s) from 81 article(s): 14 prose, 15 NO MATERIAL NEWS,
+    3 with no article to read. First healthy link local on qwen3.6:latest.
+    Instruction ee6e5f4fec65. 2 rotated to haiku. Passed over: haiku at position 2 failed
+    twice and is unhealthy for the rest of this run: the link answered with no content
+  elapsed_s=123
+
+  select ticker, provider, model_name, was_rotation, ... from news_digest
+  where date='2026-08-12' and was_rotation order by ticker;
+
+   COUR.US | local | qwen3.6:latest | t | no_material_news
+   PAYC.US | local | qwen3.6:latest | t | no_material_news
+
+Both rotated rows carry provider local: the second position could not answer, they fell
+through to the first link, and they stayed marked. Two calls to the dead link over a run of
+32 candidates, not two per rotated candidate.
+
+The same 81 articles were sent as in the run before it, so the selection reproduced exactly.
+The outcomes moved by one, 13/16/3 to 14/15/3, which is the model rather than the pipeline.
+
+Before this run the local server had exited and the first attempt halted at the gate:
+
+  local at position 1 failed its health check ...: the endpoint could not be reached: No
+  connection could be made because the target machine actively refused it. (localhost:11434)
+
+The 32 rows already in the table were untouched by that halt. `ollama serve` was started
+again, the model made resident at warm_ms=33678, and the run above followed.

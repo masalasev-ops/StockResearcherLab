@@ -27,9 +27,13 @@ and `AllOwnersForConformance`, `StageRegistry`, `StageContracts` with `IReadOwne
 
 **Status** `DRAFT`, which is the only value this corpus uses for a plan. The numbered
 checkpoints in §6 are phase scope and are authored into `BUILD_PLAN.md` by a human rather
-than from here, as are the twelve decision clauses in §4 [`CLAUDE.md` §13]. Nothing in
-this document has been issued and no checkpoint has landed, so it is not archived to
-`prompts/spent/` yet.
+than from here, as are the decision clauses in §4 and §12 [`CLAUDE.md` §13].
+
+**§4's twelve were adopted 2026-08-24 on the operator's direction and are in
+`DECISIONS.md`. §12's two are not**: D-143 and D-144 were drafted at 5.2, after 5.1
+measured two things this document had assumed, and they are unauthored. The checkpoints
+have begun landing, so this plan is no longer un-issued; it is archived to
+`prompts/spent/` when every checkpoint has landed, as phase 4's was.
 
 ---
 
@@ -1046,3 +1050,177 @@ much D-60's disqualifier will bite in phase 6; the fall-through count, which is 
 evidence about the operational failure §20 calls the most likely one in this system; and the
 annualised cost against §07's $1.30, which is a query against `cost_ledger` if 5.14 is adopted
 and is not answerable if it is not.
+
+---
+
+## 12. Two decisions the measurement forced, drafted at 5.2 and not authored
+
+**These are not in §4 because §4 was written before anything ran.** Both come out of 5.1
+and neither could have been written in advance: the first because §07's article-size
+estimate had never been measured, the second because nothing in this corpus knew the local
+model would be a reasoning model. Numbering continues from D-142.
+
+**Status is the same as §4's.** Authored content under `CLAUDE.md` §13, drafted here in
+`CLAUDE.md` §15's amendment format so they paste into a build prompt, and not a build
+session's to enter.
+
+### D-143, the digest's input is capped by tokens and `digest.max_tokens` splits
+
+Blocks 5.3's second commit, 5.7 and 5.8. Supersedes D-133's `digest.max_articles`.
+
+```
+D-143 The digest's input is capped by tokens rather than by article count, and
+digest.max_tokens splits into an input key and an output key. ACTIVE
+D-133 SUPERSEDED IN PART: its lookback window stands, its article cap does not.
+
+THE MEASUREMENT IS THE ARGUMENT. 5.1 read 275 article bodies over the seven days
+ending 2026-08-12, counted by the model that would digest them: median 1,248
+tokens against ARCHITECTURE.html section 07's five to eight hundred, p25 935,
+p75 1,974, p95 4,777, and a longest body of 14,099. A count cap prices nothing
+across that range. Three articles is roughly 900 tokens or roughly 14,000
+depending which three, and D-133 derived its three from a cost figure, so the
+cap it set is the one thing in that decision the measurement contradicts.
+
+digest.max_input_tokens is 6,000. Articles are ordered most recent first,
+ties broken on the source string ordinally as D-133 already says, and are added
+while the next one whole would not exceed the cap. The first article below the
+cap that does not fit ends the selection; the loop does not skip it to find a
+smaller one behind it, because a selection that reorders on size is no longer
+the most recent articles and no document describes what it would be.
+
+A MINIMUM OF ONE IS SENT EVEN WHERE THAT ONE EXCEEDS THE CAP. p95 is 4,777
+tokens and the longest body measured is 14,099, so a candidate whose only recent
+article is an earnings-call transcript is a real case rather than a contrived
+one. Without the minimum that candidate produces no digest, which under D-134 is
+the null-digest_text state, which under D-60 is "no digest available" and
+disqualifies the name. That would make a long article and an absent article the
+same fact, and D-134's second state would be standing in for a fourth thing.
+
+THIS IS NOT TRUNCATION AND THE DISTINCTION IS LOAD-BEARING. D-137 forbids
+truncating a response: a half-sentence digest reaches the researcher as a
+complete fact and the validator cannot check prose. This decision selects how
+many whole articles to send. No article is ever partially transmitted, no input
+is cut mid-sentence, and the model always receives complete documents. Reading
+the prohibition as covering both is how a rule about output quality becomes a
+rule about input volume, and it is the confusion that makes the minimum-of-one
+look like a violation when it is the opposite.
+
+THE ANNUAL FIGURE BECOMES A CEILING RATHER THAN AN EXPECTATION, WHICH IS WHAT A
+BUDGET NEEDS. At 6,000 input tokens and 150 output tokens a candidate, 28
+candidates and 252 sessions, Haiku 4.5 at $1.00 per million input and $5.00 per
+million output: input 42.34 million tokens at $42.34, output 1.06 million at
+$5.29, so A FULL YEAR RUN ENTIRELY ON THE SECONDARY IS AT MOST $47.63, against
+section 07's $18. The rotation's own ceiling is 2 of 28 of that, $3.40 a year,
+against section 07's $1.30.
+
+CEILING AND NOT EXPECTATION, stated because the difference is the point. The
+measured median candidate reaches nowhere near 6,000 tokens: at three median
+articles it is about 3,700 and most nights most candidates will be under the cap
+with articles to spare. What 6,000 buys is that no night can cost more than the
+figure above, which a count cap could not promise at any number.
+
+SIX THOUSAND, and the three things that fix it. It admits three median articles
+with room, four at p25 and one at p95, so the ordinary candidate is unconstrained
+and the tail is bounded. It keeps the ceiling inside the same order of magnitude
+as the figure section 07 priced rather than a different one. And it is under the
+smallest context window in the chain by a wide margin, Haiku 4.5's being 200K,
+so the cap is a budget decision rather than a technical limit and can move
+without anything else moving.
+
+digest.max_tokens SPLITS AND THE OLD NAME IS RETIRED. digest.max_output_tokens
+is 150 and is the digest's own length, which is what section 07 and
+CONFIG_REFERENCE.md have always meant by that number and which belongs to the
+design rather than to the provider. digest.max_input_tokens is 6,000 and is this
+decision's. One name for two quantities is what let them be conflated at 5.1,
+where the API parameter capped the completion and the design meant the digest,
+and on a reasoning model those turned out to be different numbers with nothing
+saying so.
+
+Test: a candidate whose three most recent articles sum under the cap sends three;
+one whose second article would cross it sends one and does not reach past it for
+a third that would fit; one whose only article exceeds the cap alone sends that
+article and produces a digest rather than D-134's null state. The token count
+used for selection is asserted against a counted value rather than a character
+estimate.
+
+Done when: both keys are in CONFIG_REFERENCE.md with a verified consumer,
+digest.max_articles and digest.max_tokens are gone from that document as clean
+edits with the prior wording in CHANGELOG.md, D-133's entry in DECISIONS.md
+carries the partial supersession, and the $47.63 ceiling is in PROGRESS.md
+marked as a ceiling beside section 07's $18.
+```
+
+### D-144, the request shape is a `local_model_config` column
+
+Blocks 5.3's second commit, 5.5 and 5.7.
+
+```
+D-144 How a link must be asked is a local_model_config column, not a config key
+and not a client literal. ACTIVE
+
+local_model_config gains request_options, jsonb, nullable. It holds the
+provider-specific parameters a link's request must carry beyond the ones every
+link takes, and it is null for the secondary, which needs none.
+
+WHY THE COLUMN AND NOT A CONFIG KEY. This is a property of the endpoint's loaded
+model rather than of the digest step. Swap the loaded model and the setting
+changes with it; a digest.* key stays behind, describing a model that is no
+longer there, and does so silently because nothing reads a key against the model
+it was written for. local_model_config is already the row that says where a link
+is and whether it is enabled, and this is the same kind of fact.
+
+WHY NOT A CLIENT LITERAL. A literal cannot differ per link, and the two links
+already need different requests: reasoning_effort is an OpenAI-compatible
+parameter that this endpoint honours and the secondary has no use for. A literal
+would also put a provider's parameter name inside a client that section 07 says
+is written against the OpenAI-compatible surface rather than against a product.
+
+WHAT IT HOLDS TODAY, recorded because a column with no stated content is a
+column the next session guesses at. For the local link: reasoning_effort set to
+none. Measured at 5.1 against qwen3.6:latest on Ollama, where that produced a
+243-character digest in 74 completion tokens, and where max_tokens 150 and
+max_tokens 2,000 both produced zero characters of content. The native surface's
+think:false produced the identical 243 characters, which is what says the
+setting is the model's behaviour rather than one endpoint's spelling of it.
+chat_template_kwargs.enable_thinking set to false was accepted and ignored,
+returning a response byte-identical to the call without it, so it is recorded
+here as not working rather than left for the next session to try.
+
+THE FAILURE THIS PREVENTS, WHICH IS WHY THE COLUMN EXISTS RATHER THAN THE
+PARAMETER BEING SET SOMEWHERE. A reasoning model returns HTTP 200, a normal
+usage block, a finish_reason, and zero characters of content. Nothing errors.
+Under D-137 an empty response is malformed, so the chain retries once, gets
+another empty response, marks the local link unhealthy for the run, and digests
+every candidate on the secondary. Every night. With the local server running,
+answering in under two seconds, and reporting healthy. The record is not silent,
+news_digest.provider saying haiku on every row being exactly what D-29 exists
+for, but nothing raises anything and the year costs the full-secondary ceiling
+rather than the local one. This is CLAUDE.md section 1's failure class: the run
+completes, the numbers look plausible, and what was measured is not what was
+meant to be measured.
+
+A HEALTH CHECK THAT READS A STATUS CODE IS THEREFORE INSUFFICIENT, and that
+follows from the paragraph above rather than being a separate rule. A link is
+healthy when it returns non-empty content to a small fixed probe under
+digest.health_timeout_ms, not when it returns 200. The probe's text is fixed and
+is not the digest instruction, so a health check costs nothing and cannot be
+confused with a digest.
+
+Test: 5.5 asserts a link answering 200 with empty content is unhealthy, against
+a fabricated response rather than against the live server, because the live
+server can be made to produce that state today and cannot be relied on to keep
+producing it. 5.5 also asserts the live local link is healthy with
+request_options applied and unhealthy with them removed, which is the same
+assertion against the case that produced the finding.
+
+Done when: migration 0023 adds the column, SCHEMA.md's local_model_config
+section states what it holds and that it is null for the secondary, the seeder
+writes the local link's row with reasoning_effort none, and PROGRESS.md carries
+the enable_thinking result as a measured negative rather than an untried option.
+```
+
+**One thing both decisions leave alone, named so it is not read as settled.**
+`ARCHITECTURE.html` §07's table names LM Studio and the machine runs Ollama. Neither
+decision touches that: D-144 is about what a link's request carries and is indifferent to
+which product serves it, and `local_model_config.endpoint` is a row precisely so the server
+can differ. It is reported in `PROGRESS.md` rather than fixed, §07 being human-edited only.

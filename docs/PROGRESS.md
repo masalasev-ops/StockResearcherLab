@@ -11340,6 +11340,29 @@ wrong].
 | 5.6, 5.14 | **Blocked** on blocker three |
 | 5.8 to 5.13 | Downstream of the above |
 
+### §07 names LM Studio and the machine runs Ollama
+
+**Reported, not fixed.** `ARCHITECTURE.html` §07's provider-chain table gives link one as
+"Local, LM Studio on the GPU". 5.1 found an Ollama server on `localhost:11434` serving
+`qwen3.6:latest`, and there is nothing on 1234.
+
+**Nothing in the build depends on which of the two it is**, which is why this is a report
+rather than a blocker. The phase 5 scope line and D-136 both say the OpenAI-compatible
+endpoint, which is the surface Ollama exposes at `/v1/models` and `/v1/chat/completions`
+and which is what the client is written against. `local_model_config.endpoint` is a row
+precisely so the server can differ, and D-144's `request_options` is a column for the same
+reason one level down.
+
+**It is recorded because a document naming a product that is not what runs is a document a
+later reader will act on.** Someone debugging a dead chain at 18:33 reads §07, looks for LM
+Studio, does not find it, and concludes the local link was never set up. `ARCHITECTURE.html`
+is human-edited only [`CLAUDE.md` §13], so this is not the build's to correct.
+
+**One consequence that is real rather than cosmetic.** D-144's `reasoning_effort` is an
+OpenAI-compatible parameter that this endpoint honours; whether the product §07 names would
+honour the same parameter is not measured and is not assumed. That is exactly why D-144
+makes the request shape a per-link column rather than a client literal.
+
 **One thing found while building that is not a blocker and is worth an operator's
 attention.** A `StockResearcherLab.Ui` process was holding
 `src/StockResearcherLab.Ui/bin/Debug/net10.0/StockResearcherLab.Api.dll`, so a

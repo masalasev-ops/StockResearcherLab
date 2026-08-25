@@ -48,7 +48,7 @@ cannot reach them.
 | 3 Backfill | **SIGNED OFF** | 7764dfe | Checkpoints 3.1 to 3.7 landed, 303 tests at `ba88b0b`, 314 with D-98's implementation, 324 with its two open items closed, 326 with the backfill driver, 332 with range-scoped resumption and 338 with the frontier position and the connection retry, `ci.ps1` green at each, then 336 at `5be4d33` when the frontier's four tests were replaced by two, 336 again at `3fcdd57` and `cf42116`, and **342 at `7c25f13`** where D-100 replaced the intermittent retry test with two and added five at the provider client. Stage A complete: the endpoint sweep, migration 0007 for `security_daily` and the date-leading indexes, ten config keys, and the range contract with its allowance gate. Stage B has 3.5, 3.6 and 3.7 built, and ~~3.6 has been run once: it failed at 58 percent after 2h10m, leaving `price_daily` at 78 million rows and 12 GB~~ **3.6 completed on 2026-08-13**, after three failed attempts, a vacuum, and its resumption rebuilt onto `price_fetch_attempt` [D-99, 0010]: 33,359,792 bars over 18,812 tickers in 108.4 minutes, the pool covered at 50,737 attempt rows, and `price_daily` at 109.6 million rows and 18.3 GB. ~~3.7 to 3.10 are unrun and the phase's remaining sweeps spend between 376,685 and 702,795 units across four to seven days, which is a separate decision from building them.~~ The open findings are the table at the foot of this file rather than a second list here; ~~**item 24 blocks 3.7 and every nightly run against the backfilled store**~~ [closed, item 24]. ~~**Every checkpoint 3.1 to 3.16 is built as of 2026-08-17, at 429 tests, 416 before 3.16, `ci.ps1` green at `e619ba7`.**~~ ~~What is built and what has been run are different lines and the difference is the phase's remaining work. **Run:** 3.6, 3.7, 3.8 and 3.10 swept and completed, and 3.11 filled `security_daily`. **Built and unrun:** 3.9, which is the last owed sweep at roughly three days of allowance, and the whole of stage D, so `indicator_daily` and `valuation_daily` still carry phase 2's nightly rows. **3.16 spends nothing to build and its first invocation is a spending decision**, C05's sweep being inside the order. 3.17 and 3.18 are outstanding and 3.17's timing line is owed against a stage D run.~~ **Restated 2026-08-22 at `126f5d8`, the paragraph above having gone four days and about fourteen commits stale.** Every checkpoint 3.1 to 3.18 is built, at **441 tests**, `guards.ps1` green. What is built and what has been run are different lines and the difference is what remains. **Run and complete:** every ingest sweep, 3.6, 3.7, 3.8, 3.9 and 3.10; 3.11's `security_daily` fill; and stage D except its last component, C08, C09, C10, C11 and C35 all carrying a range `run_log` row. **3.9 completed 2026-08-22 at `run_log` 1760**, 2,864 of 2,864 members, once item 59 turned out to be the pager rather than the ticker. ~~**Outstanding:** C34 over the range [item 55], the sequence driver 3.16 never having been invoked once, 3.17's `run-night` replay half [item 44], and the three sign-off blockers that need an authored decision rather than a build, items 51, 52 and 60.~~ **Restated 2026-08-22 at the close of the day's work, at `718a43f` plus the run.** Items 51, 52, 57 and 60 all closed, at 451 tests, `ci.ps1` green at every one of the day's seven commits and **GitHub CI green on the branch at `aae9464`**, which is sign-off step 1's first half. **The compute half re-ran whole over the corrected range** 2021-01-04..2026-08-12 in 98.81 minutes, and **the replay reproduced 2026-08-12 byte for byte across all five compute tables**, zero rows differing in either direction. **Two done-when lines are half evidenced and are recorded as half rather than claimed whole.** 3.16: the compute half ran through the same `BackfillRun` the sequence uses, so the work and the `run_log` rows are the sequence's, but the driver's own ordering and fall-through was not exercised, because at the corrected range end C03 and C05 re-dispatch whole for about 440,000 units [item 62]. 3.17: the replay is the compute half rather than the literal evening order, the five ingest stages skipped deliberately, because a full `run-night` would have C02 give 2026-08-13 real bars and item 60's stale rows there would stop being identifiable by their thin date. **The timing done-when is measured and not met**, 170.35 minutes with C01 against "minutes rather than hours", which is a finding rather than a bound to move [`CLAUDE.md` section 11]. ~~**What phase 3 still needs is three authored decisions and a review**: the timing verdict, item 44 with item 62, and a decision number for item 60's refuse-not-clamp rule.~~ **Two of the three are taken as of 2026-08-22.** **D-105** numbers the frontier rule and closes item 60. **The timing verdict** is recorded: 170.35 minutes is not met, the bound is not moved, and it closes as a measured finding because nothing depends on the rebuild being fast, D-88 and `SCREEN_LIFECYCLE.md` §6.7 bundling every rebuild-forcing change into one gated boundary. **What remains is one authored decision and the review**: the item 44 split, D-99's own named remedy, now merged with item 62 and carrying three named triggers. Sign-off step 2 must run in a session that has not committed here, and the four partial lines are listed in the handover note at the head of this file | ~~BUILD COMPLETE, AWAITING SIGN-OFF~~ **PHASE 3 SIGNED OFF, 2026-08-22.** **Step 1, CI green:** `ci.ps1` green at every commit and GitHub CI green on the branch at `cb327d0`, the branch head at the time, verified independently rather than taken. **Step 2, the review:** run in a session that had not committed here, recorded in full below, reproducing 451 tests and re-measuring every store-side line against the database. It returned four exceptions and all four are now closed: the two wrong figures corrected with their mechanisms, item 52's fixture on the forward list, item 44's column split built and proved, and the timing line resolved on a consumer search. **3.16 closes MET**, `BackfillSequence.ExecuteAsync` having run once end to end at `run_log` 1775 to 1786, twelve sources, 54,452,165 rows, exit 0. **The rebuild is 121.30 minutes** measured as one command in one process, and the done-when is still NOT met on that figure; it closes because no consumer of it exists, not because the figure was argued down. **454 tests.** ~~Two things are owed and neither is a build session's~~ **Both are now authored, 2026-08-22.** **D-106** states the sweep-marker rule and closes items 44 and 62. **`first_seen` means first retained**, stated in `SCHEMA.md`, closing item 51; `_verify_security_before` is decided gone with the reasoning recorded, and the drop itself is the one step still owed a hand. **One qualification on the sign-off, stated rather than left to be found: the session that reviewed this phase then built the `0013` split inside it**, so that migration and its two components have not been read by a session that did not write them. `BUILD_PLAN.md`'s two-step sign-off assumes those are different sessions and here they were not. It is covered by 454 tests including both halves of the split and by a real-store run, and it is named here because a reader should decide about it rather than inherit it. **The `price_daily` sizes here are pre-prune** [item 51]: the size the 2026-08-20 prune left is in the prune record and the current ticker count is in the phase 3.5 record, neither restated here. |
 | 3.5 The record for one name on one date | ~~**BUILD COMPLETE, AWAITING SIGN-OFF**~~ **PHASE 3.5 SIGNED OFF, 2026-08-23.** **Step 1:** GitHub CI green at `0e8ca25` and `ci.ps1` re-run independently there and at `75ed6b0`. **Step 2:** the review ran in a session that had not committed here, re-measured every store-side line against the database, and returned nine exceptions; **eight are closed** and the corrections are recorded below. **One survives, named rather than carried quietly:** `RecordInspector` holds a second copy of the as-of membership pick, agreeing with `Universe.AsOf` today with nothing holding it so, and closing it is a change to a statement six components read. It blocks nothing in phase 4 | ~~`54da3d5`~~ `75ed6b0` | Checkpoints 3.5.1 to 3.5.4 built, and the sign-off corrections after them. ~~495 tests~~ **498 tests**, the three added by the panel correction. `C36 RecordInspector` at `/record?ticker=&date=`, four panels, reading fourteen stores through the same guarded route a stage uses and behind an empty write set. D-107, D-108 and D-109 authored. Migrations 0014, 0015 and 0016. Both range passes run: C01 over 292 evaluation dates in 14.94 minutes, C11 over 1,462 trading dates in 48.54 minutes, both at zero provider units. ~~495 tests. Sign-off step 2 must run in a session that has not committed here~~ [both superseded at the head of this cell] |
 | 4 Screens and selection | **SIGNED OFF 2026-08-24.** Built 4.1 to 4.14, the four owed items closed at Q.8 to Q.11, reviewed at step 2, and the review's exceptions closed. The record has started | `cd8310d` at the run | Checkpoints 4.1 to 4.13, then `Q.1` to `Q.7` closing the nine reported items as D-121 to D-129, then 4.14, then `Q.8` to `Q.11`. Components: C12, C13, C14 and C28. Migrations `0017` to `0021`. **4.14 froze 74,767 attribution rows** over 1,457 sessions in 12.72 minutes, 34,932 of them candidates and 39,835 shadow, beside 3,812,120 gate rows and 28 alerts. `RUNBOOK.md`'s prohibition is operative. ~~**Five done-when lines hold and one does not**: screen overlap measures 0.5 percent against §06's 10 to 15, which is what near-independent ranking produces and is reported unadjusted [`CLAUDE.md` §11]. Two items reported and not closed, both §3 Writes cells.~~ **The overlap line is amended to the measurement at Q.9** and the done-when moves with it, all three readings named; **the two §3 Writes cells are amended at Q.8**; **§05's S3 tilt and S5 fill sentences are corrected at Q.10 and Q.11**, with both composition questions filed to phase 8. Nothing was re-measured and no screen changed. ~~**Sign-off step 2 is owed and needs a session that has not committed here**~~ **Step 2 ran 2026-08-24 in a session that had not committed here.** It re-ran `ci.ps1` at `c4e782d`, re-ran `distributions` and `persistence` over the frozen range, and queried the store directly; every recorded figure reproduced except one. **It returned six exceptions and six smaller items.** Five exceptions and four of the smaller items are closed in the pass recorded below, at **722 tests** and `ci.ps1` green at `d09ef2e`. ~~**Three things are open and all three are the operator's**: item 42, what a session is, which 54 days in the frozen range turn on and which two measurements now size; and §16's `screen_score_daily` size against the measured 305 MB with the database-size row beside it, both belonging with the `3 → 3 sign-off` obligation.~~ **All three are authored or filed as of 2026-08-24 and the phase signs off.** **Item 42 closes at D-130**: a session is a date the exchange traded, read from the exchange calendar rather than inferred from the store. Its code change reaches every compute range execution and is filed as a carried obligation naming `TradingCalendar.SessionsAsync`, and phase 8 gains an obligation for C21 to skip a non-session date with the eight frozen rows named by date. **The two size figures ride with the `3 → 3 sign-off` obligation**, both being authored figures. **What survives the sign-off is not an open question but a frozen fact**: 57 `attribution` rows stand on 54 days the exchange was shut, they cannot be rewritten, and what reads them excludes them. ~~**SIX OF SIX DONE-WHEN LINES HOLD**~~ **The done-when now reads four holding and two stating no bound**, the overlap clause having become a description at Q.9 and the measure having gone on scoring it as a bound until the review found it. Every figure is unchanged. ~~**The phase is not signed off**: that call is the operator's and item 42 is under it~~ **Signed off 2026-08-24 on the operator's direction, item 42 having been authored as D-130.** Both sign-off steps are met: step 1 with `ci.ps1` green at the branch head and step 2 in a session that had not committed here |
-| 5 Digest chain | **IN PROGRESS, STOPPED AT 5.3 ON THREE BLOCKERS** | `a2db04e` | Plan drafted at `edb1c2d` and its authored items adopted 2026-08-24 on the operator's direction: D-131 to D-142, the fourteen checkpoints, and the scope line amended to name C29 HeadlineIngestor, which it had never carried. Two carried obligations closed, one added for phase 9. Baseline `ci.ps1` green at `edb1c2d`, 722 tests, 5 guard checks over 182 files, 21 migrations. **5.1 and 5.2 landed.** 5.1's sweep measured six things over the 32 candidates of 2026-08-12 at 160 provider units; 5.2 is migration `0022`, `DigestProvider`, `SCHEMA.md` and `FIXTURES.md`, **`ci.ps1` green at `a2db04e` with 735 tests, 22 migrations and 5 guard checks over 186 files**. **The phase stops at 5.3 on three blockers, none of them a build session's**: the measured median article is 1,248 tokens against `ARCHITECTURE.html` §07's five to eight hundred, so D-133's cap of three is a decision rather than a seeded value and 5.1's stopping rule fired; the local model is a reasoning model and returns zero characters of digest at any token cap, which under D-137 would run every night on the paid link with the local server healthy; and the Anthropic key is a placeholder. The full statement is in the 5.2 block below |
+| 5 Digest chain | **IN PROGRESS. 5.1, 5.2, 5.3's first commit and 5.4 landed** | `1cdbb5a` | Plan drafted at `edb1c2d` and its authored items adopted 2026-08-24 on the operator's direction: D-131 to D-142, the fourteen checkpoints, and the scope line amended to name C29 HeadlineIngestor, which it had never carried. Two carried obligations closed, one added for phase 9. Baseline `ci.ps1` green at `edb1c2d`, 722 tests, 5 guard checks over 182 files, 21 migrations. **5.1 and 5.2 landed.** 5.1's sweep measured six things over the 32 candidates of 2026-08-12 at 160 provider units; 5.2 is migration `0022`, `DigestProvider`, `SCHEMA.md` and `FIXTURES.md`, **`ci.ps1` green at `a2db04e` with 735 tests, 22 migrations and 5 guard checks over 186 files**. **The phase stops at 5.3 on three blockers, none of them a build session's**: the measured median article is 1,248 tokens against `ARCHITECTURE.html` §07's five to eight hundred, so D-133's cap of three is a decision rather than a seeded value and 5.1's stopping rule fired; the local model is a reasoning model and returns zero characters of digest at any token cap, which under D-137 would run every night on the paid link with the local server healthy; and the Anthropic key is a placeholder. The full statement is in the 5.2 block below. **Two of the three are now drafted as D-143 and D-144**, unauthored, in §12 of the phase plan; the third is a credential the operator is replacing. **5.3's first commit seeded seven decided keys and no provisional value**, four names asserted absent, `ci.ps1` green at `b2e50dc` with 749 tests. **5.4 built C29 HeadlineIngestor** under D-132's run scope, `ci.ps1` green at `1cdbb5a` with **756 tests** and 5 guard checks over 189 files. 5.5 and 5.7 wait on D-144, 5.6 and 5.14 on the key, 5.8 on D-143 |
 | 6 Researcher | NOT STARTED | | |
 | 7 Risk and execution | NOT STARTED | | |
 | 8 Learning loops | NOT STARTED | | |
@@ -11369,3 +11369,124 @@ attention.** A `StockResearcherLab.Ui` process was holding
 solution-wide `dotnet build` in the working tree fails with MSB3027 until it exits.
 `ci.ps1` is unaffected, building a worktree with its own `bin/`, which is why the two
 disagree. Nothing was killed to work around it.
+
+---
+
+## Phase 5, checkpoints 5.3 and 5.4
+
+**5.3 lands in two commits and that is its shape rather than a compromise.** The first
+seeds the keys that are decided; the second lands the two D-143 introduces, once D-143 is
+authored. `BUILD_PLAN.md` says a commit spanning two checkpoints means the checkpoints were
+drawn wrong; it does not say a checkpoint may not span two commits, and this one does so for
+a stated reason.
+
+**`ci.ps1` green at `b2e50dc`**, 749 tests, 5 guard checks over 187 files. **And at
+`1cdbb5a`**, 756 tests, 189 files, 22 migrations at both.
+
+### 5.3, first commit: seven keys seeded and four names deliberately absent
+
+**Seeded**, every one at the value the corpus already documents or that an authored
+decision states, so nothing was chosen at the call site: `digest.chain`,
+`digest.rotation_count`, `digest.lookback_days`, `digest.health_timeout_ms`,
+`digest.readiness_check_et`, `digest.secondary_model_id`, and
+`s5.no_digest_disqualifier_min_articles_90d`. The last had been documented since the first
+corpus with `CONFIG_REFERENCE.md` saying in terms that it stays unseeded until phase 5.
+
+**Not seeded, and a theory asserts all four names are absent.** `digest.max_articles` and
+`digest.max_tokens` are what D-143 supersedes; `digest.max_input_tokens` and
+`digest.max_output_tokens` are what it introduces. **No provisional value entered the
+store.** Config is append-only and versioned, so a placeholder is a config version and a
+history that must be segmented rather than a number that can be corrected [`CLAUDE.md` §8,
+§12]. The four names are asserted rather than left to the count, because a count that moved
+would not say which four keys it was about.
+
+**`ConfigSeeder.Keys.Count` moves from 95 to 102 and its test moves with it.** It moves
+again in the second commit, which is the visible form of a checkpoint that landed in two.
+
+**`local_model_config` gains its two rows through the seeder** [D-136]. Not config keys:
+they carry no version, resolve as of nothing, and are reported on their own line rather
+than added to the key count. The local endpoint is 5.1's measurement rather than a default.
+**`last_health_check` and `last_loaded_model` stay null and the test asserts the nulls**, so
+phase 9 inherits a decision rather than a drift.
+
+**One thing in that comment was stale and is removed rather than corrected.**
+`ConfigSeeder.Keys`' summary opened with "Forty-two keys" while the asserted count had
+reached ninety-five, four phases having added keys without touching the word. A count stated
+in two places is a count that can disagree with itself, and the one that is asserted is the
+one in the test.
+
+### Two findings recorded in `CONFIG_REFERENCE.md` rather than resolved
+
+**`digest.chain` does not order the chain.** D-136 gives the order to
+`local_model_config.provider_order` filtered on `enabled`, so what this key is for is open
+rather than merely unbuilt. It is seeded at the value the document already carried, which
+chooses nothing, and 5.7 states what reads it or marks it `NOT BOUND`. The candidate role,
+recorded and not taken: config is versioned and `local_model_config` is not, so this key is
+the only thing that could record which links were in the chain on a past date.
+
+**`digest.readiness_check_et`'s consumer is documented as LocalModelClient and the check is
+the chain's.** On a night the local server is down and the secondary is healthy, a readiness
+report naming only the local link reports a problem where there is none, and the reverse is
+worse. 5.13 builds it over the chain and fills the cell from what was read.
+
+### 5.4, C29 HeadlineIngestor
+
+The phase's first component, and **the first stage in this system that reads a table the
+select layer wrote rather than a source**. Reads `candidate_set` and the news endpoint,
+writes `headline`, declares Insert and Delete and no Update.
+
+**The grain is the checkpoint** [D-132]. Two fixtures carry it and both are cases where the
+wrong answer looks right. Two articles identical on every stored attribute but the body stay
+two rows: a unique index on the row's own attributes collapses one of them and the row count
+still looks plausible, and 5.1 measured articles sharing a title and a publication timestamp.
+And a run over one candidate leaves another candidate's rows alone, because the delete is
+scoped to ticker and date rather than to date: a date-wide clear on a night that failed part
+way through would leave the rest of the set with no headlines and no error.
+
+**A re-run over one date is byte-identical**, asserted as a set comparison in both
+directions rather than on a row count. A count is equal in the case that matters, where the
+second run appends its rows beside the first run's and the table doubles.
+
+**A night with no candidate writes nothing and says the zero is expected**, so the halt does
+not fire. That is C14's warm-up case one stage later. **Zero rows over a non-empty candidate
+set is deliberately not marked expected**: it would mean no candidate carried an article in
+seven days, which 5.1 measured happening for three of thirty-two individually and would be
+remarkable across all of them.
+
+**`screen_score_daily` and `attribution` are absent from the read set and a test asserts
+their absence.** This is INVARIANT 7 made structural one stage before the digest rather than
+documented at it: a component that could see a name's score could gather more evidence for a
+better-scoring one, and nothing downstream could tell.
+
+**Three counts moved with the component and all three are asserted**: `ExpectedOwners` 18 to
+19, `ExpectedStages` 17 to 18, and the composition-route count 18 to 19.
+
+**The folder is `Ingest/`, on §01 rather than §03.** The layer map puts C29 in layer 1; the
+component catalogue says it "runs inside the select layer because candidates do not exist
+until then". Both are human-edited and they disagree. The layer map is the document whose
+subject is which layer a component is in, and §03's sentence reads as a statement about when
+it runs. Reported, not resolved.
+
+### A defect in a test of mine, found by running it
+
+`TheDeclaredSetsAreCandidateSetAndHeadlineAndNothingElse` asserted the write set sorted as
+Delete then Insert. `WriteOperation` declares Insert, Update, Delete, so a sort by the value
+puts Insert first. The expectation was written from what reads naturally rather than from the
+declaration, and it is now asserted against the declaration. **Recorded because it is the
+second defect this phase found by running rather than by reading**, the first being `btrim`.
+
+### Where the phase stands
+
+| Checkpoint | State |
+|---|---|
+| 5.1 | **Done.** Six measurements, two of them stopping the build |
+| 5.2 | **Done.** `0022`, 735 tests, `ci.ps1` green at `a2db04e` |
+| 5.3 | **First commit done**, 749 tests, green at `b2e50dc`. Second commit waits on D-143 |
+| 5.4 | **Done.** C29, 756 tests, green at `1cdbb5a` |
+| 5.5, 5.7 | Blocked on D-144 |
+| 5.6, 5.14 | Blocked on the Anthropic key |
+| 5.8 | Blocked on D-143 and on 5.7 |
+| 5.9 to 5.13 | Downstream |
+
+**The `StockResearcherLab.Ui` process holding an Api DLL was ended on the operator's
+direction.** A solution-wide `dotnet build` in the working tree succeeds again.

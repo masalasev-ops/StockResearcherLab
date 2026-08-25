@@ -551,7 +551,7 @@ budget.
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
 | `digest.chain` | `["local","haiku"]` | D-25 | DigestChain, `BuildAsync` | **verified 5.7** |
-| `digest.rotation_count` | 2 | D-27 | NewsDigester | unverified, **seeded 5.3** |
+| `digest.rotation_count` | 2 | D-27 | NewsDigester, `ExecuteAsync`, through `DigestRotation.Select` | **verified 5.10** |
 | `digest.lookback_days` | 7 | D-133 | NewsDigester, `ExecuteAsync`; HeadlineIngestor, `ExecuteAsync`; RecordInspector, `DigestAsync` | **verified 5.9** |
 | `digest.health_timeout_ms` | 5000 | — | LocalModelClient, `HealthAsync` | **verified 5.5** |
 | `digest.readiness_check_et` | 15:30 | — | the chain, not one link [5.3] | unverified, **seeded 5.3** |

@@ -41,7 +41,7 @@ public sealed class DigestChainTests
         var second = Answering(DigestProvider.Haiku);
 
         var chain = await BuildAsync(["local", "haiku"], first, second);
-        var answer = await chain.DigestAsync(Request, TestContext.Current.CancellationToken);
+        var answer = await chain.DigestAsync(Request, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(answer);
         Assert.Equal(DigestProvider.Local, answer!.Provider);
@@ -62,10 +62,10 @@ public sealed class DigestChainTests
         var haiku = Answering(DigestProvider.Haiku);
 
         var forward = await BuildAsync(["local", "haiku"], local, haiku);
-        Assert.Equal(DigestProvider.Local, (await forward.DigestAsync(Request, Ct))!.Provider);
+        Assert.Equal(DigestProvider.Local, (await forward.DigestAsync(Request, ct: Ct))!.Provider);
 
         var reversed = await BuildAsync(["haiku", "local"], haiku, local);
-        Assert.Equal(DigestProvider.Haiku, (await reversed.DigestAsync(Request, Ct))!.Provider);
+        Assert.Equal(DigestProvider.Haiku, (await reversed.DigestAsync(Request, ct: Ct))!.Provider);
     }
 
     /// <summary>
@@ -77,10 +77,71 @@ public sealed class DigestChainTests
     public async Task TheFallThroughWorksFromEitherEnd()
     {
         var forward = await BuildAsync(["local", "haiku"], Silent(DigestProvider.Local), Answering(DigestProvider.Haiku));
-        Assert.Equal(DigestProvider.Haiku, (await forward.DigestAsync(Request, Ct))!.Provider);
+        Assert.Equal(DigestProvider.Haiku, (await forward.DigestAsync(Request, ct: Ct))!.Provider);
 
         var reversed = await BuildAsync(["haiku", "local"], Silent(DigestProvider.Haiku), Answering(DigestProvider.Local));
-        Assert.Equal(DigestProvider.Local, (await reversed.DigestAsync(Request, Ct))!.Provider);
+        Assert.Equal(DigestProvider.Local, (await reversed.DigestAsync(Request, ct: Ct))!.Provider);
+    }
+
+    /// <summary>
+    /// **The rotation's target is a position and not a name** [D-138, 5.10]. Asked for the
+    /// link at the chain's second position, the same code answers from the other one when
+    /// the chain is built in the opposite order, which is `ReversingTheOrderReverses...`
+    /// applied to the preference rather than to the default.
+    /// </summary>
+    [Fact]
+    public async Task ThePreferredLinkIsTheSecondPositionFromEitherEnd()
+    {
+        var local = Answering(DigestProvider.Local);
+        var haiku = Answering(DigestProvider.Haiku);
+
+        var forward = await BuildAsync(["local", "haiku"], local, haiku);
+        Assert.Equal(DigestProvider.Haiku, forward.RotationTarget);
+        Assert.Equal(
+            DigestProvider.Haiku,
+            (await forward.DigestAsync(Request, forward.RotationTarget, Ct))!.Provider);
+
+        var reversed = await BuildAsync(["haiku", "local"], haiku, local);
+        Assert.Equal(DigestProvider.Local, reversed.RotationTarget);
+        Assert.Equal(
+            DigestProvider.Local,
+            (await reversed.DigestAsync(Request, reversed.RotationTarget, Ct))!.Provider);
+    }
+
+    /// <summary>
+    /// **A preferred link that answers with nothing falls through to the rest of the chain
+    /// in its own order**, so a rotated candidate on a night the secondary is dead reaches
+    /// exactly the link an ordinary candidate would have [D-137, D-138]. The preference
+    /// moves where the walk starts and changes nothing else.
+    /// </summary>
+    [Fact]
+    public async Task APreferredLinkThatCannotAnswerFallsThroughToTheRest()
+    {
+        var local = Answering(DigestProvider.Local);
+        var haiku = Silent(DigestProvider.Haiku);
+
+        var chain = await BuildAsync(["local", "haiku"], local, haiku);
+
+        var answer = await chain.DigestAsync(Request, chain.RotationTarget, Ct);
+
+        Assert.NotNull(answer);
+        Assert.Equal(DigestProvider.Local, answer.Provider);
+        Assert.Single(answer.PassedOver);
+    }
+
+    /// <summary>
+    /// A chain of one has no second position, so it has nowhere to rotate to and says null
+    /// rather than pointing at itself. A caller then marks the candidate and sends it down
+    /// the ordinary path, which is what D-138's "the whole set rotates" needs to stay
+    /// meaningful on a one-link chain.
+    /// </summary>
+    [Fact]
+    public async Task AChainOfOneHasNoRotationTarget()
+    {
+        var chain = await BuildAsync(["local"], Answering(DigestProvider.Local));
+
+        Assert.Null(chain.RotationTarget);
+        Assert.Equal(DigestProvider.Local, (await chain.DigestAsync(Request, null, Ct))!.Provider);
     }
 
     // ------------------------------------------------------------- D-137 ---
@@ -97,7 +158,7 @@ public sealed class DigestChainTests
         var second = Answering(DigestProvider.Haiku);
 
         var chain = await BuildAsync(["local", "haiku"], first, second);
-        var answer = await chain.DigestAsync(Request, Ct);
+        var answer = await chain.DigestAsync(Request, ct: Ct);
 
         Assert.Equal(2, first.Calls);
         Assert.Equal(1, second.Calls);
@@ -116,7 +177,7 @@ public sealed class DigestChainTests
         var chain = await BuildAsync(
             ["local", "haiku"], Silent(DigestProvider.Local), Answering(DigestProvider.Haiku, model: "claude-haiku-4-5"));
 
-        var answer = await chain.DigestAsync(Request, Ct);
+        var answer = await chain.DigestAsync(Request, ct: Ct);
 
         Assert.Equal(DigestProvider.Haiku, answer!.Provider);
         Assert.Equal("claude-haiku-4-5", answer.Model);
@@ -141,7 +202,7 @@ public sealed class DigestChainTests
 
         for (var candidate = 0; candidate < 5; candidate++)
         {
-            Assert.Equal(DigestProvider.Haiku, (await chain.DigestAsync(Request, Ct))!.Provider);
+            Assert.Equal(DigestProvider.Haiku, (await chain.DigestAsync(Request, ct: Ct))!.Provider);
         }
 
         Assert.Equal(2, first.Calls);
@@ -149,7 +210,7 @@ public sealed class DigestChainTests
         Assert.Equal([DigestProvider.Local], chain.Failed);
 
         // And the reason is recorded once rather than on every candidate after it.
-        Assert.Single((await chain.DigestAsync(Request, Ct))!.PassedOver);
+        Assert.Single((await chain.DigestAsync(Request, ct: Ct))!.PassedOver);
     }
 
     /// <summary>
@@ -167,7 +228,7 @@ public sealed class DigestChainTests
         var second = Answering(DigestProvider.Haiku, text: "A short digest.");
 
         var chain = await BuildAsync(["local", "haiku"], first, second);
-        var answer = await chain.DigestAsync(Request, Ct);
+        var answer = await chain.DigestAsync(Request, ct: Ct);
 
         Assert.Equal(2, first.Calls);
         Assert.Equal("A short digest.", answer!.Text);
@@ -183,7 +244,7 @@ public sealed class DigestChainTests
         };
 
         var chain = await BuildAsync(["local", "haiku"], link, Answering(DigestProvider.Haiku));
-        var answer = await chain.DigestAsync(Request, Ct);
+        var answer = await chain.DigestAsync(Request, ct: Ct);
 
         Assert.Equal(DigestProvider.Local, answer!.Provider);
         Assert.Equal(1, link.Calls);
@@ -205,7 +266,7 @@ public sealed class DigestChainTests
         };
 
         var chain = await BuildAsync(["local", "haiku"], first, Answering(DigestProvider.Haiku));
-        var answer = await chain.DigestAsync(Request, Ct);
+        var answer = await chain.DigestAsync(Request, ct: Ct);
 
         Assert.Equal(DigestProvider.Haiku, answer!.Provider);
         Assert.Contains("cap cannot be asserted", answer.PassedOver[0], StringComparison.Ordinal);
@@ -228,7 +289,7 @@ public sealed class DigestChainTests
 
         var chain = await BuildAsync(["local", "haiku"], first, Answering(DigestProvider.Haiku));
 
-        Assert.Equal(DigestProvider.Haiku, (await chain.DigestAsync(Request, Ct))!.Provider);
+        Assert.Equal(DigestProvider.Haiku, (await chain.DigestAsync(Request, ct: Ct))!.Provider);
     }
 
     /// <summary>
@@ -241,7 +302,7 @@ public sealed class DigestChainTests
         var first = new StubLink(DigestProvider.Local) { Throw = true };
 
         var chain = await BuildAsync(["local", "haiku"], first, Answering(DigestProvider.Haiku));
-        var answer = await chain.DigestAsync(Request, Ct);
+        var answer = await chain.DigestAsync(Request, ct: Ct);
 
         Assert.Equal(2, first.Calls);
         Assert.Contains("could not be reached", answer!.PassedOver[0], StringComparison.Ordinal);
@@ -258,7 +319,7 @@ public sealed class DigestChainTests
         var chain = await BuildAsync(
             ["local", "haiku"], Silent(DigestProvider.Local), Silent(DigestProvider.Haiku));
 
-        Assert.Null(await chain.DigestAsync(Request, Ct));
+        Assert.Null(await chain.DigestAsync(Request, ct: Ct));
         Assert.Equal([DigestProvider.Local, DigestProvider.Haiku], chain.Failed);
     }
 

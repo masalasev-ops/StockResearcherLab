@@ -431,6 +431,164 @@ public sealed class NewsDigesterTests : IAsyncLifetime
 
     // ------------------------------------------------------------- the seams ---
 
+    // ------------------------------------------------- D-138's rotation ---
+
+    /// <summary>
+    /// **Exactly `digest.rotation_count` rows carry `was_rotation`, and they are the rows
+    /// the hash names** [D-138].
+    ///
+    /// The pair itself is pinned in `DigestRotationTests` against literal names. What is
+    /// asserted here is the half that lives in C33: the rows the rule selects are the rows
+    /// that go to the chain's second position and the rows the column marks.
+    /// </summary>
+    [Fact]
+    public async Task ExactlyTheRotationCountRowsAreMarkedAndTheyAreTheOnesTheHashNames()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ClearAsync(ct);
+
+        await CandidatesAsync(Five, ct);
+
+        foreach (var ticker in Five)
+        {
+            await ArticleAsync(ticker, "Something happened at " + ticker, ct);
+        }
+
+        var local = new StubLink(DigestProvider.Local);
+        var secondary = new StubLink(DigestProvider.Haiku) { Model = "claude-haiku-4-5" };
+
+        await RunAsync(local, ct, secondary, rotation: 2);
+
+        var rows = await ReadAsync(ct);
+        var marked = rows.Where(r => r.Value.WasRotation).Select(r => r.Key).Order(StringComparer.Ordinal);
+
+        Assert.Equal(5, rows.Count);
+        Assert.Equal(
+            DigestRotation.Select(Date, Five, 2).Order(StringComparer.Ordinal),
+            marked);
+
+        // The marked rows went to the second position and the rest to the first, which is
+        // what makes D-27's pair a pair rather than a label.
+        foreach (var (ticker, row) in rows)
+        {
+            Assert.Equal(row.WasRotation ? "haiku" : "local", row.Provider);
+            Assert.Equal(row.WasRotation ? "claude-haiku-4-5" : "qwen3.6:latest", row.Model);
+            Assert.NotNull(ticker);
+        }
+
+        Assert.Equal(2, secondary.Calls);
+        Assert.Equal(3, local.Calls);
+    }
+
+    /// <summary>
+    /// **The rotation is present on a night the primary is down**, which is the case D-138
+    /// says `was_rotation` exists for: everything went to the secondary, and without the
+    /// column the rotation's rows would be indistinguishable from the fall-through.
+    /// </summary>
+    [Fact]
+    public async Task TheRotationIsPresentOnANightThePrimaryIsDown()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ClearAsync(ct);
+
+        await CandidatesAsync(Five, ct);
+
+        foreach (var ticker in Five)
+        {
+            await ArticleAsync(ticker, "Something happened at " + ticker, ct);
+        }
+
+        var local = new StubLink(DigestProvider.Local) { Healthy = false };
+        var secondary = new StubLink(DigestProvider.Haiku) { Model = "claude-haiku-4-5" };
+
+        await RunAsync(local, ct, secondary, rotation: 2);
+
+        var rows = await ReadAsync(ct);
+
+        Assert.All(rows.Values, r => Assert.Equal("haiku", r.Provider));
+        Assert.Equal(2, rows.Count(r => r.Value.WasRotation));
+        Assert.Equal(
+            DigestRotation.Select(Date, Five, 2).Order(StringComparer.Ordinal),
+            rows.Where(r => r.Value.WasRotation).Select(r => r.Key).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// **A rotated candidate whose target is dead falls through and is still marked.**
+    ///
+    /// This is the reading of D-138 this build takes and it is the one worth asserting: the
+    /// flag records that the candidate was selected, and `provider` records which link
+    /// answered. The alternative, marking only the rows the second link answered, makes the
+    /// count vary with an outage, and the checkpoint asks for exactly
+    /// `digest.rotation_count` rows on a night the primary is healthy and on a night it is
+    /// not. D-27's pair is therefore the marked rows whose provider is not the first link's.
+    /// </summary>
+    [Fact]
+    public async Task ARotatedCandidateWhoseTargetIsDeadFallsThroughAndIsStillMarked()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ClearAsync(ct);
+
+        await CandidatesAsync(Five, ct);
+
+        foreach (var ticker in Five)
+        {
+            await ArticleAsync(ticker, "Something happened at " + ticker, ct);
+        }
+
+        var local = new StubLink(DigestProvider.Local);
+
+        // **Dead for a digest, not merely unhealthy at the probe.** `ReadyAsync` stops at
+        // the first healthy link, so a secondary that fails only its health check is never
+        // probed on a night the primary is up and would answer the rotation normally. The
+        // link that is actually dead is the one that answers with nothing [D-137].
+        var secondary = new StubLink(DigestProvider.Haiku)
+        {
+            Model = "claude-haiku-4-5",
+            Answer = _ => string.Empty,
+        };
+
+        await RunAsync(local, ct, secondary, rotation: 2);
+
+        var rows = await ReadAsync(ct);
+
+        Assert.All(rows.Values, r => Assert.Equal("local", r.Provider));
+        Assert.Equal(2, rows.Count(r => r.Value.WasRotation));
+
+        // Two calls to the dead link and not two per rotated candidate: it failed twice on
+        // the first of them and was unhealthy for the rest of the run, so the second went
+        // straight past it [D-137].
+        Assert.Equal(2, secondary.Calls);
+        Assert.Equal(5, local.Calls);
+    }
+
+    /// <summary>
+    /// A candidate set smaller than the count rotates whole and nothing is padded [D-138],
+    /// asserted through the stage rather than only over the rule, because the padding a
+    /// naive implementation would do happens where the rows are built.
+    /// </summary>
+    [Fact]
+    public async Task ACandidateSetSmallerThanTheRotationCountRotatesWhole()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ClearAsync(ct);
+
+        await CandidatesAsync([Prose], ct);
+        await ArticleAsync(Prose, "Something happened.", ct);
+
+        await RunAsync(new StubLink(DigestProvider.Local), ct, rotation: 2);
+
+        var rows = await ReadAsync(ct);
+
+        Assert.Single(rows);
+        Assert.True(rows[Prose].WasRotation);
+    }
+
+    /// <summary>The five candidates the rotation tests run over.</summary>
+    private static readonly string[] Five =
+    [
+        Marker + "R1.US", Marker + "R2.US", Marker + "R3.US", Marker + "R4.US", Marker + "R5.US",
+    ];
+
     private static string Prose => Marker + "PROSE.US";
 
     private static string Hatch => Marker + "HATCH.US";
@@ -448,11 +606,11 @@ public sealed class NewsDigesterTests : IAsyncLifetime
     /// refusal is 5.7's and it is load-bearing here: a class that named one link would be
     /// testing C33 against a chain the store does not describe.
     /// </summary>
-    private static NewsDigester Stage(StubLink local, StubLink secondary)
+    private static NewsDigester Stage(StubLink local, StubLink secondary, int rotation = 0)
         => new(
             (context, ct) => DigestChain.BuildAsync(
                 new StageData(TestDatabase.ConnectionString, LocalModelClient.Access()),
-                new StubConfig(),
+                new StubConfig(rotation),
                 context.Date,
                 new Dictionary<DigestProvider, IDigestLink>
                 {
@@ -462,19 +620,19 @@ public sealed class NewsDigesterTests : IAsyncLifetime
                 ct),
             () => new DigestInstruction.Instruction("Summarise.", "hash"));
 
-    private static NewsDigester Stage(StubLink local)
-        => Stage(local, new StubLink(DigestProvider.Haiku) { Model = "claude-haiku-4-5" });
+    private static NewsDigester Stage(StubLink local, int rotation = 0)
+        => Stage(local, new StubLink(DigestProvider.Haiku) { Model = "claude-haiku-4-5" }, rotation);
 
     private static async Task<StageResult> RunAsync(
-        StubLink link, CancellationToken ct, StubLink? secondary = null)
+        StubLink link, CancellationToken ct, StubLink? secondary = null, int rotation = 0)
     {
-        var stage = secondary is null ? Stage(link) : Stage(link, secondary);
+        var stage = secondary is null ? Stage(link, rotation) : Stage(link, secondary, rotation);
 
         var context = new StageContext(
             Date, 1,
             new StageData(TestDatabase.ConnectionString, new DeclaredAccess(stage)),
             new FixedClock(new DateTimeOffset(2026, 8, 12, 22, 33, 0, TimeSpan.Zero), Date),
-            new StubConfig());
+            new StubConfig(rotation));
 
         return await stage.ExecuteAsync(context, ct).ConfigureAwait(false);
     }
@@ -589,8 +747,17 @@ public sealed class NewsDigesterTests : IAsyncLifetime
         }
     }
 
-    /// <summary>The four keys C33 reads, and nothing else.</summary>
-    private sealed class StubConfig : IConfigStore
+    /// <summary>
+    /// The five keys C33 reads, and nothing else.
+    /// </summary>
+    /// <param name="rotation">
+    /// **`digest.rotation_count`, and it is zero here where production seeds two** [5.10].
+    /// The rotation routes its candidates to the chain's second link, and every test in
+    /// this class that asserts which link answered, what it was sent or what it named its
+    /// model would be asserting about the secondary stub instead on a candidate set of one
+    /// to three names. The rotation's own tests pass two and assert on the rows.
+    /// </param>
+    private sealed class StubConfig(int rotation = 0) : IConfigStore
     {
         private static readonly Dictionary<string, string> Values = new(StringComparer.Ordinal)
         {
@@ -601,10 +768,16 @@ public sealed class NewsDigesterTests : IAsyncLifetime
         };
 
         public Task<ConfigRow?> ResolveAsync(string key, DateOnly asOf, CancellationToken ct = default)
-            => Values.TryGetValue(key, out var value)
-                ? Task.FromResult<ConfigRow?>(new ConfigRow(key, 1, value, new DateOnly(2020, 1, 1)))
-                : throw new InvalidOperationException(
-                    $"C33 resolved '{key}', which 5.8 does not expect it to read.");
+        {
+            var value = string.Equals(key, "digest.rotation_count", StringComparison.Ordinal)
+                ? rotation.ToString(CultureInfo.InvariantCulture)
+                : Values.TryGetValue(key, out var seeded)
+                    ? seeded
+                    : throw new InvalidOperationException(
+                        $"C33 resolved '{key}', which this class does not expect it to read.");
+
+            return Task.FromResult<ConfigRow?>(new ConfigRow(key, 1, value, new DateOnly(2020, 1, 1)));
+        }
 
         public async Task<ConfigRow> RequireAsync(string key, DateOnly asOf, CancellationToken ct = default)
             => (await ResolveAsync(key, asOf, ct).ConfigureAwait(false))!;

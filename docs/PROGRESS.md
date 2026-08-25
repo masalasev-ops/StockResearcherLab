@@ -12107,3 +12107,68 @@ fourth did not need a halted run to demonstrate.
 all while the same statement's window expression, reading the same column in Postgres, said
 the row was inside the window. That contradiction is what a panel is for, and it is the
 second time in this corpus that opening something found what tests had passed over.
+
+---
+
+## Phase 5, checkpoint 5.10, the rotation
+
+**D-138's hash, and nothing in the code names a link.** The night's candidates are ordered
+by an FNV-1a 64-bit hash of the invariant `yyyy-MM-dd` date string concatenated with the
+ticker, ties broken on the ticker ordinally, and the first `digest.rotation_count` go to the
+chain's **second position**. The chain exposes that position as `RotationTarget` rather than
+as a name, so an operator who reorders `local_model_config` reorders the rotation with it,
+which is 5.7's property applied to the preference rather than to the default.
+
+**The hash is written in this repository and is asserted against the published FNV-1a
+vectors**, because D-138 rejects a seeded `Random` on the ground that its sequence is a
+runtime implementation detail, and a hash written here can drift from the algorithm it
+claims to be in exactly the same way. `a`, `foobar` and the empty string pin it.
+
+**The selection is pinned to literal names on three adjacent dates.** A test asserting only
+that two were chosen would pass over a pair that had quietly changed, and D-27's paired
+sample is accumulated one night at a time over months, so that change is unrecoverable
+rather than merely wrong.
+
+### `was_rotation` records the selection, not which link answered
+
+**This is a build decision inside an authored rule and it is stated rather than left in the
+code.** D-138 says the rotation runs regardless of primary health, and that on a night the
+primary is down the rotation pair is indistinguishable from the fall-through **except that
+`was_rotation` is true on those two rows**. That reading makes the flag a property of the
+selection: exactly `digest.rotation_count` rows carry it on a night the primary is healthy
+and on a night it is not, which is what the checkpoint asks for.
+
+**The consequence is that a rotated candidate whose target is dead is still marked**, and
+`provider` is what says the second link did not answer. **D-27's pair is therefore the
+marked rows whose provider is not the first link's**, not the marked rows alone. The
+alternative, marking only rows the second link answered, was rejected because it makes the
+count vary with an outage and loses which candidates were selected on the night it matters
+most.
+
+### What the tests hold
+
+Exactly `digest.rotation_count` rows marked, and they are the rows the rule names, asserted
+through the store. The same on a night the primary is down, where every row carries the
+second link. A dead target falling through to the first link with the mark intact, and
+costing two calls rather than two per rotated candidate [D-137]. A candidate set smaller
+than the count rotating whole with nothing padded. And at the chain, the preferred link
+tried first **from either end**, which is the "no code path names a link" assertion applied
+to the rotation.
+
+**A fixture distinction worth recording, because the first version of the test had it
+wrong.** A link that fails its health check is not a dead link for a digest: `ReadyAsync`
+stops at the first healthy link, so on a night the primary is up the secondary is never
+probed and would answer the rotation normally. The link that is actually dead is the one
+that answers with nothing, which is what D-137's refusal is written against.
+
+### What 5.10 does not evidence
+
+**No rotation has ever reached a real secondary.** 5.6 waits on the Anthropic credential, so
+every assertion here is against stub links, and what is proved is the routing, the
+selection and the marking rather than the paired sample they exist to build. **The evidenced
+half is the chain-side behaviour; the half that waits for the key is a rotated candidate
+answered by Haiku 4.5 and a night's cost against it** [5.14]. Stated in the shape 3.16 and
+3.17 took, because two honest halves handed forward beat two claimed wholes.
+
+`digest.rotation_count`'s Consumer cell moves to verified, read in `ExecuteAsync` through
+`DigestRotation.Select` rather than inferred from the name.

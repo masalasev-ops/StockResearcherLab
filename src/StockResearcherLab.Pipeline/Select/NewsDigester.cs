@@ -92,6 +92,7 @@ public sealed class NewsDigester : IStage
         var lookback = (int)await LongAsync(context, "digest.lookback_days", ct).ConfigureAwait(false);
         var maxInput = (int)await LongAsync(context, "digest.max_input_tokens", ct).ConfigureAwait(false);
         var maxOutput = (int)await LongAsync(context, "digest.max_output_tokens", ct).ConfigureAwait(false);
+        var rotationCount = (int)await LongAsync(context, "digest.rotation_count", ct).ConfigureAwait(false);
 
         var candidates = await CandidatesAsync(context, ct).ConfigureAwait(false);
         if (candidates.Count == 0)
@@ -118,6 +119,18 @@ public sealed class NewsDigester : IStage
         var rows = new List<Row>(candidates.Count);
         var counts = new Counts();
 
+        // **The rotation is chosen before any candidate is digested, from the date and the
+        // tickers alone** [D-138]. It does not depend on which link is healthy, on what the
+        // articles say, or on the order the loop below reaches them, so two runs of one
+        // night rotate the same names [INVARIANT 6].
+        var rotation = DigestRotation.Select(context.Date, candidates, rotationCount)
+            .ToHashSet(StringComparer.Ordinal);
+
+        // Where the rotation goes, read off the chain as a position rather than named
+        // [D-27, 5.7]. Null is a one-link chain, and then a selected candidate is still
+        // marked and simply has nowhere else to go.
+        var target = chain.RotationTarget;
+
         foreach (var ticker in candidates)
         {
             var articles = await ArticlesAsync(context, ticker, from, ct).ConfigureAwait(false);
@@ -130,12 +143,16 @@ public sealed class NewsDigester : IStage
                 // article carrying a null body. The row exists and carries the link that
                 // would have answered, which is what the probe is for.
                 counts.NoArticles++;
-                rows.Add(new Row(ticker, null, ready.Provider, ready.LoadedModel));
+                rows.Add(new Row(ticker, null, ready.Provider, ready.LoadedModel, rotation.Contains(ticker)));
                 continue;
             }
 
+            var rotated = rotation.Contains(ticker);
+
             var answer = await chain.DigestAsync(
-                new DigestRequest(instruction.Text, DigestSelection.Render(selected), maxOutput), ct)
+                new DigestRequest(instruction.Text, DigestSelection.Render(selected), maxOutput),
+                rotated ? target : null,
+                ct)
                 .ConfigureAwait(false)
                 ?? throw new InvalidOperationException(
                     $"Every link in the chain failed while digesting {ticker}, so the run halts " +
@@ -153,7 +170,7 @@ public sealed class NewsDigester : IStage
             }
 
             counts.Articles += selected.Count;
-            rows.Add(new Row(ticker, text, answer.Provider, answer.Model));
+            rows.Add(new Row(ticker, text, answer.Provider, answer.Model, rotated));
         }
 
         await context.Data.WriteAsync(
@@ -181,6 +198,12 @@ public sealed class NewsDigester : IStage
         var version = instruction.Sha256.Length > 12 ? instruction.Sha256[..12] : instruction.Sha256;
         detail += string.Create(CultureInfo.InvariantCulture, $". Instruction {version}");
 
+        // The rotation, counted from the rows rather than from the selection, so the line
+        // says what was written and not what was intended [D-138].
+        detail += string.Create(
+            CultureInfo.InvariantCulture,
+            $". {rows.Count(r => r.WasRotation):N0} rotated to {(target is null ? "nowhere, the chain holding one link" : DigestProviders.Name(target.Value))}");
+
         if (chain.PassedOver.Count > 0)
         {
             // The second half of D-137's record. Without it a night that ran entirely on
@@ -201,7 +224,24 @@ public sealed class NewsDigester : IStage
 
     // ---------------------------------------------------------------- reading ---
 
-    private sealed record Row(string Ticker, string? Text, DigestProvider Provider, string? Model);
+    /// <param name="WasRotation">
+    /// **Whether this candidate was selected for the rotation, not whether the second link
+    /// answered** [D-138, 5.10].
+    ///
+    /// D-138 says the rotation runs regardless of primary health and that `was_rotation` is
+    /// what distinguishes its rows on a night everything went to the secondary anyway, so
+    /// the flag is a property of the selection. `provider` says which link answered, and the
+    /// pair D-27 compares is therefore the rotated rows whose provider is not the first
+    /// link's: a rotated candidate whose target failed twice falls through and is still
+    /// marked, because it was still selected.
+    ///
+    /// **Recorded here because the alternative reading is defensible.** Flagging only the
+    /// rows the second link answered would make the count vary with a provider outage, and
+    /// the checkpoint asks for exactly `digest.rotation_count` rows on a night the primary
+    /// is healthy and on a night it is not.
+    /// </param>
+    private sealed record Row(
+        string Ticker, string? Text, DigestProvider Provider, string? Model, bool WasRotation);
 
     private static async Task<IReadOnlyList<string>> CandidatesAsync(
         StageContext context, CancellationToken ct)
@@ -309,10 +349,9 @@ public sealed class NewsDigester : IStage
                 "news_digest.model_name is what separates a shift in results from a change " +
                 "in the evidence [D-29]. A blank there records nothing."));
 
-            // **The rotation is 5.10's and every row here is false.** Not defaulted: the
-            // column has a DEFAULT and a writer that declines to think about it is what
-            // the default makes easy, so the value is written.
-            sb.Append(", FALSE)");
+            // Written rather than defaulted: the column has a DEFAULT and a writer that
+            // declines to think about it is what a default makes easy.
+            sb.Append(r.WasRotation ? ", TRUE)" : ", FALSE)");
         }
 
         return sb.Append(';').ToString();

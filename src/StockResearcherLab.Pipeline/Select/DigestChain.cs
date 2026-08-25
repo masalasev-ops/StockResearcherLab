@@ -98,6 +98,21 @@ public sealed class DigestChain
     public IReadOnlyList<DigestProvider> Order => [.. _links.Select(l => l.Provider)];
 
     /// <summary>
+    /// Where the nightly rotation sends its candidates, being the chain's second position,
+    /// or null where the chain has only one [D-27, D-138].
+    ///
+    /// **It is a position and not a name**, which is what keeps 5.7's property intact: no
+    /// code path here knows which link is which, so an operator who reorders
+    /// `local_model_config` reorders the rotation with it rather than finding a branch that
+    /// still names the old secondary.
+    ///
+    /// **Null is a chain that cannot rotate**, and it is a state a caller must decide
+    /// about rather than an error: a one-link chain is a configuration, and the rotation
+    /// existing at all is what D-27's paired sample needs.
+    /// </summary>
+    public DigestProvider? RotationTarget => _links.Count > 1 ? _links[1].Provider : null;
+
+    /// <summary>
     /// Links this run has given up on, in the order they were given up on. A link is here
     /// after failing twice on one candidate [D-137].
     /// </summary>
@@ -176,13 +191,22 @@ public sealed class DigestChain
     /// machine problem and a link that answered with nothing is a configuration one
     /// [D-144].
     /// </summary>
-    public async Task<ChainAnswer?> DigestAsync(DigestRequest request, CancellationToken ct = default)
+    /// <param name="preferred">
+    /// The link to try first, which the rotation passes and an ordinary candidate does not
+    /// [D-138]. **It changes where the walk starts and nothing else**: a preferred link that
+    /// fails twice is marked unhealthy and the walk continues through the rest of the chain
+    /// in its own order, which is D-137's fall-through reached from a different position.
+    /// A preferred link the chain does not hold is ignored rather than refused, because the
+    /// caller asks for a position it read off this chain.
+    /// </param>
+    public async Task<ChainAnswer?> DigestAsync(
+        DigestRequest request, DigestProvider? preferred = null, CancellationToken ct = default)
     {
         // Readiness first, so an unreachable link costs one probe rather than two digests
         // and so the caller and this method agree about which link is answering.
         await ReadyAsync(ct).ConfigureAwait(false);
 
-        foreach (var link in _links)
+        foreach (var link in Ordered(preferred))
         {
             if (_failed.Contains(link.Provider))
             {
@@ -216,6 +240,25 @@ public sealed class DigestChain
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The links in the order this call tries them: the preferred one first where the chain
+    /// holds it, then the rest in the chain's own order.
+    ///
+    /// **Nothing is removed and nothing is reordered beyond the move**, so a rotation
+    /// candidate whose target is dead falls through to exactly the links an ordinary
+    /// candidate would have used, in the same order.
+    /// </summary>
+    private IEnumerable<Link> Ordered(DigestProvider? preferred)
+    {
+        if (preferred is not DigestProvider wanted || !_links.Any(l => l.Provider == wanted))
+        {
+            return _links;
+        }
+
+        return _links.Where(l => l.Provider == wanted)
+            .Concat(_links.Where(l => l.Provider != wanted));
     }
 
     /// <summary>

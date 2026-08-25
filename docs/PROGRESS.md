@@ -12242,6 +12242,8 @@ is either a stand-in or absent.
 | `219d156` | 5.9, the digest panel | **green, 830 tests**, 203 files, on the second attempt: see below |
 | `6498337` | 5.10, the rotation | **green, 849 tests** |
 | `8896d06` | 5.11, the gate | **green, 853 tests** |
+| `0a9b795` | 5.13's residency line, the evidence file, this table | **green, 853 tests** |
+| `745d7ff` | the night re-digested with the rotation present | **green, 853 tests**, 5 guard checks over 206 files |
 
 ### The drop step's file lock again, which is now the fifth of its shape today
 

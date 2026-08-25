@@ -205,6 +205,23 @@ public sealed class LocalModelClientTests
     }
 
     /// <summary>
+    /// **The same probe under the warm bound names the warm key** [5.13]. Two questions
+    /// get two bounds, and a detail line saying `digest.health_timeout_ms` after a probe
+    /// that ran under the other one would send an operator to change the wrong value.
+    /// </summary>
+    [Fact]
+    public async Task TheWarmBoundNamesItsOwnKeyRatherThanTheHealthOne()
+    {
+        var health = await ProbeAsync(
+            new StubHandler { Delay = TimeSpan.FromSeconds(30) }, LocalOptions, timeoutMs: 120,
+            timeoutKey: LocalModelClient.WarmTimeoutKey);
+
+        Assert.False(health.Healthy);
+        Assert.Contains("digest.warm_timeout_ms", health.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("digest.health_timeout_ms", health.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// **No enabled row is not a sick server**, and the line says which it is. The chain
     /// is built from this table [D-136], so an operator who disabled the local link gets
     /// a report saying that rather than one implying the machine is broken.
@@ -368,14 +385,15 @@ public sealed class LocalModelClientTests
     // ------------------------------------------------------------- the seams ---
 
     private static async Task<LinkHealth> ProbeAsync(
-        StubHandler handler, string? requestOptions, long timeoutMs = 5000)
+        StubHandler handler, string? requestOptions, long timeoutMs = 5000,
+        string timeoutKey = LocalModelClient.HealthTimeoutKey)
     {
         var client = new LocalModelClient(
             new OneLinkData(requestOptions),
             new StubConfig(timeoutMs),
             new HttpClient(handler));
 
-        return await client.HealthAsync(TestContext.Current.CancellationToken);
+        return await client.HealthAsync(timeoutKey, TestContext.Current.CancellationToken);
     }
 
     /// <summary>One enabled row at `provider_order` 1, without a store.</summary>
@@ -421,11 +439,16 @@ public sealed class LocalModelClientTests
             => throw new NotSupportedException("C32 writes nothing [D-136].");
     }
 
-    /// <summary>`digest.health_timeout_ms` and nothing else; anything unexpected throws.</summary>
+    /// <summary>
+    /// The two timeout keys and nothing else; anything unexpected throws. Both answer the
+    /// same stub value, because what these tests separate is which key the client names
+    /// in its own detail line, not what the two are set to [5.13].
+    /// </summary>
     private sealed class StubConfig(long timeoutMs = 5000) : IConfigStore
     {
         public Task<ConfigRow?> ResolveAsync(string key, DateOnly asOf, CancellationToken ct = default)
-            => string.Equals(key, "digest.health_timeout_ms", StringComparison.Ordinal)
+            => string.Equals(key, LocalModelClient.HealthTimeoutKey, StringComparison.Ordinal)
+               || string.Equals(key, LocalModelClient.WarmTimeoutKey, StringComparison.Ordinal)
                 ? Task.FromResult<ConfigRow?>(new ConfigRow(
                     key, 1, timeoutMs.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     new DateOnly(2020, 1, 1)))

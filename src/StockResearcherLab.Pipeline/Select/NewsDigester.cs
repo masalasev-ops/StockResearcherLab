@@ -52,7 +52,11 @@ public sealed class NewsDigester : IStage
         _instruction = instruction;
     }
 
-    public string Name => "NewsDigester";
+    /// <summary>Named once, as C32 is, so a caller outside the pipeline can name it
+    /// without a literal [`CLAUDE.md` section 6, names match the architecture].</summary>
+    public const string ComponentName = "NewsDigester";
+
+    public string Name => ComponentName;
 
     /// <summary>
     /// **`screen_score_daily` and `attribution` are absent and their absence is asserted**,

@@ -12486,3 +12486,77 @@ two-link chain whose links were both unhealthy. With one link the same `ReadyAsy
 runs over a shorter list, so the path is the same and shorter, but no run has yet met a
 cold model with the secondary disabled. **The first night that does is the demonstration,
 and it is worth watching for rather than assuming.**
+
+---
+
+## Phase 5, checkpoint 5.13, the local model precondition
+
+**The checkpoint was reshaped before it was built** [amended 2026-08-25, operator
+direction]. It was a readiness check on a clock at 15:30; it is now a precondition the
+Worker runs immediately ahead of C33. The reason is the operator's and it is not a design
+preference: they are not reliably at the machine in the afternoon, so a check timed for
+three hours earlier warns nobody. What they asked for is that the probe load the model
+where it can, and stop and wait for them where it cannot.
+
+### Two bounds, because there are two questions
+
+| Key | Asks | Value |
+|---|---|---|
+| `digest.health_timeout_ms` | can this link answer now | 5,000, **unchanged** |
+| `digest.warm_timeout_ms` | can this link be made to answer | 120,000, new |
+
+**The health timeout is not widened and this morning's direction stands.** It bounds the
+chain's own check, which is the thing that finds a cold model, and one wide enough to
+absorb a cold load is wide enough to hide one. The warm bound is a second key read by one
+caller, the Worker, ahead of the stage and never inside it.
+
+**120,000 is headroom rather than a measurement.** The cold load measures 41 to 52 seconds
+[5.5, 5.13].
+
+**The long bound costs nothing on the case it looks expensive for.** A refused connection
+throws at once and reports `the endpoint could not be reached`, so the 120 seconds is
+spent only when the server is up and loading, which is the case worth waiting through.
+This was not obvious and it is why the warm bound is safe: it cannot turn a dead server
+into a two-minute pause.
+
+### The precondition is a host concern and the pipeline is untouched
+
+**`LocalModelPrecondition` is not a stage and is not in the registry.** A stage completes
+or it fails the run [`CLAUDE.md` section 6], and one that blocks on a person is neither.
+It sits ahead of C33, writes nothing, and decides nothing: `EnsureAsync` returns a bool
+that the Worker does not act on. C33 runs either way, and an unhealthy chain still halts
+on INVARIANT 15's gate. **It can only ever delay a halt and never convert one into a run.**
+
+**The unattended case needs no configuration.** Whether somebody is at the keyboard is a
+property of the run rather than a value to tune, so `Console.IsInputRedirected` decides it.
+CI, a scheduled task and any piped invocation all present redirected input, so the prompt
+is never reached and nothing waits. That is asserted twice, once by the prompt not being
+reached and once by the input ending mid-wait.
+
+### What is evidenced and what waits
+
+**Evidenced, live on 2026-08-25 through the Worker:**
+
+```
+run NewsDigester  date 2026-08-25  config v25
+  qwen/qwen3.5-9b answered in 2,897 ms. Continuing.
+  ok, 0 row(s) written
+```
+
+Both input paths were run, attached and with input redirected from the null device, and
+both behaved identically with the model resident, which is the correct outcome: the seam
+only matters once the probe fails. **866 tests**, up 13.
+
+**Waiting: the prompt has not been seen against a genuinely cold model.** Eight tests
+cover it against stubs, including the case the checkpoint exists for, where the operator
+loads the model and presses Enter and the night continues without the command being
+re-run. But no live run has met a cold model since the precondition was built, because
+demonstrating it means unloading the operator's model and that is theirs to do. **The
+first night that meets one is the demonstration**, and this line is here so a later reader
+does not read eight green tests as a live observation.
+
+### `digest.readiness_check_et` now has no consumer
+
+`CONFIG_REFERENCE.md`'s Consumer column says so rather than carrying one that will not
+arrive. **Retiring the key is a separate decision and is not taken here**, config being
+append-only and a retirement being a version with its own reasoning.

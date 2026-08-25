@@ -31,6 +31,7 @@ public sealed class ChainSeedTests
     [InlineData("digest.rotation_count", "2")]
     [InlineData("digest.lookback_days", "7")]
     [InlineData("digest.health_timeout_ms", "5000")]
+    [InlineData("digest.warm_timeout_ms", "120000")]
     [InlineData("digest.readiness_check_et", "\"15:30\"")]
     [InlineData("digest.secondary_model_id", "\"claude-haiku-4-5\"")]
     [InlineData("digest.max_input_tokens", "6000")]

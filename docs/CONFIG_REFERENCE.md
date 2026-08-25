@@ -554,7 +554,8 @@ budget.
 | `digest.rotation_count` | 2 | D-27 | NewsDigester, `ExecuteAsync`, through `DigestRotation.Select` | **verified 5.10** |
 | `digest.lookback_days` | 7 | D-133 | NewsDigester, `ExecuteAsync`; HeadlineIngestor, `ExecuteAsync`; RecordInspector, `DigestAsync` | **verified 5.9** |
 | `digest.health_timeout_ms` | 5000 | — | LocalModelClient, `HealthAsync` | **verified 5.5** |
-| `digest.readiness_check_et` | 15:30 | — | the chain, not one link [5.3] | unverified, **seeded 5.3** |
+| `digest.warm_timeout_ms` | 120000 | — | the Worker's `run` command, `EnsureLocalModelAsync`, through `LocalModelClient.HealthAsync(key)` | **verified 5.13** |
+| `digest.readiness_check_et` | 15:30 | — | none. 5.13 was reshaped from a clock to a precondition and nothing reads it [5.13] | **no consumer, seeded 5.3** |
 | `digest.secondary_model_id` | `claude-haiku-4-5` | D-140 | the secondary link | unverified, **seeded 5.3** |
 | `digest.max_input_tokens` | 6000 | D-143 | NewsDigester, `ExecuteAsync`; RecordInspector, `DigestAsync` | **verified 5.9** |
 | `digest.max_output_tokens` | 150 | D-143 | NewsDigester, `ExecuteAsync` | **verified 5.8** |
@@ -588,11 +589,22 @@ tokens of article. Bounding the second with the first would mark a working link 
 its slowest candidate and set D-137's fall-through running on the wrong evidence.
 
 **A cold local model answers in about 51 seconds against this 5,000** [5.5, measured]. Warm
-it answers in about 700 milliseconds. That is not an argument for a larger value: a timeout
-wide enough to absorb a cold load is wide enough to hide one. It means the local link is
-unhealthy on any night the model is not resident, which is what
-`digest.readiness_check_et` at 15:30 exists to catch three hours earlier, and 5.13 is built
-against the measurement.
+it answers in about 700 milliseconds. That is not an argument for a larger value here: a
+health timeout wide enough to absorb a cold load is wide enough to hide one. It means the
+local link is unhealthy on any night the model is not resident.
+
+**`digest.warm_timeout_ms` is the second bound, and the two are not interchangeable**
+[5.13]. `digest.health_timeout_ms` asks whether the link can answer now.
+`digest.warm_timeout_ms` bounds a probe whose job is to make it able to: the local server
+loads on request, so a probe generous enough to cover a load causes one. 120,000 against
+a cold load measured at 41 to 52 seconds, which is headroom rather than a measurement of
+its own. Only the Worker reads it, ahead of C33 and never inside a stage, so the chain's
+own health check keeps the short bound and the operator-facing probe gets the long one.
+
+**A server that is down does not wait for either bound.** A refused connection throws at
+once and reports `the endpoint could not be reached`, so the long bound costs nothing on
+the case it looks expensive for. It is spent only when the server is up and loading,
+which is the case worth waiting through.
 
 **Neither name D-143 retires was ever seeded** [5.3]. `digest.max_articles` and
 `digest.max_tokens` reached no config row, so there is no version carrying either and no

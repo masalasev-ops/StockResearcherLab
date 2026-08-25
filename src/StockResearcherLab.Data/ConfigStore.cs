@@ -584,6 +584,16 @@ public sealed class ConfigSeeder
         ("digest.rotation_count", "2"),
         ("digest.lookback_days", "7"),
         ("digest.health_timeout_ms", "5000"),
+
+        // **A second bound on a second question** [5.13]. `digest.health_timeout_ms`
+        // asks whether the link is ready now and is deliberately short.
+        // `digest.warm_timeout_ms` bounds a probe whose job is to make the model
+        // resident: LM Studio loads on request, so a probe generous enough to cover a
+        // load causes one. 120,000 against a cold load measured at 41 to 52 seconds,
+        // which is headroom rather than a measurement of its own. Widening the health
+        // timeout instead would hide a cold model behind the check that exists to find
+        // one, which is why these are two keys and not one.
+        ("digest.warm_timeout_ms", "120000"),
         ("digest.readiness_check_et", "\"15:30\""),
         ("digest.secondary_model_id", "\"claude-haiku-4-5\""),
 

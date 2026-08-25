@@ -56,6 +56,12 @@ public sealed class LocalModelClient : IDigestLink, IReadOwner
 
     public const string ComponentName = "LocalModelClient";
 
+    /// <summary>Bounds the readiness question: can this link answer now.</summary>
+    public const string HealthTimeoutKey = "digest.health_timeout_ms";
+
+    /// <summary>Bounds the residency question: can this link be made to answer [5.13].</summary>
+    public const string WarmTimeoutKey = "digest.warm_timeout_ms";
+
     private static readonly string[] Tables = ["local_model_config"];
 
     private readonly IStageData _data;
@@ -99,9 +105,23 @@ public sealed class LocalModelClient : IDigestLink, IReadOwner
     /// server that is down and a server that is up and returning nothing call for
     /// opposite responses and "unhealthy" alone cannot tell an operator which happened.
     /// </summary>
-    public async Task<LinkHealth> HealthAsync(CancellationToken ct = default)
+    public Task<LinkHealth> HealthAsync(CancellationToken ct = default)
+        => HealthAsync(HealthTimeoutKey, ct);
+
+    /// <summary>
+    /// The same probe under a different bound, named by config key rather than by a
+    /// number so the detail line can say which one expired [`CLAUDE.md` section 8].
+    ///
+    /// **Two keys because there are two questions.** `digest.health_timeout_ms` asks
+    /// whether the link is ready now and is short on purpose. `digest.warm_timeout_ms`
+    /// bounds a probe whose job is to make the model resident, LM Studio loading on
+    /// request, so a probe generous enough to cover a load causes one [5.13]. Widening
+    /// the first to do the second's work would hide a cold model behind the check that
+    /// exists to find one.
+    /// </summary>
+    public async Task<LinkHealth> HealthAsync(string timeoutKey, CancellationToken ct = default)
     {
-        var timeoutMs = await TimeoutAsync(ct).ConfigureAwait(false);
+        var timeoutMs = await TimeoutAsync(timeoutKey, ct).ConfigureAwait(false);
         var link = await LinkAsync(ct).ConfigureAwait(false);
 
         var stopwatch = Stopwatch.StartNew();
@@ -154,7 +174,7 @@ public sealed class LocalModelClient : IDigestLink, IReadOwner
         {
             return Unhealthy(
                 stopwatch,
-                string.Create(CultureInfo.InvariantCulture, $"no answer inside digest.health_timeout_ms of {timeoutMs:N0} ms"));
+                string.Create(CultureInfo.InvariantCulture, $"no answer inside {timeoutKey} of {timeoutMs:N0} ms"));
         }
         catch (HttpRequestException ex)
         {
@@ -262,17 +282,17 @@ public sealed class LocalModelClient : IDigestLink, IReadOwner
             row[2] as string);
     }
 
-    private async Task<long> TimeoutAsync(CancellationToken ct)
+    private async Task<long> TimeoutAsync(string key, CancellationToken ct)
     {
         // Resolved at the frontier rather than as of a simulated date. A health check is
         // about the machine now, so there is no simulated date it could be as of, which
         // is the one shape INVARIANT 13 does not reach.
-        var row = await _config.RequireAsync("digest.health_timeout_ms", DateOnly.MaxValue, ct).ConfigureAwait(false);
+        var row = await _config.RequireAsync(key, DateOnly.MaxValue, ct).ConfigureAwait(false);
 
         return long.TryParse(row.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var ms)
             ? ms
             : throw new InvalidOperationException(
-                $"digest.health_timeout_ms resolved to '{row.Value}', which is not a whole number.");
+                $"{key} resolved to '{row.Value}', which is not a whole number.");
     }
 
     // --------------------------------------------------------------- probing ---

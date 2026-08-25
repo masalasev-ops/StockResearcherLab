@@ -7,6 +7,7 @@ using StockResearcherLab.Data;
 using StockResearcherLab.Data.Eodhd;
 using StockResearcherLab.Pipeline;
 using StockResearcherLab.Pipeline.Select;
+using StockResearcherLab.Worker;
 
 // The host that runs the nightly pipeline and the backfill. At phase 0 it does
 // two things: apply the schema, and run one stage. migrate.ps1 is a wrapper over
@@ -633,8 +634,43 @@ async Task<int> RunStageAsync()
 
     Console.WriteLine($"run {args[1]}  date {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}  config v{configVersion}");
 
+    // **The local model precondition, ahead of the stage and never inside it** [5.13].
+    // It probes under `digest.warm_timeout_ms`, which is long enough to cause a load
+    // rather than to time one out, and asks the operator where it cannot. Whether it
+    // succeeds is not consulted below: C33 runs either way, and an unhealthy chain still
+    // halts on INVARIANT 15's gate. This can only delay a halt, never convert one.
+    if (string.Equals(args[1], NewsDigester.ComponentName, StringComparison.Ordinal))
+    {
+        await EnsureLocalModelAsync(connectionString).ConfigureAwait(false);
+    }
+
     var result = await runner.RunAsync(args[1], date, configVersion).ConfigureAwait(false);
 
     Console.WriteLine($"  ok, {result.RowsWritten.ToString("N0", CultureInfo.InvariantCulture)} row(s) written");
     return 0;
+}
+
+/// <summary>
+/// Probes the local link under the warm bound and asks the operator to load the model
+/// where it cannot answer [5.13]. Returns whether it answered, which the caller does not
+/// act on: the stage runs either way and the gate is still the thing that halts a night.
+/// </summary>
+async Task<bool> EnsureLocalModelAsync(string connectionString)
+{
+    using var http = new HttpClient();
+    var client = new LocalModelClient(connectionString, http);
+
+    var link = await client.LinkAsync().ConfigureAwait(false);
+
+    if (link is null)
+    {
+        // No enabled row at position 1. C33 says so in its own words and this has
+        // nothing to add, so it declines rather than guessing at an address.
+        return false;
+    }
+
+    return await LocalModelPrecondition.EnsureAsync(
+        ct => client.HealthAsync(LocalModelClient.WarmTimeoutKey, ct),
+        LocalModelPrecondition.Describe(link.Endpoint, link.RequestOptions),
+        new TerminalConsole()).ConfigureAwait(false);
 }

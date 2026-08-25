@@ -2583,3 +2583,33 @@ articles were sent is not recorded anywhere: D-143 selects newest-first up to
 column holds the result. So the two bounds that governed the selection are shown beside the
 pool and the selection itself is left unstated. A page that reconstructed it would produce a
 plausible three of nine and read as the record.
+
+---
+
+## 2026-08-25, phase 5 checkpoint 5.13, `CONFIG_REFERENCE.md`'s two digest timeouts
+
+`digest.warm_timeout_ms` arrives and `digest.readiness_check_et` loses the consumer the
+document said it would have. Both are clean edits under D-73; the prior wordings are here.
+
+### `CONFIG_REFERENCE.md` §digest, the `digest.readiness_check_et` row
+
+> \| `digest.readiness_check_et` \| 15:30 \| — \| the chain, not one link [5.3] \| unverified, **seeded 5.3** \|
+
+5.13 was reshaped on operator direction from a 15:30 readiness check into a precondition
+the Worker runs ahead of C33, so nothing reads the key. The row now says so rather than
+carrying a consumer that will not arrive. Retiring the key itself is a separate decision
+and is not taken here.
+
+### `CONFIG_REFERENCE.md` §digest, the cold-load paragraph
+
+> **A cold local model answers in about 51 seconds against this 5,000** [5.5, measured]. Warm
+> it answers in about 700 milliseconds. That is not an argument for a larger value: a timeout
+> wide enough to absorb a cold load is wide enough to hide one. It means the local link is
+> unhealthy on any night the model is not resident, which is what
+> `digest.readiness_check_et` at 15:30 exists to catch three hours earlier, and 5.13 is built
+> against the measurement.
+
+The measurement stands and so does the refusal to widen the health timeout. What changed
+is the last clause: the cold model is now caught by a probe ahead of the stage rather than
+by a clock in the afternoon, and the replacement paragraph says why two bounds exist
+instead of one, and why the long one costs nothing when the server is genuinely down.

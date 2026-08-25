@@ -454,6 +454,17 @@ name; stopping the local server falls through to the secondary and the fallthrou
 is visible in the record; stopping both halts the run before any researcher call and
 produces no orders; the rotation is present every night regardless of primary health.
 
+**The second line is deferred rather than met** [amended 2026-08-25, operator direction].
+"Stopping the local server falls through to the secondary and the fallthrough is visible in
+the record" needs the secondary enabled and a night run through it, and the operator has
+directed that the digest step does not reach a paid provider until they evaluate it. The
+chain is `["local"]` and C33 halts on a cold model instead. **The secondary is built and
+inert, not absent**: 5.6 landed, the composition constructs no paid link while the chain
+names none, and both halves are asserted. What is deferred is the evaluation and therefore
+the evidence, not the design: D-25, D-27 and D-140 stand and the rotation stays in the
+code. **The line is re-asked when the secondary is evaluated**, on the same footing as the
+third line below rather than marked met here.
+
 **The third line is not evaluable in this phase and that is recorded rather than
 worked around** [D-139]. There is no researcher and no order until phases 6 and 7, so
 the clause names two things that do not exist. What phase 5 proves instead is

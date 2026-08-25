@@ -11679,8 +11679,11 @@ rather than the value being changed here [`CLAUDE.md` §11, §15].
 ### Two things stated in code rather than left to be inferred
 
 **"Loaded" is the endpoint's word and this server does not mean by it what §07 assumes.**
-§07 names LM Studio, which serves the one model it has loaded; Ollama lists every model
-pulled. Today it lists exactly one, so the two readings agree and nothing is ambiguous.
+~~§07 names LM Studio, which serves the one model it has loaded; Ollama lists every model
+pulled. Today it lists exactly one, so the two readings agree and nothing is ambiguous.~~
+**Both halves are wrong, corrected 2026-08-25 against LM Studio itself.** It lists every
+model downloaded rather than the one loaded, and on this machine it listed five. So the
+two readings do not agree and the ordinal pick is not a tie-break over a set of one.
 C32 takes the first by ordinal id so the choice stays deterministic if a second is ever
 pulled, and the name it records against a health report is the one the completion says
 answered, which is authoritative either way.
@@ -12327,3 +12330,84 @@ selection, and both did.
 articles, and a model that answers differently on two runs of the same input means the pair
 measures a difference that includes the model's own variance. That is a phase 8 problem
 rather than a phase 5 one, and it is recorded here because this is where it was first seen.
+
+---
+
+## Phase 5, the local link moved to LM Studio on 1234, and the Anthropic key placed
+
+**Operator direction on 2026-08-25, recorded here because both changes are outside the
+repository and neither would otherwise be visible to a later reader.** The endpoint move is
+a hand write to `local_model_config`, whose declared writer is the UI [D-51]; that path
+does not exist until phase 9, so `psql` was used and this paragraph is the record of it.
+
+| Before | After |
+|---|---|
+| `http://localhost:11434/v1`, Ollama | `http://localhost:1234/v1`, LM Studio |
+| `{"reasoning_effort": "none"}` | `{"model": "qwen/qwen3.5-9b", "reasoning_effort": "none"}` |
+| `qwen3.6:latest` | `qwen/qwen3.5-9b` |
+
+**Ollama is stopped, server and tray app both, so 11434 is dead** and the switch is not
+masked by a second working address. Proved through the shipped `LocalModelClient` rather
+than through curl: `HealthAsync` true at 2,502 ms naming `qwen/qwen3.5-9b`, and
+`DigestAsync` returning 31 completion tokens of prose over a one-article prompt.
+
+### The `model` key in `request_options` is load-bearing and fails silently if cleared
+
+**`LoadedModelAsync` takes the ordinally first id from `/v1/models`**, which was written
+when that list held one entry. On 1234 it holds four and the ordinal first is
+`prism-ml/bonsai-27b`. `Apply` merges `request_options` after `["model"]` is set, so the
+key overrides the pick and the right model answers.
+
+**What that means for an operator: clearing the key does not fail the run.** Bonsai would
+answer, the health probe would report bonsai as the model that answered, and a night of
+digests would be produced by a model nobody chose. This is the shape section 1 of
+`CLAUDE.md` describes and it has no test, because the pick is a property of a live
+endpoint's listing rather than of the code.
+
+**The proper fix was offered and not taken**, deliberately: a `model` column on
+`local_model_config` needs a migration, a `SCHEMA.md` change, an amendment to 5.5's tested
+behaviour and a decision number, none of which is a build session's to author. It is filed
+rather than closed, and the doc comment above `LoadedModelAsync` still states the premise
+that the endpoint lists one model, which is now false and should be corrected alongside
+whichever route is chosen.
+
+### `qwen/qwen3.5-9b:2` is an instance handle, not a model id
+
+**Config named `:2` for four minutes and it was wrong.** LM Studio appends the suffix to a
+second loaded instance of the same weights; it left `/v1/models` the moment that instance
+unloaded. The stable id is `qwen/qwen3.5-9b` and config names it. Recorded because the
+suffix appears in the listing exactly like an id and nothing distinguishes the two.
+
+### `reasoning_effort` carries across, measured rather than assumed
+
+`qwen/qwen3.5-9b` on LM Studio returns `reasoning_tokens` 0 and empty `reasoning_content`
+with the key set. 5.1 measured the opposite failure against Ollama, HTTP 200 with zero
+characters of content and the key absent, and that is why the key is on the row. The key
+was kept across the move on the strength of this measurement rather than on the assumption
+that it was still needed.
+
+### `qwen/qwen3.6-27b` does not load on this machine and bonsai does
+
+`{"error": {"message": "Failed to load model \"qwen/qwen3.6-27b\". Error: Engine protocol
+startup was aborted."}}` at 12 seconds, twice. `prism-ml/bonsai-27b` loaded and answered in
+7.6 seconds cold. Neither is the configured model and no comparison of digest quality was
+run: that is D-27's rotation, which 5.10 built, and it is a phase 8 read.
+
+### The Anthropic key is placed and 5.6 is unblocked on that axis
+
+**`Anthropic:ApiKey` in the Worker and the Tests projects**, the two that need it. Api and
+Ui left on the placeholder. The operator had also written it to `appsettings.Secrets.json`
+at the repository root under `Secrets:AnthropicApiKey`; nothing reads that path or that
+shape, since every host does `SetBasePath(AppContext.BaseDirectory)` and binds
+`Anthropic:ApiKey`. The root file is covered by `*.Secrets.json` and confirmed ignored
+[D-55]. **Placing the key does not build 5.6**: no link implements `haiku`, so C33 still
+cannot run in the composed pipeline.
+
+### The seeder still carries the old address, and that is correct rather than drift
+
+`ConfigSeeder.ChainLinks` seeds `http://localhost:11434/v1` with no `model` key. It was not
+changed: the seeder is code carrying an authored rationale, the change above is one
+machine's operator configuration, and the seed is idempotent so it will not revert the live
+row. What it means is that **a fresh database gets the Ollama address**, which is right for
+the test and CI databases, whose links are stubs, and which an operator standing up a
+second machine has to know. Named here because nothing else says it.

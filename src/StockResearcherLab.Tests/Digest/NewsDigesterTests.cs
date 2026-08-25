@@ -210,6 +210,51 @@ public sealed class NewsDigesterTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// **The articles reach the selection carrying their publication instant, read through
+    /// the store rather than handed to it.**
+    ///
+    /// Every other test of D-143's order builds `Article` records by hand, so all of them
+    /// passed while `ArticlesAsync` was reading the column as an absence: the driver
+    /// returns `timestamptz` as a `DateTime` and the cast that read it asked for a
+    /// `DateTimeOffset`, which is null for every row and never throws. The order then fell
+    /// through to the tie-breaks and the rendered input said "date unknown" on articles
+    /// whose date the store held.
+    ///
+    /// **It asserts on what the link was sent**, which is the only place the two effects
+    /// are both visible: the dates appear, and the newer article appears before the older
+    /// one rather than in url order.
+    /// </summary>
+    [Fact]
+    public async Task TheArticlesReachTheLinkWithTheirDatesAndInDateOrder()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ClearAsync(ct);
+
+        await CandidatesAsync([Prose], ct);
+
+        // The older article sorts first on the url tie-break and second on the date, so
+        // one order is the rule and the other is the rule having nothing to order on.
+        await ArticleAsync(Prose, "older body", new DateTimeOffset(2026, 8, 7, 9, 0, 0, TimeSpan.Zero), "http://example.invalid/a", ct);
+        await ArticleAsync(Prose, "newer body", new DateTimeOffset(2026, 8, 11, 9, 0, 0, TimeSpan.Zero), "http://example.invalid/b", ct);
+
+        var link = new StubLink(DigestProvider.Local);
+        string? sent = null;
+        link.Answer = input => { sent = input; return "A digest."; };
+
+        await RunAsync(link, ct);
+
+        Assert.NotNull(sent);
+        Assert.DoesNotContain("date unknown", sent, StringComparison.Ordinal);
+        Assert.Contains("[2026-08-11]", sent, StringComparison.Ordinal);
+        Assert.Contains("[2026-08-07]", sent, StringComparison.Ordinal);
+
+        Assert.True(
+            sent.IndexOf("newer body", StringComparison.Ordinal)
+                < sent.IndexOf("older body", StringComparison.Ordinal),
+            "The newer article is sent first [D-143].");
+    }
+
+    /// <summary>
     /// **The tie-break is total, which D-133's source-only rule is not on this provider.**
     /// 5.1 measured no source at all and 5.4's fixture is two articles sharing a
     /// publication instant, a title and a link and differing only in body. An undecided
@@ -482,6 +527,27 @@ public sealed class NewsDigesterTests : IAsyncLifetime
         cmd.Parameters.AddWithValue("d", Date);
         cmd.Parameters.AddWithValue("p", new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
         cmd.Parameters.AddWithValue("u", "http://example.invalid/" + (content?.Length ?? 0).ToString(CultureInfo.InvariantCulture));
+        cmd.Parameters.AddWithValue("c", (object?)content ?? DBNull.Value);
+
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The same, with the instant and the link stated, for the one test whose subject is
+    /// the order the instants put the articles in.
+    /// </summary>
+    private static async Task ArticleAsync(
+        string ticker, string? content, DateTimeOffset at, string url, CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(false);
+        await using var cmd = new NpgsqlCommand(
+            "INSERT INTO headline (ticker, date, published_at, title, source, url, content) " +
+            "VALUES (@t, @d, @p, 'A title', NULL, @u, @c);", conn);
+
+        cmd.Parameters.AddWithValue("t", ticker);
+        cmd.Parameters.AddWithValue("d", Date);
+        cmd.Parameters.AddWithValue("p", at);
+        cmd.Parameters.AddWithValue("u", url);
         cmd.Parameters.AddWithValue("c", (object?)content ?? DBNull.Value);
 
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);

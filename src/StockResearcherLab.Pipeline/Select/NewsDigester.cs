@@ -239,8 +239,12 @@ public sealed class NewsDigester : IStage
         // a test can exercise it without a store [D-133, 5.8].
         return
         [
+            // **The instant goes through `StoredInstant` and not through a cast.** The
+            // driver returns `timestamptz` as a `DateTime`, so `as DateTimeOffset?` is
+            // null for every row and D-143's ordering silently loses the thing it orders
+            // on. That was live between 5.8 and 5.9 [5.9].
             .. rows.Select(r => new Article(
-                r[0] as DateTimeOffset?,
+                StoredInstant.From(r[0]),
                 r[1] as string,
                 r[2] as string,
                 r[3] as string,

@@ -11757,3 +11757,110 @@ halts on no healthy link is 5.11's, which is where the two meet.
 uses stub links. That is the right instrument for this checkpoint regardless: the claim
 under test is that nothing knows which link is preferred, and a test against the two real
 links would prove the two real links work and say nothing about the claim.
+
+---
+
+## Phase 5, checkpoint 5.8, C33 NewsDigester and the write
+
+**The read set is `candidate_set` and `headline` and their absences are asserted.**
+`screen_score_daily`, `attribution` and `local_model_config` are all absent by test. The
+first two are INVARIANT 7 made structural at the component the invariant is actually about:
+this is the stage that decides how much evidence each name gets, and a component that could
+see a name's score could gather more for a better-scoring one with nothing downstream able
+to tell. The third is D-109's line held: the chain reads `local_model_config` through the
+declaration C32 owns, so C33's read set says what C33 reads.
+
+**Insert and Delete, no Update.** The grain is ticker by day and the table has that primary
+key, so an upsert would work; delete-then-insert is C14's and C29's shape and makes a re-run
+replace the night. The absence of Update is what makes a later "just refresh the ones that
+came back empty" throw before a connection opens.
+
+**Registered whether or not a data provider token is present**, unlike C29. Its links are
+the digest chain rather than EODHD, so it sits with the compute and select stages on the
+unconditional side of the branch, and the no-token registry count moves 11 to 12 while the
+full one moves 19 to 20. Both are asserted, and the no-token test now asserts that C29 is
+absent and C33 is present in the same breath, which is the one thing the other count cannot
+say.
+
+### D-134's four outcomes, written and read back apart
+
+| Outcome | What it means | What D-60 does |
+|---|---|---|
+| No row | Not a candidate, or the run halted before the digest step | Nothing to read |
+| Null `digest_text` | A link was selected and there was nothing to send | **Bites** |
+| `NO MATERIAL NEWS` | A link read the articles and returned the escape hatch | Does not bite |
+| Prose | An ordinary digest | Does not bite |
+
+**The middle pair is the one that gets collapsed** and one fixture writes all four in one
+run and reads them back apart. The null-`digest_text` row carries the provider and the model
+of the link that would have answered, which is what the health probe is for: without it the
+row could not exist at all, `model_name` being NOT NULL and non-blank, and "no digest
+available" and "the run halted" would be the same fact.
+
+### D-143's selection, and the gap in it this build had to fill
+
+**The minimum-of-one case is asserted alone rather than as a clause**, because it is the
+assertion a later reader would remove as a special case. One article of 60,000 characters,
+alone far past the cap, is still sent; without it that candidate becomes the null state and
+D-60 disqualifies the name for having long news.
+
+**D-143 caps the input in tokens and this system has no tokenizer.** It cannot usefully have
+one, and that is the argument rather than the excuse: **the selection must be identical
+whichever link answers**, or the rotation compares two different inputs and D-27's paired
+sample stops being paired. A count taken from one provider's tokenizer would make the
+evidence depend on which link the chain picked that night.
+
+So the count is a stated, provider-independent estimate at **3.5 characters per token**,
+deliberately below both ratios 5.1 measured: 4.30 over 20 article bodies counted by
+`qwen3.6:latest`, and 3.80 over a real three-article prompt of 28,463 characters that the
+same server evaluated at 7,498 tokens. The estimate therefore over-counts, the selection
+sends no more than the cap allows, and D-143's $47.63 is not exceeded by an under-count. A
+test asserts the constant stays below 3.80, so a later session cannot drift it toward 4.30
+without failing. **Over-counting costs an article at the margin and under-counting costs the
+budget**, which is why the error is pointed one way rather than centred.
+
+**Reported as a gap in D-143 rather than closed by it**: the decision names a token cap and
+does not say what counts tokens. The prompt tokens the provider reports come back on every
+answer, so once rows accumulate the estimate is checkable against what the models actually
+counted, and 5.14's ledger is where that lands.
+
+**D-133's tie-break is not total on this provider and the key is extended.** D-133 breaks
+ties on the source string; 5.1 measured no source at all on 275 of 275 rows, and 5.4's
+fixture is two articles sharing a publication instant, a title and a link and differing only
+in body. On those two a source-only tie-break leaves the order undecided, and an undecided
+order is a different prompt on two runs of one night [INVARIANT 6]. The key continues
+through source, url and body, all ordinal. **Reported: this extends an authored rule rather
+than applying it**, and the extension is inside what D-133 was reaching for rather than
+beside it.
+
+### The instruction is a section, not a file
+
+`prompts/digest-instruction.md` is prose for a person as well as for a model: a header, the
+instruction, and a section explaining what the model is likely to get wrong. Sending the
+whole file would send the explanation. So the boundary is stated: the section headed
+`## The instruction` up to the next horizontal rule, with a test asserting the extraction
+finds the escape hatch and does not find the explanation, so an edit removing the rule fails
+rather than silently widening what is sent.
+
+**It is resolved when the stage runs, not when it is registered**, because building the
+registry must touch nothing: the conformance tests enumerate it with a fictional connection
+string, and a constructor that read a file would make every one of them depend on the
+working directory. The file is found by walking up from the binary rather than by a relative
+path, the Worker, the tests and a scratch host sitting at different depths.
+
+**The instruction's hash reaches the run log**, twelve characters of it, because a change to
+that text splits history into halves that cannot be pooled and the run log is where a reader
+would look for when [`CLAUDE.md` §12].
+
+### Two defects of mine, both found by running
+
+**A slice on a hash shorter than twelve characters** threw from the detail line, which would
+have failed a whole night over a log string. Length-guarded now, and stated as such: a run
+must not fail on the shape of its own record.
+
+**Rows left behind failed two tests in other classes.** `SelectionShapeTests` asserts the six
+selection tables still hold zero rows and `HeadlineIngestorTests` asserts a night with no
+candidate, both over the shared database. Teardown after every test rather than clearing
+before, which is `UniverseRejectionTests`' rule and the same failure it records.
+
+**`ci.ps1` green at the 5.8 commit**, 812 tests.

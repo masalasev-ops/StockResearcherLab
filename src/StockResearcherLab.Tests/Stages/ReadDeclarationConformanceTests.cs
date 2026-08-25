@@ -33,9 +33,10 @@ public sealed class ReadDeclarationConformanceTests
     /// without being runnable, so it has no read set to check.
     ///
     /// It moves deliberately when a phase adds a stage. Fourteen at 4.4, which adds
-    /// C13 ScreenEngine. Eighteen at 5.4, which adds C29 HeadlineIngestor.
+    /// C13 ScreenEngine. Eighteen at 5.4, which adds C29 HeadlineIngestor. Nineteen at
+    /// 5.8, which adds C33 NewsDigester.
     /// </summary>
-    private const int ExpectedStages = 18;
+    private const int ExpectedStages = 19;
 
     /// <summary>
     /// Section 3 catalogues thirty-six components, C36 RecordInspector having joined at

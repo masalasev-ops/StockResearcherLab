@@ -74,8 +74,14 @@ public sealed class WriteOwnershipConformanceTests
     /// 19 at 5.4, which adds C29 HeadlineIngestor. Provider-backed like the six ingest
     /// stages above it, and the first stage that reads a table the select layer wrote
     /// rather than a source.
+    ///
+    /// 20 at 5.8, which adds C33 NewsDigester. **Registered whether or not a data
+    /// provider token is present**, unlike C29, because its links are the digest chain
+    /// rather than EODHD: it reads `headline`, which C29 already filled, and calls a
+    /// model. That puts it with the compute and select stages on the unconditional side
+    /// of the branch.
     /// </summary>
-    private const int ExpectedOwners = 19;
+    private const int ExpectedOwners = 20;
 
     /// <summary>
     /// The assertion that keeps the rest of this file meaningful. A conformance test

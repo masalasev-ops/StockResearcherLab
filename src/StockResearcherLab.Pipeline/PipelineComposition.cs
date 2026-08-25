@@ -1,4 +1,5 @@
 using StockResearcherLab.Core;
+using StockResearcherLab.Core.Digest;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data;
 using StockResearcherLab.Data.Eodhd;
@@ -76,6 +77,30 @@ public static class PipelineComposition
             // Outside the layers with RunLog, per section 02, and registered here
             // because it reads stores the pipeline wrote and calls nothing.
             new ConcentrationMonitor(),
+
+            // C33. Layer 3, and registered unconditionally because it calls no data
+            // provider: its links are the digest chain rather than EODHD [5.8].
+            //
+            // **The chain is built per run and not per registry**, holding which links
+            // have failed [D-137], so a re-used stage cannot carry one night's failures
+            // into the next.
+            //
+            // **It reaches `local_model_config` through the declaration C32 owns.** That
+            // is why C33's read set is `candidate_set` and `headline` alone: the chain is
+            // a collaborator rather than a component, it has no §03 row, and giving C33 a
+            // declaration on that table would say it reads something it does not
+            // [INVARIANT 7, D-109].
+            new NewsDigester(
+                (context, ct) => DigestChain.BuildAsync(
+                    new StageData(connectionString, LocalModelClient.Access()),
+                    context.Config,
+                    context.Date,
+                    new Dictionary<DigestProvider, IDigestLink>
+                    {
+                        [DigestProvider.Local] = new LocalModelClient(connectionString, DigestHttp),
+                    },
+                    ct),
+                () => DigestInstruction.Read(DigestInstructionPath)),
         };
 
         if (eodhd is not null)
@@ -94,6 +119,47 @@ public static class PipelineComposition
         }
 
         return new StageRegistry(owners);
+    }
+
+    /// <summary>
+    /// One `HttpClient` for every digest call, which is what the type is designed for and
+    /// what a per-call one exhausts sockets doing.
+    ///
+    /// **No timeout of its own.** `digest.health_timeout_ms` bounds a probe and a digest
+    /// takes as long as it takes, so a client-wide timeout would be a second bound nothing
+    /// documents, applied to the wrong one of the two [5.5].
+    /// </summary>
+    private static readonly HttpClient DigestHttp = new() { Timeout = Timeout.InfiniteTimeSpan };
+
+    /// <summary>
+    /// `prompts/digest-instruction.md`, found by walking up from the binary until a
+    /// directory holding `prompts/` appears.
+    ///
+    /// **The runtime prompts are product read at execution time and are deliberately not
+    /// copied to the output** [`CLAUDE.md` §14]. A copied prompt is a prompt the operator
+    /// can edit without the running system seeing the edit, which is the failure this
+    /// corpus keeps naming: nothing errors and the evidence quietly changes.
+    ///
+    /// The walk rather than a relative path, because the Worker, the tests and a scratch
+    /// host all sit at different depths, and a `..\..\..` that is right for one is wrong
+    /// for the others in a way that only shows up when it runs.
+    /// </summary>
+    public static string DigestInstructionPath { get; } = FindPrompt("digest-instruction.md");
+
+    private static string FindPrompt(string file)
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, "prompts", file);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        // Returned rather than thrown, so building the registry still touches nothing and
+        // the failure lands when the stage runs and says what it could not find.
+        return Path.Combine(AppContext.BaseDirectory, "prompts", file);
     }
 
     /// <summary>

@@ -104,6 +104,65 @@ public sealed class DigestChain
     public IReadOnlyList<DigestProvider> Failed => [.. _failed];
 
     /// <summary>
+    /// One line per link this run gave up on, naming the link and the reason, in the order
+    /// they were given up on. Empty on an ordinary night.
+    ///
+    /// **The run-log half of D-137's record.** The digest row says which link answered;
+    /// this says which did not and why, and without it a night that ran entirely on the
+    /// secondary looks the same whether the primary was down or simply second in the order.
+    /// </summary>
+    public IReadOnlyList<string> PassedOver => [.. _passedOver];
+
+    private LinkHealth? _ready;
+    private bool _probed;
+
+    /// <summary>
+    /// The first healthy link, probed once per run, or null where none is.
+    ///
+    /// **Once per run and not per candidate.** A probe is a request, and a chain that
+    /// probed before every digest would double the calls on an ordinary night to learn
+    /// something it already knew.
+    ///
+    /// **A link that fails its probe is unhealthy for the rest of the run**, which is
+    /// D-137's rule reached through the health check rather than through two digest
+    /// failures. The probe stops at the first healthy link, so the secondary is not called
+    /// at all on a night the local link answers, and the paid link therefore costs nothing
+    /// to have in the chain.
+    ///
+    /// **This is also what a null-`digest_text` row is written with** [D-134]. That row
+    /// says a link was selected and there was nothing to send, so it needs a provider and
+    /// a model name for a call that was never made, and the probe is where both come from.
+    /// </summary>
+    public async Task<LinkHealth?> ReadyAsync(CancellationToken ct = default)
+    {
+        if (_probed)
+        {
+            return _ready;
+        }
+
+        _probed = true;
+
+        foreach (var link in _links)
+        {
+            var health = await link.Implementation.HealthAsync(ct).ConfigureAwait(false);
+
+            if (health.Healthy)
+            {
+                _ready = health;
+                return _ready;
+            }
+
+            _failed.Add(link.Provider);
+            _passedOver.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"{DigestProviders.Name(link.Provider)} at position {link.Order} " +
+                $"failed its health check and is unhealthy for the rest of this run: {health.Detail}"));
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// One digest, from the first link that answers acceptably.
     ///
     /// **D-137 in full, and the order of the two tests matters.** A response is tried, and
@@ -119,6 +178,10 @@ public sealed class DigestChain
     /// </summary>
     public async Task<ChainAnswer?> DigestAsync(DigestRequest request, CancellationToken ct = default)
     {
+        // Readiness first, so an unreachable link costs one probe rather than two digests
+        // and so the caller and this method agree about which link is answering.
+        await ReadyAsync(ct).ConfigureAwait(false);
+
         foreach (var link in _links)
         {
             if (_failed.Contains(link.Provider))

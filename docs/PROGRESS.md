@@ -12411,3 +12411,65 @@ machine's operator configuration, and the seed is idempotent so it will not reve
 row. What it means is that **a fresh database gets the Ollama address**, which is right for
 the test and CI databases, whose links are stubs, and which an operator standing up a
 second machine has to know. Named here because nothing else says it.
+
+---
+
+## Phase 5, the chain reduced to one link, and what that exposed about D-136's split
+
+**Operator direction on 2026-08-25: a cold local model must halt the night rather than
+fall through to the paid link.** The mechanism is config rather than code, and it uses
+INVARIANT 15's gate exactly as 5.11 built it.
+
+| Key or row | Before | After |
+|---|---|---|
+| `digest.chain` | v1 `["local", "haiku"]` | **v2 `["local"]`**, set 2026-08-25 ET |
+| `local_model_config` row 2 | `enabled` true | **false** |
+
+**Both had to move together.** `DigestChain.BuildAsync` compares the count of names in
+`digest.chain` against the count of enabled rows and refuses when they disagree, which is
+D-136's "a name nothing can reach or an address nothing can name".
+
+**C33 ran through the Worker for the first time**: `run NewsDigester 2026-08-25`, config
+v25, 0 rows written, there being no candidate set for today. Every digest run before this
+went through a hand-composed scratch host because `digest.chain` named a link the
+composition could not supply. That is no longer true for any date on or after 2026-08-25.
+
+### The finding: a versioned key is compared against an unversioned table
+
+**Every date before 2026-08-25 is now unbuildable, and this was not anticipated.**
+
+```
+run NewsDigester 2026-08-12
+  digest.chain names 2 link(s) and local_model_config holds 1 enabled row(s).
+```
+
+**`digest.chain` is versioned and resolves as of the simulated date [INVARIANT 13].
+`local_model_config` is not versioned and resolves as of now.** `BuildAsync` compares a
+count taken from the first against a count taken from the second, so the moment that key
+gains a version, every past date sees the old name list beside the current enabled set and
+the two disagree by construction. Nothing is wrong with either half on its own. The
+comparison across them is what has no consistent as-of.
+
+**What it costs today: the 2026-08-12 night cannot be re-digested** without re-enabling row
+2, and re-enabling it restores exactly the fall-through this change exists to prevent. The
+run of that night is recorded above and its rows are intact, so nothing is lost; what is
+gone is the ability to reproduce it, which is the property `CLAUDE.md` section 5 says the
+stage pattern exists to give.
+
+**This is reported and not fixed.** D-136 put the name in versioned config and the address
+and enabled flag in an unversioned table, and reconciling them is a decision about which
+half owns the chain's shape, not a build task. Two shapes are visible from here and both
+are authored work: `local_model_config` gains a version, or `digest.chain` becomes the sole
+declaration of chain membership and the table's `enabled` stops being read by `BuildAsync`.
+
+### What is proved and what is asserted
+
+**Proved on 2026-08-25:** the one-link chain builds, C33 runs through the Worker, and a
+past date refuses with the count mismatch quoted above.
+
+**Asserted rather than demonstrated on a one-link chain:** the halt itself. INVARIANT 15's
+gate is covered by 5.11's four tests and fired live three times on 2026-08-25 against a
+two-link chain whose links were both unhealthy. With one link the same `ReadyAsync` loop
+runs over a shorter list, so the path is the same and shorter, but no run has yet met a
+cold model with the secondary disabled. **The first night that does is the demonstration,
+and it is worth watching for rather than assuming.**

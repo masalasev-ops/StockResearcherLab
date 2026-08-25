@@ -124,13 +124,19 @@ public sealed class ReadDeclarationConformanceTests
     }
 
     /// <summary>
-    /// Read owners that are not stages, which is C36 alone [D-109].
+    /// Read owners that are not stages. C36 alone until 5.5, which adds C32 [D-109,
+    /// D-136].
     ///
     /// **Stated for the reason <see cref="ExpectedStages"/> is stated.** A composition
     /// that returned nothing would make both directions pass over an empty set, and
     /// neither pass would look like a failure.
+    ///
+    /// **Two now, and they come from two projects.** C36 is in the Api and C32 is in the
+    /// Pipeline, which cannot see each other [`CLAUDE.md` §4], so the merge below takes
+    /// both compositions. A count that moved by one while one source silently returned
+    /// nothing is the failure this number is stated against.
     /// </summary>
-    private const int ExpectedReaders = 1;
+    private const int ExpectedReaders = 2;
 
     [Fact]
     public void EveryRegisteredReaderIsUnderTest()
@@ -145,9 +151,19 @@ public sealed class ReadDeclarationConformanceTests
             "RecordInspector is the first reader that owns no write, and D-109 exists so that " +
             "such a reader is held to its Reads cell rather than sitting outside the check.");
 
+        Assert.True(readers.ContainsKey("LocalModelClient"),
+            "LocalModelClient owns no write and §03's Writes cell for C32 says nothing, via C27, " +
+            "so it is held here rather than by the write registry [D-136].");
+
         // Enumerating the readers opens nothing, exactly as building the registry makes
         // no provider call. Asserted by the connection string being a fiction.
         Assert.NotEmpty(readers["RecordInspector"]);
+
+        // C32's whole read set, asserted by name. It is one table and it is meant to
+        // stay one: this component's reason to exist is a probe over a network, and a
+        // second table here would be it reaching into the run rather than reporting to
+        // it [INVARIANT 10].
+        Assert.Equal(["local_model_config"], readers["LocalModelClient"]);
     }
 
     [Fact]
@@ -302,9 +318,27 @@ public sealed class ReadDeclarationConformanceTests
             .OfType<IStage>()
             .ToDictionary(s => s.Name, s => s.ReadSet, StringComparer.Ordinal);
 
+    /// <summary>
+    /// Both compositions, merged. The Api hosts C36 and the Pipeline hosts C32, and
+    /// neither project can see the other, so a single source here would leave one of
+    /// them unchecked with every assertion green.
+    /// </summary>
     private static IReadOnlyDictionary<string, IReadOnlyList<string>> Readers()
-        => ApiComposition.AllReadOwnersForConformance(TestDatabase.ConnectionString)
-            .ToDictionary(r => r.Name, r => r.ReadSet, StringComparer.Ordinal);
+    {
+        var readers = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+
+        foreach (var reader in ApiComposition.AllReadOwnersForConformance(TestDatabase.ConnectionString)
+                     .Concat(PipelineComposition.AllReadOwnersForConformance(TestDatabase.ConnectionString)))
+        {
+            Assert.False(readers.ContainsKey(reader.Name),
+                $"{reader.Name} is registered as a reader in both projects, so one of the two " +
+                "declarations is unreachable and the catalogue cannot say which.");
+
+            readers[reader.Name] = reader.ReadSet;
+        }
+
+        return readers;
+    }
 
     /// <summary>
     /// Every declared reader, stages and read-only components together, which is what

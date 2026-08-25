@@ -104,4 +104,21 @@ public static class PipelineComposition
     /// </summary>
     public static IReadOnlyList<IWriteOwner> AllOwnersForConformance(string connectionString)
         => BuildRegistry(connectionString, apiToken: "not-a-real-token-registry-only").Owners;
+
+    /// <summary>
+    /// Every read owner this project hosts that owns no write, which is C32 alone
+    /// [D-109, D-136].
+    ///
+    /// **The counterpart of `ApiComposition.AllReadOwnersForConformance` and it exists
+    /// for the same reason.** A reader nothing enumerates is a reader D-74 is not
+    /// enforced against, and the registry above holds write owners only, so a component
+    /// that writes nothing cannot be in it. C36 needed one of these in the Api; C32 is
+    /// the first in the Pipeline.
+    ///
+    /// **It takes a connection string and opens nothing**, and the `HttpClient` it hands
+    /// C32 makes no request while a declaration is being read. Enumerating readers must
+    /// be as free as building the registry.
+    /// </summary>
+    public static IReadOnlyList<IReadOwner> AllReadOwnersForConformance(string connectionString)
+        => [new LocalModelClient(connectionString, new HttpClient())];
 }

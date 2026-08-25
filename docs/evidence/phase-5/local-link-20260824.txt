@@ -1,0 +1,102 @@
+Checkpoint 5.5. C32 LocalModelClient against the live local inference server.
+2026-08-24.
+
+WHAT THIS IS AND WHY IT IS EVIDENCE RATHER THAN A TEST.
+
+D-144 says the local link is healthy when it returns non-empty content to a fixed
+probe, not when it returns 200, and that 5.5 asserts both directions. The suite
+asserts them against fabricated responses, for the reason D-144 gives: the local
+server can be made to produce the empty-content state today and cannot be relied on
+to keep producing it, that state being a property of the loaded model and the model
+being operator-editable by design. A test whose subject may stop existing is a test
+that goes green for the wrong reason.
+
+So the live exercise is run once, here, and recorded. It runs the shipped
+LocalModelClient, not a copy of it, from a scratch project outside the repository
+that references StockResearcherLab.Pipeline, against the suite's disposable database
+rather than the operator's. It restores what it changed and prints the restored
+value.
+
+THE MACHINE. Ollama on http://localhost:11434/v1, serving qwen3.6:latest, which is
+the only model the endpoint lists. ARCHITECTURE.html section 07's table names LM
+Studio; that discrepancy is recorded in PROGRESS.md and local_model_config.endpoint
+is a row precisely so the server can differ.
+
+----------------------------------------------------------------- the exercise ---
+
+5.5, C32 LocalModelClient against the live local server
+  database  stockresearcherlab_tests  (the suite's, disposable)
+
+  endpoint        http://localhost:11434/v1
+  request_options {"reasoning_effort": "none"}
+  probe           In one short sentence, say that you are ready to summarise news articles.
+  probe max_tokens 32
+
+[1] with request_options as seeded, which is D-144's value
+      healthy      TRUE
+      loaded model qwen3.6:latest
+      latency      2,678 ms
+      detail       qwen3.6:latest answered in 2,678 ms with 43 character(s)
+
+[2] with request_options as an empty object, which is the state D-144 was written against
+      healthy      FALSE
+      loaded model qwen3.6:latest
+      latency      825 ms
+      detail       qwen3.6:latest answered with no content. The request shape is local_model_config.request_options and this is what an absent reasoning_effort produces [D-144]
+
+[3] with request_options null, which is what the column held before 0023 backfilled it
+      healthy      FALSE
+      loaded model qwen3.6:latest
+      latency      690 ms
+      detail       qwen3.6:latest answered with no content. The request shape is local_model_config.request_options and this is what an absent reasoning_effort produces [D-144]
+
+
+  restored        {"reasoning_effort": "none"}
+
+------------------------------------------------------------------ what it says ---
+
+D-144 REPRODUCES ON THE LIVE SERVER IN BOTH DIRECTIONS, which is what 5.5 owed.
+The same endpoint, the same loaded model, the same probe: with the column's value
+applied it answers in 43 characters and reports healthy, and with the column emptied
+or nulled it answers with none and reports unhealthy.
+
+[2] AND [3] ARE THE ASSERTION THAT WOULD HAVE CAUGHT THIS. Both took under a second
+and both returned HTTP 200 with a normal usage block and a finish_reason of stop. A
+health check reading the status code reports healthy on both, and the chain then
+sends every candidate to the paid link, every night, with this server up and
+answering in 825 milliseconds.
+
+[3] IS ALSO THE STATE 0023's BACKFILL EXISTS FOR. A database seeded before that
+migration carries a null here and the seeder can never fill it, so this line is what
+that database would do.
+
+--------------------------------------------- a finding this exercise produced ----
+
+THE FIRST CALL AFTER THE MODEL IS NOT RESIDENT TAKES ABOUT 51 SECONDS, AND
+digest.health_timeout_ms IS 5,000.
+
+Measured in the same session, by direct request rather than through C32, so the
+figure is the server's rather than this client's:
+
+  cold, model not resident        51,103 ms
+  warm, second call                  956 ms
+  warm, third call                   697 ms
+  GET /v1/models                     308 ms
+
+The first run of this exercise, before the model was resident, reported the local
+link unhealthy three times out of three with "no answer inside
+digest.health_timeout_ms of 5,000 ms". Warm, it reports what is above.
+
+WHAT THAT MEANS AND WHAT IT DOES NOT. It is not a defect in the client and not an
+argument for a larger timeout: 5,000 ms is generous against a warm server by a factor
+of six, and a timeout wide enough to absorb a cold load would be wide enough to hide
+one. What it means is that the local link is unhealthy on any night the model is not
+already loaded, and that is exactly the condition digest.readiness_check_et at 15:30
+exists to catch three hours before the digest step runs.
+
+REPORTED RATHER THAN ACTED ON. digest.health_timeout_ms carries no decision in
+CONFIG_REFERENCE.md, config is append-only so a change is a config version, and
+5.13 is the checkpoint whose subject is readiness. The figure is recorded here and in
+PROGRESS.md so that 5.13 is built against a measurement rather than against an
+assumption, and so that whoever decides what the readiness check does about a cold
+model is deciding with the number in front of them.

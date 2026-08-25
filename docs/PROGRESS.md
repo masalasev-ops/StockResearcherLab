@@ -11605,3 +11605,91 @@ estimate and D-143's is arithmetic over a measured input distribution and a publ
 | 5.6, 5.14 | Blocked on the Anthropic key |
 | 5.9 to 5.13 | Downstream |
 
+---
+
+## Phase 5, checkpoint 5.5, C32 LocalModelClient
+
+**The first read owner in the Pipeline that owns no write** [D-109, D-136]. It declares
+`local_model_config` and an empty write set, so a write throws through `DeclaredAccess`
+before a connection opens. That is not decoration on this component: `local_model_config`
+carries `last_health_check` and `last_loaded_model`, this is the component a later session
+would naturally have fill them, and §03's Writes cell for C32 says nothing, via C27. The
+empty write set is what makes "emits through the run log rather than writing it"
+structural.
+
+**`ExpectedReaders` moves 1 to 2 and the two come from projects that cannot see each
+other.** C36 is in the Api and C32 is in the Pipeline [`CLAUDE.md` §4], so
+`PipelineComposition` gains `AllReadOwnersForConformance` beside the Api's and the
+conformance test merges both. The count is asserted for the reason it was stated
+originally: a merge where one source silently returned nothing would leave a component
+unchecked with every assertion green.
+
+### D-144 asserted in both directions, twice, and the two are different instruments
+
+**In the suite, against fabricated responses**, which is what D-144 asks for: the local
+server can be made to produce the empty-content state today and cannot be relied on to
+keep producing it, that state being a property of a loaded model the operator may change.
+The fabricated endpoint returns HTTP 200 with a `finish_reason` of stop, a normal usage
+block, and whatever content the case is about. Twenty assertions, including that
+whitespace is not content, that the model recorded is the one the completion says
+answered rather than the one the list offered, and that the three ways to be unhealthy
+produce three different lines in the detail.
+
+**On the live server, once, recorded as evidence** at
+`docs/evidence/phase-5/local-link-20260824.txt`. It runs the shipped class rather than a
+copy, from a scratch project outside the repository, against the suite's disposable
+database, and restores what it changed:
+
+| Request shape | Healthy | Latency | What came back |
+|---|---|---|---|
+| `{"reasoning_effort": "none"}` | **TRUE** | 2,678 ms | 43 characters |
+| `{}` | **FALSE** | 825 ms | 200, `finish_reason` stop, no content |
+| null | **FALSE** | 690 ms | 200, `finish_reason` stop, no content |
+
+**The second and third rows are the assertion that would have caught the finding.** Both
+took under a second, both returned a normal status and a normal usage block, and a health
+check reading either would have reported the link healthy while it could not produce a
+digest.
+
+### A finding this checkpoint produced, reported rather than acted on
+
+**A cold local model takes about 51 seconds to answer and `digest.health_timeout_ms` is
+5,000.** Measured directly against the server rather than through C32, so the figure is
+the server's:
+
+| Call | Wall time |
+|---|---|
+| First, model not resident | **51,103 ms** |
+| Second, warm | 956 ms |
+| Third, warm | 697 ms |
+| `GET /v1/models` | 308 ms |
+
+The first run of the live exercise, before the model was resident, reported the local link
+unhealthy three times out of three on the timeout.
+
+**This is not an argument for a larger timeout and the reason is stated so it is not read
+as one.** 5,000 ms is generous against a warm server by a factor of six, and a timeout
+wide enough to absorb a cold load would be wide enough to hide one. What the figure means
+is that the local link is unhealthy on any night the model is not already loaded, which is
+exactly the condition `digest.readiness_check_et` at 15:30 exists to catch three hours
+before the digest step runs. `digest.health_timeout_ms` carries no decision in
+`CONFIG_REFERENCE.md` and config is append-only, so 5.13 is built against this measurement
+rather than the value being changed here [`CLAUDE.md` §11, §15].
+
+### Two things stated in code rather than left to be inferred
+
+**"Loaded" is the endpoint's word and this server does not mean by it what §07 assumes.**
+§07 names LM Studio, which serves the one model it has loaded; Ollama lists every model
+pulled. Today it lists exactly one, so the two readings agree and nothing is ambiguous.
+C32 takes the first by ordinal id so the choice stays deterministic if a second is ever
+pulled, and the name it records against a health report is the one the completion says
+answered, which is authoritative either way.
+
+**The probe is not the digest instruction and its cap is not `digest.max_output_tokens`.**
+The probe asks for one sentence of prose, which is the shape a digest is and the shape a
+reasoning model fails to produce; a model asked to echo one word could satisfy that from a
+template. Its 32-token cap bounds a fixed internal request no design document has a length
+for, and tying it to the digest's length would make a change to the digest silently change
+what counts as healthy.
+
+**`ci.ps1` green at the 5.5 commit**, 780 tests.

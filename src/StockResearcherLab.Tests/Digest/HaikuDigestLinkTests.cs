@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using StockResearcherLab.Core.Config;
 using StockResearcherLab.Core.Digest;
 using StockResearcherLab.Pipeline.Select;
 using Xunit;
@@ -161,6 +162,56 @@ public sealed class HaikuDigestLinkTests
     [InlineData("   ", ModelId)]
     public void AnAbsentKeyOrModelIsRefusedAtConstruction(string key, string model)
         => Assert.ThrowsAny<ArgumentException>(() => new HaikuDigestLink(key, model));
+
+    /// <summary>
+    /// **The construction guard, asserted from the composition rather than described in a
+    /// comment** [operator direction 2026-08-25].
+    ///
+    /// The operator's decision is that the digest step never reaches a paid provider: a
+    /// cold local model halts the night instead. That decision lives in config, as
+    /// `digest.chain` at `["local"]`, and config is the right place for it. What this
+    /// asserts is the second half: with the chain naming no paid link, the composition
+    /// does not construct one either.
+    ///
+    /// **The distinction is worth a test rather than a comment.** A link that exists and
+    /// is never selected is off by accident of routing, and the next person to touch the
+    /// chain can reach it without noticing. A link that is never constructed is off
+    /// structurally, and this test is what stops the guard being loosened back to "a key
+    /// is present" by someone who reads that as the natural condition.
+    /// </summary>
+    [Theory]
+    [InlineData("[\"local\"]", false)]
+    [InlineData("[\"local\",\"haiku\"]", true)]
+    public async Task TheChainsOwnMembershipDecidesWhetherAPaidLinkIsBuilt(
+        string chain, bool named)
+    {
+        var links = await DigestChain.NamedLinksAsync(
+            new ChainConfig(chain), new DateOnly(2026, 8, 25), TestContext.Current.CancellationToken);
+
+        Assert.Equal(named, links.Contains("haiku", StringComparer.Ordinal));
+    }
+
+    /// <summary>`digest.chain` and nothing else; anything unexpected throws.</summary>
+    private sealed class ChainConfig(string chain) : IConfigStore
+    {
+        public Task<ConfigRow?> ResolveAsync(string key, DateOnly asOf, CancellationToken ct = default)
+            => string.Equals(key, "digest.chain", StringComparison.Ordinal)
+                ? Task.FromResult<ConfigRow?>(new ConfigRow(key, 2, chain, new DateOnly(2026, 8, 25)))
+                : throw new InvalidOperationException($"Unexpected key '{key}'.");
+
+        public async Task<ConfigRow> RequireAsync(string key, DateOnly asOf, CancellationToken ct = default)
+            => (await ResolveAsync(key, asOf, ct).ConfigureAwait(false))!;
+
+        public Task<int?> ResolveVersionAsync(DateOnly asOf, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task<int> RequireVersionAsync(DateOnly asOf, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<ConfigRow>> ResolvePrefixAsync(
+            string prefix, DateOnly asOf, CancellationToken ct = default)
+            => throw new NotSupportedException();
+    }
 
     /// <summary>
     /// A Messages API double. Returns one text block and a usage object, or an error

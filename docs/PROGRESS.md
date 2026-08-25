@@ -12606,10 +12606,22 @@ be a second place the model is chosen, and an attribution row's config version w
 fail to explain a change in what answered. The Consumer column in `CONFIG_REFERENCE.md`
 moves from unverified to verified on that reading.
 
-**The link is composed only where a key exists.** Without one it is absent from the
+~~**The link is composed only where a key exists.** Without one it is absent from the
 implementations dictionary, and a `digest.chain` still naming `haiku` fails to build. That
 is 5.7's refusal doing its job rather than a chain quietly one link shorter than the record
-says.
+says.~~ **That guard was the wrong one and was corrected the same day, on operator
+direction.** The key is present, so the link was constructed on every run and reached by
+nothing: off by the accident of routing rather than structurally. **The composition now
+asks the chain what it names first**, through `DigestChain.NamedLinksAsync`, so with
+`digest.chain` at `["local"]` no link that reaches a paid provider is built at all. The key
+test survives underneath it and still means what it did: a chain naming `haiku` with no key
+leaves the link absent and `BuildAsync` refuses [5.7].
+
+**The correction is the residue of a build that went past a settled decision.** The
+operator had decided the digest step never reaches a paid provider; 5.6 was built because
+it is a phase 5 checkpoint, which is not the same as being authorised. What the checkpoint
+produced is kept and made inert rather than deleted, because deleting it would take D-27's
+rotation, `ARCHITECTURE.html` §07, D-25 and D-140 with it and those are authored.
 
 ### `DigestAnswer` gained the two cache counts
 

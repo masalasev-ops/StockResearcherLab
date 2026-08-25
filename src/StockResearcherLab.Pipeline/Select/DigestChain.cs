@@ -325,6 +325,20 @@ public sealed class DigestChain
         return (answer, null);
     }
 
+    /// <summary>
+    /// The link names `digest.chain` holds as of a date, which is the chain's membership
+    /// [D-136, INVARIANT 13].
+    ///
+    /// **Public so a composition can supply only the links the chain names.** Building an
+    /// implementation the chain will not use is work nobody asked for, and where that
+    /// implementation reaches a paid provider it is also a live object nobody decided to
+    /// create. Asking first makes an off secondary structurally off rather than off by
+    /// the accident of never being selected [5.6, operator direction 2026-08-25].
+    /// </summary>
+    public static Task<IReadOnlyList<string>> NamedLinksAsync(
+        IConfigStore config, DateOnly asOf, CancellationToken ct = default)
+        => NamesAsync(config, asOf, ct);
+
     private static async Task<IReadOnlyList<string>> NamesAsync(
         IConfigStore config, DateOnly asOf, CancellationToken ct)
     {

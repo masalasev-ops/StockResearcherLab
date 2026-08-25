@@ -113,12 +113,25 @@ public static class PipelineComposition
                         [DigestProvider.Local] = new LocalModelClient(connectionString, DigestHttp),
                     };
 
-                    // **The secondary is composed only where a key exists, and its model
-                    // id is resolved as of the run's date rather than read from a literal**
-                    // [D-140, INVARIANT 13]. Without a key the link is absent, and a
-                    // `digest.chain` that still names it fails to build rather than
-                    // running one link shorter than the record says [5.7].
-                    if (!string.IsNullOrWhiteSpace(anthropicKey))
+                    // **The secondary is composed only where `digest.chain` names it and
+                    // a key exists** [D-136, D-140, operator direction 2026-08-25]. The
+                    // name test comes first and is the one that matters: with the chain at
+                    // `["local"]` no link that reaches a paid provider is constructed at
+                    // all, so the digest step cannot bill by any path, including one added
+                    // later by someone who did not know it was meant not to.
+                    //
+                    // **The key test survives underneath it and still means what it did.**
+                    // A chain that names `haiku` with no key leaves the link absent and
+                    // `BuildAsync` refuses, rather than running one link shorter than the
+                    // record says [5.7].
+                    //
+                    // The model id is resolved as of the run's date rather than read from
+                    // a literal [INVARIANT 13].
+                    var named = await DigestChain
+                        .NamedLinksAsync(context.Config, context.Date, ct).ConfigureAwait(false);
+
+                    if (named.Contains(DigestProviders.Name(DigestProvider.Haiku), StringComparer.Ordinal)
+                        && !string.IsNullOrWhiteSpace(anthropicKey))
                     {
                         links[DigestProvider.Haiku] = new HaikuDigestLink(
                             anthropicKey,
@@ -133,6 +146,13 @@ public static class PipelineComposition
                         ct).ConfigureAwait(false);
                 },
                 () => DigestInstruction.Read(DigestInstructionPath),
+
+                // **Keyed on the key alone and dormant by the same logic as the link.**
+                // This is built when the registry is, where there is no date to resolve
+                // `digest.chain` as of, and it fires only on an answer from a link that is
+                // not the local one. A chain that names no paid link cannot produce one,
+                // so a recorder that exists and is never called is the correct shape here
+                // [5.14].
                 string.IsNullOrWhiteSpace(anthropicKey)
                     ? null
                     : async (context, answer, ct) => await new CostLedger(connectionString, context.Config)

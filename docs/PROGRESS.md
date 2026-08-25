@@ -12547,13 +12547,31 @@ Both input paths were run, attached and with input redirected from the null devi
 both behaved identically with the model resident, which is the correct outcome: the seam
 only matters once the probe fails. **866 tests**, up 13.
 
-**Waiting: the prompt has not been seen against a genuinely cold model.** Eight tests
-cover it against stubs, including the case the checkpoint exists for, where the operator
-loads the model and presses Enter and the night continues without the command being
-re-run. But no live run has met a cold model since the precondition was built, because
-demonstrating it means unloading the operator's model and that is theirs to do. **The
-first night that meets one is the demonstration**, and this line is here so a later reader
-does not read eight green tests as a live observation.
+**Then evidenced against a genuinely cold model, the operator having unloaded it.**
+
+```
+run NewsDigester  date 2026-08-25  config v25
+  qwen/qwen3.5-9b answered in 15,219 ms. Continuing.
+  ok, 0 row(s) written
+real  0m16.249s
+```
+
+**15,219 ms, so the probe loaded the model and the night continued with no prompt and no
+operator action.** That is the checkpoint's first purpose demonstrated rather than
+asserted, and it is the measurement that settles the two-bound design: three times
+`digest.health_timeout_ms`, so this night would have been declared unhealthy and halted
+under this morning's configuration, and an eighth of `digest.warm_timeout_ms`, so the
+headroom is real without being idle. It also revises 5.5's 41 to 52 seconds downward for
+this model on this server: `qwen/qwen3.5-9b` on LM Studio loads far faster than
+`qwen3.6:latest` did on Ollama, which is a smaller model rather than a faster mechanism.
+
+**Waiting: the prompt itself has not fired live.** Eight tests cover it against stubs,
+including the case where the operator loads the model and presses Enter and the night
+continues without the command being re-run. No live run has reached it, and the reason is
+the good one: the probe has never failed to load the model. **The prompt is the fallback
+for a load that genuinely fails**, which on this machine means something like
+`qwen/qwen3.6-27b`, whose load aborts. This line is here so a later reader does not read
+eight green tests and one successful warm as a live observation of the prompt.
 
 ### `digest.readiness_check_et` now has no consumer
 

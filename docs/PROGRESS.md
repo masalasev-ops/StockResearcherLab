@@ -11919,3 +11919,38 @@ so a per-test call costs nothing and leaves an operator-edited row alone.
 passed on a fresh database before and after the fix above. Recorded rather than chased,
 because an unreproduced failure is a thing to watch for rather than a thing to explain, and
 both are about config resolution against a store two keys larger than it was.
+
+---
+
+## Phase 5, O.2, the two config-version tests that were not serialised
+
+**The mechanism, read out of the lines rather than inferred.** `ConfigResolutionTests` and
+`BackfillRunTests` each assert a store-wide config version: the first that it is 1 as of
+2026-08-07, the second that it is 1 on five dates in June 2022. Both are true only while no
+row anywhere carries a later version set at or before the date being asked about.
+
+**`AttributionWriteTests` and `CandidateAllocatorTests` each insert exactly such a row**, a
+version 2 at `set_at` 2020-06-01, and delete it again. **Both are in the `database`
+collection and the two asserting classes were not**, so they ran in parallel with the
+writers and failed whenever the window overlapped. `ScreenConfigTests` carries a second one
+at 2026-01-02, which reaches the first assertion and not the second.
+
+**It surfaced in `ci.ps1` and not locally, and that is the point.** `ci.ps1` drops both
+databases before every run, so the suite executes against a store holding nothing but what
+this run put there, and the timing shifts. The local database had been seeded hours earlier
+and the interleaving that fails never came up. Three consecutive `ci.ps1` runs produced it,
+one of them alongside the digest-ordering defect above, and none of them locally.
+
+**The fix is the collection attribute and nothing else.** Both classes join `database`,
+which serialises them against every class that writes `config_rows`, and every
+database-touching class in the suite now declares the same thing. No assertion moved, no
+value changed, and the two tests still say exactly what they said.
+
+**This predates phase 5 and is corrected here rather than filed**, which is the one place
+this session departed from "file it and continue" [`CLAUDE.md` §15]. The reason is narrow:
+`ci.ps1` green is the gate on every commit, and a race that fails it intermittently cannot
+be left for a later phase without every commit after it inheriting a red gate. The
+alternative, a scoped config store per test class, is a larger change to how the suite
+isolates and is a decision rather than a correction.
+
+**`ci.ps1` green at the O.2 commit**, 812 tests, 23 migrations.

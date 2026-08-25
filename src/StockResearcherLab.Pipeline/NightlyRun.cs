@@ -69,6 +69,15 @@ public sealed class NightlyRun
         "ScreenEngine",         // C13 18:25
         "CandidateAllocator",   // C14 18:30
         "ConcentrationMonitor", // C28 19:00
+
+        // **C28 precedes both of these and that is a dependency rather than a clock**
+        // [D-139, 5.11]. Section 04 gives the monitor 19:00 and the digest stages 18:32
+        // and 18:33, but the monitor reads `candidate_set`, `position` and
+        // `security_daily` and nothing either of these writes, and a night that halts at
+        // C33 is not a night its concentration guarantees stopped mattering. Ordering it
+        // after them would lose the alerts on exactly the nights the digest chain fails.
+        "HeadlineIngestor",     // C29 18:32
+        "NewsDigester",         // C33 18:33
     ];
 
     /// <summary>

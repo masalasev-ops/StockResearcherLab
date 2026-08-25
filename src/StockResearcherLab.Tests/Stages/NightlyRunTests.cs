@@ -232,15 +232,20 @@ public sealed class NightlyRunTests
     {
         var order = NightlyRun.EveningOrder;
 
-        Assert.Equal(16, order.Length);
+        // 16 until 5.12, which appends C29 and C33 behind C28 [D-139].
+        Assert.Equal(18, order.Length);
 
         Assert.True(
             Array.IndexOf(order, "MarketContextEngine") > Array.IndexOf(order, "IndicatorEngine"),
             "C10 counts breadth off indicator_daily, so it cannot run before C08 wrote it.");
 
-        // C11 was last until 4.12 put the selection layer behind it. It is still last of
-        // the compute layer, which is what this assertion was always about.
-        Assert.Equal("ConcentrationMonitor", order[^1]);
+        // C11 was last until 4.12 put the selection layer behind it, and C28 was last
+        // until 5.12 put the digest stages behind that. What this assertion has always
+        // been about is that nothing appended to the array quietly overtakes the stage
+        // that was last, so it names the current one rather than an index.
+        Assert.Equal("NewsDigester", order[^1]);
+        Assert.Equal("HeadlineIngestor", order[^2]);
+        Assert.Equal("ConcentrationMonitor", order[^3]);
 
         foreach (var engine in new[]
                  {
@@ -283,9 +288,23 @@ public sealed class NightlyRunTests
     [Fact]
     public void TheSelectionOrderIsTheTailOfTheEveningOrder()
     {
+        // **A contiguous run rather than the literal tail, from 5.12.** C29 and C33 sit
+        // behind C28, so the selection order is no longer the last N names. What must not
+        // drift is still what it always was: which stages a range run touches, and that
+        // they appear in the evening order in this order and with nothing interleaved.
+        var order = NightlyRun.EveningOrder;
+        var start = Array.IndexOf(order, BackfillSequence.SelectionOrder[0]);
+
+        Assert.True(start >= 0, "The selection order's first stage is not in the evening order.");
         Assert.Equal(
-            NightlyRun.EveningOrder[^BackfillSequence.SelectionOrder.Length..],
+            order[start..(start + BackfillSequence.SelectionOrder.Count())],
             BackfillSequence.SelectionOrder);
+
+        // And the two digest stages are what follows it, which is D-139's ordering seen
+        // from the other side: C28 precedes them rather than trailing them [5.11].
+        Assert.Equal(
+            ["HeadlineIngestor", "NewsDigester"],
+            order[(start + BackfillSequence.SelectionOrder.Count())..]);
 
         // And every name in it exists, which is 4.12's own done-when: the selection order
         // names only components that exist.

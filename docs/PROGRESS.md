@@ -12708,3 +12708,52 @@ figure needs the token counts a live secondary call reports, and no live call ha
 made. **The ceiling is exact and the expectation is not the ceiling**: D-143 says the
 median candidate reaches about 3,700 tokens against the cap of 6,000, so the measured
 figure will come in under $3.40 and how far under is the thing that is not yet known.
+
+---
+
+## Phase 5, checkpoint 5.12, the evening order wired
+
+**C29 and C33 are in `NightlyRun.EveningOrder`, appended behind C28** [D-139]. That is the
+ordering 5.11 asserted against fabricated orders while the two stages were absent; it is
+now load-bearing without the test being touched, which is what 5.11 said would happen.
+
+**`RUNBOOK.md`'s cycle table gains the concentration monitor's row and a note saying what
+the table is.** The monitor's 19:00 is a clock time and not a position: it reads
+`candidate_set`, `position` and `security_daily` and nothing either digest stage writes,
+and the digest chain is a hard gate, so an order that put it last would lose its alerts on
+exactly the nights the chain failed. The table is read as clock times and the executed
+order is the array, and the document now says so rather than leaving a reader to find the
+two disagreeing.
+
+Two ordering tests moved with it and both were rewritten rather than renumbered:
+
+- `TheComputeStagesSitInDependencyOrder` named the last stage by index. It now names
+  the last three, so a stage appended to the array still cannot overtake silently.
+- `TheSelectionOrderIsTheTailOfTheEveningOrder` asserted a literal tail. The selection
+  order is no longer the last N names, so it asserts a **contiguous run** at the position
+  it starts, plus that the two digest stages are exactly what follows. That is D-139's
+  ordering seen from the other side and it is a stronger assertion than the one it
+  replaced, not a weaker one dressed up.
+
+**885 tests.**
+
+### The real night is not run, and the reason is a config as-of, not an oversight
+
+5.12's other half is "one real night run end to end" with a chain of counts. It has not
+been run and cannot be today. **Three routes exist and each is blocked by something that
+is not a build task:**
+
+| Route | What blocks it |
+|---|---|
+| `run-night 2026-08-12`, the newest date with a candidate set | `digest.chain` resolves to **v1** as of that date, which names two links, against one enabled row. `DigestChain.BuildAsync` refuses on the count. Config is append-only and resolves as of the simulated date [INVARIANT 13], so the only way to change that answer is to backdate a config row, which falsifies the record |
+| `run-night 2026-08-25`, where v2 applies | No candidate set for today, and no price data: the US session has not closed. `FreshnessGuard` aborts the run before anything downstream |
+| Re-enable the secondary and run 2026-08-12 under v1 | Two links, both implemented since 5.6, so the chain builds and the rotation sends two candidates to Haiku. **That spends money**, which the operator has directed against, and it also re-runs the night's ingest stages at a cost in provider units |
+
+**The natural close is the next trading night.** From 2026-08-25 forward `digest.chain` is
+`["local"]` against one enabled row, so a full evening order runs end to end on the local
+link with no spending and no config change. That is a run rather than a build, and it is
+recorded here as owed rather than done.
+
+**What is proved today is the wiring and not the night**, and the two are stated apart on
+purpose: an order that contains two names is not evidence that a night carrying them
+completes.

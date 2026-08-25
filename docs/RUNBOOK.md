@@ -21,6 +21,7 @@ night.
 | 18:20 | Gates |
 | 18:25 | Screens |
 | 18:30 | Candidate allocation, attribution write |
+| 19:00 | Concentration monitor. **Runs here in the clock and ahead of 18:32 in the sequence**, see below [D-139] |
 | 18:32 | Headlines for candidates only |
 | 18:33 | News digests via the provider chain |
 | 18:35 | Dossier assembly |
@@ -28,6 +29,15 @@ night.
 | by 09:00 | Batch returns, validator runs, risk gate, orders queued |
 | 09:35 | Fills at the open |
 | 18:10 daily | Position marking, exits, forward return filling |
+
+**The concentration monitor's 19:00 is a clock time and not its position in the
+sequence** [D-139, 5.12]. `NightlyRun.EveningOrder` runs it immediately after candidate
+allocation and before the two digest stages. It reads `candidate_set`, `position` and
+`security_daily` and nothing either digest stage writes, and the digest chain is a hard
+gate [INVARIANT 15]: a night that halts at 18:33 is not a night the concentration
+guarantees stopped mattering, and an order that put the monitor last would lose its alerts
+on exactly the nights the chain failed. The table above is read top to bottom as clock
+times; the executed order is the array.
 
 **The decide stage is asynchronous.** The evening run submits and exits. A separate
 job completes the pipeline when the batch returns. This is normal and the run health

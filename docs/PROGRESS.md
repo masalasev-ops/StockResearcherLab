@@ -12228,3 +12228,50 @@ phases 6 and 7 to exist before it can be false.**
 **And both links being unhealthy has only ever been produced by stubs and by a cold local
 model.** A real secondary refusing is 5.6's, and until the credential lands the second link
 is either a stand-in or absent.
+
+---
+
+## Phase 5, the day's `ci.ps1` results, and one more environment failure
+
+**Green at every commit, with the counts and the shas rather than a claim.**
+
+| Commit | What it was | `ci.ps1` |
+|---|---|---|
+| `11b510c` | `psql`'s path in `RUNBOOK.md` | not run, documentation only, and the next commit's run covers the tree |
+| `eb473d9` | 5.8's correction, the article instant | **green, 819 tests**, 23 migrations, 5 guard checks over 201 files |
+| `219d156` | 5.9, the digest panel | **green, 830 tests**, 203 files, on the second attempt: see below |
+| `6498337` | 5.10, the rotation | **green, 849 tests** |
+| `8896d06` | 5.11, the gate | **green, 853 tests** |
+
+### The drop step's file lock again, which is now the fifth of its shape today
+
+**`ci.ps1` failed at `219d156` in step 8 and passed on an immediate retry**, nothing in the
+tree having changed. The message is the same one the 2026-08-25 evidence file records:
+
+> Unhandled exception: The process cannot access the file
+> `...\dotnet\runfile\srl-ci-drop-22908-...\bin\debug\srl-ci-drop-22908.dll` because it is
+> being used by another process.
+
+**That is the second occurrence of this exact failure and the fifth file lock of this shape
+in two sessions.** Beside it today: two `git add` calls failed with `Permission denied`
+writing a loose object and succeeded on retry, and a `git stash push` failed the same way
+and succeeded on retry. `git fsck` is clean. A scanner holding a newly written file for a
+moment fits all five and nothing here proves it.
+
+**Reported and not acted on, for the reason the earlier record gives**: a retry inside
+`ci.ps1` would make the script pass over the thing it exists to surface. What is worth
+knowing is that the drop step's failure is now twice observed with a non-Postgres cause, so
+occurrence six is read with that in front of it rather than investigated as a database
+problem.
+
+### 5.13's scope gained a line, on operator direction
+
+**`BUILD_PLAN.md`'s 5.13 row and the phase plan's copy of it both now say the readiness
+check's job is to make the model resident rather than to report that it is not**
+[2026-08-25]. The measurements behind it are this session's: 52,303 ms and 41,352 ms cold
+against `digest.health_timeout_ms` of 5,000, beside 5.5's 51,103 ms. **The timeout is not
+widened**, and the amendment says so in the same clause, because one wide enough to absorb a
+cold load is wide enough to hide one.
+
+**Both copies were amended rather than one**, the phase plan being an unrun plan under
+`CLAUDE.md` §14 rather than a spent prompt.

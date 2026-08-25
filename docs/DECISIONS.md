@@ -2943,17 +2943,21 @@ untouched. C29 declares `Insert` and `Delete` on `headline` and nothing else wri
 **The scope is ticker and date rather than date alone**, because C29's unit of work is a
 candidate and a partial night must not delete the candidates it did not reach.
 
-**D-133 The digester reads at most `digest.max_articles` articles published within
-`digest.lookback_days` of the date being processed, most recent first.** `ACTIVE`
+**D-133 The digester reads ~~at most `digest.max_articles`~~ articles published within
+`digest.lookback_days` of the date being processed, most recent first.** ~~`ACTIVE`~~
+**`SUPERSEDED IN PART BY D-143`**, whose token cap replaces the article count. The lookback
+window, the ordering and the tie-break below stand and are what D-143 selects with.
 Neither figure existed anywhere in this corpus and both are needed before the first call.
-`digest.max_articles` is 3 and `digest.lookback_days` is 7.
+~~`digest.max_articles` is 3~~ [superseded, D-143] and `digest.lookback_days` is 7.
 
-**Three is read off `ARCHITECTURE.html` §07's own cost figures rather than chosen.** The
+~~**Three is read off `ARCHITECTURE.html` §07's own cost figures rather than chosen.** The
 rotation at about $1.30 a year and a full secondary year at roughly $18, against Haiku 4.5
 at $1.00 per million input tokens and $5.00 per million output, 28 candidates and 252
 sessions, leave about 1,800 input tokens per candidate, which at §07's five to eight hundred
 tokens an article is three. It also agrees with the S3 and S5 screen blocks, which give
-three headlines each.
+three headlines each.~~ [superseded, D-143: 5.1 measured the median article at 1,248 tokens
+against that five to eight hundred, so the figure this paragraph derives three from prices
+nothing.]
 
 Seven days is the window the digest's recency is about. §07 asks for what happened recently
 and the apparent cause of a sharp move, and `s5.news_gate_min_articles` already operates at
@@ -2968,7 +2972,8 @@ key, which is the tidy-looking edit a later session will reach for, leaves the g
 digest no longer independently movable. That coupling would be inherited rather than chosen.
 
 Most recent first, ties broken on the source string ordinally, so the selection is
-deterministic when a name carries more than three articles in the window. Five of the seven
+deterministic when a name carries ~~more than three articles~~ [superseded, D-143] more
+articles than the cap admits in the window. Five of the seven
 names phase P probed carried more than three in ninety days and NVDA.US carried 1,000, so
 the tie-break is reached in practice rather than in principle.
 
@@ -3166,6 +3171,130 @@ live accumulation and of nothing else this system has.
 whatever a drift screen would need if D-90 ever registers one. Neither is a forward date.
 D-90's third option, widen the backward window and backfill earnings history first, does not
 fix `announced_date` and is pointed here.
+
+**D-143 and D-144 were adopted after 5.1 and 5.2 rather than with the twelve above**, and
+neither could have been written before something ran.
+`prompts/BuildPlans/phase-5-digest-chain.md` §12 is where both were drafted and is archived
+as issued. The first comes out of 5.1's article measurement, which is the first time §07's
+article-size estimate had been checked against articles; the second out of 5.1's finding
+that the local model is a reasoning model, which nothing in this corpus knew.
+
+**Entered verbatim from that plan on the operator's explicit authorisation**, the operator
+remaining the decider of record. The `Blocks` line and the closing `Test:` and `Done when:`
+paragraphs are not carried, following D-107, D-109 and the eleven of the screens section:
+the register states what was decided and why, and how a checkpoint proves it is the plan's.
+Identifiers gained backticks, "section 07" became §07 and the drafts' capitalised emphasis
+became bold, which is the same re-marking those transcriptions did and changes no word.
+
+**D-143 The digest's input is capped by tokens rather than by article count, and
+`digest.max_tokens` splits into an input key and an output key.** `ACTIVE`
+D-133 `SUPERSEDED IN PART`: its lookback window stands, its article cap does not.
+
+**The measurement is the argument.** 5.1 read 275 article bodies over the seven days ending
+2026-08-12, counted by the model that would digest them: median 1,248 tokens against
+`ARCHITECTURE.html` §07's five to eight hundred, p25 935, p75 1,974, p95 4,777, and a
+longest body of 14,099. A count cap prices nothing across that range. Three articles is
+roughly 900 tokens or roughly 14,000 depending which three, and D-133 derived its three from
+a cost figure, so the cap it set is the one thing in that decision the measurement
+contradicts.
+
+`digest.max_input_tokens` is 6,000. Articles are ordered most recent first, ties broken on
+the source string ordinally as D-133 already says, and are added while the next one whole
+would not exceed the cap. The first article below the cap that does not fit ends the
+selection; the loop does not skip it to find a smaller one behind it, because a selection
+that reorders on size is no longer the most recent articles and no document describes what
+it would be.
+
+**A minimum of one is sent even where that one exceeds the cap.** p95 is 4,777 tokens and
+the longest body measured is 14,099, so a candidate whose only recent article is an
+earnings-call transcript is a real case rather than a contrived one. Without the minimum
+that candidate produces no digest, which under D-134 is the null-`digest_text` state, which
+under D-60 is "no digest available" and disqualifies the name. That would make a long
+article and an absent article the same fact, and D-134's second state would be standing in
+for a fourth thing.
+
+**This is not truncation and the distinction is load-bearing.** D-137 forbids truncating a
+response: a half-sentence digest reaches the researcher as a complete fact and the validator
+cannot check prose. This decision selects how many whole articles to send. No article is
+ever partially transmitted, no input is cut mid-sentence, and the model always receives
+complete documents. Reading the prohibition as covering both is how a rule about output
+quality becomes a rule about input volume, and it is the confusion that makes the
+minimum-of-one look like a violation when it is the opposite.
+
+**The annual figure becomes a ceiling rather than an expectation, which is what a budget
+needs.** At 6,000 input tokens and 150 output tokens a candidate, 28 candidates and 252
+sessions, Haiku 4.5 at $1.00 per million input and $5.00 per million output: input 42.34
+million tokens at $42.34, output 1.06 million at $5.29, so **a full year run entirely on the
+secondary is at most $47.63**, against §07's $18. The rotation's own ceiling is 2 of 28 of
+that, $3.40 a year, against §07's $1.30.
+
+**Ceiling and not expectation**, stated because the difference is the point. The measured
+median candidate reaches nowhere near 6,000 tokens: at three median articles it is about
+3,700 and most nights most candidates will be under the cap with articles to spare. What
+6,000 buys is that no night can cost more than the figure above, which a count cap could not
+promise at any number.
+
+**Six thousand**, and the three things that fix it. It admits three median articles with
+room, four at p25 and one at p95, so the ordinary candidate is unconstrained and the tail is
+bounded. It keeps the ceiling inside the same order of magnitude as the figure §07 priced
+rather than a different one. And it is under the smallest context window in the chain by a
+wide margin, Haiku 4.5's being 200K, so the cap is a budget decision rather than a technical
+limit and can move without anything else moving.
+
+**`digest.max_tokens` splits and the old name is retired.** `digest.max_output_tokens` is
+150 and is the digest's own length, which is what §07 and `CONFIG_REFERENCE.md` have always
+meant by that number and which belongs to the design rather than to the provider.
+`digest.max_input_tokens` is 6,000 and is this decision's. One name for two quantities is
+what let them be conflated at 5.1, where the API parameter capped the completion and the
+design meant the digest, and on a reasoning model those turned out to be different numbers
+with nothing saying so.
+
+**D-144 How a link must be asked is a `local_model_config` column, not a config key and not
+a client literal.** `ACTIVE`
+
+`local_model_config` gains `request_options`, jsonb, nullable. It holds the
+provider-specific parameters a link's request must carry beyond the ones every link takes,
+and it is null for the secondary, which needs none.
+
+**Why the column and not a config key.** This is a property of the endpoint's loaded model
+rather than of the digest step. Swap the loaded model and the setting changes with it; a
+`digest.*` key stays behind, describing a model that is no longer there, and does so
+silently because nothing reads a key against the model it was written for.
+`local_model_config` is already the row that says where a link is and whether it is enabled,
+and this is the same kind of fact.
+
+**Why not a client literal.** A literal cannot differ per link, and the two links already
+need different requests: `reasoning_effort` is an OpenAI-compatible parameter that this
+endpoint honours and the secondary has no use for. A literal would also put a provider's
+parameter name inside a client that §07 says is written against the OpenAI-compatible
+surface rather than against a product.
+
+**What it holds today**, recorded because a column with no stated content is a column the
+next session guesses at. For the local link: `reasoning_effort` set to none. Measured at 5.1
+against `qwen3.6:latest` on Ollama, where that produced a 243-character digest in 74
+completion tokens, and where `max_tokens` 150 and `max_tokens` 2,000 both produced zero
+characters of content. The native surface's `think:false` produced the identical 243
+characters, which is what says the setting is the model's behaviour rather than one
+endpoint's spelling of it. `chat_template_kwargs.enable_thinking` set to false was accepted
+and ignored, returning a response byte-identical to the call without it, so it is recorded
+here as not working rather than left for the next session to try.
+
+**The failure this prevents, which is why the column exists rather than the parameter being
+set somewhere.** A reasoning model returns HTTP 200, a normal usage block, a
+`finish_reason`, and zero characters of content. Nothing errors. Under D-137 an empty
+response is malformed, so the chain retries once, gets another empty response, marks the
+local link unhealthy for the run, and digests every candidate on the secondary. Every night.
+With the local server running, answering in under two seconds, and reporting healthy. The
+record is not silent, `news_digest.provider` saying `haiku` on every row being exactly what
+D-29 exists for, but nothing raises anything and the year costs the full-secondary ceiling
+rather than the local one. This is `CLAUDE.md` §1's failure class: the run completes, the
+numbers look plausible, and what was measured is not what was meant to be measured.
+
+**A health check that reads a status code is therefore insufficient**, and that follows from
+the paragraph above rather than being a separate rule. A link is healthy when it returns
+non-empty content to a small fixed probe under `digest.health_timeout_ms`, not when it
+returns 200. The probe's text is fixed and is not the digest instruction, so a health check
+costs nothing and cannot be confused with a digest.
 
 ---
 

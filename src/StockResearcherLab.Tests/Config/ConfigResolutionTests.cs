@@ -363,7 +363,16 @@ public sealed class ConfigResolutionTests
         // version and a split history rather than a placeholder [CLAUDE.md section 8].
         // The count moving twice inside one checkpoint is the visible form of that,
         // which is why the number is asserted rather than described.
-        Assert.Equal(102, ConfigSeeder.Keys.Count);
+        //
+        // **104 at 5.3's second commit**, D-143 authored: `digest.max_input_tokens` at
+        // 6,000 and `digest.max_output_tokens` at 150. This is the first time this
+        // number has moved because a decision was taken rather than because a key was
+        // found documented with nothing seeding it, and the difference is worth the
+        // line: every entry above records a gap, and this one records a choice. The
+        // two names D-143 retires never appeared here, so nothing was removed and the
+        // count moves by exactly the two that arrived. `ChainSeedTests` asserts all
+        // four names, which is what says which two.
+        Assert.Equal(104, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)

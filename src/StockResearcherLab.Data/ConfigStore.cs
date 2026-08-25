@@ -169,6 +169,11 @@ public sealed class ConfigSeeder
     /// D-143 being drafted and unauthored. The count therefore moves twice in one
     /// checkpoint and its test moves with it both times, which is the visible form of
     /// a checkpoint that landed in two commits rather than one.
+    ///
+    /// **104 at 5.3's second commit**, D-143 having been authored: the two keys it
+    /// introduces arrive and the two it retires were never here to remove. That is
+    /// what the first commit's absence assertions bought, and it is why this count
+    /// moved by two rather than staying still while two names changed underneath it.
     /// </summary>
     public static IReadOnlyList<(string Key, string Value)> Keys { get; } =
     [
@@ -559,16 +564,16 @@ public sealed class ConfigSeeder
         // one `CONFIG_REFERENCE.md` already documents or one an authored decision
         // states, so nothing is chosen at this call site.
         //
-        // **Two keys this namespace is documented with are deliberately absent and
-        // that is the whole shape of this commit.** `digest.max_articles` and
-        // `digest.max_tokens` are not seeded: 5.1 measured the median article at 1,248
-        // real tokens against `ARCHITECTURE.html` section 07's five to eight hundred,
-        // which makes the article cap a decision rather than a documented value, and
-        // D-143 is drafted and unauthored. Config is append-only, so a provisional
-        // value is a config version and a history that must be segmented rather than a
-        // placeholder [CLAUDE.md section 8, section 12]. They arrive in this
-        // checkpoint's second commit as `digest.max_input_tokens` and
-        // `digest.max_output_tokens` once D-143 is in.
+        // **Two keys this namespace is documented with were deliberately absent from
+        // the first commit and that was its whole shape.** `digest.max_articles` and
+        // `digest.max_tokens` were never seeded: 5.1 measured the median article at
+        // 1,248 real tokens against `ARCHITECTURE.html` section 07's five to eight
+        // hundred, which made the article cap a decision rather than a documented
+        // value, and D-143 was then drafted and unauthored. Config is append-only, so
+        // a provisional value is a config version and a history that must be segmented
+        // rather than a placeholder [CLAUDE.md section 8, section 12]. **D-143 is now
+        // authored and neither name is ever seeded**: the two below replace them, and
+        // `ChainSeedTests` asserts all four names in the state they now stand in.
         //
         // `digest.chain` is seeded at its documented value and its consumer is not
         // bound here. D-136 gives the chain's order to `local_model_config.provider_order`
@@ -581,6 +586,18 @@ public sealed class ConfigSeeder
         ("digest.health_timeout_ms", "5000"),
         ("digest.readiness_check_et", "\"15:30\""),
         ("digest.secondary_model_id", "\"claude-haiku-4-5\""),
+
+        // D-143's two, which are one retired key split into the two quantities it was
+        // standing for. `digest.max_input_tokens` caps what is sent and is measured
+        // rather than derived: it admits three median articles with room, one at p95,
+        // and it bounds a full secondary year at $47.63 against section 07's $18,
+        // which a count cap could not promise at any number.
+        // `digest.max_output_tokens` is 150 and is the digest's own length, which is
+        // what section 07 and `CONFIG_REFERENCE.md` have always meant by that number.
+        // One name for both is what let them be conflated at 5.1, where the API
+        // parameter capped the completion and the design meant the digest.
+        ("digest.max_input_tokens", "6000"),
+        ("digest.max_output_tokens", "150"),
 
         // D-60's no-digest disqualifier, documented since the first corpus and seeded
         // by nothing until now, which `CONFIG_REFERENCE.md` says in terms: "the fourth
@@ -616,16 +633,18 @@ public sealed class ConfigSeeder
     /// is the declared grain, so the honest value is the address the link actually
     /// reaches rather than an empty string standing for "not applicable".
     ///
-    /// **`request_options` is absent from these rows and is D-144's**, which is drafted
-    /// and unauthored. Without it the local link returns zero characters of content and
-    /// the chain falls through every night with the server up and healthy, so these
-    /// rows are the chain's addresses rather than a working chain, and 5.5 is where
-    /// that is proved either way.
+    /// **`request_options` is D-144's and is null for the secondary.** The local link
+    /// carries `reasoning_effort` at `none`, measured at 5.1: without it that server
+    /// returns HTTP 200, a normal usage block and zero characters of content, so the
+    /// chain would fall through to the paid link every night with the local server up,
+    /// answering in under two seconds, and reporting healthy. The secondary's null is
+    /// a link that needs no provider-specific parameter rather than one whose options
+    /// are unknown, and it is asserted rather than left to the column's default.
     /// </summary>
-    public static IReadOnlyList<(int Order, string Endpoint)> ChainLinks { get; } =
+    public static IReadOnlyList<(int Order, string Endpoint, string? RequestOptions)> ChainLinks { get; } =
     [
-        (1, "http://localhost:11434/v1"),
-        (2, "https://api.anthropic.com"),
+        (1, "http://localhost:11434/v1", "{\"reasoning_effort\": \"none\"}"),
+        (2, "https://api.anthropic.com", null),
     ];
 
     private readonly string _connectionString;
@@ -677,8 +696,8 @@ public sealed class ConfigSeeder
     public async Task<int> SeedChainAsync(CancellationToken ct = default)
     {
         const string sql = """
-            INSERT INTO local_model_config (provider_order, endpoint, enabled)
-            VALUES (@order, @endpoint, TRUE)
+            INSERT INTO local_model_config (provider_order, endpoint, enabled, request_options)
+            VALUES (@order, @endpoint, TRUE, @options::jsonb)
             ON CONFLICT (provider_order) DO NOTHING;
             """;
 
@@ -686,11 +705,17 @@ public sealed class ConfigSeeder
         await conn.OpenAsync(ct).ConfigureAwait(false);
 
         var inserted = 0;
-        foreach (var (order, endpoint) in ChainLinks)
+        foreach (var (order, endpoint, options) in ChainLinks)
         {
             await using var cmd = new NpgsqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("order", order);
             cmd.Parameters.AddWithValue("endpoint", endpoint);
+
+            // Null rather than an empty object [D-144]. A link that needs no
+            // provider-specific parameter and a link whose parameters are an empty
+            // request shape are different facts, and 5.5's unhealthy assertion is
+            // written against the second.
+            cmd.Parameters.AddWithValue("options", (object?)options ?? DBNull.Value);
             inserted += await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         }
 

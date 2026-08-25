@@ -1002,9 +1002,35 @@ follows [D-110].
 Grain: one row per provider in the chain. **Writer: the UI, via the single permitted
 write endpoint** [D-51].
 
-`provider_order`, `endpoint`, `enabled`, `last_health_check`, `last_loaded_model`.
+`provider_order`, `endpoint`, `enabled`, `last_health_check`, `last_loaded_model`,
+`request_options`.
 
 The only table the interface can write. Nothing here touches run data.
+
+**`request_options` is jsonb, nullable, and holds how a link must be asked** [D-144,
+migration `0023`]. Not what to ask it, which is `prompts/digest-instruction.md`, and not
+which link to ask, which is `provider_order` and `enabled`: the provider-specific
+parameters its request must carry beyond the ones every link takes. Today the local link
+carries `{"reasoning_effort": "none"}` and the secondary carries null.
+
+**Null is a link that needs no such parameter, and an empty object is a request shape
+somebody chose.** They are different facts and the column keeps them apart, which is why
+there is no `DEFAULT '{}'::jsonb`: 5.5's assertion that a link with its options removed
+reports unhealthy is written against the empty object, and a default would manufacture
+one on every row [`CLAUDE.md` §6].
+
+**Why a column and not a `digest.*` key.** This is a property of the endpoint's loaded
+model rather than of the digest step, so it must travel with the row that names the
+endpoint. A key would stay behind when the loaded model changed, describing a model no
+longer there, and would do so silently.
+
+**No CHECK on its shape.** The keys inside are a provider's rather than this system's,
+which is the opposite of `news_digest.provider`, whose two values D-25 names and whose
+vocabulary is therefore closed here.
+
+**It gains no writer in this phase.** The seeder writes it with the two rows [D-136],
+the UI inherits it at phase 9, and `last_health_check` and `last_loaded_model` stay null
+as they were.
 
 ---
 

@@ -11490,3 +11490,118 @@ second defect this phase found by running rather than by reading**, the first be
 
 **The `StockResearcherLab.Ui` process holding an Api DLL was ended on the operator's
 direction.** A solution-wide `dotnet build` in the working tree succeeds again.
+
+---
+
+## Phase 5, D-143 and D-144 adopted, and 5.3's second commit
+
+**Both decisions are in `DECISIONS.md` and `ACTIVE`**, moved from the phase plan's §12 on
+the operator's direction. **Word for word, checked rather than read**: a normalising
+comparison over both entries, stripping backticks, bold and the section sign and folding
+case, matched 736 words for D-143 and 528 for D-144 against the drafts. What changed is
+only markup, which is what D-107, D-109 and the screens section's eleven did on
+transcription. The `Blocks` line and the closing `Test:` and `Done when:` paragraphs are
+not carried, and the section preamble says so.
+
+**D-133 keeps its number and gains a partial status.** Its article cap is struck, its
+lookback window, ordering and tie-break stand, and the entry says which is which. The
+register does not carry two live caps.
+
+**One thing the adoption did not touch, reported rather than closed.** The phase plan's §4
+and §5 still describe `digest.max_articles` at 3 and the stopping rule that fired against
+it, and its checkpoint table still names D-133 as what blocks 5.3 and 5.8. That is a record
+of what was drafted before anything ran, and §12 of the same document already names the
+checkpoints D-143 and D-144 block, so nothing there is unreconciled. It is stated because a
+reader arriving at §4 alone would take the article cap as current [`CLAUDE.md` §14].
+
+### 5.3's second commit
+
+`digest.max_input_tokens` at 6,000 and `digest.max_output_tokens` at 150 seeded,
+`ConfigSeeder.Keys.Count` **102 to 104** with its test moved. **The count moved by two and
+nothing was removed**, because neither retired name ever reached the store: there is no
+config version carrying `digest.max_articles` or `digest.max_tokens` and no history to
+segment on their account, which is what the first commit's refusal to seed a provisional
+value bought.
+
+**All four names are asserted again and the pair that is absent is now asserted absent for
+ever rather than not yet.** The test that recorded the waiting is kept and its meaning
+changed, because §07, `WORKED_EXAMPLE.md` and D-133's struck paragraph all still contain the
+retired names, and a later session reading any of them would be reaching for a fifth digest
+key in a namespace with four.
+
+**`local_model_config.request_options` is migration `0023`** [D-144]. jsonb, nullable, no
+default and no CHECK on its shape. The local link carries `{"reasoning_effort": "none"}` and
+**the secondary's is null and the test asserts the null**, because a link needing no
+provider-specific parameter and a link whose request shape is empty are different facts, and
+5.5's unhealthy assertion is written against the second.
+
+### The seeder could not have delivered D-144's value, and the test found it
+
+`SeedChainAsync` inserts `ON CONFLICT (provider_order) DO NOTHING`, deliberately, so a row
+the operator has edited through the one permitted write endpoint is left as they left it
+[D-51, D-136]. **On any database seeded before `0023` that means the seeder can never fill
+the new column**, and the local link's `request_options` stays null for ever. The chain then
+runs every candidate on the paid link with the local server up and answering, which is the
+failure D-144 exists to prevent arriving through the one path the decision did not describe.
+
+Found by 5.3's own test failing against the suite's database, which had been seeded at the
+first commit. Not by reading.
+
+**The migration carries the value for the row that predates the column**, guarded on the
+column still being null so a re-run is a no-op and a row the operator has since written is
+not disturbed. That is `0013`'s shape exactly, where the sweep marker moved into a column
+added in the same migration, and it is the only precedent in twenty-three migrations for
+writing data. The literal is duplicated between `ConfigSeeder.ChainLinks` and the migration,
+visibly, and a test asserts they agree: a migration whose text is built from code at
+migration time is a migration whose recorded hash means nothing, which is `0022`'s provider
+vocabulary a second time.
+
+**The backfill is exercised by running it rather than by reading it**, and it is worth
+saying that no environment here fires it otherwise: `ci.ps1` migrates from an empty server,
+so the `UPDATE` runs against zero rows there, and the suite's database is created after
+`0023` and takes its value from the insert. The only database it ever fires on is the
+operator's. The test nulls the column, runs the migration's own statement out of the
+embedded resource, and asserts one row changed, the second run changed none, and the
+secondary was untouched.
+
+### A third defect found by running rather than by reading
+
+That test's first version stripped SQL comments after splitting on `;` rather than before.
+**Two of `0023`'s comment lines contain a semicolon**, so the split cut a comment in half
+and left its tail standing at the front of the next statement, which then did not begin with
+`UPDATE`. Comments are stripped first now. Recorded because the cause is general rather than
+local: prose in this corpus is full of semicolons, and anything that splits a migration into
+statements will meet this.
+
+### The $47.63 ceiling, beside §07's $18
+
+| Figure | `ARCHITECTURE.html` §07 | D-143 |
+|---|---|---|
+| A full year run entirely on the secondary | $18 | **at most $47.63** |
+| The rotation's two candidates a night | $1.30 | **at most $3.40** |
+
+**A ceiling and not an expectation, and the distinction is the reason the cap is a token
+count.** At `digest.max_input_tokens` 6,000 and `digest.max_output_tokens` 150 a candidate,
+28 candidates and 252 sessions, Haiku 4.5 at $1.00 per million input and $5.00 per million
+output: 42.34 million input tokens at $42.34 and 1.06 million output at $5.29. The measured
+median candidate reaches nowhere near the cap, about 3,700 tokens at three median articles,
+so most nights cost far less. What 6,000 buys is that **no night can cost more**, which the
+article cap could not promise at any number: three articles measured anywhere from roughly
+900 to roughly 14,000 tokens depending which three.
+
+**Neither figure is measured yet and neither is presented as one.** §07's is a design
+estimate and D-143's is arithmetic over a measured input distribution and a published price.
+5.14 produces this corpus's first measured figure on a model call.
+
+### Where the phase stands
+
+| Checkpoint | State |
+|---|---|
+| 5.1 | **Done.** Six measurements, two of them stopping the build |
+| 5.2 | **Done.** `0022`, 735 tests, `ci.ps1` green at `a2db04e` |
+| 5.3 | **Done in two commits**, `b2e50dc` and this one |
+| 5.4 | **Done.** C29, 756 tests, green at `1cdbb5a` |
+| 5.5, 5.7, 5.8 | Unblocked by the adoption, and next |
+| 5.6, 5.14 | Blocked on the Anthropic key |
+| 5.9 to 5.13 | Downstream |
+

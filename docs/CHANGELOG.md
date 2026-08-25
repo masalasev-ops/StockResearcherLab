@@ -2456,3 +2456,64 @@ and is written null, measured at 5.1 over 275 rows.
 
 `news_digest` and `attribution` gain paragraphs in the same checkpoint and neither loses
 a line, so neither is restated here.
+
+
+---
+
+## 2026-08-24, phase 5 checkpoint 5.3, `CONFIG_REFERENCE.md`'s digest chain and `SCHEMA.md`'s `local_model_config`
+
+**Both are read to know the current state, so both are clean edits and the prior wording
+is here** [5.3's second commit, D-143, D-144].
+
+### `CONFIG_REFERENCE.md` §Digest chain, two rows and two paragraphs [D-143]
+
+> | `digest.max_articles` | 3 | D-133 | NewsDigester | **NOT SEEDED**, see below |
+> | `digest.max_tokens` | 150 | D-24 | NewsDigester | **NOT SEEDED**, see below |
+>
+> **Two keys in this table are deliberately unseeded and the reason is a measurement**
+> [5.1, 5.3]. `digest.max_articles` is 3 because §07's cost figures imply about 1,800
+> input tokens a candidate at five to eight hundred tokens an article. The median article
+> measures **1,248 real tokens**, counted by the model that would digest it, with p95 at
+> 4,777 and a longest body of 14,099, so three articles is anywhere from roughly 900 to
+> roughly 14,000 tokens depending which three and the count prices nothing.
+> `digest.max_tokens` is one name for two quantities, the digest's length and the
+> completion's, which are the same number only on a model that does not reason before
+> answering.
+>
+> **Both are superseded by D-143, which is drafted and unauthored.** It replaces them with
+> `digest.max_input_tokens` at 6,000 and `digest.max_output_tokens` at 150, and this table
+> gains those two rows and loses these when it is authored. **Nothing was seeded at a
+> provisional value**: config is append-only and versioned, so a placeholder is a config
+> version and a history that must be segmented rather than a value that can be corrected
+> [`CLAUDE.md` §8, §12].
+
+**What replaces them is the same measurement stated as a rule rather than as a reason to
+wait.** D-143 is authored, so the two rows become `digest.max_input_tokens` at 6,000 and
+`digest.max_output_tokens` at 150, both seeded, and the paragraph that explained why two
+keys were absent becomes the paragraph that states how the cap selects: most recent first
+within `digest.lookback_days`, whole articles while the next still fits, a minimum of one
+even where that one exceeds the cap.
+
+**Two facts are carried forward rather than dropped.** The measured distribution stays, and
+gains p25 at 935 and p75 at 1,974 which the removed text did not carry. And the statement
+that nothing was seeded at a provisional value stays, now in the past tense and attached to
+the two retired names, because it is the reason there is no config version carrying either
+and therefore no history to segment.
+
+**One fact is new here and belongs to D-143 rather than to this edit**: 6,000 input tokens
+bounds a full year run entirely on the secondary at $47.63 against §07's $18. The removed
+text had no ceiling in it at all, a count cap not admitting one.
+
+### `SCHEMA.md` §local_model_config, the column list [D-144]
+
+> `provider_order`, `endpoint`, `enabled`, `last_health_check`, `last_loaded_model`.
+>
+> The only table the interface can write. Nothing here touches run data.
+
+**One column added and no line removed.** The list gains `request_options`, which migration
+`0023` adds, and the two sentences below it are unchanged. What the section gains beyond the
+column name is all new rather than replacing anything: what the column holds and that it is
+null for the secondary; why null and an empty object are different facts and why there is
+therefore no `DEFAULT '{}'::jsonb`; why this is a column rather than a `digest.*` key; why
+its shape carries no CHECK where `news_digest.provider`'s vocabulary does; and that it gains
+no writer in this phase.

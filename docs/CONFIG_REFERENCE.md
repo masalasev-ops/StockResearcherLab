@@ -556,26 +556,30 @@ budget.
 | `digest.health_timeout_ms` | 5000 | — | LocalModelClient | unverified, **seeded 5.3** |
 | `digest.readiness_check_et` | 15:30 | — | the chain, not one link [5.3] | unverified, **seeded 5.3** |
 | `digest.secondary_model_id` | `claude-haiku-4-5` | D-140 | the secondary link | unverified, **seeded 5.3** |
-| `digest.max_articles` | 3 | D-133 | NewsDigester | **NOT SEEDED**, see below |
-| `digest.max_tokens` | 150 | D-24 | NewsDigester | **NOT SEEDED**, see below |
+| `digest.max_input_tokens` | 6000 | D-143 | NewsDigester | unverified, **seeded 5.3** |
+| `digest.max_output_tokens` | 150 | D-143 | NewsDigester | unverified, **seeded 5.3** |
 
 The chain is an ordered list, so adding a third link is an insert.
 
-**Two keys in this table are deliberately unseeded and the reason is a measurement**
-[5.1, 5.3]. `digest.max_articles` is 3 because §07's cost figures imply about 1,800 input
-tokens a candidate at five to eight hundred tokens an article. The median article measures
-**1,248 real tokens**, counted by the model that would digest it, with p95 at 4,777 and a
-longest body of 14,099, so three articles is anywhere from roughly 900 to roughly 14,000
-tokens depending which three and the count prices nothing. `digest.max_tokens` is one name
-for two quantities, the digest's length and the completion's, which are the same number
-only on a model that does not reason before answering.
+**The input cap is a token count rather than an article count, and it is measured**
+[D-143, 5.1]. The median article body measures **1,248 real tokens**, counted by the model
+that would digest it, with p25 at 935, p75 at 1,974, p95 at 4,777 and a longest body of
+14,099. Articles are taken most recent first within `digest.lookback_days` and added while
+the next one whole would still fit, with a minimum of one sent even where that one alone
+exceeds the cap. 6,000 admits three median articles with room and one at p95, and it bounds
+a full year run entirely on the secondary at **$47.63** against §07's $18, which a count
+could not promise at any number.
 
-**Both are superseded by D-143, which is drafted and unauthored.** It replaces them with
-`digest.max_input_tokens` at 6,000 and `digest.max_output_tokens` at 150, and this table
-gains those two rows and loses these when it is authored. **Nothing was seeded at a
-provisional value**: config is append-only and versioned, so a placeholder is a config
-version and a history that must be segmented rather than a value that can be corrected
-[`CLAUDE.md` §8, §12].
+**`digest.max_output_tokens` is the digest's own length and is not the completion's.** On a
+model that reasons before answering those are different quantities, and one key for both is
+what let them be conflated at 5.1.
+
+**Neither name D-143 retires was ever seeded** [5.3]. `digest.max_articles` and
+`digest.max_tokens` reached no config row, so there is no version carrying either and no
+history to segment on their account: config is append-only and versioned, so a placeholder
+seeded to keep a checkpoint whole would have been a config version rather than a value that
+could be corrected [`CLAUDE.md` §8, §12]. A test asserts both names absent and the two above
+present, which is what says which four names moved.
 
 **`digest.chain`'s consumer is genuinely open and is not merely unbuilt** [5.3 finding].
 D-136 gives the chain's order to `local_model_config.provider_order` filtered on `enabled`,
@@ -595,6 +599,14 @@ Two rows, `provider_order` 1 at the local endpoint and 2 at the vendor's base, `
 true, `last_health_check` and `last_loaded_model` null and gaining no writer in this phase.
 It carries no version and resolves as of nothing, which is why its count is reported on its
 own line by `seed.ps1` rather than added to the key count.
+
+**`request_options` is on that table rather than in this one, and deliberately** [D-144].
+How a link must be asked is a property of the endpoint's loaded model, so it travels with
+the row naming the endpoint; a `digest.*` key would stay behind when the loaded model
+changed and describe a model no longer there. The local link carries
+`{"reasoning_effort": "none"}` and the secondary carries null. It is not a config key, is
+not versioned, and does not resolve as of a date, which is the same line `local_model_config`
+already sits on above.
 
 ## Learning
 

@@ -14,14 +14,15 @@ namespace StockResearcherLab.Tests.Config;
 /// answer a different question than the one asked, and it does that without
 /// producing an error.
 /// </summary>
-/// **In the `database` collection since O.2, and the reason is a shared store rather than
-/// this class's own subject.** It asserts a store-wide config version, which is true only
-/// while no row anywhere carries a later version set at or before the date it asks about.
-/// `AttributionWriteTests` and `CandidateAllocatorTests` each insert a version 2 row at
-/// `set_at` 2020-06-01 and delete it again, and both are in that collection; this class was
-/// not, so it ran in parallel with them and failed whenever the window happened to overlap.
-/// Intermittent, and it surfaced in `ci.ps1` rather than locally because `ci.ps1` drops both
-/// databases and the suite then runs against a store with nothing else in it.
+/// **In the `database` collection since phase 5's O.2, and the reason is a shared store
+/// rather than this class's own subject.** It asserts a store-wide config version, which
+/// is true only while no row anywhere carries a later version set at or before the date
+/// it asks about. `AttributionWriteTests` and `CandidateAllocatorTests` each insert a
+/// version 2 row at `set_at` 2020-06-01 and delete it again, and both are in that
+/// collection; this class was not, so it ran in parallel with them and failed whenever
+/// the window happened to overlap. Intermittent, and it surfaced in `ci.ps1` rather than
+/// locally because `ci.ps1` drops both databases and the suite then runs against a store
+/// with nothing else in it.
 [Collection("database")]
 public sealed class ConfigResolutionTests
 {

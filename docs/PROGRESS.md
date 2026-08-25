@@ -11953,4 +11953,4 @@ be left for a later phase without every commit after it inheriting a red gate. T
 alternative, a scoped config store per test class, is a larger change to how the suite
 isolates and is a decision rather than a correction.
 
-**`ci.ps1` green at the O.2 commit**, 812 tests, 23 migrations.
+**`ci.ps1` green at phase 5's O.2 commit**, 812 tests, 23 migrations.

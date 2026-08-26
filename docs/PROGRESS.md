@@ -12522,6 +12522,17 @@ on**: one short session is what the guard exists to absorb, and the walk-back ab
 after 2026-08-25**, which is the night of 2026-08-26 blessing 2026-08-26. 2026-08-25 will
 not be blessed on any later run either, its file being short by more than the guard allows.
 
+**That the halt is the date alone was checked rather than left to tonight.** `run
+NewsDigester 2026-08-26` at 08:16 ET resolved config v25, built the chain against one
+enabled row, and completed: `qwen/qwen3.5-9b answered in 27,297 ms. Continuing. ok, 0
+row(s) written`. Zero rows because no candidate set exists for a session that has not
+happened; the count check that halted the night passes on this date. **The 27.3 seconds is
+also the first measured cold load through 5.13's precondition**, the probe having loaded
+the model rather than found it resident, which is the warm bound of 120,000 ms earning its
+value against the 5,000 ms health bound that would have called it dead. **The load is read
+off the timing rather than observed**: a resident model answers a probe of this size in
+well under a second, and 27.3 is a weight load.
+
 ### What is proved and what is asserted
 
 **Proved on 2026-08-25:** the one-link chain builds, C33 runs through the Worker, and a

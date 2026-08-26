@@ -12475,6 +12475,53 @@ half owns the chain's shape, not a build task. Two shapes are visible from here 
 are authored work: `local_model_config` gains a version, or `digest.chain` becomes the sole
 declaration of chain membership and the table's `enabled` stops being read by `BuildAsync`.
 
+### The finding bit on 2026-08-26, and not where it was predicted to
+
+**The prediction above was that it becomes load-bearing "when 5.6 exists and a past date
+would otherwise run". It bit a night nobody was treating as a past date: the first one.**
+
+```
+run-night 2026-08-25
+  PriceIngestor          ok, 699,102 row(s)
+  FreshnessGuard         ok, trading date 2026-08-24
+  ... 16 stages on 2026-08-24, HeadlineIngestor ok, 140 row(s)
+  NewsDigester           FAILED, halting: digest.chain names 2 link(s) and
+                         local_model_config holds 1 enabled row(s).
+  halted on 2026-08-24, 18 step(s)
+```
+
+**The mechanism is one this record had not put together, and neither half is a defect.** A
+config row is stamped with the day it is written, so `digest.chain` v2 is in force from
+2026-08-25. `FreshnessGuard` blesses the newest settled session, which is at best the
+previous one, and every stage after it runs on the blessed date rather than the invoked one
+[INVARIANT 13]. **So a change to `digest.chain` cannot be in force on the first night after
+it is made.** The night of the change sees the version before it, beside an enabled set
+edited the same day, and the two disagree exactly as the finding says they must.
+
+**This generalises past `digest.chain`.** Any key whose value must agree with an unversioned
+table has the same one-session gap between the edit and the first run that can honour it.
+Nothing else pairs a versioned key with an unversioned table today, so the exposure is this
+one key, and the two authored shapes offered above are still the two that close it.
+
+**Why 2026-08-25 was not blessed is a separate fact and is not about the digest chain.**
+
+| date | rows | fraction of median |
+|---|---|---|
+| 2026-08-25 | 44,602 | 0.885 |
+| 2026-08-24 | 50,354 | 0.999 |
+
+`freshness.settled_fraction` is 0.95, so the guard walked back one session, which is the
+guard working. **The shortfall is the provider's file rather than a truncated sweep**, and
+that was checked rather than assumed: `run PriceIngestor 2026-08-26` at 08:12 ET wrote
+649,132 rows and lifted 2026-08-25 from 44,602 to 44,936, while each neighbouring date
+gained around twenty. A session 11 percent short of its neighbours also sits below
+`freshness.row_count_alert_below` of 45,000. **Filed as a fact about the feed, not acted
+on**: one short session is what the guard exists to absorb, and the walk-back absorbed it.
+
+**What it costs 5.12: the first night that can run C33 is one whose blessed date is on or
+after 2026-08-25**, which is the night of 2026-08-26 blessing 2026-08-26. 2026-08-25 will
+not be blessed on any later run either, its file being short by more than the guard allows.
+
 ### What is proved and what is asserted
 
 **Proved on 2026-08-25:** the one-link chain builds, C33 runs through the Worker, and a
@@ -12774,14 +12821,15 @@ completes.
 
 ## Phase 5, what is owed before sign-off
 
-**Every checkpoint 5.1 to 5.14 is built and `ci.ps1` is green at `4db0c28` with 885 tests.**
+**Every checkpoint 5.1 to 5.14 is built and `ci.ps1` is green at `d1b8248` with 887 tests**
+~~at `4db0c28` with 885~~.
 What remains is not code. Three of the phase's done-when lines are runs, and they are
 listed here rather than left for a reviewer to reconstruct from fourteen checkpoint
 records.
 
 | Owed | Which line | What it needs |
 |---|---|---|
-| One real night end to end, with its chain of counts | 5.12 | **The next trading night.** From 2026-08-25 `digest.chain` is `["local"]` against one enabled row, so a full evening order runs with no spending and no config change. The three routes available today are all blocked, and 5.12's record says by what |
+| One real night end to end, with its chain of counts | 5.12 | ~~**The next trading night.** From 2026-08-25 `digest.chain` is `["local"]` against one enabled row~~ **Corrected 2026-08-26: a night whose BLESSED date is on or after 2026-08-25**, which the next trading night was not. The attempt on 2026-08-26 05:22 ET halted at C33 on the count mismatch, the guard having blessed 2026-08-24, and the reason is recorded under 5.7's finding. 2026-08-25 will not be blessed on any later run, its price file being 11 percent short. **The first night that can carry this is 2026-08-26's**, run after that session settles |
 | The secondary link answering once | 5.6 | **One live call, a fraction of a cent.** Eleven tests cover the link against a stubbed transport; no stub can prove the wire shape, the key, or that the model id is reachable on this account |
 | The night's rotation cost, annualised | 5.14 | **The token counts a live secondary call reports.** What is recorded is D-143's ceiling of $3.40 a year, reproduced exactly through C26's own pricing and registered as a fixture. The measured figure lands under it by an amount nobody yet knows |
 | ~~The fall-through visible in the record~~ **DEFERRED, 2026-08-25, operator direction** | phase done-when, line 2 | `BUILD_PLAN.md` now records the line as deferred rather than owed, on the same footing as line 3. The evaluation is deferred and therefore the evidence is; the design is not. The secondary is built and inert, D-25, D-27 and D-140 stand, and the rotation stays in the code. **Re-asked when the secondary is evaluated** |

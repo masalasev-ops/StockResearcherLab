@@ -284,9 +284,11 @@ public sealed class LocalModelClient : IDigestLink, IReadOwner
 
     private async Task<long> TimeoutAsync(string key, CancellationToken ct)
     {
-        // Resolved at the frontier rather than as of a simulated date. A health check is
-        // about the machine now, so there is no simulated date it could be as of, which
-        // is the one shape INVARIANT 13 does not reach.
+        // Resolved at the frontier rather than as of a simulated date [D-145]. A health
+        // check is about the machine now, so there is no simulated date it could be as of,
+        // which is the one shape INVARIANT 13 does not reach. The decision states the
+        // boundary: these two keys and no others, every key about the night resolving
+        // through the stage's own date.
         var row = await _config.RequireAsync(key, DateOnly.MaxValue, ct).ConfigureAwait(false);
 
         return long.TryParse(row.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var ms)
@@ -300,13 +302,29 @@ public sealed class LocalModelClient : IDigestLink, IReadOwner
     /// <summary>
     /// What the endpoint says it has, first by ordinal id.
     ///
-    /// **"Loaded" is the endpoint's word and this server does not mean by it what §07
-    /// assumes** [5.5 finding]. §07's table names LM Studio, which serves the one model
-    /// it has loaded; the machine runs Ollama, which lists every model pulled. Today it
-    /// lists exactly one, so the two readings agree and nothing is ambiguous. The
-    /// tie-break is ordinal and stated so that it stays deterministic if a second is ever
-    /// pulled, and the name recorded against a digest is the one the completion says
-    /// answered rather than this one, which is the authoritative half either way.
+    /// **"Loaded" is the endpoint's word and no server this has run against means by it
+    /// what §07 assumes** [5.5 finding, corrected 2026-08-25]. §07's table names LM Studio
+    /// as a server that serves the one model it has loaded. It does not: it lists every
+    /// model downloaded, and on this machine it listed five. Ollama, which the sweep ran
+    /// against first, lists every model pulled. **So the ordinal pick is a real choice
+    /// over a real set rather than a tie-break over a set of one**, and the two earlier
+    /// sentences here claiming otherwise were wrong on both halves.
+    ///
+    /// **What keeps the right model answering is `request_options.model`, not this pick**
+    /// [D-144, the LM Studio move]. `Apply` merges those options after `["model"]` is set,
+    /// so the row's key overrides whatever the listing offered first. On the configured
+    /// endpoint the ordinal first is `prism-ml/bonsai-27b` and the configured model is
+    /// `qwen/qwen3.5-9b`, so the two differ and the key is load-bearing.
+    ///
+    /// **Clearing that key does not fail the run**, which is the hazard worth naming here:
+    /// another model answers, the probe reports it as the model that answered, and a night
+    /// of digests comes from a model nobody chose. `news_digest.model_name` records what
+    /// answered, so the record is not silent [D-29], but nothing raises anything. The
+    /// remedy is a `model` column on `local_model_config` and is an authored decision
+    /// rather than a build change, carried against phase 9.
+    ///
+    /// The name recorded against a digest is the one the completion says answered rather
+    /// than this one, which is the authoritative half either way.
     /// </summary>
     private async Task<string?> LoadedModelAsync(string endpoint, CancellationToken ct)
     {

@@ -12923,12 +12923,14 @@ completes.
 
 ## Phase 5, what is owed before sign-off
 
-**Every checkpoint 5.1 to 5.14 is built and `ci.ps1` is green at `68a6f90` with 895 tests**
-~~at `d1b8248` with 887~~ ~~at `4db0c28` with 885~~. The last move is phase R's two
-corrective passes, which are recorded at the foot of this file.
-What remains is not code. Three of the phase's done-when lines are runs, and they are
-listed here rather than left for a reviewer to reconstruct from fourteen checkpoint
-records.
+**Every checkpoint 5.1 to 5.14 is built and `ci.ps1` is green at `49e235e` with 895 tests**
+~~at `d1b8248` with 887~~ ~~at `4db0c28` with 885~~. `68a6f90` is the last commit touching
+code or tests, everything after it being this record, and the count moved there for phase
+R's two corrective passes, which are recorded at the foot of this file.
+
+**What remains is not code.** Five of the phase's done-when lines are runs rather than
+assertions, and they are listed here rather than left for a reviewer to reconstruct from
+fourteen checkpoint records.
 
 | Owed | Which line | What it needs |
 |---|---|---|

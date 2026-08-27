@@ -12878,15 +12878,16 @@ completes.
 
 ## Phase 5, what is owed before sign-off
 
-**Every checkpoint 5.1 to 5.14 is built and `ci.ps1` is green at `d1b8248` with 887 tests**
-~~at `4db0c28` with 885~~.
+**Every checkpoint 5.1 to 5.14 is built and `ci.ps1` is green at `68a6f90` with 895 tests**
+~~at `d1b8248` with 887~~ ~~at `4db0c28` with 885~~. The last move is phase R's two
+corrective passes, which are recorded at the foot of this file.
 What remains is not code. Three of the phase's done-when lines are runs, and they are
 listed here rather than left for a reviewer to reconstruct from fourteen checkpoint
 records.
 
 | Owed | Which line | What it needs |
 |---|---|---|
-| One real night end to end, with its chain of counts | 5.12 | ~~**The next trading night.** From 2026-08-25 `digest.chain` is `["local"]` against one enabled row~~ **Corrected 2026-08-26: a night whose BLESSED date is on or after 2026-08-25**, which the next trading night was not. Two attempts, both recorded under 5.7's finding: 05:22 ET halted at C33 on the count mismatch with 2026-08-24 blessed, and 20:35 ET halted at the guard itself with 2026-08-26 below the abort floor while still arriving. ~~2026-08-25 will not be blessed on any later run, its price file being 11 percent short~~ **wrong, it settled at 50,348 the same evening**. **What this now needs is one run made after the newest session clears 40,000 rows**, at which point the walk-back reaches 2026-08-25 and blesses it |
+| ~~One real night end to end, with its chain of counts~~ **MET 2026-08-26, on the blessed date 2026-08-25.** 32 candidates, 87 headlines across 27 tickers, 32 digest rows split 23 prose / 4 `NO MATERIAL NEWS` / 5 null. Recorded in full under 5.12 below | 5.12 | ~~**The next trading night.** From 2026-08-25 `digest.chain` is `["local"]` against one enabled row~~ **Corrected 2026-08-26: a night whose BLESSED date is on or after 2026-08-25**, which the next trading night was not. Two attempts, both recorded under 5.7's finding: 05:22 ET halted at C33 on the count mismatch with 2026-08-24 blessed, and 20:35 ET halted at the guard itself with 2026-08-26 below the abort floor while still arriving. ~~2026-08-25 will not be blessed on any later run, its price file being 11 percent short~~ **wrong, it settled at 50,348 the same evening**. **What this now needs is one run made after the newest session clears 40,000 rows**, at which point the walk-back reaches 2026-08-25 and blesses it |
 | The secondary link answering once | 5.6 | **One live call, a fraction of a cent.** Eleven tests cover the link against a stubbed transport; no stub can prove the wire shape, the key, or that the model id is reachable on this account |
 | The night's rotation cost, annualised | 5.14 | **The token counts a live secondary call reports.** What is recorded is D-143's ceiling of $3.40 a year, reproduced exactly through C26's own pricing and registered as a fixture. The measured figure lands under it by an amount nobody yet knows |
 | ~~The fall-through visible in the record~~ **DEFERRED, 2026-08-25, operator direction** | phase done-when, line 2 | `BUILD_PLAN.md` now records the line as deferred rather than owed, on the same footing as line 3. The evaluation is deferred and therefore the evidence is; the design is not. The secondary is built and inert, D-25, D-27 and D-140 stand, and the rotation stays in the code. **Re-asked when the secondary is evaluated** |
@@ -12975,3 +12976,118 @@ still arriving four and a half hours after the close. If that is typical, the sc
 nightly run aborts on its own current date every night. **One observation is not a pattern**,
 and the two candidate answers, moving the slot or revisiting D-64's floors, are both
 authored work rather than a build task.
+
+---
+
+## Phase R, corrective pass R.2: the night had no precondition
+
+**5.13 built a precondition that displays and waits, and wired it into the wrong path.**
+`EnsureLocalModelAsync` was called from `RunStageAsync` only, so `run <stage> NewsDigester`
+warmed the model and asked the operator where it could not, and `run-night` did neither.
+The evening sequence is the path the checkpoint exists for.
+
+**It halted the 2026-08-25 night, live:**
+
+```
+  HeadlineIngestor       ok, 87 row(s)
+  NewsDigester           FAILED, halting: No link in the digest chain is healthy, so the
+                         run halts here [INVARIANT 15, D-139]. local at position 1 failed
+                         its health check and is unhealthy for the rest of this run:
+                         no answer inside digest.health_timeout_ms of 5,000 ms
+  halted on 2026-08-25, 18 step(s)
+```
+
+**Nothing about that halt is wrong**, and it is worth being clear about which part was the
+defect. The chain probes under `digest.health_timeout_ms` of 5,000 ms, the model had been
+evicted since the morning, and a cold load of this model takes 36 seconds. The gate then
+did exactly what INVARIANT 15 says: no healthy link, so the run stops before any researcher
+call and produces no orders. **What was missing was the chance to avoid needing the gate**,
+which is the whole of 5.13.
+
+### The fix
+
+`NightlyRun` gains an optional `before` hook, called with a stage's name immediately before
+that stage runs. The Worker passes a callback that runs the precondition for C33.
+
+**Immediately before the stage rather than once before the sequence**, because the evening
+order takes about twelve minutes to reach C33 and a model warmed at the start of it can be
+evicted before the digest asks anything. **Inside the same `try` the stage runs in**, so a
+precondition that cannot complete halts the night rather than being swallowed [`CLAUDE.md`
+section 6]. **No stage name in `NightlyRun`**: what needs preparing before a stage is the
+caller's to know, and a name there would be a second place the digest step is identified.
+
+Three tests: the hook interleaves before each stage rather than running up front, asserted
+as interleaving because a count passes on the wrong arrangement; a throwing hook halts the
+night and the stage does not run; an absent hook leaves the sequence unchanged.
+
+### What this does not change
+
+**The hook cannot convert a halt into a pass.** It runs, then the stage runs, then the gate
+decides. A night whose model cannot be loaded still halts, and in an unattended shell the
+precondition still refuses rather than blocking, `Console.IsInputRedirected` being true
+there.
+
+---
+
+## Phase 5, checkpoint 5.12: the night, run end to end on 2026-08-25
+
+**Run on 2026-08-26 at 21:32 ET, blessed date 2026-08-25, config v25.** Eighteen steps to
+C33 in one `run-night 2026-08-25`, then C33 separately after the gate halted it on a cold
+model, which is R.2 above and is the operator flow `RUNBOOK.md` describes rather than a
+workaround.
+
+| step | rows |
+|---|---|
+| PriceIngestor | 704,941 |
+| FreshnessGuard | trading date 2026-08-25 |
+| FundamentalsIngestor | 49,485, alert |
+| FlowIngestor | 198,200 |
+| EventsIngestor | 782 |
+| SentimentIngestor | 31,570 |
+| FlowEngine | 5,887 |
+| IndicatorEngine | 2,865 |
+| ValuationEngine | 9,621 |
+| SentimentEngine | 2,865 |
+| MarketContextEngine | 1 |
+| PercentileEngine | 21,238 |
+| GateEngine | 2,865 |
+| ScreenEngine | 22,920 |
+| CandidateAllocator | 32 |
+| ConcentrationMonitor | 0 |
+| HeadlineIngestor | 87 |
+| NewsDigester | 32 |
+
+### The chain of counts the checkpoint asks for
+
+**32 candidates, 87 headlines across 27 tickers, 32 digest rows.** Every candidate has a
+row, which is what D-134 requires: a candidate with nothing to summarise is a null digest
+and not an absent one.
+
+| outcome [D-134] | rows |
+|---|---|
+| prose | 23 |
+| `NO MATERIAL NEWS` | 4 |
+| null, no headlines to send | 5 |
+
+**The five nulls are exactly the 32 candidates less the 27 tickers headlines were found
+for**, which is the arithmetic that says no candidate was dropped rather than digested
+badly. **The four `NO MATERIAL NEWS` rows are the classifier's**, not the absence of input:
+those tickers had headlines and the digest step judged none of them material, which is a
+transformation and not a view [INVARIANT 7].
+
+**Every row is `local` on `qwen/qwen3.5-9b`** and `cost_ledger` holds nothing for the date,
+which is C26 working as written: the local link bills nothing and a zero row would put a
+night of free calls into a table an operator reads as spend.
+
+**Two rows carry `was_rotation` on a chain with one link, and that is correct.** D-138 makes
+the flag a property of the selection rather than of which link answered, and 5.10 records
+the alternative reading and why it was rejected: flagging only rows the second link answered
+would make the count vary with a provider outage.
+
+### What this night also demonstrates
+
+**INVARIANT 15's gate, live, on a one-link chain.** The 5.7 record listed this as asserted
+rather than demonstrated: "no run has yet met a cold model with the secondary disabled. The
+first night that does is the demonstration." This is that night. The chain found its only
+link unhealthy, the run halted before any researcher call, and no orders were produced.
+**It was not staged.** The model had been evicted by its own idle timer during the day.

@@ -12518,9 +12518,55 @@ gained around twenty. A session 11 percent short of its neighbours also sits bel
 `freshness.row_count_alert_below` of 45,000. **Filed as a fact about the feed, not acted
 on**: one short session is what the guard exists to absorb, and the walk-back absorbed it.
 
+~~2026-08-25 will not be blessed on any later run either, its file being short by more than
+the guard allows.~~ **Wrong, corrected 2026-08-26 20:36 ET, and wrong in a way worth
+naming.** By that evening 2026-08-25 held **50,348 rows**, 0.999 of the trailing median and
+comfortably settled. The file filled during the day.
+
+**The error was reading a rate off two points and calling it a level.** 44,602 at 05:22 and
+44,936 at 08:12 is a gain of 334 in three hours, which was taken as a file that had
+finished arriving 11 percent short. It was a file still arriving, and it added a further
+5,412 rows over the next twelve. **The two readings were consistent with both stories and
+only one was checked.** What distinguishes them is a third reading much later, which is
+what the correction rests on and what should have been waited for before the claim was
+written [`CLAUDE.md` §7].
+
 **What it costs 5.12: the first night that can run C33 is one whose blessed date is on or
-after 2026-08-25**, which is the night of 2026-08-26 blessing 2026-08-26. 2026-08-25 will
-not be blessed on any later run either, its file being short by more than the guard allows.
+after 2026-08-25.** ~~which is the night of 2026-08-26 blessing 2026-08-26.~~ **2026-08-25
+is now itself such a date**, having settled, so the walk-back reaching it is enough and the
+run does not need 2026-08-26 to settle.
+
+### The second attempt, and the abort floor meeting a file that is still arriving
+
+**`run-night` at 2026-08-26 20:35 ET halted at the guard rather than reaching the digest.**
+
+```
+run-night  2026-08-26  config v25
+  PriceIngestor          ok, 690,754 row(s)
+  FreshnessGuard         FAILED, halting: no usable date. 2026-08-26 holds 36,121 rows,
+                         below the abort floor of 40,000
+  halted with no usable trading date, 2 step(s)
+```
+
+**No walk-back happened, and that is the rule as written rather than a fault.**
+`FreshnessRule` checks completeness before settledness and the two outcomes differ: a date
+below `freshness.row_count_abort_below` is `Truncated` and returns immediately, where a
+date below the settled fraction is `Unsettled` and continues to the next. D-59 draws that
+line deliberately, truncated being a fault to abort on and still-filling a date to skip.
+
+**What this session shows is that the current session is indistinguishable from a truncated
+one while it is still arriving.** 2026-08-26 stood at 36,121 four and a half hours after the
+close and moved to 36,262 on a second sweep minutes later, so the fill is the provider's
+pace and not the sweep's. Until it crosses 40,000 the guard aborts on it and never reaches
+the settled dates behind it; once it crosses, the same run walks back to 2026-08-25 and
+blesses it.
+
+**This is reported and not acted on.** The floors are `CONFIG_REFERENCE.md` values and D-64
+gives them their job, and a floor lowered because a run met it is the shape `CLAUDE.md` §11
+forbids. What the evidence supports is a statement about timing, not about the threshold:
+**on this provider the newest session is not above the abort floor by 20:35 ET**, and the
+18:30 slot `RUNBOOK.md` gives the evening sequence sits earlier still. Whether that holds
+across sessions is one observation so far, and the next two nights answer it.
 
 **That the halt is the date alone was checked rather than left to tonight.** `run
 NewsDigester 2026-08-26` at 08:16 ET resolved config v25, built the chain against one
@@ -12840,7 +12886,7 @@ records.
 
 | Owed | Which line | What it needs |
 |---|---|---|
-| One real night end to end, with its chain of counts | 5.12 | ~~**The next trading night.** From 2026-08-25 `digest.chain` is `["local"]` against one enabled row~~ **Corrected 2026-08-26: a night whose BLESSED date is on or after 2026-08-25**, which the next trading night was not. The attempt on 2026-08-26 05:22 ET halted at C33 on the count mismatch, the guard having blessed 2026-08-24, and the reason is recorded under 5.7's finding. 2026-08-25 will not be blessed on any later run, its price file being 11 percent short. **The first night that can carry this is 2026-08-26's**, run after that session settles |
+| One real night end to end, with its chain of counts | 5.12 | ~~**The next trading night.** From 2026-08-25 `digest.chain` is `["local"]` against one enabled row~~ **Corrected 2026-08-26: a night whose BLESSED date is on or after 2026-08-25**, which the next trading night was not. Two attempts, both recorded under 5.7's finding: 05:22 ET halted at C33 on the count mismatch with 2026-08-24 blessed, and 20:35 ET halted at the guard itself with 2026-08-26 below the abort floor while still arriving. ~~2026-08-25 will not be blessed on any later run, its price file being 11 percent short~~ **wrong, it settled at 50,348 the same evening**. **What this now needs is one run made after the newest session clears 40,000 rows**, at which point the walk-back reaches 2026-08-25 and blesses it |
 | The secondary link answering once | 5.6 | **One live call, a fraction of a cent.** Eleven tests cover the link against a stubbed transport; no stub can prove the wire shape, the key, or that the model id is reachable on this account |
 | The night's rotation cost, annualised | 5.14 | **The token counts a live secondary call reports.** What is recorded is D-143's ceiling of $3.40 a year, reproduced exactly through C26's own pricing and registered as a fixture. The measured figure lands under it by an amount nobody yet knows |
 | ~~The fall-through visible in the record~~ **DEFERRED, 2026-08-25, operator direction** | phase done-when, line 2 | `BUILD_PLAN.md` now records the line as deferred rather than owed, on the same footing as line 3. The evaluation is deferred and therefore the evidence is; the design is not. The secondary is built and inert, D-25, D-27 and D-140 stand, and the rotation stays in the code. **Re-asked when the secondary is evaluated** |

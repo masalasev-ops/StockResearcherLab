@@ -2631,3 +2631,32 @@ one. The cell named one of the two routes that read the key, which is the shape 
 worse than an absent entry: it lets an audit conclude a value is wired up where it is
 wired up twice and one path is unread. Both routes were read in `Program.cs` before this
 edit, at the `run-night` callback and at the single-stage gate.
+
+---
+
+## 2026-08-27, phase 5 sign-off review, `ARCHITECTURE.html` §12's readiness clause
+
+5.13 was reshaped on operator direction from a clock-timed readiness check into a
+precondition the Worker runs immediately ahead of C33, and §12 was left saying the
+opposite of what was built. A clean edit under D-73; the prior wording is here.
+
+### `ARCHITECTURE.html` §12, the local model chrome note
+
+> So the chain state sits in the application frame on every screen, showing which link is
+> currently answering rather than a bare up or down, and a readiness check runs shortly
+> before the evening window rather than at the moment of use, so a failure is reported
+> while there is still time to start the local server.
+
+The clause said the check runs early **rather than** at the moment of use, and gave the
+reason in the same breath: report a failure while there is still time to start the server.
+5.13 answers that reason differently rather than abandoning it. The operator is not
+reliably at the machine three hours before the evening window, so a check timed for then
+warns nobody; a probe under `digest.warm_timeout_ms` immediately before the stage causes
+the load instead of reporting its absence, which is a stronger outcome than the clause
+asked for, and the attached-terminal prompt is what covers the load that genuinely fails.
+`digest.readiness_check_et`, the key the old clause named, has carried no consumer since
+5.13 and its retirement is a separate decision.
+
+**Nothing else in the note changed.** The persistent chrome, the argument for it, the
+visible-secondary state and the run health screen's detail and reconnect control all
+stand as written.

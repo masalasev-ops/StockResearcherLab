@@ -3302,6 +3302,45 @@ non-empty content to a small fixed probe under `digest.health_timeout_ms`, not w
 returns 200. The probe's text is fixed and is not the digest instruction, so a health check
 costs nothing and cannot be confused with a digest.
 
+**D-145 was authored at the phase 5 sign-off review rather than during the phase**, on the
+operator's explicit authorisation of 2026-08-27, the operator remaining the decider of
+record. It states a rule the code has followed since 5.5 whose only statement was a comment,
+which is the shape `CLAUDE.md` §7 refuses: a code comment is not a record. Nothing in the
+code changes on it.
+
+**D-145 A health check resolves its config at the frontier, and that is the one shape
+INVARIANT 13 does not reach.** `ACTIVE`
+
+`LocalModelClient` resolves `digest.health_timeout_ms` and `digest.warm_timeout_ms` at
+`DateOnly.MaxValue`, which is the current version rather than the version in force on a
+simulated date.
+
+**Why the invariant does not reach it.** INVARIANT 13 exists so that an analysis over
+history answers the question it was asked: the tuner rewrites slot allocations monthly, and
+a stage reading today's config while computing a past date silently applies today's rules to
+that date. Every key it protects describes the run's subject. **A health timeout describes
+neither the subject nor the date.** It asks whether a machine that exists now can answer
+now, and there is no simulated date at which that question has a different answer, because
+the server as it stood on 2026-08-12 is not reachable from 2026-08-27 whatever config says.
+Resolving as of the simulated date would bound a live probe by a number chosen for a night
+that is over.
+
+**What that costs, stated rather than waved past.** A replay of a past night can bound its
+probe differently from the original run, so a night that halted on the gate could replay
+into one that does not, or the reverse. That is not a loss of the replay property the stage
+pattern means, because the health check reads a live server and no run over a past date
+reproduces it under any resolution rule. What is reproducible is what was written, and
+`news_digest` carries the provider and the model that answered [D-29, D-134].
+
+**The boundary, so this does not widen.** It covers the two timeout keys the health probe
+reads and nothing else. Every key a stage reads about its own date resolves as of the
+simulated date and is unaffected: `DigestChain.BuildAsync` takes an `asOf`, and
+`NewsDigester` resolves `digest.lookback_days`, `digest.max_input_tokens`,
+`digest.max_output_tokens` and `digest.rotation_count` through `context.Date`. **A third key
+resolved at the frontier is a change to this decision rather than an application of it**,
+and the test is the one above: does the value describe the machine now, or the night being
+computed.
+
 ---
 
 ## Open

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using StockResearcherLab.Pipeline.Ingest;
 using Xunit;
@@ -257,4 +258,75 @@ public sealed class FreshnessGuardTests
 
         Assert.Throws<InvalidOperationException>(() => ExchangeCalendar.Parse(doc.RootElement));
     }
+
+    // ------------------------------------------------------------- the read ---
+
+    /// <summary>
+    /// **The guard reads no date after the one it was asked about** [R.1, `CLAUDE.md`
+    /// section 5]. Every test above this line exercises the rule, which is a pure
+    /// function and was never the problem. The read that feeds it was unbounded, and
+    /// an unbounded read makes the stage a function of when it ran rather than of the
+    /// date it was given.
+    ///
+    /// **Asserted on the SQL rather than through a database**, for the reason the class
+    /// comment gives: the guard's false pass is invisible in the output, so the check
+    /// has to be one that runs every time rather than one that needs a store in a
+    /// particular state.
+    /// </summary>
+    [Fact]
+    public void TheReadIsBoundedByTheDateTheStageWasGiven()
+    {
+        var sql = FreshnessGuard.CountsSql(new DateOnly(2026, 8, 25), Window);
+
+        Assert.Contains("date <= DATE '2026-08-25'", sql, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The two live failures the bound closes, stated as the two dates that must not
+    /// appear in each other's read [R.1].
+    ///
+    /// A run for 2026-08-25 must not see 2026-08-26, which is what aborted the evening
+    /// of 2026-08-26 on a session still arriving. A run for 2026-08-26 must still see
+    /// its own date, because a bound that excluded it would turn every night into a
+    /// walk-back and hide a genuinely stale provider.
+    /// </summary>
+    [Theory]
+    [InlineData("2026-08-25", "2026-08-26", false)]
+    [InlineData("2026-08-26", "2026-08-26", true)]
+    public void ADateIsInsideItsOwnReadAndOutsideAnEarlierOne(string asOf, string other, bool inside)
+    {
+        var sql = FreshnessGuard.CountsSql(DateOnly.Parse(asOf, CultureInfo.InvariantCulture), Window);
+        var bound = DateOnly.Parse(asOf, CultureInfo.InvariantCulture);
+        var candidate = DateOnly.Parse(other, CultureInfo.InvariantCulture);
+
+        Assert.Equal(inside, candidate <= bound);
+        Assert.Contains("date <= DATE '" + asOf + "'", sql, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The whole statement, pinned. Shape and date format together, so a rewrite that
+    /// kept the bound and lost the ordering, or kept both and rendered the date some
+    /// other way, is caught here rather than at 18:33.
+    ///
+    /// **The locale half of this is closed above the test.** `InvariantGlobalization`
+    /// is true for every project here, so a date reaching SQL as `25/08/2026` is not
+    /// reachable from a culture setting; the format string is asserted anyway, because
+    /// what closes it is a property of the build rather than of this method.
+    /// </summary>
+    [Fact]
+    public void TheStatementIsExactlyThis()
+        => Assert.Equal(
+            "SELECT date, count(*) FROM price_daily WHERE date <= DATE '2026-08-25' " +
+            "GROUP BY date ORDER BY date DESC LIMIT 80;",
+            FreshnessGuard.CountsSql(new DateOnly(2026, 8, 25), Window));
+
+    /// <summary>
+    /// The window still sets how far back the read reaches, unchanged by the bound.
+    /// </summary>
+    [Fact]
+    public void TheWindowStillSetsTheLimit()
+        => Assert.Contains(
+            "LIMIT " + ((Window * 2) + 40).ToString(CultureInfo.InvariantCulture),
+            FreshnessGuard.CountsSql(new DateOnly(2026, 8, 25), Window),
+            StringComparison.Ordinal);
 }

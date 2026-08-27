@@ -102,16 +102,8 @@ public sealed class FreshnessGuard : IStage
     private static async Task<IReadOnlyList<(DateOnly Date, long Rows)>> CountsAsync(
         StageContext context, int window, CancellationToken ct)
     {
-        // Enough for a full window behind every candidate the walk-back could
-        // reach. The literal is the only thing interpolated and it is an int this
-        // method computed, not input: IStageData's read route takes no parameters.
-        var limit = (window * 2) + 40;
-
         var rows = await context.Data.ReadAsync(
-            "price_daily",
-            "SELECT date, count(*) FROM price_daily GROUP BY date ORDER BY date DESC LIMIT " +
-            limit.ToString(CultureInfo.InvariantCulture) + ";",
-            ct).ConfigureAwait(false);
+            "price_daily", CountsSql(context.Date, window), ct).ConfigureAwait(false);
 
         var counts = new List<(DateOnly, long)>(rows.Count);
         foreach (var row in rows)
@@ -120,6 +112,40 @@ public sealed class FreshnessGuard : IStage
         }
 
         return counts;
+    }
+
+    /// <summary>
+    /// The read this guard makes, as a function of the date it was asked about.
+    ///
+    /// **The bound on `date` is what makes this stage a pure function of its date**
+    /// [`CLAUDE.md` section 5, D-70]. Without it the guard reads whatever the table's
+    /// newest rows happen to be at the moment it runs, which broke in two ways at once
+    /// and neither announced itself [R.1]:
+    ///
+    /// A run for a past date aborted on a session it was never asked about, so no
+    /// night could be replayed once a later partial date existed. And the evening
+    /// sequence ingested the current session as its first step and then aborted on the
+    /// rows it had just written, which is a halt a run causes itself and cannot clear
+    /// by being run again.
+    ///
+    /// **Public so it can be asserted directly.** The rule this feeds is a pure
+    /// function and is tested as one; the read was the untested half, and the untested
+    /// half is the half that was wrong.
+    /// </summary>
+    /// <param name="asOf">The stage's date. Rows after it are not this run's to see.</param>
+    /// <param name="window">`freshness.settled_window_days`, which sets how far back to read.</param>
+    public static string CountsSql(DateOnly asOf, int window)
+    {
+        // Enough for a full window behind every candidate the walk-back could reach.
+        // Both interpolations are values this method was handed rather than input: an
+        // int it computed, and a date rendered invariantly [CLAUDE.md section 6].
+        // IStageData's read route takes no parameters.
+        var limit = (window * 2) + 40;
+
+        return "SELECT date, count(*) FROM price_daily WHERE date <= DATE '" +
+            asOf.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) +
+            "' GROUP BY date ORDER BY date DESC LIMIT " +
+            limit.ToString(CultureInfo.InvariantCulture) + ";";
     }
 
     private static async Task<long> LongAsync(StageContext context, string key, CancellationToken ct)

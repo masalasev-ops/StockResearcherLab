@@ -12760,6 +12760,51 @@ secondary enabled and a night's worth of rotated candidates answered.
 
 **That is a spending decision and it is the operator's**, recorded here rather than taken.
 
+
+### The live half, run by the operator on 2026-08-27 at 04:03 ET
+
+**The attached branch, reached for the first time.** Every run of this checkpoint from an
+agent session takes the redirected path, `Console.IsInputRedirected` being unconditionally
+true there, so the branch the checkpoint exists for had eight tests and no execution. It
+has now been executed, with LM Studio quit entirely rather than the model unloaded.
+
+```
+The local model is not answering.
+    endpoint  http://localhost:1234/v1
+    model     qwen/qwen3.5-9b
+    reason    the endpoint could not be reached: No connection could be made because
+              the target machine actively refused it. (localhost:1234)
+
+  Load qwen/qwen3.5-9b at that endpoint, then press Enter to probe again.
+```
+
+**Four things in that text were the point of building it this way.** The endpoint and the
+model are named rather than left for an operator to look up, and the model comes from
+`request_options` rather than from a literal [D-144]. The reason distinguishes refused from
+timed out, which are different faults and different mornings. And the process waits on a
+line of input rather than probing on a timer, which is the shape the operator asked for on
+2026-08-25.
+
+**Then the model was started and Enter pressed, and the second probe answered in 21,857
+ms.** The stage that followed took **28 ms** and wrote 0 rows, 2026-08-26 having no
+candidate set.
+
+**Those two numbers together are the checkpoint's whole argument.** The chain's own health
+probe runs under `digest.health_timeout_ms` of 5,000 ms and cannot survive a cold load; the
+precondition runs under `digest.warm_timeout_ms` of 120,000 ms and causes one. A 21,857 ms
+load followed by a 28 ms stage is a probe that found the model already resident because the
+precondition had put it there. **The counter-example is in the same table**: the 2026-08-25
+night, which had no precondition on its path, failed at a duration of 5,055 ms, which is
+the health bound expiring and nothing else [R.2].
+
+| run_date | status | rows | duration | what it shows |
+|---|---|---|---|---|
+| 2026-08-25 | failed | null | 5,055 ms | the health bound, with nothing having warmed the model |
+| 2026-08-25 | ok | 32 | 60,760 ms | the same night after the precondition loaded it |
+| 2026-08-26 | ok | 0 | 28 ms | a warm model, the precondition having just loaded it in 21,857 ms |
+
+**This closes the last owed line on phase 5's list.**
+
 ---
 
 ## Phase 5, checkpoint 5.14, C26's digest half
@@ -12891,12 +12936,25 @@ records.
 | The secondary link answering once **BLOCKED ON THE SAME DEFERRAL, noted 2026-08-26** | 5.6 | **Blocked on the deferred evaluation two rows down, and it was not marked when that was.** The secondary is inert by operator decision and `digest.chain` names one link, so there is no run in which this call happens; it is re-asked when the secondary is evaluated, not before. **One live call, a fraction of a cent.** Eleven tests cover the link against a stubbed transport; no stub can prove the wire shape, the key, or that the model id is reachable on this account |
 | The night's rotation cost, annualised **BLOCKED ON THE SAME DEFERRAL, noted 2026-08-26** | 5.14 | **The measured figure needs the call the row above cannot make**, so it defers with it. The 2026-08-25 night wrote no `cost_ledger` row at all, which is C26 correct rather than C26 unexercised: the local link bills nothing. **The token counts a live secondary call reports.** What is recorded is D-143's ceiling of $3.40 a year, reproduced exactly through C26's own pricing and registered as a fixture. The measured figure lands under it by an amount nobody yet knows |
 | ~~The fall-through visible in the record~~ **DEFERRED, 2026-08-25, operator direction** | phase done-when, line 2 | `BUILD_PLAN.md` now records the line as deferred rather than owed, on the same footing as line 3. The evaluation is deferred and therefore the evidence is; the design is not. The secondary is built and inert, D-25, D-27 and D-140 stand, and the rotation stays in the code. **Re-asked when the secondary is evaluated** |
-| The prompt against a genuinely cold model | 5.13 | **Easier to reach since R.2 and still the operator's.** Until R.2 the prompt was on `run <stage>` alone, so this could only be tested by running C33 by hand; it is now on `run-night` too, which is the path the checkpoint describes. **A terminal a person is sitting at.** `Console.IsInputRedirected` is unconditionally true in an agent session, so the attached branch cannot be reached from one. Eight tests cover it; the live half is the operator's to run |
+| ~~The prompt against a genuinely cold model~~ **MET 2026-08-27 04:03 ET, run by the operator.** LM Studio quit entirely, the prompt raised naming the endpoint, the model and a refused connection, the model started, and the second probe answered in 21,857 ms with the stage that followed taking 28 ms. Recorded in full under 5.13 | 5.13 | ~~**Easier to reach since R.2 and still the operator's.**~~ Until R.2 the prompt was on `run <stage>` alone, so this could only be tested by running C33 by hand; it is now on `run-night` too, which is the path the checkpoint describes. **A terminal a person is sitting at.** `Console.IsInputRedirected` is unconditionally true in an agent session, so the attached branch cannot be reached from one. Eight tests cover it; the live half is the operator's to run |
 
 **Line 3 of the phase's done-when is not evaluable here and that was recorded before the
 phase began** [D-139]. "Stopping both halts the run before any researcher call and produces
 no orders" names two things that do not exist until phases 6 and 7. What 5.11 proves is the
 narrower observable in full, and the line is re-asked at phase 7 rather than marked met.
+
+**Every owed line is now met or deferred, as of 2026-08-27 04:03 ET.** Two are met, 5.12's
+night and 5.13's prompt, both recorded above with the figures they produced. Three are
+deferred by operator direction and all three wait on the same thing, the evaluation of the
+secondary. Nothing on this list is waiting on a build.
+
+**What a reviewer should read as unproven rather than proven**, stated here so it is not
+reconstructed from two corrective passes: R.2's Worker callback has not run live, the only
+date whose chain reaches C33 being one whose attribution write cannot be re-run, and phase
+R itself has no sign-off of its own. **And the abort floor question is open**: on 2026-08-26
+the current session stood at 36,121 rows at 20:35 ET, four and a half hours after the
+close, so a nightly run on `RUNBOOK.md`'s 18:30 slot would abort on its own current date.
+One observation is not a pattern, and both candidate answers are authored work.
 
 **The sign-off review runs in a session that has not committed here** [D-67]. This session
 has committed extensively and cannot run it.

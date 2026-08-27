@@ -13164,3 +13164,366 @@ rather than demonstrated: "no run has yet met a cold model with the secondary di
 first night that does is the demonstration." This is that night. The chain found its only
 link unhealthy, the run halted before any researcher call, and no orders were produced.
 **It was not staged.** The model had been evicted by its own idle timer during the day.
+
+---
+
+## Phase 5, the review at sign-off, 2026-08-27
+
+Run in a session that has not committed in this repository, which is what
+`BUILD_PLAN.md`'s step 2 asks for. Every store-side figure the phase 5 record states was
+re-measured against the developer database rather than read, and both gate scripts were
+re-run.
+
+**It was written correcting nothing, as `CLAUDE.md` section 3 requires, and then closed all
+six of its own exceptions on operator direction the same day, in two passes.** **A
+direction to close a finding is not a reading of the text written to close it**, and what
+that leaves pending a reading is separated out at the foot of this section rather than
+recorded as approved. That departure is recorded there rather than absorbed into the
+findings:
+the six exceptions below are stated as the review found them, and what was subsequently
+changed is listed separately so a reader can see which is which. **The precedent for
+closing a review's exceptions is a separate pass in a separate session**, which is what
+phase 4 did, and it is not what happened here.
+
+### Step 1, CI green, verified rather than taken
+
+**Re-run here at `9a8d5c1` rather than at `49e235e`, and the substitution is checked
+rather than assumed.** The record claims `68a6f90` is the last commit touching code or
+tests. The four commits after it were read as diffstats: `8b069e6` touches `FIXTURES.md`
+and `PROGRESS.md`, and `50738a3`, `49e235e` and `9a8d5c1` touch `PROGRESS.md` alone.
+Nothing under `src/` moves between the two shas, so a run at the branch head is a run at
+the sha the record names, and it is the stronger of the two.
+
+`ci.ps1` returned its seven results and exit 0: `guards.ps1` exit 0 with **5 checks over
+213 files**, restore ok, build **0 warnings and 0 errors**, no secrets file present,
+migrate from an empty server applying **23 migrations**, migrate again with nothing to
+apply, and **895 passed, 0 failed**. Every figure the record states reproduced exactly.
+`guards.ps1` was also run standalone and returned the same five checks.
+
+**The test count reconciles across phase R, which is the only place it could have
+drifted.** `d1b8248` is recorded at 887. R.1 states five tests taking
+`FreshnessGuardTests` from 11 to 16, and that file now holds 14 facts and one theory of
+two cases, which is 16. R.2 states three, and `NightlyRunTests` holds 12 facts against the
+9 it carried. 887 plus 8 is 895.
+
+**What CI does not cover is stated in the record rather than here, and that is step 1
+met.** Five of the phase's done-when lines are runs rather than assertions, and the owed
+table names each one with what it needs. Nothing was recorded by hand that a run could
+have recorded.
+
+### Question 1, does the code match the architecture sections this phase implements
+
+**The five components read match §03's rows and §07's narrative, and the three properties
+§07 asks for are structural rather than documented.**
+
+C33's `ReadSet` is `candidate_set` and `headline` and carries nothing about a score, which
+is INVARIANT 7 made unreachable rather than remembered; C29 carries the same absence one
+stage earlier. The chain names no link anywhere: order comes from
+`local_model_config.provider_order`, identity from `digest.chain`, and `RotationTarget` is
+position two rather than a name, so §07's "no special-case failure branch" holds by
+construction. INVARIANT 15's gate is the `ReadyAsync` null throw in `NewsDigester`, ahead
+of every write. INVARIANT 6 holds through `DigestRotation`'s own FNV-1a over an invariant
+date string, `DigestSelection`'s total ordinal tie-break continuing through source, url
+and body, and `DigestInstruction` normalising line endings before hashing. INVARIANT 10
+holds: `news_digest` has one writer with Insert and Delete and no Update, and C33 calls
+into C26 rather than writing `cost_ledger`.
+
+**C36's fifth panel matches §12's U8 row as that row now stands**, showing the pool with
+`in_window` and `has_body` marked rather than applied, the digest with provider and model,
+and D-134's four outcomes classified from the row. What it does not show, the selected
+articles and the instruction version, is reported in the 5.9 record and in the contract's
+own summary rather than left to be found.
+
+**Three exceptions.**
+
+**Exception 1: §12 says the readiness check runs "shortly before the evening window rather
+than at the moment of use", and 5.13 built it at the moment of use.** §12's persistent
+chrome note gives the reason in the same sentence, that a failure is reported while there
+is still time to start the local server. The reshape is recorded at length, with the
+operator's reason, with `digest.readiness_check_et` correctly marked as having no
+consumer, and with the note that both the build plan row and the phase plan were amended.
+**What is not recorded anywhere is that §12 still says the opposite.** Searched
+whitespace-tolerantly across `PROGRESS.md`, `DECISIONS.md`, `CHANGELOG.md`,
+`BUILD_PLAN.md` and the phase plan, on each file's joined text, for `shortly before the
+evening window` and for `at the moment of use`: zero hits in all five.
+`ARCHITECTURE.html` is human-edited only, so the correction is not the build's. Naming it
+was.
+
+**Exception 2: `LocalModelClient` resolves config as of the frontier and only a code
+comment says so.** `LocalModelClient.cs:290` reads `digest.health_timeout_ms` and
+`digest.warm_timeout_ms` at `DateOnly.MaxValue`, with a comment arguing that a health
+check is about the machine now and that this is the one shape INVARIANT 13 does not reach.
+The argument is a reasonable one. **It is a departure from a numbered invariant recorded
+in no document.** `DateOnly.MaxValue` appears in no other non-test file, and neither the
+reasoning nor the phrase appears in `PROGRESS.md`, `DECISIONS.md`, `CONFIG_REFERENCE.md`
+or `CHANGELOG.md`. `CLAUDE.md` §7 says a code comment is not a record, and this is the
+case that sentence describes.
+
+**Exception 3: `ARCHITECTURE.html` was edited by the build with no authorisation line,
+which is the exception phase 3.5's review raised and had closed in prose.** `219d156` is
+the only commit touching that file in phase 5. The §03 C36 cell gains two table names,
+which the conformance test forces in both directions and which is the case 3.5's record
+already blessed. **The §20 U8 row is more than that**: it gains a whole Digest panel
+description and the normative clause "Which articles were sent is not recorded and the
+panel does not reconstruct them", which is authored prose stating a rule. The commit
+message and the 5.9 record both justify the edit under D-73, which is the supersede-
+visibly rule and answers a different question from §13's human-edited-only rule. Phase 3.5
+recorded the equivalent as "made by the build on the operator's explicit authorisation,
+2026-08-23", and no such line exists for phase 5.
+
+### Question 2, does every number trace to something that produced it
+
+**The 2026-08-25 night reproduces exactly against the store, every count.** Queried
+directly through Npgsql rather than read off the record:
+
+| Figure | Recorded at 5.12 | Re-measured 2026-08-27 |
+|---|---|---|
+| Candidates | 32 | 32 |
+| `headline` rows | 87 | 87 |
+| Distinct tickers with headlines | 27 | 27 |
+| `news_digest` rows | 32 | 32 |
+| Prose | 23 | 23 |
+| `NO MATERIAL NEWS` | 4 | 4 |
+| Null digest | 5 | 5 |
+| `was_rotation` | 2 | 2 |
+| Provider and model, distinct | `local` on `qwen/qwen3.5-9b` | one pair, identical |
+| `cost_ledger` rows | none | 0 rows on any date |
+
+**The three durations 5.6's live half tabulates are `run_log` rows and reproduce as
+written**: 2026-08-25 failed at 5,055 ms, 2026-08-25 ok with 32 rows at 60,760 ms, and
+2026-08-26 ok with 0 rows at 28 ms.
+
+**D-143's ceiling reproduces as arithmetic in both of its figures**, which matters because
+5.14 registers it as a fixture. 6,000 input at $1.00 a million plus 150 output at $5.00
+gives $0.00675 a call; times 28 candidates times 252 sessions is $47.63, and two of
+twenty-eight of that is $3.402. Both match the decision.
+
+**`ConfigSeeder.Keys.Count` is 106 and is asserted at that value in a passing test**, which
+is where 5.14's claim lands. `ExpectedReaders` is 2, which is 5.5's.
+
+**The cold-load figures all trace, to four measurements of two different model
+populations, and the record says which is which.** 51,103 ms is 5.5 against
+`qwen3.6:latest` on Ollama; 52,303 and 41,352 are the same server and give
+`BUILD_PLAN.md`'s "41 to 52 seconds"; 15,219 ms and 27,297 ms are `qwen/qwen3.5-9b` on LM
+Studio and are recorded as revising the earlier figure downward for a smaller model;
+21,857 ms is 5.13's live half. R.2's commit message says "a cold load of 36 seconds",
+which sits between the two populations and matches none of the five recorded measurements.
+It is a commit message rather than the record and nothing rests on it.
+
+**Two exceptions and one stale row.**
+
+**Exception 4: 04:03 ET is a UTC clock wearing an ET label.** The owed table records
+5.13's live half as "MET 2026-08-27 04:03 ET" and the 5.6 record repeats it. The `run_log`
+row for that run reads `2026-08-27 00:03:05.42266-04`, and the commit that records it,
+`49e235e`, is dated `00:07:33 -0400`. So the run happened at 00:03 ET, four minutes before
+it was written up, and 04:03 is that instant in UTC. `CLAUDE.md` §6 makes every market
+semantic US Eastern, and this is the off-by-one-timezone that section exists to prevent,
+landed in a record rather than in a query.
+
+**Exception 5: "eleven tests" for 5.6 counted executed cases, and the row that repeats it
+is a checkpoint behind.** At `0b410fc` `HaikuDigestLinkTests` held 8 facts and one theory
+of three cases, which is 11. `193a78c` added a theory of two, so the file now runs 13
+cases over 10 methods and the owed table still says eleven. **The unit also alternates
+between adjacent rows**: 5.13's "eight tests" is 8 methods running 11 cases, so "eleven"
+and "eight" in the same table are counted two different ways.
+
+**The phase status row is superseded by the record it heads.** Row 5 still reads "ALL
+FOURTEEN CHECKPOINTS BUILT, 2026-08-25. NOT READY FOR SIGN-OFF" with `ci.ps1` green at
+`4db0c28` and 885 tests, against 895 at `49e235e` and "every owed line is now met or
+deferred" at the foot. D-66 makes that table the only place phase status lives, so a
+reader who trusts it as instructed reads a phase two done-when lines and ten tests behind.
+`PROGRESS.md` is a record and keeps its strikes, so this is a strike rather than a clean
+edit, and it is not this review's to make.
+
+### Question 3, did the build resolve any contradiction silently instead of reporting it
+
+**Most of what could have been resolved silently was reported at length, and some of it
+was reported against the session's own interest.** §07's five-to-eight-hundred-token
+article against a measured median of 1,248 fired 5.1's stopping rule and stopped the phase
+rather than seeding a cap. The reasoning-model finding was chased to a cause across five
+calls rather than worked around. §01 and §03 disagree about which layer C29 is in, and the
+disagreement is written into the class summary and left open. LM Studio against Ollama in
+§07 is named as a document a later reader will act on and left for a human. The instruction
+version 5.9 could not show is reported with both closing routes named. Two claims the
+record made were struck by the session that made them within the hour, and a third, the
+11-percent-short session, was struck the next day with the reasoning error named. That is
+the behaviour question 3 asks about and it is this phase's strongest feature.
+
+**Three exceptions are the three above**: §12's readiness sentence, the frontier config
+read, and the `ARCHITECTURE.html` edit. **A fourth is about where things were filed.**
+
+**Exception 6: six items the record files as reported-not-closed reached no carried
+obligation, and phase R's two reached none either.** `CLAUDE.md` §7 names
+`BUILD_PLAN.md`'s carried obligations as the place an obligation is recorded, on the
+ground that a note beside the code and nowhere the planning will look is not recorded.
+Phase 5 contributed exactly one row, `local_model_config.last_health_check` owed to phase
+9. Absent from that table: the versioned-key-against-unversioned-table as-of mismatch that
+halted a night on 2026-08-26 and which the record says becomes load-bearing once 5.6 is
+live; the `model` key in `request_options`, whose clearing silently substitutes a model
+nobody chose; `digest.readiness_check_et`'s retirement; `headline.source`'s disposition;
+`LoadedModelAsync`'s doc comment, still stating at `LocalModelClient.cs:303` the two
+premises the record struck as wrong on 2026-08-25; and both of phase R's, the guard's
+as-of and the abort floor against the 18:30 slot. Searched on the joined text of the
+obligations table for `digest.chain`, `request_options`, `abort floor`,
+`row_count_abort_below`, `readiness_check_et`, `LoadedModelAsync`, `18:30`,
+`headline.source` and `warm_timeout`: zero hits for all nine. Each is well recorded in
+this file. None is where phase 6's planning reads.
+
+**One smaller item, recorded here rather than counted as an exception.**
+`CONFIG_REFERENCE.md`'s Consumer cell for `digest.warm_timeout_ms` reads "the Worker's
+`run` command, `EnsureLocalModelAsync`". Since R.2 it has a second consumer path, the
+`run-night` callback, and R.2 touched three files, none of them that one. The cell is a
+verified consumer that is now one route short.
+
+### The three the record asks a reviewer to read as unproven
+
+**R.2's Worker callback: confirmed unproven, and the gap is wider than the record states.**
+`StockResearcherLab.Tests.csproj` references Core, Data, Pipeline and Api and does not
+reference Worker, so the callback is not merely untested but unreachable from the suite as
+the projects stand. **And the predicate now exists twice**, at `Program.cs:185` for
+`run-night` and `Program.cs:660` for `run <stage>`, each independently naming
+`NewsDigester.ComponentName`. R.2's own rationale for keeping the name out of `NightlyRun`
+is that a name there would be "a second place the digest step is identified"; the fix put
+the second place in the Worker instead. That is defensible, the Worker being the caller
+that should know, and it is worth a reader knowing that the two sites can now diverge with
+nothing catching it. The record's reason for the callback never having run, that the only
+date reaching C33 carries an attribution write nothing may re-run, was checked and holds.
+
+**Phase R has no sign-off, and the corpus has a precedent for what to do about that.**
+Phase 0's status row names its gap in terms: "Step 2 ran at `d4baeaf` and does not cover
+pass O's four corrected files." No status row names phase R. R.2 is inside phase 5's
+surface and this review read it. **R.1 is not**: it changes `FreshnessGuard`, which is C07,
+a phase 1 component, and phase 1's row is `IN PROGRESS` and silent about it. The change is
+small, well argued, and covered by five tests that were run here, and the code was read.
+`CountsSql(DateOnly asOf, int window)` carries `WHERE date <= DATE '<asOf>'` rendered
+invariantly, and the claim that a date is inside its own read and outside an earlier one is
+what `FreshnessGuardTests` now pins. Nothing about it looks wrong. What is absent is a row
+saying which review covered it.
+
+**The 18:30 slot rests on one observation and still does.** `price_daily` holds 36,262
+rows for 2026-08-26, which is the second-sweep figure the record states, and 50,358 for
+2026-08-25 against 50,399 for 2026-08-24. **The 36,262 is not a second observation**: no
+`PriceIngestor` run has touched that date since the 20:36 sweep, so the table shows where
+the file was left rather than where it finished. The record's own reading is the correct
+one and this review adds nothing to it except that the reading is still correct a day on.
+**What is worth stating is the shape of the question rather than the count.** The abort
+floor and the settled fraction answer the same evidence differently by design, and R.1's
+bound means the two now separate cleanly: a run for an earlier date never sees the arriving
+one. So the open question is only about a run for the current date, which is what
+`RUNBOOK.md`'s 18:30 slot schedules and what nothing yet schedules. Both candidate answers
+remain authored work, and one observation is one observation.
+
+### The first pass, four figures, on operator direction 2026-08-27
+
+**Stated apart from the findings above, because a review that corrects its own findings
+has stopped being a check on them** [`CLAUDE.md` section 3]. What follows is what changed
+after the review was written, at the operator's instruction, and it is confined to what
+section 13 calls verified content: figures, shas and the Consumer column.
+
+| Exception | What changed | Where |
+|---|---|---|
+| 4, the ET label | `04:03` struck and `00:03` stated in all three places, with the `run_log` instant and the commit time given as the mechanism | the owed table, the 5.6 live-half heading, the every-owed-line line |
+| 5, the stale count | "Eleven tests" struck for "thirteen cases over ten methods", which is the unit the adjacent row uses | the owed table's 5.6 row |
+| The stale status row | `4db0c28` and 885 struck for `49e235e` and 895, the NOT READY clause struck, and both sign-off steps recorded. **The sign-off itself is not taken**, that being the operator's call on phase 4's precedent | the phase status table, row 5 |
+| The smaller item | `digest.warm_timeout_ms`'s Consumer cell names both routes, having read each in `Program.cs` first. A clean edit under D-73 with the prior wording in `CHANGELOG.md` | `CONFIG_REFERENCE.md` §digest |
+
+**Nothing under `src/` was touched in that first pass and no test reads any of the four
+files**, so the 895 stood unmoved. `CONFIG_REFERENCE.md` is named in test comments only
+and is parsed by nothing.
+
+### The authorship line for `ARCHITECTURE.html`, and the remaining four closed
+
+**The four above were reported as not an agent session's to close, and the operator then
+directed that they be closed.** That direction is what follows, recorded in the form phase
+3.5's review established, because the corpus records authorisation in this file in prose
+and the precedent is 3.8's and 3.5's.
+
+~~**The line.** The phase 5 edits to `ARCHITECTURE.html`, being §03's C36 Reads cell and
+§20's U8 row at 5.9 and §12's local model chrome note at this review, were made by the
+build on **the operator's explicit authorisation, 2026-08-27**. The same authorisation
+covers D-145 in `DECISIONS.md` and the six carried obligation rows added to
+`BUILD_PLAN.md`. **The operator remains the decider of record**, and nothing entered under
+it introduces a design choice they had not already made: §12 is transcribed from the 5.13
+reshape they directed on 2026-08-25, D-145 states a rule the code has followed since 5.5,
+and each obligation row is drawn from a finding already recorded in this file.~~
+
+~~**What that line does not cover, said plainly.** 5.9's edit stood unauthorised from
+2026-08-25 to 2026-08-27, and this line is retrospective for that half. It is written
+because the alternative is the state phase 3.5's review objected to, an edit to a
+human-edited document with the authorisation living in a conversation, and a conversation
+is not a repository artifact [`CLAUDE.md` §7].~~
+
+**Wrong, and corrected on operator direction 2026-08-27 before this branch was pushed.**
+The struck wording ran two different things together under one authorisation and only the
+first of them had been directed. **A direction to close a finding is not a reading of the
+text written to close it**, and a line that records the second where only the first
+happened is indistinguishable, later, from a phase whose findings were actually read. That
+is the failure the two-step sign-off exists to prevent, reached from inside the review
+rather than from inside the build. What follows separates them.
+
+**Directed, and the edit matches the instruction.** §03's C36 Reads cell and §20's U8 row
+gaining `headline` and `news_digest`, landing inside 5.9's commit `219d156` on 2026-08-25.
+The instruction was given. What was missing was only the line saying so, which is what
+Exception 3 above found, and this is that line: **those two edits were made by the build on
+the operator's direction of 2026-08-25**, the operator remaining the decider of record.
+
+**Drafted by this session and not yet read, therefore not authorised.** D-145 in
+`DECISIONS.md` and the six carried obligation rows in `BUILD_PLAN.md`. Both were written
+out of this review's own findings on a direction to close them, and the operator has read
+neither. **They stand as drafted and pending a reading**, and nothing in this file should
+be taken as their having been approved. Their text is pasted for reading rather than
+summarised, because a summary is not the thing being read.
+
+**A third case, named rather than sorted into either.** §12's local model chrome note was
+edited at this review. The reshape it transcribes, 5.13 moving from a 15:30 clock to a
+precondition ahead of C33, was directed on 2026-08-25 and is not in question. **The wording
+that replaced the clause is this session's and has not been read**, so it sits with D-145
+and the six rather than with the C36 cell, and it is called out separately because it is
+neither a fresh design choice nor a directed edit. It is offered for reading on the same
+terms.
+
+**What no line here can do.** 5.9's edit stood in the repository with its authorisation
+living only in a conversation from 2026-08-25 until this line, which is the state phase
+3.5's review objected to and a conversation is not a repository artifact [`CLAUDE.md` §7].
+Recording the direction now closes that. **Recording a direction that was not given would
+not have closed anything**, which is why the struck paragraph above is struck rather than
+edited quietly.
+
+| Exception | What changed | Where |
+|---|---|---|
+| 1, §12's readiness clause | The clause now describes the probe the Worker runs immediately before C33, the load it causes, and the attached-terminal prompt, citing 5.13. Clean edit under D-73, prior wording in `CHANGELOG.md`. **Nothing else in the note moved** | `ARCHITECTURE.html` §12 |
+| 2, the frontier config read | **D-145** states it as a rule, with the reason INVARIANT 13 does not reach a health check, what a replay costs, and a boundary of exactly two keys. `LocalModelClient.cs` cites it instead of arguing it | `DECISIONS.md`, `LocalModelClient.cs` |
+| 3, the missing authorship line | The paragraph above | this section |
+| 6, the nine unfiled items | **Six rows** added to the carried obligations table: the versioned-key as-of mismatch to phase 6, the `request_options.model` hazard and `digest.readiness_check_et`'s retirement to phase 9, `headline.source` to phase 6, R.1's uncovered sign-off to phase 1's, and the abort floor against the 18:30 slot to phase 7 | `BUILD_PLAN.md` carried obligations |
+
+**Six rows and not nine, and the arithmetic is stated so it is not read as a shortfall.**
+`LoadedModelAsync`'s doc comment was a code defect rather than an obligation and is
+corrected below. The `model` column that would close the hazard behind it is the phase 9
+row rather than a seventh. And `digest.chain`'s two candidate shapes are one decision, not
+two.
+
+**One code change, and it is a comment.** `LoadedModelAsync`'s summary stated two premises
+the record struck as wrong on 2026-08-25, that the machine runs Ollama and that the
+endpoint lists exactly one model. It now states what was measured, that LM Studio lists
+every model downloaded and listed five, that the ordinal pick is therefore a real choice,
+that `request_options.model` is what overrides it, and what clearing that key costs. **The
+design question it names is unchanged and is carried rather than answered**: the remedy is
+a column and a decision number, and this is a false premise removed from the file a later
+session would read before touching the pick.
+
+**Both passes verified against the working tree rather than against HEAD**, `ci.ps1`
+checking out a worktree at HEAD and therefore not seeing uncommitted work. `guards.ps1`
+exit 0 with 5 checks over 213 files, build 0 warnings and 0 errors, and **895 passed, 0
+failed**. That is the check that matters here rather than a formality: the suite parses
+`ARCHITECTURE.html` and `BUILD_PLAN.md`, both of which these passes edited, through
+`ArchitectureDocument`, the two declaration conformance tests and
+`SelectionDistributionsTests`. `DECISIONS.md`, `CONFIG_REFERENCE.md`, `CHANGELOG.md` and
+`PROGRESS.md` are parsed by nothing.
+
+### What this review did not do
+
+It did not open the 2026-08-12 night, which the record says is reachable only through a
+hand-composed scratch host, and it attempted no run that would spend a provider unit or a
+cent. It read the code for INVARIANTS 6, 7, 10, 11 and 15 rather than measuring them,
+those being properties of statements rather than of rows, except where `ci.ps1`'s 895
+tests measure them. It made no live call to any digest link.

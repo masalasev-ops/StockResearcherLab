@@ -12888,10 +12888,10 @@ records.
 | Owed | Which line | What it needs |
 |---|---|---|
 | ~~One real night end to end, with its chain of counts~~ **MET 2026-08-26, on the blessed date 2026-08-25.** 32 candidates, 87 headlines across 27 tickers, 32 digest rows split 23 prose / 4 `NO MATERIAL NEWS` / 5 null. Recorded in full under 5.12 below | 5.12 | ~~**The next trading night.** From 2026-08-25 `digest.chain` is `["local"]` against one enabled row~~ **Corrected 2026-08-26: a night whose BLESSED date is on or after 2026-08-25**, which the next trading night was not. Two attempts, both recorded under 5.7's finding: 05:22 ET halted at C33 on the count mismatch with 2026-08-24 blessed, and 20:35 ET halted at the guard itself with 2026-08-26 below the abort floor while still arriving. ~~2026-08-25 will not be blessed on any later run, its price file being 11 percent short~~ **wrong, it settled at 50,348 the same evening**. **What this now needs is one run made after the newest session clears 40,000 rows**, at which point the walk-back reaches 2026-08-25 and blesses it |
-| The secondary link answering once | 5.6 | **One live call, a fraction of a cent.** Eleven tests cover the link against a stubbed transport; no stub can prove the wire shape, the key, or that the model id is reachable on this account |
-| The night's rotation cost, annualised | 5.14 | **The token counts a live secondary call reports.** What is recorded is D-143's ceiling of $3.40 a year, reproduced exactly through C26's own pricing and registered as a fixture. The measured figure lands under it by an amount nobody yet knows |
+| The secondary link answering once **BLOCKED ON THE SAME DEFERRAL, noted 2026-08-26** | 5.6 | **Blocked on the deferred evaluation two rows down, and it was not marked when that was.** The secondary is inert by operator decision and `digest.chain` names one link, so there is no run in which this call happens; it is re-asked when the secondary is evaluated, not before. **One live call, a fraction of a cent.** Eleven tests cover the link against a stubbed transport; no stub can prove the wire shape, the key, or that the model id is reachable on this account |
+| The night's rotation cost, annualised **BLOCKED ON THE SAME DEFERRAL, noted 2026-08-26** | 5.14 | **The measured figure needs the call the row above cannot make**, so it defers with it. The 2026-08-25 night wrote no `cost_ledger` row at all, which is C26 correct rather than C26 unexercised: the local link bills nothing. **The token counts a live secondary call reports.** What is recorded is D-143's ceiling of $3.40 a year, reproduced exactly through C26's own pricing and registered as a fixture. The measured figure lands under it by an amount nobody yet knows |
 | ~~The fall-through visible in the record~~ **DEFERRED, 2026-08-25, operator direction** | phase done-when, line 2 | `BUILD_PLAN.md` now records the line as deferred rather than owed, on the same footing as line 3. The evaluation is deferred and therefore the evidence is; the design is not. The secondary is built and inert, D-25, D-27 and D-140 stand, and the rotation stays in the code. **Re-asked when the secondary is evaluated** |
-| The prompt against a genuinely cold model | 5.13 | **A terminal a person is sitting at.** `Console.IsInputRedirected` is unconditionally true in an agent session, so the attached branch cannot be reached from one. Eight tests cover it; the live half is the operator's to run |
+| The prompt against a genuinely cold model | 5.13 | **Easier to reach since R.2 and still the operator's.** Until R.2 the prompt was on `run <stage>` alone, so this could only be tested by running C33 by hand; it is now on `run-night` too, which is the path the checkpoint describes. **A terminal a person is sitting at.** `Console.IsInputRedirected` is unconditionally true in an agent session, so the attached branch cannot be reached from one. Eight tests cover it; the live half is the operator's to run |
 
 **Line 3 of the phase's done-when is not evaluable here and that was recorded before the
 phase began** [D-139]. "Stopping both halts the run before any researcher call and produces
@@ -13026,6 +13026,14 @@ night and the stage does not run; an absent hook leaves the sequence unchanged.
 decides. A night whose model cannot be loaded still halts, and in an unattended shell the
 precondition still refuses rather than blocking, `Console.IsInputRedirected` being true
 there.
+
+**The mechanism is tested and the wiring has not run live, and the difference is worth
+stating.** Three tests cover `NightlyRun`'s hook. What no test covers is the Worker's own
+callback, which is the line deciding that C33 is the stage needing a model. **It could not
+be demonstrated on the night that motivated it**: the only date whose chain reaches C33 is
+2026-08-25, and re-running that night would re-run the attribution write, which nothing is
+permitted to do [`CLAUDE.md` section 12]. The next night that reaches C33 demonstrates it,
+and it is the same run that closes 5.13's live half.
 
 ---
 

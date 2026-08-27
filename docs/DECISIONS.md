@@ -3302,11 +3302,22 @@ non-empty content to a small fixed probe under `digest.health_timeout_ms`, not w
 returns 200. The probe's text is fixed and is not the digest instruction, so a health check
 costs nothing and cannot be confused with a digest.
 
-**D-145 was authored at the phase 5 sign-off review rather than during the phase**, on the
+**D-145 was authored at the phase 5 sign-off review rather than during the phase**, ~~on the
 operator's explicit authorisation of 2026-08-27, the operator remaining the decider of
-record. It states a rule the code has followed since 5.5 whose only statement was a comment,
-which is the shape `CLAUDE.md` §7 refuses: a code comment is not a record. Nothing in the
-code changes on it.
+record.~~ **drafted by that review on 2026-08-27, then read and authorised by the operator
+on 2026-08-28**, the operator remaining the decider of record. It states a rule the code has
+followed since 5.5 whose only statement was a comment, which is the shape `CLAUDE.md` §7
+refuses: a code comment is not a record. Nothing in the code changes on it.
+
+**The struck wording claimed an authorisation that had not been given at the date it named,
+and that is the finding rather than the correction.** On 2026-08-27 the operator had
+directed that the review's findings be closed; they had not read the text written to close
+them, and this decision was part of that text. **A direction to close a finding is not a
+reading of the text written to close it.** A register entry that records the second where
+only the first happened leaves a decision the build wrote for itself indistinguishable from
+one the operator read, which is precisely what the two-step sign-off exists to separate
+[`BUILD_PLAN.md` sign-off, D-67]. The reading happened on 2026-08-28 and the authorisation
+dates from then.
 
 **D-145 A health check resolves its config at the frontier, and that is the one shape
 INVARIANT 13 does not reach.** `ACTIVE`

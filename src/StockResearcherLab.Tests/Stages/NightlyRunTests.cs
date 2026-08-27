@@ -232,15 +232,20 @@ public sealed class NightlyRunTests
     {
         var order = NightlyRun.EveningOrder;
 
-        Assert.Equal(16, order.Length);
+        // 16 until 5.12, which appends C29 and C33 behind C28 [D-139].
+        Assert.Equal(18, order.Length);
 
         Assert.True(
             Array.IndexOf(order, "MarketContextEngine") > Array.IndexOf(order, "IndicatorEngine"),
             "C10 counts breadth off indicator_daily, so it cannot run before C08 wrote it.");
 
-        // C11 was last until 4.12 put the selection layer behind it. It is still last of
-        // the compute layer, which is what this assertion was always about.
-        Assert.Equal("ConcentrationMonitor", order[^1]);
+        // C11 was last until 4.12 put the selection layer behind it, and C28 was last
+        // until 5.12 put the digest stages behind that. What this assertion has always
+        // been about is that nothing appended to the array quietly overtakes the stage
+        // that was last, so it names the current one rather than an index.
+        Assert.Equal("NewsDigester", order[^1]);
+        Assert.Equal("HeadlineIngestor", order[^2]);
+        Assert.Equal("ConcentrationMonitor", order[^3]);
 
         foreach (var engine in new[]
                  {
@@ -283,9 +288,23 @@ public sealed class NightlyRunTests
     [Fact]
     public void TheSelectionOrderIsTheTailOfTheEveningOrder()
     {
+        // **A contiguous run rather than the literal tail, from 5.12.** C29 and C33 sit
+        // behind C28, so the selection order is no longer the last N names. What must not
+        // drift is still what it always was: which stages a range run touches, and that
+        // they appear in the evening order in this order and with nothing interleaved.
+        var order = NightlyRun.EveningOrder;
+        var start = Array.IndexOf(order, BackfillSequence.SelectionOrder[0]);
+
+        Assert.True(start >= 0, "The selection order's first stage is not in the evening order.");
         Assert.Equal(
-            NightlyRun.EveningOrder[^BackfillSequence.SelectionOrder.Length..],
+            order[start..(start + BackfillSequence.SelectionOrder.Count())],
             BackfillSequence.SelectionOrder);
+
+        // And the two digest stages are what follows it, which is D-139's ordering seen
+        // from the other side: C28 precedes them rather than trailing them [5.11].
+        Assert.Equal(
+            ["HeadlineIngestor", "NewsDigester"],
+            order[(start + BackfillSequence.SelectionOrder.Count())..]);
 
         // And every name in it exists, which is 4.12's own done-when: the selection order
         // names only components that exist.
@@ -376,6 +395,93 @@ public sealed class NightlyRunTests
 
             return new StageResult(rows);
         }
+    }
+
+    // ------------------------------------------------- the per-stage hook [R.2] ---
+
+    private static NightlyRun BuildWithHook(
+        Func<string, CancellationToken, Task> before, params IWriteOwner[] owners)
+    {
+        var cs = TestDatabase.ConnectionString;
+        var all = owners.Append(new RunLog(cs)).ToList();
+        var registry = new StageRegistry(all);
+
+        return new NightlyRun(
+            registry, new StageRunner(registry, new RunLog(cs), Clock, cs), null, before);
+    }
+
+    /// <summary>
+    /// **The hook fires immediately before each stage, not once before the sequence**
+    /// [R.2]. 5.13's precondition warms a model that an evening order takes about twelve
+    /// minutes to reach, and a hook that ran at the start would warm it too early to
+    /// help. Asserted as interleaving rather than as a count, because a count passes on
+    /// the wrong arrangement.
+    /// </summary>
+    [Fact]
+    public async Task TheHookRunsImmediatelyBeforeEachStageRatherThanOnceUpFront()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ClearAsync(ct);
+
+        var trace = new List<string>();
+        var writer = new MarkerWriter(WriterName);
+
+        var night = BuildWithHook(
+            (name, _) => { trace.Add("before:" + name); return Task.CompletedTask; },
+            new BlessingGuard(new DateOnly(2026, 8, 7)),
+            writer);
+
+        await night.ExecuteAsync(
+            new DateOnly(2026, 8, 7), 1, [GuardName, WriterName], ct);
+
+        Assert.Equal(["before:" + GuardName, "before:" + WriterName], trace);
+
+        await ClearAsync(ct);
+    }
+
+    /// <summary>
+    /// **A hook that throws halts the night** [`CLAUDE.md` section 6, fail closed]. It
+    /// runs inside the same try the stage does, so a precondition that cannot complete
+    /// stops the sequence rather than being swallowed and letting the stage run anyway.
+    /// </summary>
+    [Fact]
+    public async Task AHookThatThrowsHaltsTheNightAndTheStageDoesNotRun()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ClearAsync(ct);
+
+        var writer = new MarkerWriter(WriterName);
+
+        var night = BuildWithHook(
+            (_, _) => throw new InvalidOperationException("the precondition could not complete"),
+            writer);
+
+        var result = await night.ExecuteAsync(new DateOnly(2026, 8, 7), 1, [WriterName], ct);
+
+        Assert.False(result.Completed);
+        Assert.False(writer.Ran);
+        Assert.Contains(
+            "the precondition could not complete",
+            result.Steps[^1].Detail!,
+            StringComparison.Ordinal);
+
+        await ClearAsync(ct);
+    }
+
+    /// <summary>No hook is the default and changes nothing.</summary>
+    [Fact]
+    public async Task AnAbsentHookLeavesTheSequenceUnchanged()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ClearAsync(ct);
+
+        var writer = new MarkerWriter(WriterName);
+        var result = await Build(writer).ExecuteAsync(new DateOnly(2026, 8, 7), 1, [WriterName], ct);
+
+        Assert.True(result.Completed);
+        Assert.True(writer.Ran);
+
+        await ClearAsync(ct);
     }
 
     /// <summary>Declares a write and produces nothing, which is the halt condition.</summary>

@@ -7,6 +7,7 @@ using StockResearcherLab.Data;
 using StockResearcherLab.Data.Eodhd;
 using StockResearcherLab.Pipeline;
 using StockResearcherLab.Pipeline.Select;
+using StockResearcherLab.Worker;
 
 // The host that runs the nightly pipeline and the backfill. At phase 0 it does
 // two things: apply the schema, and run one stage. migrate.ps1 is a wrapper over
@@ -167,8 +168,25 @@ async Task<int> RunNightAsync(IReadOnlyList<string>? order = null)
     Console.WriteLine(
         $"{label}  {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}  config v{configVersion}");
 
+    // **The same precondition the single-stage path has, on the path it was built for**
+    // [R.2, 5.13]. It was wired into `run` alone, so the evening sequence reached C33
+    // with nothing having warmed the model and nothing having waited for an operator,
+    // and a cold model then failed a 5,000 ms health probe it could not answer. That
+    // halt is INVARIANT 15 working; what was missing is the chance to avoid needing it.
+    //
+    // Fired per stage rather than once before the sequence, because the order takes
+    // about twelve minutes to reach C33 and a model warmed at the start can be evicted
+    // before the digest asks anything.
     var night = NightlyRun.For(
-        connectionString, config["Eodhd:ApiToken"], clock, Console.WriteLine);
+        connectionString, config["Eodhd:ApiToken"], clock, Console.WriteLine,
+        config["Anthropic:ApiKey"],
+        async (name, _) =>
+        {
+            if (string.Equals(name, NewsDigester.ComponentName, StringComparison.Ordinal))
+            {
+                await EnsureLocalModelAsync(connectionString).ConfigureAwait(false);
+            }
+        });
 
     var result = await night.ExecuteAsync(date, configVersion, order).ConfigureAwait(false);
 
@@ -431,7 +449,7 @@ async Task<int> BackfillAsync()
     // minute against one limit of 1,000 [PipelineComposition].
     var eodhd = new EodhdClient(EodhdClient.CreateHttpClient(), token, clock);
 
-    var registry = PipelineComposition.BuildRegistry(connectionString, eodhd);
+    var registry = PipelineComposition.BuildRegistry(connectionString, eodhd, config["Anthropic:ApiKey"]);
     var runLog = new RunLog(connectionString);
 
     var run = new BackfillRun(
@@ -583,12 +601,18 @@ async Task<int> SeedAsync()
 
     Console.WriteLine(ConfigSeeder.Describe(inserted, ConfigSeeder.Keys.Count));
     Console.WriteLine($"  {ConfigSeeder.Keys.Count} keys");
+
+    // The chain's two rows, reported on their own line because they are not keys
+    // [D-136, 5.3].
+    var links = await seeder.SeedChainAsync().ConfigureAwait(false);
+    Console.WriteLine(ConfigSeeder.DescribeChain(links, ConfigSeeder.ChainLinks.Count));
     return 0;
 }
 
 int ListStages()
 {
-    var registry = PipelineComposition.BuildRegistry(RequireConnectionString(), config["Eodhd:ApiToken"], new SystemClock());
+    var registry = PipelineComposition.BuildRegistry(
+        RequireConnectionString(), config["Eodhd:ApiToken"], new SystemClock(), config["Anthropic:ApiKey"]);
     Console.WriteLine("registered components");
 
     foreach (var owner in registry.Owners)
@@ -614,7 +638,7 @@ async Task<int> RunStageAsync()
     var connectionString = RequireConnectionString();
     var clock = new SystemClock();
     var registry = PipelineComposition.BuildRegistry(
-        connectionString, config["Eodhd:ApiToken"], clock);
+        connectionString, config["Eodhd:ApiToken"], clock, config["Anthropic:ApiKey"]);
     var runLog = new RunLog(connectionString);
     var runner = new StageRunner(registry, runLog, clock, connectionString);
 
@@ -628,8 +652,43 @@ async Task<int> RunStageAsync()
 
     Console.WriteLine($"run {args[1]}  date {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}  config v{configVersion}");
 
+    // **The local model precondition, ahead of the stage and never inside it** [5.13].
+    // It probes under `digest.warm_timeout_ms`, which is long enough to cause a load
+    // rather than to time one out, and asks the operator where it cannot. Whether it
+    // succeeds is not consulted below: C33 runs either way, and an unhealthy chain still
+    // halts on INVARIANT 15's gate. This can only delay a halt, never convert one.
+    if (string.Equals(args[1], NewsDigester.ComponentName, StringComparison.Ordinal))
+    {
+        await EnsureLocalModelAsync(connectionString).ConfigureAwait(false);
+    }
+
     var result = await runner.RunAsync(args[1], date, configVersion).ConfigureAwait(false);
 
     Console.WriteLine($"  ok, {result.RowsWritten.ToString("N0", CultureInfo.InvariantCulture)} row(s) written");
     return 0;
+}
+
+/// <summary>
+/// Probes the local link under the warm bound and asks the operator to load the model
+/// where it cannot answer [5.13]. Returns whether it answered, which the caller does not
+/// act on: the stage runs either way and the gate is still the thing that halts a night.
+/// </summary>
+async Task<bool> EnsureLocalModelAsync(string connectionString)
+{
+    using var http = new HttpClient();
+    var client = new LocalModelClient(connectionString, http);
+
+    var link = await client.LinkAsync().ConfigureAwait(false);
+
+    if (link is null)
+    {
+        // No enabled row at position 1. C33 says so in its own words and this has
+        // nothing to add, so it declines rather than guessing at an address.
+        return false;
+    }
+
+    return await LocalModelPrecondition.EnsureAsync(
+        ct => client.HealthAsync(LocalModelClient.WarmTimeoutKey, ct),
+        LocalModelPrecondition.Describe(link.Endpoint, link.RequestOptions),
+        new TerminalConsole()).ConfigureAwait(false);
 }

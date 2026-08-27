@@ -1,4 +1,5 @@
 using StockResearcherLab.Core;
+using StockResearcherLab.Core.Digest;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data;
 using StockResearcherLab.Data.Eodhd;
@@ -23,13 +24,20 @@ public static class PipelineComposition
     /// secret to enumerate the registry would make them unrunnable in CI.
     /// </param>
     /// <param name="clock">Injected; nothing here reads system time [INVARIANT 11].</param>
+    /// <param name="anthropicKey">
+    /// `Anthropic:ApiKey`. Null builds a chain with no secondary link, and
+    /// `DigestChain.BuildAsync` then refuses if `digest.chain` still names one, which is
+    /// the refusal 5.7 exists for rather than a silently shorter chain [D-136].
+    /// </param>
     public static StageRegistry BuildRegistry(
-        string connectionString, string? apiToken = null, IClock? clock = null)
+        string connectionString, string? apiToken = null, IClock? clock = null,
+        string? anthropicKey = null)
         => BuildRegistry(
             connectionString,
             string.IsNullOrWhiteSpace(apiToken)
                 ? null
-                : new EodhdClient(EodhdClient.CreateHttpClient(), apiToken, clock ?? new SystemClock()));
+                : new EodhdClient(EodhdClient.CreateHttpClient(), apiToken, clock ?? new SystemClock()),
+            anthropicKey);
 
     /// <summary>
     /// The same registry over a client the caller already holds.
@@ -46,12 +54,20 @@ public static class PipelineComposition
     /// Null builds a registry whose provider-backed stages are absent, which is the
     /// no-token case above.
     /// </param>
-    public static StageRegistry BuildRegistry(string connectionString, EodhdClient? eodhd)
+    public static StageRegistry BuildRegistry(
+        string connectionString, EodhdClient? eodhd, string? anthropicKey = null)
     {
         var owners = new List<IWriteOwner>
         {
             // Not a stage. Sits outside the layers and owns run_log.
             new RunLog(connectionString),
+
+            // C26. Not a stage either, and owns cost_ledger for the same reason RunLog
+            // owns run_log: a writer the conformance test cannot see is one INVARIANT 10
+            // is not enforced against. **Registered whether or not a secondary link
+            // exists**, because ownership of the table is a property of the design and
+            // not of whether tonight has a key [5.14].
+            new CostLedger(connectionString, new ConfigStore(connectionString)),
 
             // Layer 2. Every compute stage derives from tables the ingest wrote and
             // calls no provider, so all of them are registered whether or not a token
@@ -76,6 +92,79 @@ public static class PipelineComposition
             // Outside the layers with RunLog, per section 02, and registered here
             // because it reads stores the pipeline wrote and calls nothing.
             new ConcentrationMonitor(),
+
+            // C33. Layer 3, and registered unconditionally because it calls no data
+            // provider: its links are the digest chain rather than EODHD [5.8].
+            //
+            // **The chain is built per run and not per registry**, holding which links
+            // have failed [D-137], so a re-used stage cannot carry one night's failures
+            // into the next.
+            //
+            // **It reaches `local_model_config` through the declaration C32 owns.** That
+            // is why C33's read set is `candidate_set` and `headline` alone: the chain is
+            // a collaborator rather than a component, it has no §03 row, and giving C33 a
+            // declaration on that table would say it reads something it does not
+            // [INVARIANT 7, D-109].
+            new NewsDigester(
+                async (context, ct) =>
+                {
+                    var links = new Dictionary<DigestProvider, IDigestLink>
+                    {
+                        [DigestProvider.Local] = new LocalModelClient(connectionString, DigestHttp),
+                    };
+
+                    // **The secondary is composed only where `digest.chain` names it and
+                    // a key exists** [D-136, D-140, operator direction 2026-08-25]. The
+                    // name test comes first and is the one that matters: with the chain at
+                    // `["local"]` no link that reaches a paid provider is constructed at
+                    // all, so the digest step cannot bill by any path, including one added
+                    // later by someone who did not know it was meant not to.
+                    //
+                    // **The key test survives underneath it and still means what it did.**
+                    // A chain that names `haiku` with no key leaves the link absent and
+                    // `BuildAsync` refuses, rather than running one link shorter than the
+                    // record says [5.7].
+                    //
+                    // The model id is resolved as of the run's date rather than read from
+                    // a literal [INVARIANT 13].
+                    var named = await DigestChain
+                        .NamedLinksAsync(context.Config, context.Date, ct).ConfigureAwait(false);
+
+                    if (named.Contains(DigestProviders.Name(DigestProvider.Haiku), StringComparer.Ordinal)
+                        && !string.IsNullOrWhiteSpace(anthropicKey))
+                    {
+                        links[DigestProvider.Haiku] = new HaikuDigestLink(
+                            anthropicKey,
+                            await SecondaryModelAsync(context, ct).ConfigureAwait(false));
+                    }
+
+                    return await DigestChain.BuildAsync(
+                        new StageData(connectionString, LocalModelClient.Access()),
+                        context.Config,
+                        context.Date,
+                        links,
+                        ct).ConfigureAwait(false);
+                },
+                () => DigestInstruction.Read(DigestInstructionPath),
+
+                // **Keyed on the key alone and dormant by the same logic as the link.**
+                // This is built when the registry is, where there is no date to resolve
+                // `digest.chain` as of, and it fires only on an answer from a link that is
+                // not the local one. A chain that names no paid link cannot produce one,
+                // so a recorder that exists and is never called is the correct shape here
+                // [5.14].
+                string.IsNullOrWhiteSpace(anthropicKey)
+                    ? null
+                    : async (context, answer, ct) => await new CostLedger(connectionString, context.Config)
+                        .RecordAsync(
+                            context.Date,
+                            answer.Model ?? await SecondaryModelAsync(context, ct).ConfigureAwait(false),
+                            answer.PromptTokens,
+                            answer.CompletionTokens,
+                            answer.CacheWriteTokens,
+                            answer.CacheReadTokens,
+                            context.Date,
+                            ct: ct).ConfigureAwait(false)),
         };
 
         if (eodhd is not null)
@@ -87,9 +176,69 @@ public static class PipelineComposition
             owners.Add(new SentimentIngestor(eodhd));
             owners.Add(new FlowIngestor(eodhd));
             owners.Add(new EventsIngestor(eodhd));
+
+            // C29. Provider-backed like the six above, and it is the first stage that
+            // reads a table the select layer wrote rather than a source [5.4].
+            owners.Add(new HeadlineIngestor(eodhd));
         }
 
         return new StageRegistry(owners);
+    }
+
+    /// <summary>
+    /// One `HttpClient` for every digest call, which is what the type is designed for and
+    /// what a per-call one exhausts sockets doing.
+    ///
+    /// **No timeout of its own.** `digest.health_timeout_ms` bounds a probe and a digest
+    /// takes as long as it takes, so a client-wide timeout would be a second bound nothing
+    /// documents, applied to the wrong one of the two [5.5].
+    /// </summary>
+    private static readonly HttpClient DigestHttp = new() { Timeout = Timeout.InfiniteTimeSpan };
+
+    /// <summary>
+    /// `digest.secondary_model_id`, resolved as of the run's date and unwrapped from its
+    /// JSON string [INVARIANT 13, D-140]. **Resolved here rather than inside the link**,
+    /// so the link reads no store and stays out of the registry [5.6].
+    /// </summary>
+    private static async Task<string> SecondaryModelAsync(StageContext context, CancellationToken ct)
+    {
+        var row = await context.Config
+            .RequireAsync("digest.secondary_model_id", context.Date, ct).ConfigureAwait(false);
+
+        return System.Text.Json.Nodes.JsonNode.Parse(row.Value)?.GetValue<string>()
+               ?? throw new InvalidOperationException(
+                   $"digest.secondary_model_id resolved to '{row.Value}', which is not a JSON string.");
+    }
+
+    /// <summary>
+    /// `prompts/digest-instruction.md`, found by walking up from the binary until a
+    /// directory holding `prompts/` appears.
+    ///
+    /// **The runtime prompts are product read at execution time and are deliberately not
+    /// copied to the output** [`CLAUDE.md` §14]. A copied prompt is a prompt the operator
+    /// can edit without the running system seeing the edit, which is the failure this
+    /// corpus keeps naming: nothing errors and the evidence quietly changes.
+    ///
+    /// The walk rather than a relative path, because the Worker, the tests and a scratch
+    /// host all sit at different depths, and a `..\..\..` that is right for one is wrong
+    /// for the others in a way that only shows up when it runs.
+    /// </summary>
+    public static string DigestInstructionPath { get; } = FindPrompt("digest-instruction.md");
+
+    private static string FindPrompt(string file)
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, "prompts", file);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        // Returned rather than thrown, so building the registry still touches nothing and
+        // the failure lands when the stage runs and says what it could not find.
+        return Path.Combine(AppContext.BaseDirectory, "prompts", file);
     }
 
     /// <summary>
@@ -100,4 +249,21 @@ public static class PipelineComposition
     /// </summary>
     public static IReadOnlyList<IWriteOwner> AllOwnersForConformance(string connectionString)
         => BuildRegistry(connectionString, apiToken: "not-a-real-token-registry-only").Owners;
+
+    /// <summary>
+    /// Every read owner this project hosts that owns no write, which is C32 alone
+    /// [D-109, D-136].
+    ///
+    /// **The counterpart of `ApiComposition.AllReadOwnersForConformance` and it exists
+    /// for the same reason.** A reader nothing enumerates is a reader D-74 is not
+    /// enforced against, and the registry above holds write owners only, so a component
+    /// that writes nothing cannot be in it. C36 needed one of these in the Api; C32 is
+    /// the first in the Pipeline.
+    ///
+    /// **It takes a connection string and opens nothing**, and the `HttpClient` it hands
+    /// C32 makes no request while a declaration is being read. Enumerating readers must
+    /// be as free as building the registry.
+    /// </summary>
+    public static IReadOnlyList<IReadOwner> AllReadOwnersForConformance(string connectionString)
+        => [new LocalModelClient(connectionString, new HttpClient())];
 }

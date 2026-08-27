@@ -2430,3 +2430,233 @@ give, so a name two screens both surface is uncommon and therefore informative. 
 per-screen report that groups on every id in `screens_surfacing` is not diluting a common
 case; it opens a calibration bucket for a shadow out of exactly the rows carrying the most
 signal.
+
+---
+
+## 2026-08-24, phase 5 checkpoint 5.2, `SCHEMA.md`'s `headline` section
+
+**`SCHEMA.md` §headline** [5.2, D-131, D-132]. `SCHEMA.md` is read to know the current
+state, so this is a clean edit and the prior wording is here.
+
+> ### headline
+> Grain: candidate by day. **Writer: HeadlineIngestor.**
+>
+> `ticker`, `date`, `published_at`, `title`, `source`, `url`.
+
+**Two changes and neither removes a fact.** The column list gains `content`, which
+migration `0022` adds and which is the column the digest actually reads: §07 prices local
+enrichment against articles of five to eight hundred tokens and this table could not hold
+one [D-131]. The writer line gains that C29 owns the delete as well as the insert, which
+is D-132's run-scope idempotence and which the one-word form could not carry.
+
+**What the section gains beyond the two lines**, all of it new rather than replacing
+anything: why `content` is nullable and what null means there; why the grain is a run
+scope rather than a row identity; and that `source` has no input in the `news` payload
+and is written null, measured at 5.1 over 275 rows.
+
+`news_digest` and `attribution` gain paragraphs in the same checkpoint and neither loses
+a line, so neither is restated here.
+
+
+---
+
+## 2026-08-24, phase 5 checkpoint 5.3, `CONFIG_REFERENCE.md`'s digest chain and `SCHEMA.md`'s `local_model_config`
+
+**Both are read to know the current state, so both are clean edits and the prior wording
+is here** [5.3's second commit, D-143, D-144].
+
+### `CONFIG_REFERENCE.md` §Digest chain, two rows and two paragraphs [D-143]
+
+> | `digest.max_articles` | 3 | D-133 | NewsDigester | **NOT SEEDED**, see below |
+> | `digest.max_tokens` | 150 | D-24 | NewsDigester | **NOT SEEDED**, see below |
+>
+> **Two keys in this table are deliberately unseeded and the reason is a measurement**
+> [5.1, 5.3]. `digest.max_articles` is 3 because §07's cost figures imply about 1,800
+> input tokens a candidate at five to eight hundred tokens an article. The median article
+> measures **1,248 real tokens**, counted by the model that would digest it, with p95 at
+> 4,777 and a longest body of 14,099, so three articles is anywhere from roughly 900 to
+> roughly 14,000 tokens depending which three and the count prices nothing.
+> `digest.max_tokens` is one name for two quantities, the digest's length and the
+> completion's, which are the same number only on a model that does not reason before
+> answering.
+>
+> **Both are superseded by D-143, which is drafted and unauthored.** It replaces them with
+> `digest.max_input_tokens` at 6,000 and `digest.max_output_tokens` at 150, and this table
+> gains those two rows and loses these when it is authored. **Nothing was seeded at a
+> provisional value**: config is append-only and versioned, so a placeholder is a config
+> version and a history that must be segmented rather than a value that can be corrected
+> [`CLAUDE.md` §8, §12].
+
+**What replaces them is the same measurement stated as a rule rather than as a reason to
+wait.** D-143 is authored, so the two rows become `digest.max_input_tokens` at 6,000 and
+`digest.max_output_tokens` at 150, both seeded, and the paragraph that explained why two
+keys were absent becomes the paragraph that states how the cap selects: most recent first
+within `digest.lookback_days`, whole articles while the next still fits, a minimum of one
+even where that one exceeds the cap.
+
+**Two facts are carried forward rather than dropped.** The measured distribution stays, and
+gains p25 at 935 and p75 at 1,974 which the removed text did not carry. And the statement
+that nothing was seeded at a provisional value stays, now in the past tense and attached to
+the two retired names, because it is the reason there is no config version carrying either
+and therefore no history to segment.
+
+**One fact is new here and belongs to D-143 rather than to this edit**: 6,000 input tokens
+bounds a full year run entirely on the secondary at $47.63 against §07's $18. The removed
+text had no ceiling in it at all, a count cap not admitting one.
+
+### `SCHEMA.md` §local_model_config, the column list [D-144]
+
+> `provider_order`, `endpoint`, `enabled`, `last_health_check`, `last_loaded_model`.
+>
+> The only table the interface can write. Nothing here touches run data.
+
+**One column added and no line removed.** The list gains `request_options`, which migration
+`0023` adds, and the two sentences below it are unchanged. What the section gains beyond the
+column name is all new rather than replacing anything: what the column holds and that it is
+null for the secondary; why null and an empty object are different facts and why there is
+therefore no `DEFAULT '{}'::jsonb`; why this is a column rather than a `digest.*` key; why
+its shape carries no CHECK where `news_digest.provider`'s vocabulary does; and that it gains
+no writer in this phase.
+
+---
+
+## 2026-08-24, phase 5 checkpoint 5.7, `CONFIG_REFERENCE.md`'s `digest.chain`
+
+**A clean edit, the document being read to know the current state, and the prior wording
+is here** [5.7, D-136].
+
+> **`digest.chain`'s consumer is genuinely open and is not merely unbuilt** [5.3 finding].
+> D-136 gives the chain's order to `local_model_config.provider_order` filtered on
+> `enabled`, so this key does not order the chain. It is seeded at the value this document
+> already carried, which chooses nothing, and 5.7 states what reads it or marks it
+> `NOT BOUND`. The candidate role, not taken here: config is versioned and
+> `local_model_config` is not, so this key is the only thing that could record which links
+> were in the chain on a past date.
+
+**5.7 answered it and the answer is the candidate role the paragraph declined to take.**
+The key names the links and the table orders and addresses them. `local_model_config`
+carries `provider_order`, `endpoint` and `enabled` and no name; `digest.chain` carries the
+name at each position and no address. `DigestChain.BuildAsync` pairs them by position,
+which is what lets a link's identity be versioned config while its address stays an
+operator-editable row, and that split is D-51's and D-136's rather than this checkpoint's.
+
+**The Consumer column moves from unverified to verified**, the binding having been read in
+`DigestChain.BuildAsync` rather than inferred from the name [`CLAUDE.md` §8].
+
+**What the replacement adds beyond the answer**: that a length mismatch fails the run,
+because the key is versioned and the table is not, so the two can disagree; and that a
+name outside the closed vocabulary fails the same way.
+
+---
+
+## 2026-08-25, phase 5 checkpoint 5.9, `ARCHITECTURE.html` §03's C36 cell and §20's U8 row
+
+**Both are clean edits, `ARCHITECTURE.html` being a spec under D-73, and the prior wordings
+are here** [5.9, D-134, D-143].
+
+> `security`, `security_daily`, `universe_rejection` D-108, `indicator_daily`,
+> `valuation_daily`, `flow_daily`, `sentiment_derived_daily`, `percentile_cell_daily`,
+> `percentile_cell_coverage` D-107, `price_daily`, `fundamental_snapshot`,
+> `sentiment_daily`, `insider_transaction`, `market_context_daily`
+
+> Four panels. **Membership:** ... **Market context:** breadth, regime label and the name's
+> sector composite on one line. **Nothing here is computed**: where a figure would have to
+> be derived the panel shows the inputs and says so.
+
+> security, security_daily, universe_rejection, the four metric stores,
+> percentile_cell_daily, price_daily, fundamental_snapshot, sentiment_daily,
+> insider_transaction, market_context_daily
+
+**§03's C36 Reads cell gains `headline` and `news_digest`**, and §20's U8 row gains the same
+two tables and the panel that reads them. The cell and the declaration land in one commit
+because `ReadDeclarationConformanceTests` holds them against each other in both directions,
+so either alone is a red build.
+
+**U8 now says five panels and describes the fifth.** Every article `headline` holds for that
+name and date with its publication instant and body, each marked for whether the lookback
+admits it and whether it carries a body; the digest text with the provider and model that
+produced it; and which of D-134's four outcomes the row is.
+
+**The sentence added beyond the description is the one that keeps the panel honest.** Which
+articles were sent is not recorded anywhere: D-143 selects newest-first up to
+`digest.max_input_tokens` at run time, against an estimate rather than a tokenizer, and no
+column holds the result. So the two bounds that governed the selection are shown beside the
+pool and the selection itself is left unstated. A page that reconstructed it would produce a
+plausible three of nine and read as the record.
+
+---
+
+## 2026-08-25, phase 5 checkpoint 5.13, `CONFIG_REFERENCE.md`'s two digest timeouts
+
+`digest.warm_timeout_ms` arrives and `digest.readiness_check_et` loses the consumer the
+document said it would have. Both are clean edits under D-73; the prior wordings are here.
+
+### `CONFIG_REFERENCE.md` §digest, the `digest.readiness_check_et` row
+
+> \| `digest.readiness_check_et` \| 15:30 \| — \| the chain, not one link [5.3] \| unverified, **seeded 5.3** \|
+
+5.13 was reshaped on operator direction from a 15:30 readiness check into a precondition
+the Worker runs ahead of C33, so nothing reads the key. The row now says so rather than
+carrying a consumer that will not arrive. Retiring the key itself is a separate decision
+and is not taken here.
+
+### `CONFIG_REFERENCE.md` §digest, the cold-load paragraph
+
+> **A cold local model answers in about 51 seconds against this 5,000** [5.5, measured]. Warm
+> it answers in about 700 milliseconds. That is not an argument for a larger value: a timeout
+> wide enough to absorb a cold load is wide enough to hide one. It means the local link is
+> unhealthy on any night the model is not resident, which is what
+> `digest.readiness_check_et` at 15:30 exists to catch three hours earlier, and 5.13 is built
+> against the measurement.
+
+The measurement stands and so does the refusal to widen the health timeout. What changed
+is the last clause: the cold model is now caught by a probe ahead of the stage rather than
+by a clock in the afternoon, and the replacement paragraph says why two bounds exist
+instead of one, and why the long one costs nothing when the server is genuinely down.
+
+---
+
+## 2026-08-27, phase 5 sign-off review, `CONFIG_REFERENCE.md`'s warm timeout consumer
+
+`digest.warm_timeout_ms` gained a second consumer at R.2 and the Consumer cell was not
+moved with it. A clean edit under D-73; the prior wording is here.
+
+### `CONFIG_REFERENCE.md` §digest, the `digest.warm_timeout_ms` row
+
+> \| `digest.warm_timeout_ms` \| 120000 \| — \| the Worker's `run` command, `EnsureLocalModelAsync`, through `LocalModelClient.HealthAsync(key)` \| **verified 5.13** \|
+
+5.13 wired the precondition into `RunStageAsync` alone. R.2 added the same call to the
+night, through `NightlyRun`'s `before` hook, and touched three files, none of them this
+one. The cell named one of the two routes that read the key, which is the shape §8 calls
+worse than an absent entry: it lets an audit conclude a value is wired up where it is
+wired up twice and one path is unread. Both routes were read in `Program.cs` before this
+edit, at the `run-night` callback and at the single-stage gate.
+
+---
+
+## 2026-08-27, phase 5 sign-off review, `ARCHITECTURE.html` §12's readiness clause
+
+5.13 was reshaped on operator direction from a clock-timed readiness check into a
+precondition the Worker runs immediately ahead of C33, and §12 was left saying the
+opposite of what was built. A clean edit under D-73; the prior wording is here.
+
+### `ARCHITECTURE.html` §12, the local model chrome note
+
+> So the chain state sits in the application frame on every screen, showing which link is
+> currently answering rather than a bare up or down, and a readiness check runs shortly
+> before the evening window rather than at the moment of use, so a failure is reported
+> while there is still time to start the local server.
+
+The clause said the check runs early **rather than** at the moment of use, and gave the
+reason in the same breath: report a failure while there is still time to start the server.
+5.13 answers that reason differently rather than abandoning it. The operator is not
+reliably at the machine three hours before the evening window, so a check timed for then
+warns nobody; a probe under `digest.warm_timeout_ms` immediately before the stage causes
+the load instead of reporting its absence, which is a stronger outcome than the clause
+asked for, and the attached-terminal prompt is what covers the load that genuinely fails.
+`digest.readiness_check_et`, the key the old clause named, has carried no consumer since
+5.13 and its retirement is a separate decision.
+
+**Nothing else in the note changed.** The persistent chrome, the argument for it, the
+visible-secondary state and the run health screen's detail and reconnect control all
+stand as written.

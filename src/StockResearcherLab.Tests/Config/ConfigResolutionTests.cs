@@ -14,6 +14,16 @@ namespace StockResearcherLab.Tests.Config;
 /// answer a different question than the one asked, and it does that without
 /// producing an error.
 /// </summary>
+/// **In the `database` collection since phase 5's O.2, and the reason is a shared store
+/// rather than this class's own subject.** It asserts a store-wide config version, which
+/// is true only while no row anywhere carries a later version set at or before the date
+/// it asks about. `AttributionWriteTests` and `CandidateAllocatorTests` each insert a
+/// version 2 row at `set_at` 2020-06-01 and delete it again, and both are in that
+/// collection; this class was not, so it ran in parallel with them and failed whenever
+/// the window happened to overlap. Intermittent, and it surfaced in `ci.ps1` rather than
+/// locally because `ci.ps1` drops both databases and the suite then runs against a store
+/// with nothing else in it.
+[Collection("database")]
 public sealed class ConfigResolutionTests
 {
     private const string Key = "screens.s1.slots";
@@ -355,7 +365,24 @@ public sealed class ConfigResolutionTests
         // X-NSI, X-ACC and X-FM [D-129]. A screen is a row and registering one is an
         // insert, which is what CLAUDE.md section 5 means and what 4.6 proved with a
         // fabricated sixth. These three are the first registration that is meant to last.
-        Assert.Equal(95, ConfigSeeder.Keys.Count);
+        //
+        // **102 at 5.3's first commit, and it moves again in the second.** Six
+        // `digest.*` keys and D-60's disqualifier. Two more, `digest.max_input_tokens`
+        // and `digest.max_output_tokens`, are deliberately absent: D-143 is drafted and
+        // unauthored, and config is append-only, so a provisional value is a config
+        // version and a split history rather than a placeholder [CLAUDE.md section 8].
+        // The count moving twice inside one checkpoint is the visible form of that,
+        // which is why the number is asserted rather than described.
+        //
+        // **104 at 5.3's second commit**, D-143 authored: `digest.max_input_tokens` at
+        // 6,000 and `digest.max_output_tokens` at 150. This is the first time this
+        // number has moved because a decision was taken rather than because a key was
+        // found documented with nothing seeding it, and the difference is worth the
+        // line: every entry above records a gap, and this one records a choice. The
+        // two names D-143 retires never appeared here, so nothing was removed and the
+        // count moves by exactly the two that arrived. `ChainSeedTests` asserts all
+        // four names, which is what says which two.
+        Assert.Equal(106, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys
             .GroupBy(k => k.Key, StringComparer.Ordinal)

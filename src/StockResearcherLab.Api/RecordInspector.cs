@@ -2,6 +2,7 @@ using System.Globalization;
 using StockResearcherLab.Api.Contracts;
 using StockResearcherLab.Core;
 using StockResearcherLab.Core.Config;
+using StockResearcherLab.Core.Digest;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data;
 
@@ -84,6 +85,7 @@ public sealed class RecordInspector : IReadOwner
         "percentile_cell_daily", "percentile_cell_coverage",
         "price_daily", "fundamental_snapshot", "sentiment_daily", "insider_transaction",
         "market_context_daily",
+        "headline", "news_digest",
     ];
 
     /// <summary>
@@ -152,7 +154,121 @@ public sealed class RecordInspector : IReadOwner
             ticker, date, membership,
             await MetricsAsync(ticker, date, membership.InForce, ct).ConfigureAwait(false),
             await InputsAsync(ticker, date, ct).ConfigureAwait(false),
-            await MarketAsync(date, membership.InForce?.Sector, ct).ConfigureAwait(false));
+            await MarketAsync(date, membership.InForce?.Sector, ct).ConfigureAwait(false),
+            await DigestAsync(ticker, date, ct).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// What the digest step read for this name on this date, and what came back [D-134,
+    /// 5.9].
+    ///
+    /// **The pool is unfiltered and the window is marked rather than applied.** C33 reads
+    /// `headline` inside `digest.lookback_days` on `published_at`; this reads every row
+    /// the table holds for the ticker and date and lets the statement say which of them
+    /// the window admits. Applying the filter here would be C33's rule written a second
+    /// time, and a row stored outside the window would disappear from the panel with
+    /// nothing said about why.
+    ///
+    /// **Which of the admitted articles were sent is not recorded.** D-143 selects
+    /// newest-first up to `digest.max_input_tokens` at run time, against an estimate
+    /// rather than a tokenizer, and no column holds the outcome. The two bounds are shown
+    /// beside the pool and the selection is left unstated, which is this page's rule
+    /// applied to the one figure it cannot honestly show [D-109].
+    ///
+    /// **Both keys resolve as of the viewed date** [D-43, INVARIANT 13]. A panel reading
+    /// today's lookback beside a digest written under a different one would mark the wrong
+    /// rows in-window and look right doing it.
+    /// </summary>
+    public async Task<DigestPanel> DigestAsync(string ticker, DateOnly date, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
+
+        var lookback = (int) await LongAsync("digest.lookback_days", date, 7, ct).ConfigureAwait(false);
+        var maxInput = (int) await LongAsync("digest.max_input_tokens", date, 6_000, ct).ConfigureAwait(false);
+
+        var pool = await PoolAsync(ticker, date, lookback, ct).ConfigureAwait(false);
+        var digest = await DigestRowAsync(ticker, date, ct).ConfigureAwait(false);
+
+        return new DigestPanel(
+            lookback, maxInput, pool, digest,
+            DigestOutcomes.Name(DigestOutcomes.Classify(digest is not null, digest?.Text)));
+    }
+
+    /// <summary>
+    /// Every article `headline` holds for the ticker and date, newest first.
+    ///
+    /// **The window bound is built in the statement rather than in C#**, so the panel does
+    /// no date arithmetic of its own and the comparison is the one C33 makes: an instant
+    /// against midnight UTC on the lookback's first day. It is written `AT TIME ZONE 'UTC'`
+    /// rather than by concatenating a date into a literal, because the second reads the
+    /// server's `DateStyle` and this server's is `ISO, MDY` by setting rather than by
+    /// guarantee. A null `published_at` is inside
+    /// no window and sorts last rather than being dropped, because C29 stored it and a
+    /// pool that hid it would explain nothing about a null digest [D-131].
+    /// </summary>
+    private async Task<IReadOnlyList<DigestArticle>> PoolAsync(
+        string ticker, DateOnly date, int lookback, CancellationToken ct)
+    {
+        var days = lookback.ToString(CultureInfo.InvariantCulture);
+
+        var rows = await _data.ReadAsync(
+            "headline",
+            $"""
+             SELECT published_at, title, source, url, content,
+                    published_at IS NOT NULL
+                      AND published_at >= ((DATE '{Iso(date)}' - {days})::timestamp AT TIME ZONE 'UTC'),
+                    content IS NOT NULL
+             FROM headline
+             WHERE ticker = {Literal(ticker)} AND date = DATE '{Iso(date)}'
+             ORDER BY published_at DESC NULLS LAST, title;
+             """,
+            ct).ConfigureAwait(false);
+
+        return
+        [
+            // Through `StoredInstant` and not a cast: the driver returns `timestamptz` as
+            // a `DateTime`, so `as DateTimeOffset?` is null for every row and the panel
+            // would show an absent publication instant beside a window expression that
+            // read the same column [5.9].
+            .. rows.Select(r => new DigestArticle(
+                StoredInstant.From(r[0]),
+                r[5] as bool? ?? false,
+                r[1] as string,
+                r[2] as string,
+                r[3] as string,
+                r[6] as bool? ?? false,
+                r[4] as string)),
+        ];
+    }
+
+    /// <summary>
+    /// The `news_digest` row, or null where the night wrote none for this name.
+    ///
+    /// The grain is ticker by date and the table has that primary key, so this is a point
+    /// read rather than an as-of pick: a digest belongs to the night that made it and
+    /// there is no most-recent-at-or-before reading of one.
+    /// </summary>
+    private async Task<DigestRow?> DigestRowAsync(string ticker, DateOnly date, CancellationToken ct)
+    {
+        var rows = await _data.ReadAsync(
+            "news_digest",
+            $"""
+             SELECT digest_text, provider, model_name, was_rotation
+             FROM news_digest
+             WHERE ticker = {Literal(ticker)} AND date = DATE '{Iso(date)}';
+             """,
+            ct).ConfigureAwait(false);
+
+        if (rows.Count == 0)
+        {
+            return null;
+        }
+
+        return new DigestRow(
+            rows[0][0] as string,
+            rows[0][1] as string ?? string.Empty,
+            rows[0][2] as string ?? string.Empty,
+            rows[0][3] as bool? ?? false);
     }
 
     /// <summary>

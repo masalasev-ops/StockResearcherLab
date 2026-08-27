@@ -69,6 +69,15 @@ public sealed class NightlyRun
         "ScreenEngine",         // C13 18:25
         "CandidateAllocator",   // C14 18:30
         "ConcentrationMonitor", // C28 19:00
+
+        // **C28 precedes both of these and that is a dependency rather than a clock**
+        // [D-139, 5.11]. Section 04 gives the monitor 19:00 and the digest stages 18:32
+        // and 18:33, but the monitor reads `candidate_set`, `position` and
+        // `security_daily` and nothing either of these writes, and a night that halts at
+        // C33 is not a night its concentration guarantees stopped mattering. Ordering it
+        // after them would lose the alerts on exactly the nights the digest chain fails.
+        "HeadlineIngestor",     // C29 18:32
+        "NewsDigester",         // C33 18:33
     ];
 
     /// <summary>
@@ -82,12 +91,29 @@ public sealed class NightlyRun
     private readonly StageRegistry _registry;
     private readonly StageRunner _runner;
     private readonly Action<string> _say;
+    private readonly Func<string, CancellationToken, Task>? _before;
 
-    public NightlyRun(StageRegistry registry, StageRunner runner, Action<string>? say = null)
+    /// <param name="before">
+    /// Called with a stage's name immediately before that stage runs, or null for no
+    /// hook. **It exists for 5.13's precondition and is deliberately not a list of stage
+    /// names here** [R.2]: what needs preparing before a stage is the caller's to know,
+    /// and a name in this class would be a second place the digest step is identified.
+    ///
+    /// **Immediately before the stage rather than before the sequence**, because the
+    /// evening order takes about twelve minutes to reach C33 and a model warmed at the
+    /// start of it can be evicted before the digest asks anything.
+    ///
+    /// It cannot convert a halt into a pass. It runs, and then the stage runs and the
+    /// gate decides [INVARIANT 15].
+    /// </param>
+    public NightlyRun(
+        StageRegistry registry, StageRunner runner, Action<string>? say = null,
+        Func<string, CancellationToken, Task>? before = null)
     {
         _registry = registry;
         _runner = runner;
         _say = say ?? (_ => { });
+        _before = before;
     }
 
     public async Task<NightlyRunResult> ExecuteAsync(
@@ -115,6 +141,14 @@ public sealed class NightlyRun
             StageResult result;
             try
             {
+                // 5.13's precondition, and anything a later checkpoint hangs here. It
+                // runs inside the try because a hook that throws must halt the night
+                // rather than be swallowed [`CLAUDE.md` section 6, fail closed].
+                if (_before is not null)
+                {
+                    await _before(name, ct).ConfigureAwait(false);
+                }
+
                 result = await _runner.RunAsync(name, date, configVersion, ct).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -167,12 +201,13 @@ public sealed class NightlyRun
 
     /// <summary>Builds the sequence against a real database and registry.</summary>
     public static NightlyRun For(
-        string connectionString, string? apiToken, IClock clock, Action<string>? say = null)
+        string connectionString, string? apiToken, IClock clock, Action<string>? say = null,
+        string? anthropicKey = null, Func<string, CancellationToken, Task>? before = null)
     {
-        var registry = PipelineComposition.BuildRegistry(connectionString, apiToken, clock);
+        var registry = PipelineComposition.BuildRegistry(connectionString, apiToken, clock, anthropicKey);
         var runLog = new RunLog(connectionString);
         var runner = new StageRunner(registry, runLog, clock, connectionString);
 
-        return new NightlyRun(registry, runner, say);
+        return new NightlyRun(registry, runner, say, before);
     }
 }

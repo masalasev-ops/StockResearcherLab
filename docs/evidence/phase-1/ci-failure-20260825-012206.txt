@@ -1,0 +1,28 @@
+﻿ci.ps1 failure evidence
+step      : Drop the database
+utc       : 2026-08-25 01:22:10Z
+head      : 3eca964
+database  : stockresearcherlab_ci
+
+No cause is claimed by this file. It exists so the next occurrence is read
+rather than investigated from nothing. The two candidates worth checking
+first are a drop refused because a session is still attached to the target,
+and a create refused because a session is attached to template1.
+
+=== error, verbatim ===
+dotnet run exited 1. The SQLSTATE is on stderr above.
+
+=== step output, verbatim ===
+
+
+=== pg_stat_activity, every session ===
+pid      datname                    application_name           client       state                query
+33104    postgres                                              ::1          active               SELECT pid, coalesce(datname,'-'), coalesce(application_name,'-'), coalesce(host
+11652    -                                                     local        -                    
+11660    -                                                     local        -                    
+24588    -                                                     local        -                    
+32164    -                                                     local        -                    
+33220    -                                                     local        -                    
+34472    -                                                     local        -                    
+43784    -                                                     local        -                    
+44844    -                                                     local        -                    

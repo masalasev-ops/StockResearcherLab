@@ -122,7 +122,11 @@ public sealed class RegistryNameTests
             .Owners.Select(o => o.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
 
         Assert.Equal(viaToken, viaClient);
-        Assert.Equal(18, viaClient.Count);
+        // 19 at 5.4, which adds C29 HeadlineIngestor to the provider-backed branch,
+        // 20 at 5.8, which adds C33 NewsDigester to the unconditional one, and 21 at 5.14,
+        // which adds C26 CostLedger there. C26 is registered whether or not a key exists,
+        // because owning `cost_ledger` is a property of the design rather than of tonight.
+        Assert.Equal(21, viaClient.Count);
         Assert.Contains("PriceIngestor", viaClient);
         Assert.Contains("FundamentalsIngestor", viaClient);
     }
@@ -140,9 +144,15 @@ public sealed class RegistryNameTests
             .BuildRegistry(TestDatabase.ConnectionString, eodhd: null)
             .Owners.Select(o => o.Name).ToList();
 
-        Assert.Equal(11, owners.Count);
+        // 12 at 5.8 and 13 at 5.14. C33 and C26 are on this side of the branch and C29
+        // is not, which is the one thing this count says that the count above does not:
+        // the digester needs no data provider token to be registered, and the ingestor
+        // that fills its input does.
+        Assert.Equal(13, owners.Count);
         Assert.DoesNotContain("PriceIngestor", owners);
         Assert.DoesNotContain("FundamentalsIngestor", owners);
+        Assert.DoesNotContain("HeadlineIngestor", owners);
+        Assert.Contains("NewsDigester", owners);
 
         // The compute layer and RunLog are registered whether or not a token exists,
         // because none of them calls a provider.

@@ -1,0 +1,161 @@
+One local night over 2026-08-12, run 2026-08-25 so that 5.9's panel had something to open.
+Recorded verbatim. Not 5.12: the evening order is unchanged and the two stages were run one
+at a time by hand.
+
+The token and the password never appear here. Neither does any article body.
+
+================================================================================
+1. The composition refuses to run C33 at all
+================================================================================
+
+  dotnet run --project src/StockResearcherLab.Worker -- run NewsDigester 2026-08-12
+
+  run NewsDigester  date 2026-08-12  config v3
+  Unhandled exception. System.InvalidOperationException: digest.chain names 'haiku' at
+  position 2 and no link implements it. A link named in config and absent from the
+  composition is a chain one shorter than the record says, and the fall-through would be
+  invisible.
+     at StockResearcherLab.Pipeline.Select.DigestChain.BuildAsync(...) line 84
+     at StockResearcherLab.Pipeline.Select.NewsDigester.ExecuteAsync(...) line 99
+
+PipelineComposition supplies one implementation, Local. digest.chain names two. The refusal
+is 5.7's and it is right; what it means today is that C33 cannot execute in the composed
+pipeline until 5.6 exists.
+
+================================================================================
+2. C29 HeadlineIngestor, through the Worker
+================================================================================
+
+  dotnet run --project src/StockResearcherLab.Worker -- run HeadlineIngestor 2026-08-12
+
+  run HeadlineIngestor  date 2026-08-12  config v3
+    ok, 275 row(s) written
+
+  run_log: HeadlineIngestor ok 16,805 ms 275 rows
+    "275 article(s) over 32 candidate(s) in 7 day(s); 3 candidate(s) returned none,
+     0 article(s) carried no body. An absent b..."
+
+================================================================================
+3. C33 NewsDigester, composed by hand outside the repository
+================================================================================
+
+The scratch host constructs the shipped NewsDigester with the shipped LocalModelClient at
+the chain's first position and a stand-in at the second that reports unhealthy and answers
+nothing. It exists only so DigestChain.BuildAsync's length check passes. No config was
+changed: digest.chain still names both links and local_model_config still holds both rows.
+
+  digest night  date 2026-08-12  config v3
+    ok, 32 row(s)
+    32 digest(s) over 32 candidate(s) from 81 article(s): 13 prose, 16 NO MATERIAL NEWS,
+    3 with no article to read. First healthy link local on qwen3.6:latest.
+    Instruction ee6e5f4fec65
+  elapsed_s=127
+
+The first run of this step, at 21:5x, was under the defect corrected at the 5.8 commit
+(published_at read as an absence, so D-143 ordered on null). Its figures were 86 articles,
+14 prose, 15 NO MATERIAL NEWS, 3 with no article. The figures above are the re-run after
+the fix, over the same 275 headline rows.
+
+================================================================================
+4. The gate, fired live and unplanned
+================================================================================
+
+Between the two digest runs the local model went non-resident. The next run:
+
+  digest night  date 2026-08-12  config v3
+  Unhandled exception. System.InvalidOperationException: No link in the digest chain is
+  healthy, so the run halts here [INVARIANT 15, D-139]. local at position 1 failed its
+  health check and is unhealthy for the rest of this run: no answer inside
+  digest.health_timeout_ms of 5,000 ms haiku at position 2 failed its health check and is
+  unhealthy for the rest of this run: the secondary link is not built; 5.6 waits on the
+  Anthropic credential
+  elapsed_s=14
+
+  select count(*), count(*) filter (where digest_text is null) from news_digest
+  where date='2026-08-12';
+   32 | 3
+
+The 32 rows already written were untouched: the delete and the insert both sit after the
+probe.
+
+Cold load measured directly against the server, twice on this day:
+
+  warm_ms=52303   (first, model not resident)
+  warm_ms=41352   (second occasion, after it had unloaded)
+
+against digest.health_timeout_ms of 5,000. 5.5 measured 51,103 ms for the same thing.
+
+================================================================================
+5. The count chain, queried after the corrected run
+================================================================================
+
+  candidates                    | 32
+  headline rows                 | 275
+  headline tickers              | 29
+  digest rows                   | 32
+  prose                         | 13
+  no_material_news              | 16
+  no_articles                   | 3
+  was_rotation                  | 0
+  prose starting with the hatch | 5
+
+  provider: local on all 32.  model_name: qwen3.6:latest on all 32.
+
+was_rotation is 0 because the rotation is 5.10 and was not built when this ran.
+
+The five prose rows beginning with NO MATERIAL NEWS are the model giving the escape hatch
+and then explaining itself. D-134 classifies on an exact match, so they are prose.
+
+================================================================================
+6. The panel, opened on four names
+================================================================================
+
+  GET /api/record/{ticker}/2026-08-12
+
+  ENPH.US  prose             13 articles, 13 in window, 13 with a body,
+                             newest 2026-08-11T00:37:22+00:00; digest cites [2026-08-11]
+                             and [2026-08-10]
+  PAYC.US  no_material_news  23 articles in window, one of them a Q2 earnings call
+                             transcript; digest_text is the escape hatch alone
+  SAFT.US  no_articles       empty pool; row carries local and qwen3.6:latest with a null
+                             digest_text
+  AAPL.US  no_row            empty pool, no row: not a candidate that night
+
+lookbackDays 7 and maxInputTokens 6000 on all four, resolved as of the viewed date.
+
+================================================================================
+7. The same night re-digested after 5.10, with the rotation present
+================================================================================
+
+The stand-in at the second position now answers with nothing rather than throwing, which
+is what an unbuilt link looks like to the chain: D-137 refuses an empty answer, retries
+once, and falls through.
+
+  digest night  date 2026-08-12  config v3
+    ok, 32 row(s)
+    32 digest(s) over 32 candidate(s) from 81 article(s): 14 prose, 15 NO MATERIAL NEWS,
+    3 with no article to read. First healthy link local on qwen3.6:latest.
+    Instruction ee6e5f4fec65. 2 rotated to haiku. Passed over: haiku at position 2 failed
+    twice and is unhealthy for the rest of this run: the link answered with no content
+  elapsed_s=123
+
+  select ticker, provider, model_name, was_rotation, ... from news_digest
+  where date='2026-08-12' and was_rotation order by ticker;
+
+   COUR.US | local | qwen3.6:latest | t | no_material_news
+   PAYC.US | local | qwen3.6:latest | t | no_material_news
+
+Both rotated rows carry provider local: the second position could not answer, they fell
+through to the first link, and they stayed marked. Two calls to the dead link over a run of
+32 candidates, not two per rotated candidate.
+
+The same 81 articles were sent as in the run before it, so the selection reproduced exactly.
+The outcomes moved by one, 13/16/3 to 14/15/3, which is the model rather than the pipeline.
+
+Before this run the local server had exited and the first attempt halted at the gate:
+
+  local at position 1 failed its health check ...: the endpoint could not be reached: No
+  connection could be made because the target machine actively refused it. (localhost:11434)
+
+The 32 rows already in the table were untouched by that halt. `ollama serve` was started
+again, the model made resident at warm_ms=33678, and the run above followed.

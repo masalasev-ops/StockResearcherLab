@@ -70,7 +70,18 @@ public sealed class WriteOwnershipConformanceTests
     /// C08, C09, C10, C11 and C35, the last authored at D-78 after this comment
     /// was written and after C34 had already been built early with D-61's ingest.
     /// </summary>
-    private const int ExpectedOwners = 18;
+    /// <summary>
+    /// 19 at 5.4, which adds C29 HeadlineIngestor. Provider-backed like the six ingest
+    /// stages above it, and the first stage that reads a table the select layer wrote
+    /// rather than a source.
+    ///
+    /// 20 at 5.8, which adds C33 NewsDigester. **Registered whether or not a data
+    /// provider token is present**, unlike C29, because its links are the digest chain
+    /// rather than EODHD: it reads `headline`, which C29 already filled, and calls a
+    /// model. That puts it with the compute and select stages on the unconditional side
+    /// of the branch.
+    /// </summary>
+    private const int ExpectedOwners = 21;
 
     /// <summary>
     /// The assertion that keeps the rest of this file meaningful. A conformance test
@@ -104,6 +115,13 @@ public sealed class WriteOwnershipConformanceTests
                      // components are named: a registry that lost one should fail by
                      // that one's name and not by a count being off by one.
                      "GateEngine", "ScreenEngine", "CandidateAllocator", "ConcentrationMonitor",
+
+                     // The digest layer, from 5.8 and 5.14. C26 is named here rather than
+                     // left to the count for a reason the others do not have: it is
+                     // registered unconditionally and invoked conditionally, so a
+                     // composition that dropped the invocation would still hold the owner
+                     // and only the name says the owner is meant to be there.
+                     "NewsDigester", "CostLedger",
                  })
         {
             Assert.Contains(owners, o => string.Equals(o.Name, component, StringComparison.Ordinal));

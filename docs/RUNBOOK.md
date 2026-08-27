@@ -21,6 +21,7 @@ night.
 | 18:20 | Gates |
 | 18:25 | Screens |
 | 18:30 | Candidate allocation, attribution write |
+| 19:00 | Concentration monitor. **Runs here in the clock and ahead of 18:32 in the sequence**, see below [D-139] |
 | 18:32 | Headlines for candidates only |
 | 18:33 | News digests via the provider chain |
 | 18:35 | Dossier assembly |
@@ -28,6 +29,15 @@ night.
 | by 09:00 | Batch returns, validator runs, risk gate, orders queued |
 | 09:35 | Fills at the open |
 | 18:10 daily | Position marking, exits, forward return filling |
+
+**The concentration monitor's 19:00 is a clock time and not its position in the
+sequence** [D-139, 5.12]. `NightlyRun.EveningOrder` runs it immediately after candidate
+allocation and before the two digest stages. It reads `candidate_set`, `position` and
+`security_daily` and nothing either digest stage writes, and the digest chain is a hard
+gate [INVARIANT 15]: a night that halts at 18:33 is not a night the concentration
+guarantees stopped mattering, and an order that put the monitor last would lose its alerts
+on exactly the nights the chain failed. The table above is read top to bottom as clock
+times; the executed order is the array.
 
 **The decide stage is asynchronous.** The evening run submits and exits. A separate
 job completes the pipeline when the batch returns. This is normal and the run health
@@ -45,6 +55,28 @@ timeline shows a waiting state rather than a stall.
 **The machine being asleep or rebooted for updates is the same failure as the local
 model being down, and is more likely.** Decide deliberately whether this box stays
 on, because missed nights are silent and the run log is the only place they appear.
+
+### Reaching the store by hand
+
+**`psql` is at `E:\PostgreSql\v18\bin\psql.exe` and is not on `PATH`.** The server is the
+`postgresql-x64-18` service and its binaries sit under `E:\PostgreSql\v18`, while
+`C:\Program Files\PostgreSQL\18` holds only `lib` and `share`. So `which psql` finds nothing
+and the client reads as absent when it is installed. The path is recorded here because it has
+been looked for more than once and worked around instead.
+
+```
+"E:\PostgreSql\v18\bin\psql.exe" -h localhost -p 5432 -U postgres -d stockresearcherlab
+```
+
+The password is the one inside the `Postgres` connection string in the running project's
+`appsettings.Secrets.json`. Read it out of that file into `PGPASSWORD` rather than typing it,
+so it reaches neither a shell history nor a transcript [D-55].
+
+**Four database names exist on this server and only the first is the development store.**
+`stockresearcherlab` is what the Worker runs against, `stockresearcherlab_tests` is what the
+local suite derives for itself by appending its suffix, and `ci.ps1` creates and drops
+`stockresearcherlab_ci` and `stockresearcherlab_ci_tests` on every run. A hand query against
+the wrong one of these reports an empty table that is empty for the ordinary reason.
 
 ---
 

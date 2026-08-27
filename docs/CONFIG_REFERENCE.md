@@ -445,6 +445,12 @@ failing to resolve one. They are seeded at the values above, which are the ones 
 document and `ARCHITECTURE.html` §05 already carried; nothing was chosen. The fourth is
 the rubric's and is not a screen threshold, so it stays unseeded until phase 5.
 
+**Seeded at 5.3** at the value this document already carried, which is where
+`CONFIG_REFERENCE.md` said it would be: "the fourth is the rubric's and is not a screen
+threshold, so it stays unseeded until phase 5". Its consumer is the rubric prefix and is
+phase 6's to verify. It is seeded here rather than there because the fact it gates on,
+whether a digest was available, is phase 5's to produce [D-134's four outcomes].
+
 `s5.no_digest_disqualifier_min_articles_90d` is the same asymmetry applied at the
 rubric rather than the gate. The no-digest disqualifier only bites where the ticker
 carried at least twelve articles in ninety days, roughly one a week, because below
@@ -544,13 +550,118 @@ budget.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `digest.chain` | local, haiku | D-25 | NewsDigester | unverified |
-| `digest.rotation_count` | 2 | D-27 | NewsDigester | unverified |
-| `digest.max_tokens` | 150 | D-24 | NewsDigester | unverified |
-| `digest.health_timeout_ms` | 5000 | — | LocalModelClient | unverified |
-| `digest.readiness_check_et` | 15:30 | — | LocalModelClient | unverified |
+| `digest.chain` | `["local","haiku"]` | D-25 | DigestChain, `BuildAsync` | **verified 5.7** |
+| `digest.rotation_count` | 2 | D-27 | NewsDigester, `ExecuteAsync`, through `DigestRotation.Select` | **verified 5.10** |
+| `digest.lookback_days` | 7 | D-133 | NewsDigester, `ExecuteAsync`; HeadlineIngestor, `ExecuteAsync`; RecordInspector, `DigestAsync` | **verified 5.9** |
+| `digest.health_timeout_ms` | 5000 | — | LocalModelClient, `HealthAsync` | **verified 5.5** |
+| `digest.warm_timeout_ms` | 120000 | — | the Worker's `run` and `run-night` commands, both through `EnsureLocalModelAsync` and `LocalModelClient.HealthAsync(key)` [R.2] | **verified 5.13, second route verified at the phase 5 sign-off review** |
+| `digest.readiness_check_et` | 15:30 | — | none. 5.13 was reshaped from a clock to a precondition and nothing reads it [5.13] | **no consumer, seeded 5.3** |
+| `digest.secondary_model_id` | `claude-haiku-4-5` | D-140 | PipelineComposition, `SecondaryModelAsync`, passed to `HaikuDigestLink` at construction | **verified 5.6** |
+| `digest.max_input_tokens` | 6000 | D-143 | NewsDigester, `ExecuteAsync`; RecordInspector, `DigestAsync` | **verified 5.9** |
+| `digest.max_output_tokens` | 150 | D-143 | NewsDigester, `ExecuteAsync` | **verified 5.8** |
+| `cost.price_per_mtok_usd` | see below | D-140 | CostLedger, `PriceAsync`, called from `RecordAsync` | **verified 5.14** |
 
 The chain is an ordered list, so adding a third link is an insert.
+
+**The input cap is a token count rather than an article count, and it is measured**
+[D-143, 5.1]. The median article body measures **1,248 real tokens**, counted by the model
+that would digest it, with p25 at 935, p75 at 1,974, p95 at 4,777 and a longest body of
+14,099. Articles are taken most recent first within `digest.lookback_days` and added while
+the next one whole would still fit, with a minimum of one sent even where that one alone
+exceeds the cap. 6,000 admits three median articles with room and one at p95, and it bounds
+a full year run entirely on the secondary at **$47.63** against §07's $18, which a count
+could not promise at any number.
+
+**`digest.max_output_tokens` is the digest's own length and is not the completion's.** On a
+model that reasons before answering those are different quantities, and one key for both is
+what let them be conflated at 5.1.
+
+**`digest.lookback_days` has three verified consumers and that is not a duplication** [5.8,
+5.9]. C29 reads it to decide what to fetch and store, C33 reads it to decide what to send,
+and C36's digest panel reads it to mark which of the stored articles the window admits. The
+same seven days answers all three, and a re-run of C33 over a night whose `headline` rows
+came from a different lookback gives the same answer as the first because the second read
+bounds the first's output rather than trusting it. **The panel marks rather than filters**,
+so a row stored under a different lookback is visible in it rather than absent.
+
+**`digest.health_timeout_ms` bounds a probe and not a digest** [5.5]. A probe is a fixed
+32-token request and a digest is up to `digest.max_output_tokens` over several thousand
+tokens of article. Bounding the second with the first would mark a working link malformed on
+its slowest candidate and set D-137's fall-through running on the wrong evidence.
+
+**A cold local model answers in about 51 seconds against this 5,000** [5.5, measured]. Warm
+it answers in about 700 milliseconds. That is not an argument for a larger value here: a
+health timeout wide enough to absorb a cold load is wide enough to hide one. It means the
+local link is unhealthy on any night the model is not resident.
+
+**`digest.warm_timeout_ms` is the second bound, and the two are not interchangeable**
+[5.13]. `digest.health_timeout_ms` asks whether the link can answer now.
+`digest.warm_timeout_ms` bounds a probe whose job is to make it able to: the local server
+loads on request, so a probe generous enough to cover a load causes one. 120,000 against
+a cold load measured at 41 to 52 seconds, which is headroom rather than a measurement of
+its own. Only the Worker reads it, ahead of C33 and never inside a stage, so the chain's
+own health check keeps the short bound and the operator-facing probe gets the long one.
+
+**`cost.price_per_mtok_usd` is one key holding a table rather than four keys per model**
+[5.14]. It is a JSON object keyed by model id, each entry carrying `input`, `output`,
+`cache_write` and `cache_read` as decimal dollars per million tokens. Phase 6 adds its
+researcher models as entries rather than as new keys, which is the difference between one
+row to check against a published price list and sixteen.
+
+Seeded from the provider's published pricing on 2026-08-25 for `claude-haiku-4-5`: $1.00
+base input, $5.00 output, $1.25 five-minute cache write, $0.10 cache hit. **The one-hour
+cache write rate of $2.00 is deliberately absent**, because nothing in this system requests
+a one-hour cache and a rate no call can incur is a value an audit cannot verify.
+
+**A model with no entry throws rather than pricing at zero**, and so does an entry missing
+any one of the four rates. A model change nobody recorded would otherwise run indefinitely
+against a ledger full of free calls.
+
+**A server that is down does not wait for either bound.** A refused connection throws at
+once and reports `the endpoint could not be reached`, so the long bound costs nothing on
+the case it looks expensive for. It is spent only when the server is up and loading,
+which is the case worth waiting through.
+
+**Neither name D-143 retires was ever seeded** [5.3]. `digest.max_articles` and
+`digest.max_tokens` reached no config row, so there is no version carrying either and no
+history to segment on their account: config is append-only and versioned, so a placeholder
+seeded to keep a checkpoint whole would have been a config version rather than a value that
+could be corrected [`CLAUDE.md` §8, §12]. A test asserts both names absent and the two above
+present, which is what says which four names moved.
+
+**`digest.chain` names the links and `local_model_config` orders and addresses them, and
+neither is redundant** [5.7, closing the 5.3 finding]. D-136 gives the order to
+`provider_order` filtered on `enabled`, and that table carries no name; this key carries the
+name at each position and no address. `DigestChain.BuildAsync` pairs them by position, which
+is what lets a link's identity be versioned config while its address stays an
+operator-editable row, the split D-51 and D-136 already make. It is also the only thing that
+can record which links were in the chain on a past date.
+
+**A length mismatch fails the run rather than being reconciled.** This key is versioned and
+that table is not, so the two can disagree; a chain with an address nothing can name, or a
+name nothing can reach, is not something to repair silently at 18:33. A name outside the
+`local`, `haiku` vocabulary fails the same way, that list being closed by migration `0022`
+on `news_digest.provider` and by `DigestProviders` in code [D-134].
+
+**`digest.readiness_check_et`'s consumer was documented as LocalModelClient and the check
+is the chain's** [5.3 finding]. On a night the local server is down and the secondary is
+healthy, a readiness check reporting only the local link reports a problem where there is
+none, and the reverse is worse. 5.13 builds it over the chain and fills this cell from what
+was read.
+
+**`local_model_config` is seeded alongside these keys and is not one of them** [D-136].
+Two rows, `provider_order` 1 at the local endpoint and 2 at the vendor's base, `enabled`
+true, `last_health_check` and `last_loaded_model` null and gaining no writer in this phase.
+It carries no version and resolves as of nothing, which is why its count is reported on its
+own line by `seed.ps1` rather than added to the key count.
+
+**`request_options` is on that table rather than in this one, and deliberately** [D-144].
+How a link must be asked is a property of the endpoint's loaded model, so it travels with
+the row naming the endpoint; a `digest.*` key would stay behind when the loaded model
+changed and describe a model no longer there. The local link carries
+`{"reasoning_effort": "none"}` and the secondary carries null. It is not a config key, is
+not versioned, and does not resolve as of a date, which is the same line `local_model_config`
+already sits on above.
 
 ## Learning
 

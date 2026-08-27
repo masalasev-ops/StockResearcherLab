@@ -423,12 +423,39 @@ pull every thinly covered name toward zero in proportion to how thinly covered i
 That is a size proxy arriving where D-12 exists to keep one out.
 
 ### headline
-Grain: candidate by day. **Writer: HeadlineIngestor.**
+Grain: candidate by day. **Writer: HeadlineIngestor**, which owns both the insert and
+the delete [D-132].
 
-`ticker`, `date`, `published_at`, `title`, `source`, `url`.
+`ticker`, `date`, `published_at`, `title`, `source`, `url`, `content`.
 
 Only for names that reached the candidate set, since headlines exist for the dossier
 and only candidates reach the dossier [D-23].
+
+**`content` is the column the digest reads, and it arrives with migration `0022`**
+[D-131]. `ARCHITECTURE.html` §07 prices local enrichment against articles of five to
+eight hundred tokens, which is an argument about article text, and this table could
+not hold one. It is nullable, and null means the provider sent no body rather than
+that the body was empty: a row carrying null content is excluded from the digest input
+and counted, rather than being sent as an empty article [`CLAUDE.md` §6].
+
+**This is an event record and has no upsertable grain, so idempotence is by run scope**
+[D-132, D-68]. Two articles about one company on one day are not a duplicate to be
+collapsed; they are two articles, and they may share a title, a source and a
+publication timestamp while differing in body. C29 deletes the ticker and date it is
+about to write and reinserts. Both operations are its own, so INVARIANT 10 read per
+operation is untouched, which is C14's shape on `candidate_set` one table over. The
+scope is ticker and date rather than date alone, because a partial night must not
+delete the candidates it did not reach.
+
+**`source` has no input and is written null** [5.1]. The `news` payload carries
+`content`, `date`, `link`, `sentiment`, `symbols`, `tags` and `title`, measured over
+275 rows, and nothing maps to `source`. The host of `link` is derivable and deriving it
+is a choice rather than a read, so the column stays and stays null, which is
+`slot_filled`'s disposition [D-124] and `attribution.digest_provider`'s [D-135] a third
+time. `sentiment` and `tags` are carried by the payload and have no column here, no
+document asking for either; per-article sentiment is not `sentiment_daily`'s aggregate
+and a column holding it would be a second measurement of the same thing under a name
+that does not say so.
 
 ### insider_transaction
 Grain: ticker by filing by transaction, the source's own. **Writer: FlowIngestor.**
@@ -781,6 +808,15 @@ Written at shortlist time for every candidate, never reconstructed [D-40, INVARI
 4]. `config_version` is what lets history be segmented rather than pooled after a
 screen definition changes.
 
+**`digest_provider` is written null and has no writer** [D-135]. C14 inserts the row
+at 18:30 and the digest is produced at 18:33, so the provider is not known when the row
+is written; C21 owns the update and only of the nine return columns; and no third
+component writes here at all. Nothing is lost, `news_digest` being at the same grain
+and carrying `provider`, so `VALIDITY.md` §5's mitigation is met by the join rather
+than by the copy. This is `slot_filled`'s disposition [D-124] applied to a second
+column for the same reason: null says unknown truthfully, and a value stamped on a row
+no later pass may rewrite is worse than an absence.
+
 Acquisitions, delistings and bankruptcies need explicit handling rather than row
 deletion, or survivorship bias enters the attribution table itself.
 
@@ -796,6 +832,30 @@ Grain: ticker by day. **Writer: NewsDigester.**
 `provider` and `model_name` are not optional [D-29]. `was_rotation` marks the two
 candidates a night deliberately routed to the secondary [D-27], so the paired sample
 is separable from genuine fallthroughs.
+
+**Both are held by a constraint as well as by a type, from migration `0022`** [D-134].
+`provider` is closed by a CHECK to the chain's link names, `local` and `haiku`, which
+`DigestProvider` in `Core` holds as one list and a test asserts the two agree. This is
+`gate_result.reasons` at `0018` and `alert.alert_type` at `0021`, closed the same way
+for the same reason: a vocabulary held in code alone leaves the column able to carry a
+string no reader can interpret, and this is the column that says which model produced
+the evidence. `model_name` gains a non-blank CHECK, because an empty string satisfies
+NOT NULL and records nothing, and the loaded model name is the half that arrives from
+the server rather than from config and therefore the half that can come back blank.
+
+**The table carries four outcomes and a null `digest_text` is one of them** [D-134].
+No row means the ticker was not a candidate that night, or the run halted before the
+digest step. A null `digest_text` means a link was selected and there was nothing to
+send: no article inside `digest.lookback_days`, or every article carrying a null body
+[D-131]. That is "no digest available" in D-60's sense and it is what the no-digest
+disqualifier bites on. `NO MATERIAL NEWS` means a link read the articles and returned
+the escape hatch `prompts/digest-instruction.md` defines, which is a reading rather
+than an absence, and D-60 does not bite on it. Prose is an ordinary digest.
+
+**The middle two are the pair that gets collapsed**, and collapsing them makes S5's
+disqualifier fire on thinly covered small caps, which is the population the design
+exists to reach. The no-article case is not rare: 5.1 measured three of 32 candidates
+returning no article at all in the window and five returning fewer than three.
 
 ### dossier
 Grain: one prefix per night plus one block per candidate. **Writer: DossierBuilder.**
@@ -942,9 +1002,35 @@ follows [D-110].
 Grain: one row per provider in the chain. **Writer: the UI, via the single permitted
 write endpoint** [D-51].
 
-`provider_order`, `endpoint`, `enabled`, `last_health_check`, `last_loaded_model`.
+`provider_order`, `endpoint`, `enabled`, `last_health_check`, `last_loaded_model`,
+`request_options`.
 
 The only table the interface can write. Nothing here touches run data.
+
+**`request_options` is jsonb, nullable, and holds how a link must be asked** [D-144,
+migration `0023`]. Not what to ask it, which is `prompts/digest-instruction.md`, and not
+which link to ask, which is `provider_order` and `enabled`: the provider-specific
+parameters its request must carry beyond the ones every link takes. Today the local link
+carries `{"reasoning_effort": "none"}` and the secondary carries null.
+
+**Null is a link that needs no such parameter, and an empty object is a request shape
+somebody chose.** They are different facts and the column keeps them apart, which is why
+there is no `DEFAULT '{}'::jsonb`: 5.5's assertion that a link with its options removed
+reports unhealthy is written against the empty object, and a default would manufacture
+one on every row [`CLAUDE.md` §6].
+
+**Why a column and not a `digest.*` key.** This is a property of the endpoint's loaded
+model rather than of the digest step, so it must travel with the row that names the
+endpoint. A key would stay behind when the loaded model changed, describing a model no
+longer there, and would do so silently.
+
+**No CHECK on its shape.** The keys inside are a provider's rather than this system's,
+which is the opposite of `news_digest.provider`, whose two values D-25 names and whose
+vocabulary is therefore closed here.
+
+**It gains no writer in this phase.** The seeder writes it with the two rows [D-136],
+the UI inherits it at phase 9, and `last_health_check` and `last_loaded_model` stay null
+as they were.
 
 ---
 

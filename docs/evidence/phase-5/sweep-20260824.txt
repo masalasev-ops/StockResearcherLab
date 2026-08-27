@@ -1,0 +1,227 @@
+Checkpoint 5.1, the sweep.
+Run 2026-08-24 from a scratch file-based app outside the repository, as phase P's
+probe was and as 1.9 and 3.1 were. The token is never printed. Two parts: the
+six-row sweep, and a follow-up that measures why the local link returned an empty
+digest rather than supposing a cause.
+
+The population is the 32 candidates on 2026-08-12, the most recent candidate date
+in the frozen record, drawn from candidate_set rather than chosen. Their 90-day
+article coverage runs 9 to 335.
+
+TWO READINGS FIRE THE STOPPING RULE AND ONE IS NOT IN THE PLAN AT ALL.
+  Row 2: the median article body is 1,248 tokens against ARCHITECTURE.html
+  section 07's five to eight hundred. Three articles is 3,745 tokens against
+  D-133's derived 1,800. Report and wait; the cap is a decision.
+  Part two: the local model emits no digest at all with reasoning on. Not a
+  measurement this plan asked for. Found by reading the response rather than
+  the status code.
+
+
+==============================================================================
+5.1 THE SWEEP. candidate date 2026-08-12, 32 candidates
+==============================================================================
+  90-day article coverage runs 9 to 335
+  every candidate is called, which is what one night costs
+  allowance before: 8,556 of 100,000 used, stamped 2026-08-24
+
+  the local inference server, read first so row 2 can use its tokenizer:
+    /v1/models id=qwen3.6:latest  owned_by=library
+
+==============================================================================
+ROW 1. THE news PAYLOAD, FIELD SET AND WHAT content HOLDS
+==============================================================================
+  window 2026-08-05 .. 2026-08-12, which is D-133's seven days
+
+  ADSK.US      large  rows   37   with body   37   null body   0
+  ENPH.US      mid    rows   13   with body   13   null body   0
+  THC.US       large  rows    9   with body    9   null body   0
+  WGS.US       mid    rows    4   with body    4   null body   0
+  PAYC.US      mid    rows   23   with body   23   null body   0
+  CHEF.US      mid    rows   12   with body   12   null body   0
+  KGC.US       large  rows   14   with body   14   null body   0
+  MTCH.US      mid    rows   21   with body   21   null body   0
+  CC.US        mid    rows   12   with body   12   null body   0
+  JLL.US       large  rows    4   with body    4   null body   0
+  CSL.US       large  rows   11   with body   11   null body   0
+  YPF.US       large  rows    9   with body    9   null body   0
+  PAY.US       mid    rows    4   with body    4   null body   0
+  SSRM.US      mid    rows    5   with body    5   null body   0
+  TALO.US      mid    rows    9   with body    9   null body   0
+  DNOW.US      mid    rows   17   with body   17   null body   0
+  PAR.US       small  rows    8   with body    8   null body   0
+  AFG.US       large  rows    5   with body    5   null body   0
+  MTRN.US      mid    rows   13   with body   13   null body   0
+  CARG.US      mid    rows    7   with body    7   null body   0
+  UTZ.US       small  rows    3   with body    3   null body   0
+  COUR.US      small  rows    3   with body    3   null body   0
+  GEL.US       small  rows    6   with body    6   null body   0
+  TSLX.US      small  rows    4   with body    4   null body   0
+  AMR.US       small  rows    7   with body    7   null body   0
+  LZ.US        small  rows    7   with body    7   null body   0
+  RELX.US      large  rows    0   with body    0   null body   0
+  NRDS.US      small  rows    0   with body    0   null body   0
+  ERII.US      small  rows    1   with body    1   null body   0
+  MBC.US       small  rows    5   with body    5   null body   0
+  OPRT.US      small  rows    2   with body    2   null body   0
+  SAFT.US      small  rows    0   with body    0   null body   0
+
+  total rows 275, with a body 275, null body 0
+  tickers returning nothing in the window: 3 of 32
+  tickers below D-133's cap of 3 in the window: 5
+
+  every field name the payload carried, with how many rows carried it:
+    content                 275
+    date                    275
+    link                    275
+    sentiment               275
+    symbols                 275
+    tags                    275
+    title                   275
+
+==============================================================================
+ROW 2. BODY LENGTH, CHARACTERS AND REAL TOKENS
+==============================================================================
+  bodies measured: 275 over 29 tickers
+  characters  min 146  p25 4,018  median 5,365  p75 8,481  p95 20,527  max 60,589
+
+  real tokens over a 20-body sample, counted by qwen3.6:latest:
+    tokens  min 566  median 1,186  max 2,870
+    characters per token: 4.30
+    the whole distribution at that ratio, in tokens:
+      min 34  p25 935  MEDIAN 1,248  p75 1,974  p95 4,777  max 14,099
+
+    THE STOPPING RULE READS THIS LINE:
+      median body 1,248 tokens against section 07's 500 to 800. ABOVE 800: report and wait, three articles exceeds the budget section 07 priced
+      three articles at the median is 3,745 tokens against D-133's derived 1,800
+
+  three verbatim heads, shortest, median and longest, so a teaser is recognisable as one:
+    [   146 chars] KGC.US     Even with the precious metal’s recent weakness, gold mining stocks could be the best way to profit from this year’s uncertainty.  Continue Reading
+    [  5365 chars] CHEF.US    Celsius Holdings, Inc. CELH delivered second-quarter 2026 results, wherein both top and bottom lines fell short of the Zacks Consensus Estimate. While net sales increased, earnings decreased from the 
+    [ 60589 chars] MTCH.US    Image source: The Motley Fool.  DATE  Tuesday, Aug. 4, 2026 at 5:00 p.m. ET  CALL PARTICIPANTS  Senior Vice President of Investor Relations - Tanny ShelburneChief Executive Officer - Bernard KimChief 
+
+==============================================================================
+ROW 3. UNIT COST OF THE news CALL
+==============================================================================
+  allowance after:  8,716 of 100,000 used, stamped 2026-08-24
+  calls made: 32
+  units consumed: 160
+  units per news call: 5
+
+==============================================================================
+ROW 4. THE LOCAL INFERENCE SERVER
+==============================================================================
+  endpoint http://localhost:11434
+  loaded model as the server reports it: qwen3.6:latest
+
+  a real three-article prompt for ADSK.US: 28,463 chars, prompt_eval_count 7498
+  D-133's derivation says about 1,800 input tokens per candidate
+
+  ten chat completions at max_tokens 150, temperature 0:
+    call 1, 0 chars, verbatim:
+      
+    usage: {"prompt_tokens":7498,"completion_tokens":150,"total_tokens":7648}
+
+    call 2, 0 chars, verbatim:
+      
+    usage: {"prompt_tokens":7498,"completion_tokens":150,"total_tokens":7648}
+
+    latency ms: min 1,948  median 1,960  max 6,336
+    32 sequential calls at the median: 62.7 s
+    RUNBOOK.md gives 18:33 to 18:35, which is 120 s
+
+==============================================================================
+ROWS 5 AND 6. THE SECONDARY LINK
+==============================================================================
+  BLOCKED. The Anthropic key in appsettings.Secrets.json is not an API key:
+    length 18, does not begin sk-ant
+  Row 5 measures the usage block D-140's cost row is shaped against.
+  Row 6 is D-53's sanity read and no decision cites it.
+  Neither blocks 5.2. Both block 5.6 and 5.14.
+
+==============================================================================
+DONE
+==============================================================================
+
+
+
+==============================================================================
+PART TWO. WHY THE LOCAL LINK RETURNED 150 COMPLETION TOKENS AND ZERO CHARACTERS
+==============================================================================
+Five calls against the same three-article prompt, no provider units. A, B and D
+are the same call at different caps and with the chat-template thinking flag; C
+and E are the two request shapes that produce a digest.
+prompt: 4173 chars
+
+------------------------------------------------------------------------------
+A. as the sweep called it: max_tokens 150
+------------------------------------------------------------------------------
+  message field names: role, content, reasoning
+  role: 9 chars
+      assistant
+  content: 0 chars
+  reasoning: 575 chars
+      Here's a thinking process:
+      
+      1.  **Analyze User Input:**
+         - **Input Text:** A markdown document (`digest-instruction.md`) containing instructions for a digest provider, followed by three identical articles dated 2026-08-11, 2026-08-12, and 2026-08-13.
+         - **Articles Content:** All three are identical: "Acme Corp reported second-quarter revenue of $412 million, up 8 percent year on year, and said its chief financial officer would step down at the end of the quarter. The company also disclosed that its auditor had raised a question about revenue recognition on two long
+  finish_reason: length
+  usage: {"prompt_tokens":935,"completion_tokens":150,"total_tokens":1085}
+
+------------------------------------------------------------------------------
+B. max_tokens 150, chat_template_kwargs.enable_thinking = false
+------------------------------------------------------------------------------
+  message field names: role, content, reasoning
+  role: 9 chars
+      assistant
+  content: 0 chars
+  reasoning: 575 chars
+      Here's a thinking process:
+      
+      1.  **Analyze User Input:**
+         - **Input Text:** A markdown document (`digest-instruction.md`) containing instructions for a digest provider, followed by three identical articles dated 2026-08-11, 2026-08-12, and 2026-08-13.
+         - **Articles Content:** All three are identical: "Acme Corp reported second-quarter revenue of $412 million, up 8 percent year on year, and said its chief financial officer would step down at the end of the quarter. The company also disclosed that its auditor had raised a question about revenue recognition on two long
+  finish_reason: length
+  usage: {"prompt_tokens":935,"completion_tokens":150,"total_tokens":1085}
+
+------------------------------------------------------------------------------
+C. max_tokens 150, reasoning_effort = none
+------------------------------------------------------------------------------
+  message field names: role, content
+  role: 9 chars
+      assistant
+  content: 243 chars
+      2026-08-11: Acme Corp Q2 revenue $412M (+8% YoY); CFO stepping down end of quarter; auditor raised question on revenue recognition for two long-term contracts; filed shelf registration for up to $200M common stock. (Articles 1, 2, 3 identical)
+  finish_reason: stop
+  usage: {"prompt_tokens":937,"completion_tokens":74,"total_tokens":1011}
+
+------------------------------------------------------------------------------
+D. max_tokens 2000, thinking left on, to see where the tokens go
+------------------------------------------------------------------------------
+  message field names: role, content, reasoning
+  role: 9 chars
+      assistant
+  content: 0 chars
+  reasoning: 7397 chars
+      Here's a thinking process:
+      
+      1.  **Analyze User Input:**
+         - **Input Text:** A markdown document (`digest-instruction.md`) containing instructions for a digest provider, followed by three identical articles dated 2026-08-11, 2026-08-12, and 2026-08-13.
+         - **Articles Content:** All three are identical: "Acme Corp reported second-quarter revenue of $412 million, up 8 percent year on year, and said its chief financial officer would step down at the end of the quarter. The company also disclosed that its auditor had raised a question about revenue recognition on two long-term contracts, and that it had filed a shelf registration for up to $200 million of common stock."
+         - **Task:** I need to act as the digest provider and generate a summary based *strictly* on the provided instruction.
+      
+      2.  **Deconstruct the Instruction:**
+         - **Role:** Summarize recent news about one company for an analyst.
+         - **Constraints:**
+           - Do NOT judge, recommend, or use terms like cheap/expensive/promising/troubled.
+           - Max 150 tokens.
+  finish_reason: length
+  usage: {"prompt_tokens":935,"completion_tokens":2000,"total_tokens":2935}
+
+------------------------------------------------------------------------------
+E. the native /api/chat surface with think=false, for comparison only
+------------------------------------------------------------------------------
+  role: 9 chars
+      assistant
+  content: 243 chars
+      2026-08-11: Acme Corp Q2 revenue $412M (+8% YoY); CFO stepping down end of quarter; auditor raised question on revenue recognition for two long-term contracts; filed shelf registration for up to $200M common stock. (Articles 1, 2, 3 identical)

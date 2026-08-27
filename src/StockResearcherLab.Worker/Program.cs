@@ -168,9 +168,25 @@ async Task<int> RunNightAsync(IReadOnlyList<string>? order = null)
     Console.WriteLine(
         $"{label}  {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}  config v{configVersion}");
 
+    // **The same precondition the single-stage path has, on the path it was built for**
+    // [R.2, 5.13]. It was wired into `run` alone, so the evening sequence reached C33
+    // with nothing having warmed the model and nothing having waited for an operator,
+    // and a cold model then failed a 5,000 ms health probe it could not answer. That
+    // halt is INVARIANT 15 working; what was missing is the chance to avoid needing it.
+    //
+    // Fired per stage rather than once before the sequence, because the order takes
+    // about twelve minutes to reach C33 and a model warmed at the start can be evicted
+    // before the digest asks anything.
     var night = NightlyRun.For(
         connectionString, config["Eodhd:ApiToken"], clock, Console.WriteLine,
-        config["Anthropic:ApiKey"]);
+        config["Anthropic:ApiKey"],
+        async (name, _) =>
+        {
+            if (string.Equals(name, NewsDigester.ComponentName, StringComparison.Ordinal))
+            {
+                await EnsureLocalModelAsync(connectionString).ConfigureAwait(false);
+            }
+        });
 
     var result = await night.ExecuteAsync(date, configVersion, order).ConfigureAwait(false);
 

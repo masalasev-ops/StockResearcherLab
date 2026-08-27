@@ -397,6 +397,93 @@ public sealed class NightlyRunTests
         }
     }
 
+    // ------------------------------------------------- the per-stage hook [R.2] ---
+
+    private static NightlyRun BuildWithHook(
+        Func<string, CancellationToken, Task> before, params IWriteOwner[] owners)
+    {
+        var cs = TestDatabase.ConnectionString;
+        var all = owners.Append(new RunLog(cs)).ToList();
+        var registry = new StageRegistry(all);
+
+        return new NightlyRun(
+            registry, new StageRunner(registry, new RunLog(cs), Clock, cs), null, before);
+    }
+
+    /// <summary>
+    /// **The hook fires immediately before each stage, not once before the sequence**
+    /// [R.2]. 5.13's precondition warms a model that an evening order takes about twelve
+    /// minutes to reach, and a hook that ran at the start would warm it too early to
+    /// help. Asserted as interleaving rather than as a count, because a count passes on
+    /// the wrong arrangement.
+    /// </summary>
+    [Fact]
+    public async Task TheHookRunsImmediatelyBeforeEachStageRatherThanOnceUpFront()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ClearAsync(ct);
+
+        var trace = new List<string>();
+        var writer = new MarkerWriter(WriterName);
+
+        var night = BuildWithHook(
+            (name, _) => { trace.Add("before:" + name); return Task.CompletedTask; },
+            new BlessingGuard(new DateOnly(2026, 8, 7)),
+            writer);
+
+        await night.ExecuteAsync(
+            new DateOnly(2026, 8, 7), 1, [GuardName, WriterName], ct);
+
+        Assert.Equal(["before:" + GuardName, "before:" + WriterName], trace);
+
+        await ClearAsync(ct);
+    }
+
+    /// <summary>
+    /// **A hook that throws halts the night** [`CLAUDE.md` section 6, fail closed]. It
+    /// runs inside the same try the stage does, so a precondition that cannot complete
+    /// stops the sequence rather than being swallowed and letting the stage run anyway.
+    /// </summary>
+    [Fact]
+    public async Task AHookThatThrowsHaltsTheNightAndTheStageDoesNotRun()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ClearAsync(ct);
+
+        var writer = new MarkerWriter(WriterName);
+
+        var night = BuildWithHook(
+            (_, _) => throw new InvalidOperationException("the precondition could not complete"),
+            writer);
+
+        var result = await night.ExecuteAsync(new DateOnly(2026, 8, 7), 1, [WriterName], ct);
+
+        Assert.False(result.Completed);
+        Assert.False(writer.Ran);
+        Assert.Contains(
+            "the precondition could not complete",
+            result.Steps[^1].Detail!,
+            StringComparison.Ordinal);
+
+        await ClearAsync(ct);
+    }
+
+    /// <summary>No hook is the default and changes nothing.</summary>
+    [Fact]
+    public async Task AnAbsentHookLeavesTheSequenceUnchanged()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ClearAsync(ct);
+
+        var writer = new MarkerWriter(WriterName);
+        var result = await Build(writer).ExecuteAsync(new DateOnly(2026, 8, 7), 1, [WriterName], ct);
+
+        Assert.True(result.Completed);
+        Assert.True(writer.Ran);
+
+        await ClearAsync(ct);
+    }
+
     /// <summary>Declares a write and produces nothing, which is the halt condition.</summary>
     private sealed class SilentWriter(string name) : IStage
     {

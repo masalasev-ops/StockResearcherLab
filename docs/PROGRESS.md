@@ -12899,3 +12899,79 @@ narrower observable in full, and the line is re-asked at phase 7 rather than mar
 
 **The sign-off review runs in a session that has not committed here** [D-67]. This session
 has committed extensively and cannot run it.
+
+---
+
+## Phase R, corrective pass R.1: the freshness guard read no bound on date
+
+**A defect in C07, found on 2026-08-26 while trying to run the night phase 5 owes.** It is
+recorded as its own pass rather than inside phase 5's record because the component belongs
+to phase 1 and the fix changes behaviour every phase after it depends on.
+
+### What was wrong
+
+`FreshnessGuard.CountsAsync` issued this:
+
+```sql
+SELECT date, count(*) FROM price_daily GROUP BY date ORDER BY date DESC LIMIT 80;
+```
+
+**No bound on `date`.** The guard therefore read whatever the table's newest rows happened
+to be at the moment it ran, rather than as of the date it was handed. That contradicts
+`CLAUDE.md` section 5, and it contradicts the stage's own class comment, which cites D-70
+for exactly this property: "a stage is a pure function of its date and config version and a
+guard whose verdict depends on what it saw during a previous wall-clock run is not". The
+comment was right about the intent and the code did not implement it.
+
+### The two failures it caused, neither of which announced itself
+
+**A past date could not be replayed.** `run-night 2026-08-20` reads the counts, finds
+2026-08-26 at the head of the list, and aborts on a session it was never asked about. Every
+stored date behind it is invisible. This is the property the stage pattern exists to
+provide and it was absent from the one stage whose verdict decides what every later stage
+runs on.
+
+**And the evening sequence could abort on rows it had itself just written.** `PriceIngestor`
+is the first step of `NightlyRun.EveningOrder` and it ingests the current session, which is
+still arriving. `FreshnessGuard` is the second step and aborted on it. **That is a halt a
+run causes itself, and running it again does not clear it**, because the next run ingests
+the same partial session first. It is what stopped 2026-08-26 at two steps.
+
+**Neither is visible as a wrong number.** The first produces a refusal that reads exactly
+like a genuinely stale provider. The second produces a refusal that reads exactly like a
+truncated file, which is a real fault the abort floor exists to catch [D-64]. In both cases
+the guard reports the right words about the wrong date.
+
+### The fix
+
+The statement moves to `FreshnessGuard.CountsSql(DateOnly asOf, int window)` and gains
+`WHERE date <= DATE '<asOf>'`, rendered invariantly.
+
+**It is public, and that is the point of the change rather than a side effect.** The rule it
+feeds is a pure function over row counts and is tested as one, thoroughly, in eleven tests
+that were all passing throughout. **The read that produces those counts had no test at all**,
+and it is the half that was wrong. Making the statement a named function of its inputs is
+what lets it be asserted every run instead of only when a store happens to be in the right
+state.
+
+**Five tests**, taking `FreshnessGuardTests` from 11 to 16: the bound is present, a date is
+inside its own read and outside an earlier one, the whole statement is pinned exactly, and
+the window still sets the limit. The locale half needs no test here, `InvariantGlobalization`
+being true for every project in the repository.
+
+### What this does not change
+
+**The abort floor still fires on a session that is still arriving**, and that behaviour is
+untouched. A run for today whose file has not yet crossed `freshness.row_count_abort_below`
+still aborts, because today's date is inside today's read and `FreshnessRule` returns on
+`Truncated` before it reaches the walk-back [D-59]. **What the bound changes is that a run
+for an earlier date is no longer dragged into that**, so the previous settled session is
+reachable by asking for it.
+
+**The operational question underneath it is unresolved and is not a code question.**
+`RUNBOOK.md` gives the evening sequence an 18:30 ET slot; on 2026-08-26 the current session
+stood at 36,121 rows at 20:35 and moved 141 on a second sweep, so the provider's file was
+still arriving four and a half hours after the close. If that is typical, the scheduled
+nightly run aborts on its own current date every night. **One observation is not a pattern**,
+and the two candidate answers, moving the slot or revisiting D-64's floors, are both
+authored work rather than a build task.

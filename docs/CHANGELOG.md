@@ -2613,3 +2613,21 @@ The measurement stands and so does the refusal to widen the health timeout. What
 is the last clause: the cold model is now caught by a probe ahead of the stage rather than
 by a clock in the afternoon, and the replacement paragraph says why two bounds exist
 instead of one, and why the long one costs nothing when the server is genuinely down.
+
+---
+
+## 2026-08-27, phase 5 sign-off review, `CONFIG_REFERENCE.md`'s warm timeout consumer
+
+`digest.warm_timeout_ms` gained a second consumer at R.2 and the Consumer cell was not
+moved with it. A clean edit under D-73; the prior wording is here.
+
+### `CONFIG_REFERENCE.md` §digest, the `digest.warm_timeout_ms` row
+
+> \| `digest.warm_timeout_ms` \| 120000 \| — \| the Worker's `run` command, `EnsureLocalModelAsync`, through `LocalModelClient.HealthAsync(key)` \| **verified 5.13** \|
+
+5.13 wired the precondition into `RunStageAsync` alone. R.2 added the same call to the
+night, through `NightlyRun`'s `before` hook, and touched three files, none of them this
+one. The cell named one of the two routes that read the key, which is the shape §8 calls
+worse than an absent entry: it lets an audit conclude a value is wired up where it is
+wired up twice and one path is unread. Both routes were read in `Program.cs` before this
+edit, at the `run-night` callback and at the single-stage gate.

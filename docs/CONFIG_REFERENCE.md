@@ -554,7 +554,7 @@ budget.
 | `digest.rotation_count` | 2 | D-27 | NewsDigester, `ExecuteAsync`, through `DigestRotation.Select` | **verified 5.10** |
 | `digest.lookback_days` | 7 | D-133 | NewsDigester, `ExecuteAsync`; HeadlineIngestor, `ExecuteAsync`; RecordInspector, `DigestAsync` | **verified 5.9** |
 | `digest.health_timeout_ms` | 5000 | — | LocalModelClient, `HealthAsync` | **verified 5.5** |
-| `digest.warm_timeout_ms` | 120000 | — | the Worker's `run` command, `EnsureLocalModelAsync`, through `LocalModelClient.HealthAsync(key)` | **verified 5.13** |
+| `digest.warm_timeout_ms` | 120000 | — | the Worker's `run` and `run-night` commands, both through `EnsureLocalModelAsync` and `LocalModelClient.HealthAsync(key)` [R.2] | **verified 5.13, second route verified at the phase 5 sign-off review** |
 | `digest.readiness_check_et` | 15:30 | — | none. 5.13 was reshaped from a clock to a precondition and nothing reads it [5.13] | **no consumer, seeded 5.3** |
 | `digest.secondary_model_id` | `claude-haiku-4-5` | D-140 | PipelineComposition, `SecondaryModelAsync`, passed to `HaikuDigestLink` at construction | **verified 5.6** |
 | `digest.max_input_tokens` | 6000 | D-143 | NewsDigester, `ExecuteAsync`; RecordInspector, `DigestAsync` | **verified 5.9** |

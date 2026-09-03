@@ -15,8 +15,8 @@ D-110, D-124, D-126, D-130, D-132 to D-145, `FIXTURES.md`, `METRICS.md` §3,
 `prompts/candidate-block.md`, `prompts/rubrics.md`, `prompts/README.md` and `CLAUDE.md`
 §2, §3, §5, §6, §7, §9, §11, §13 and §14, at HEAD `7e1ff1a`.
 
-**Fourteen claims below rest on the code or on the store rather than on a document and
-were read there** [`CLAUDE.md` §7]: the `dossier` and `proposal` definitions in
+**Sixteen claims below rest on the code, on the store or on a probe rather than on a
+document, and were read or taken there** [`CLAUDE.md` §7]: the `dossier` and `proposal` definitions in
 `0001_snapshot.sql` including both partial unique indexes and the absence of any CHECK or
 NOT NULL beyond `date` and the three key columns; the empty `Pipeline/Decide/` folder and
 the absence of any type named `DossierBuilder`, `ResearcherClient` or `ProposalValidator`
@@ -30,8 +30,11 @@ usage mapping; `LocalModelClient` as the OpenAI-compatible shape; `ValuationEngi
 carrying `last_two_earnings_surprises` beside a `ReadSet` that already declares
 `earnings_history`; `indicator_daily`'s column list in `SCHEMA.md` §indicator_daily read
 against `IndicatorEngine`; `NightlyRun.EveningOrder` ending at `NewsDigester` and its
-`before` hook; `Directory.Packages.props` at `Anthropic` 12.42.0; and `git rev-parse HEAD`
-at `7e1ff1a` with `git log --oneline -20`.
+`before` hook; `Directory.Packages.props` at `Anthropic` 12.42.0; that package's own
+assembly, carrying `BatchService` over `/v1/messages/batches` and
+`CacheControlEphemeral.Ttl` with `Ephemeral1hInputTokens`; the Claude Code CLI's
+non-interactive surface and its reported usage, probed 2026-08-28 and recorded at D-157;
+and `git rev-parse HEAD` at `7e1ff1a` with `git log --oneline -20`.
 
 **Status** `DRAFT`, which is the only value this corpus uses for a plan. **The numbered
 checkpoints in §7 are phase scope and the decision clauses in §4 are decisions; both are
@@ -104,6 +107,7 @@ vocabulary. All of them are free now and expensive later.
 | `alert` | Table, one writer, two-value vocabulary closed by `0021` | Gains a second writer and two values at 6.7 |
 | `CostLedger` | Built, `IWriteOwner`, prices from `cost.price_per_mtok_usd`, throws on an unpriced model | Extended, not replaced. The price key gains two entries and not four keys |
 | `HaikuDigestLink` | Built, Anthropic SDK 12.42.0, `HttpClient` seam, maps four usage counts | The shape 6.9's batch path is built beside. It is not reused directly: it is a digest link |
+| `Anthropic` 12.42.0 | Pinned, referenced by the Pipeline. **Carries `BatchService` over `/v1/messages/batches` and `CacheControlEphemeral.Ttl` with the extended-TTL beta** | 6.9's two hard requirements, D-22's batch and its one-hour cache, are already in the package [D-157] |
 | `LocalModelClient` | Built, OpenAI-compatible, health and loaded-model name | The shape 6.8's V4 Pro client is built from |
 | `researcher.*` | Seven rows in `CONFIG_REFERENCE.md`, all `unverified`, **none seeded** | Seeded at 6.3, Consumer column filled from the composition code |
 | `cost.annual_budget` | Documented at 100, **unseeded**, Consumer `CostLedger`, `unverified` | Seeded at 6.3, wired at 6.7 |
@@ -215,7 +219,7 @@ mitigating this threat says must not exist.
 
 ## 4. Decisions that need authoring before code
 
-Eleven, D-146 to D-156. Each is drafted here in the corpus's clause form for the operator
+Twelve, D-146 to D-157. Each is drafted here in the corpus's clause form for the operator
 to adopt into `DECISIONS.md`. **Nothing below is authored by this document** [`CLAUDE.md`
 §13]. The blocked-on column in §7 names them.
 
@@ -510,6 +514,68 @@ mid-comparison. **The decision records that the alert fires and the switch does 
 happen**, and files the tier question rather than answering it. An automated model switch
 inside a running comparison is exactly the kind of change §12 says invalidates the record.
 
+### D-157, the researcher runs on the API and not on the Claude Code CLI
+
+**The question is asked because the alternative is sitting there.** A Claude subscription
+already pays for this system to be built, the CLI has a non-interactive mode, and using it
+for C16 would appear to make the researcher free. It is asked and answered here rather
+than left for someone to notice in a year, which is `CLAUDE.md` §11's rule about recording
+a decision before the number that would justify it exists.
+
+**The CLI is more capable than the question assumes, and that is stated first.** Driven as
+`--print --output-format json --tools "" --system-prompt <file> --no-session-persistence`
+it gives a replaced system prompt with no per-machine scaffolding, no tools at all, a JSON
+schema on the output, and complete token accounting. **Measured on 2026-08-28**:
+`prompts/rubrics.md` as the system prompt is **3,491 tokens**; a cold call costs
+**$0.0357** and writes them to the **one-hour** cache; the two calls after it read all
+3,491 and cost **$0.0025**, a fourteenfold drop across separate process invocations. So
+the cache economics §07 rests on are reproducible through the CLI and INVARIANT 9 and
+INVARIANT 6 are both reachable. Nothing below rests on the CLI being unable to do this.
+
+**Three design reasons stand independently of cost.**
+
+**It can serve only one of the two research portfolios.** The CLI is Anthropic-only and
+V4 Pro reaches its own endpoint whatever happens, so the two portfolios would differ in
+transport, in caching and in the sidecar below. §12 holds the research-against-research
+comparison to "every variable except the model held identical, including the dossier, the
+rubrics, the arbitration steps and the random seed", and `VALIDITY.md` S-1 is the claim
+that confounding lands on. **This is the reason that would stand at any price.**
+
+**There is no Batch API on it**, so D-22 would have to be superseded and §17's Opus line
+roughly doubles: the same night un-batched prices at about $0.36 against §17's batched
+year of $45. D-151's submit-and-exit, D-152's deadline behaviour and `RUNBOOK.md`'s
+asynchronous decide stage all exist because of batch and would all be rewritten.
+
+**A second model answers on every call and nothing asked it to.** Every invocation
+measured also billed `claude-haiku-4-5` at **537 input tokens, never cached, $0.00061 a
+call**, roughly $4.30 a year. It is not the digest chain and no row in this system would
+record it. That is D-144's finding one layer up: a model nobody chose answers, and the
+only place it appears is a field nobody reads.
+
+**And a fourth reason that is about the record rather than the run.** The CLI updates
+itself. Its scaffolding, its defaults and that sidecar can change between two nights with
+nothing in `attribution.config_version` to segment on, which is the pooling §12 forbids.
+The SDK is pinned in `Directory.Packages.props` and a version change is a commit.
+
+**The cost argument runs the other way from the intuition and is stated with its
+uncertainty.** §17's ~$50 combined is a design estimate and `PROGRESS.md` records it as
+unmeasured; 6.12 is what fills that cell. Against it, the cheapest subscription is $240 a
+year and the plan that would actually carry 28 candidates a night on Opus over 252 nights
+is several times that. The subscription also removes no API bill, V4 Pro being on its own
+endpoint either way. **The sharpest form of it is contention rather than price**: the
+subscription is already spent on building this system, and pointing it at running the
+system puts the nightly job against the development work, whose resolution is a plan
+upgrade costing twenty to fifty times the API bill.
+
+**What the decision does not say.** It does not say the CLI is unsuitable for this corpus.
+C23 LessonWriter in phase 8 is monthly, is one call on aggregate statistics, produces prose
+for a person, and has no cache economics, no cross-model comparison and no per-night
+byte-identity requirement. **Not one of the four reasons above reaches it**, and the
+decision records that rather than leaving the question to be re-asked with the same
+measurements missing.
+
+---
+
 ---
 
 ## 5. The measurement 6.1 takes, and what stops the build
@@ -522,10 +588,29 @@ scratch app is deleted at 6.2, which is 5.1's arrangement unchanged.
 |---|---|---|
 | 1 | The assembled prefix's real token count, counted by the model that will read it | §07's ~4,600 |
 | 2 | One assembled candidate block's real token count, on a name surfaced by one screen and on a name surfaced by two | §07's ~800 |
-| 3 | Whether the SDK exposes the one-hour cache TTL, and what the response reports for cache write and cache read tokens | D-22, §17's cache lines |
+| 3 | What a real response reports for cache write and cache read, and that a second call inside the window reads the prefix rather than rewriting it. **The SDK half of this is already answered and is not re-asked** | D-22, §17's cache lines |
 | 4 | One batch submission end to end: submission, poll, retrieval, and the real round-trip time | §08's "completing by 09:00" |
 | 5 | V4 Pro's endpoint, its exact model id, and whether it supports prompt caching at all | §17's V4 Pro column, which assumes it does |
 | 6 | The four token counts each provider reports, mapped onto `cost_ledger`'s four columns | 5.14's mapping, one provider over |
+
+**Two of the six are partly answered before the sweep runs, from a file already on disk
+and from a probe already taken, and they are recorded here rather than re-asked** [D-157].
+
+**Measurement 3's SDK half is answered.** `Anthropic` 12.42.0, already referenced by the
+Pipeline and already carrying `HaikuDigestLink`, exposes `CacheControlEphemeral` with a
+`Ttl` property, the `extended-cache-ttl-2025-04-11` beta, `Ephemeral1hInputTokens` and
+`Ephemeral5mInputTokens` on usage, and a full `BatchService` over `/v1/messages/batches`
+with create, retrieve, list, cancel, delete and results. **So the one-hour cache and the
+batch endpoint are both present in the pinned package** and neither can halt this phase.
+What 6.1 still measures is the runtime half: what a real response reports and whether a
+second call inside the window reads rather than rewrites.
+
+**Measurement 1 has a first data point.** `prompts/rubrics.md` assembled as a system prompt
+measures **3,491 tokens** [D-157, probed 2026-08-28]. §07 puts the whole prefix at ~4,600,
+so the rubrics are roughly three quarters of it and the other six sections have about
+1,100 tokens of room. **That is a partial reading and not the measurement**: sections 1, 2
+and 7 are static text nobody has written yet, section 6 is a real night's market context,
+and 4 and 5 render empty under D-149. 6.1 assembles all seven and counts them.
 
 **Measurements 1 and 2 need a real prefix and a real block, which is a circularity and is
 resolved the way 5.1 resolved its own.** The sweep assembles them by hand from
@@ -548,8 +633,8 @@ same section, and §17's entire cost table is built on them.
 | Prefix tokens | Materially above 4,600 | **Halt before 6.5 and report.** Recompute §17's cache-write and cache-read lines at the measured count and state what the $50 total becomes. A prefix token is written once and read 28 times, so this is the cheap direction per night and it still moves the annual figure the design closed on |
 | Block tokens | Within roughly 15 percent of 800 | Record and proceed |
 | Block tokens | Materially above 800 | **Halt before 6.6 and report.** A block token is fresh input paid 28 times a night at full rate, which §07 prices at roughly seven times a prefix token. This is the expensive direction and it is a decision rather than a number to seed and continue past |
-| One-hour cache TTL | Exposed | Proceed |
-| One-hour cache TTL | Not exposed | **Halt before 6.9 and reopen D-22.** §17 states that five-minute caching under batch timing lands the year near $112, which is worse than not batching at all, so the batch decision does not survive the absence of the one-hour cache |
+| One-hour cache, at runtime | A second call inside the window reads the prefix | Record and proceed |
+| One-hour cache, at runtime | It rewrites rather than reads | **Halt before 6.9 and reopen D-22.** §17 states that five-minute caching under batch timing lands the year near $112, which is worse than not batching at all. **The SDK half of this row is retired** [D-157]: the TTL and the batch endpoint are both in the pinned package, so what remains is behaviour under batch timing rather than availability |
 | V4 Pro caching | Present | Proceed |
 | V4 Pro caching | Absent | **Report and wait.** §17's V4 Pro column prices cache writes at $0.50 and cache reads at $0.12 and no other document checks that the provider has a cache. The phase can proceed on an uncached V4 Pro; what cannot proceed is §17's figure standing unqualified |
 | Batch round trip | Inside the window between 18:40 and 09:00 | Record and proceed |
@@ -757,7 +842,7 @@ the one the night asked. `prompts/prefix-template.md` §3 already says this in t
 
 ### The blocker
 
-**Eleven decisions, D-146 to D-156, none of which this document may author** [`CLAUDE.md`
+**Twelve decisions, D-146 to D-157, none of which this document may author** [`CLAUDE.md`
 §13]. Seven checkpoints are blocked on one or more. 6.1 is not, so the sweep can run while
 they are being read, and the measurements it takes are inputs to none of them.
 
@@ -816,7 +901,7 @@ filed.
 
 ## 11. Authored items owed, and files
 
-**Owed from a human before the checkpoints they block:** D-146 to D-156 in `DECISIONS.md`;
+**Owed from a human before the checkpoints they block:** D-146 to D-157 in `DECISIONS.md`;
 §7's checkpoint table into `BUILD_PLAN.md`'s phase 6 section; and four amendments to
 `ARCHITECTURE.html` §03, each in the checkpoint that needs it, being C15's Reads cell at
 6.6, C26's Writes cell at 6.7, C36's Reads cell at 6.11, and §15's screen list at 6.11.

@@ -13617,7 +13617,7 @@ Each row is filled when its checkpoint lands.
 | 5.5.8 | `double positionSize` in a monetary-owning component | | |
 | 5.5.9 | `screen_score_daily` removed from a copy of `SelectionRangeRun`'s reads | **Red**: the check reports `src/StockResearcherLab.Pipeline/Select/SelectionRangeRun.cs: screen_score_daily`, while `DeclaredAccess` over the same mutilated list passes the read it gates | **Green**: no violation over today's code, every registered component's file found, statements read in at least twenty files |
 | 5.5.10 | `HEAD`, six stages | **Red at `HEAD`**: twelve declared writes across **eight** components no route checked, `CandidateAllocator` (2), `ConcentrationMonitor`, `CostLedger`, `GateEngine`, `HeadlineIngestor`, `NewsDigester`, `PercentileEngine` (2) and `ScreenEngine` (3) | **Green**: every one on `Statements()`, and the two column directions and both column-drop fixtures green, 10 in the two classes |
-| 5.5.12 | `HEAD`, the four Consumer rows | | |
+| 5.5.12 | `HEAD`, the four Consumer rows | **Red at `HEAD` on thirteen read sites over thirteen keys**: the plan's four rows and its missing one, eight `RecordInspector` cells, and `BackfillPool`'s read of the pool timeout | **Green** after the cells were filled from the code |
 | 5.5.13 | `HEAD`, one live row | | |
 | 5.5.14 | `HEAD`, two engines | | |
 | 5.5.15 | A copy of the order with one built daily component removed | | |
@@ -13953,3 +13953,44 @@ against: it persists between local runs and seeds under `ON CONFLICT DO NOTHING`
 gate is where the new seed is proved.
 
 **Neither enables the secondary nor spends money.** No paid call was made.
+### 5.5.12, `CONFIG_REFERENCE.md`'s Consumer column made true, and kept true
+
+`ConfigReferenceDocumentTests.EveryConfigReadSiteIsNamedInItsConsumerCell` takes every string
+literal under `src/` equal to a documented or seeded key as a read site, outside the seeder and
+the store, and requires the reading file's own type in that key's Consumer cell, the Worker
+standing for `Program.cs`. **The plan asked for `RequireAsync("key"` literals alone, and that
+form would not have seen the consumer its own row leads with**: `FundamentalsIngestor` reads
+`events.earnings_backward_days` through `LongAsync(context, "key", ct)`, as most components
+read config. A companion fact asserts the scan finds more than eighty read sites over more than
+fifty keys, and that one among them.
+
+**Red at `HEAD` on thirteen read sites, not four rows.**
+
+| Key | Consumer the cell did not name |
+|---|---|
+| `events.earnings_backward_days` | `FundamentalsIngestor`, ordering the rotation queue |
+| `monitor.megacap_share_max` | the Worker's `distributions` route, scoring a done-when line |
+| `screens.floor_percentile`, `screens.floor_lookback_days` | `ScreenRangeRun.FloorAsync` |
+| `fundamentals.widest_gap_alert_days` | no row at all; its pointer sent the reader to a table without it |
+| `universe.pool_statement_timeout_seconds` | `BackfillPool.DelistedWithBarsInWindowAsync`, which C04 and C06 call. **Not in the plan** |
+| the six `universe.*` criteria, `fundamentals.min_clean_gaps_for_substitution` and `sentiment.lookback_days` | `RecordInspector`. **Not in the plan, which recorded this as refuted** |
+
+**The plan's refutation of the `RecordInspector` item rested on a sentence that is false.** It
+cited the subsection "Keys this reader consumes without owning" as proof the reader is
+documented, and that subsection opens by saying "The Consumer columns in the sections above
+name it alongside their owners". None of the eight did. The cells now name it, which makes
+the subsection's own sentence true; the subsection itself is unchanged.
+
+**Every new consumer was read in the code, not inferred from a name** [`CLAUDE.md` §8], and
+each cell's Verified column says which checkpoint verified the addition. The `digest.chain`
+note is corrected: `BuildAsync` reads `provider_order` and pairs a name with an order number,
+the local link resolves its endpoint at `provider_order = 1` whatever the chain says, and the
+secondary reads no endpoint. The prior wordings of that note and of the Fundamentals pointer
+are in `CHANGELOG.md`.
+
+**The key-count narration is carried to 106** in `ConfigSeeder` and `ConfigResolutionTests`:
+105 at 5.13 with `digest.warm_timeout_ms`, 106 at 5.14 with `cost.price_per_mtok_usd`, read off
+the commits that moved the assertion.
+
+**The 5.5.11 gate passed at `4513e2c`, on a freshly created test database, and that sha is
+pushed.**

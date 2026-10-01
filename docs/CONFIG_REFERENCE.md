@@ -22,23 +22,23 @@ Verified column values: `unverified`, `verified <date>`, or `NOT BOUND`.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `universe.min_market_cap` | 300000000 | D-4 | UniverseBuilder | verified 2026-08-09 |
-| `universe.min_price` | 5 | D-4 | UniverseBuilder, FundamentalsIngestor | verified 2026-08-09 |
-| `universe.min_adv_20d` | 2000000 | D-4 | UniverseBuilder, FundamentalsIngestor | verified 2026-08-09 |
-| `universe.min_history_days` | 250 | D-4 | UniverseBuilder, FundamentalsIngestor | verified 2026-08-09 |
-| `universe.pool_statement_timeout_seconds` | 1800 | D-102 | `UniverseBuilder` C01 `LiquidAsync`, `FundamentalsIngestor` C03 `BootstrapPoolAsync` and `RangePoolAsync` | verified 2026-08-15 |
-| `universe.bucket_large_floor` | 10000000000 | D-4 | UniverseBuilder | verified 2026-08-09 |
-| `universe.bucket_mid_floor` | 2000000000 | D-4 | UniverseBuilder | verified 2026-08-09 |
+| `universe.min_market_cap` | 300000000 | D-4 | UniverseBuilder; `RecordInspector`, for display | verified 2026-08-09; RecordInspector 5.5.12 |
+| `universe.min_price` | 5 | D-4 | UniverseBuilder, FundamentalsIngestor; `RecordInspector`, for display | verified 2026-08-09; RecordInspector 5.5.12 |
+| `universe.min_adv_20d` | 2000000 | D-4 | UniverseBuilder, FundamentalsIngestor; `RecordInspector`, for display | verified 2026-08-09; RecordInspector 5.5.12 |
+| `universe.min_history_days` | 250 | D-4 | UniverseBuilder, FundamentalsIngestor; `RecordInspector`, for display | verified 2026-08-09; RecordInspector 5.5.12 |
+| `universe.pool_statement_timeout_seconds` | 1800 | D-102 | `UniverseBuilder` C01 `LiquidAsync`, `FundamentalsIngestor` C03 `BootstrapPoolAsync` and `RangePoolAsync`; `BackfillPool.DelistedWithBarsInWindowAsync`, which `SentimentIngestor` C04 and `EventsIngestor` C06 call | verified 2026-08-15; BackfillPool 5.5.12 |
+| `universe.bucket_large_floor` | 10000000000 | D-4 | UniverseBuilder; `RecordInspector`, for display | verified 2026-08-09; RecordInspector 5.5.12 |
+| `universe.bucket_mid_floor` | 2000000000 | D-4 | UniverseBuilder; `RecordInspector`, for display | verified 2026-08-09; RecordInspector 5.5.12 |
 
 ## Fundamentals
 
-**`fundamentals.widest_gap_alert_days` is in the cadence table below** rather than
-here, with the other keys phase 1 wired up.
+`fundamentals.widest_gap_alert_days` is in the table below [5.5.12].
 
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `fundamentals.min_clean_gaps_for_substitution` | 4 | D-62 | UniverseBuilder [L.2] | verified 2026-08-09 |
+| `fundamentals.min_clean_gaps_for_substitution` | 4 | D-62 | UniverseBuilder [L.2]; `RecordInspector`, for display | verified 2026-08-09; RecordInspector 5.5.12 |
+| `fundamentals.widest_gap_alert_days` | 180 | D-62 | `FundamentalsIngestor.ExecuteAsync`, through the run log [A3] | verified 5.5.12 |
 | `fundamentals.substitution_rate_alert` | 0.25 | D-57 | FundamentalsIngestor | verified 2026-08-09 |
 
 The substitution window is each ticker's own widest clean gap observed before the
@@ -72,12 +72,12 @@ looked at, not what it is worth.
 |---|---|---|---|---|
 | `fundamentals.max_tickers_per_run` | 500 | 1.4 | FundamentalsIngestor | verified 2026-08-08 |
 | `sentiment.tickers_per_call` | 50 | 1.6 | SentimentIngestor | verified 2026-08-08 |
-| `sentiment.lookback_days` | 30 | 1.6 | SentimentIngestor | verified 2026-08-08 |
+| `sentiment.lookback_days` | 30 | 1.6 | SentimentIngestor; `RecordInspector`, for display | verified 2026-08-08; RecordInspector 5.5.12 |
 | `flow.max_tickers_per_run` | 250 | 1.7 | FlowIngestor | verified 2026-08-08 |
 | `flow.form4_page_size` | 50 | 1.7 | FlowIngestor | verified 2026-08-08 |
 | `flow.institutional_report_lag_days` | 45 | 1.8 | FlowEngine | verified 2026-08-08 |
 | `events.earnings_forward_days` | 90 | 1.8 | EventsIngestor | verified 2026-08-08 |
-| `events.earnings_backward_days` | 7 | 1.8 | EventsIngestor | verified 2026-08-08 |
+| `events.earnings_backward_days` | 7 | 1.8 | EventsIngestor; `FundamentalsIngestor.ExecuteAsync`, where it orders the rotation queue rather than filling a calendar [D-74] | verified 2026-08-08; FundamentalsIngestor 5.5.12 |
 
 **The three per-run bounds exist because their endpoints are per ticker and metered
 per call** [PROGRESS, endpoint weights]. Fundamentals is 10 units a ticker and form4
@@ -317,8 +317,8 @@ regime keys are verified at `MarketContextEngine.cs:56-57`.
 
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
-| `screens.floor_percentile` | 98 | D-9 | `ScreenEngine.ExecuteAsync`, `ScreenEngine.cs` | verified 4.5 |
-| `screens.floor_lookback_days` | 250 | D-9 | `ScreenEngine.ExecuteAsync`, `ScreenEngine.cs` | verified 4.5 |
+| `screens.floor_percentile` | 98 | D-9 | `ScreenEngine.ExecuteAsync`, `ScreenEngine.cs`; `ScreenRangeRun.FloorAsync`, `ScreenRangeRun.cs`, per session [5.5.6] | verified 4.5; ScreenRangeRun 5.5.12 |
+| `screens.floor_lookback_days` | 250 | D-9 | `ScreenEngine.ExecuteAsync`, `ScreenEngine.cs`; `ScreenRangeRun.FloorAsync`, `ScreenRangeRun.cs`, per session [5.5.6] | verified 4.5; ScreenRangeRun 5.5.12 |
 | `screens.<id>.metrics` | per screen | D-6 | `ScreenRegistry.LoadOneAsync` via the screen's own facade, `ScreenRegistry.cs` | verified 4.7 |
 | `screens.<id>.slots` | 8 for each live screen, 12 for each shadow | D-43, D-129 | `CandidateAllocator.Validated`, `CandidateAllocator.cs` | verified 4.9, and see below on shadows |
 | `screens.<id>.state` | `live` for S1 to S5, `shadow` for X-NSI, X-ACC and X-FM | D-84, D-119, D-129 | `ScreenRegistry.IdsAsync` and `.LoadOneAsync`, `ScreenRegistry.cs` | verified 4.7 |
@@ -629,13 +629,16 @@ seeded to keep a checkpoint whole would have been a config version rather than a
 could be corrected [`CLAUDE.md` §8, §12]. A test asserts both names absent and the two above
 present, which is what says which four names moved.
 
-**`digest.chain` names the links and `local_model_config` orders and addresses them, and
-neither is redundant** [5.7, closing the 5.3 finding]. D-136 gives the order to
-`provider_order` filtered on `enabled`, and that table carries no name; this key carries the
-name at each position and no address. `DigestChain.BuildAsync` pairs them by position, which
-is what lets a link's identity be versioned config while its address stays an
-operator-editable row, the split D-51 and D-136 already make. It is also the only thing that
-can record which links were in the chain on a past date.
+**`digest.chain` names the links and `local_model_config` orders them, and neither is
+redundant; the address is read elsewhere, and for one link only** [5.7, corrected at
+5.5.12]. D-136 gives the order to `provider_order` filtered on `enabled`, and that table
+carries no name; this key carries the name at each position. `DigestChain.BuildAsync` reads
+`provider_order` alone and pairs each name with an order number, never with an address. The
+local link resolves its own endpoint from the enabled row at `provider_order = 1`, whatever
+position `local` holds in this key, and the secondary reads no endpoint at all, its SDK
+carrying the vendor's address. So an operator who reordered the rows to put `local` second
+would leave the local link probing the first row's address. The key is still the only thing
+that can record which links were in the chain on a past date.
 
 **A length mismatch fails the run rather than being reconciled.** This key is versioned and
 that table is not, so the two can disagree; a chain with an address nothing can name, or a
@@ -683,7 +686,7 @@ value, but changing it to `vs_spy` is a defect and not a tuning option [INVARIAN
 | Key | Default | Set by | Consumer | Verified |
 |---|---|---|---|---|
 | `validator.rejection_rate_alert` | 0.05 | — | ProposalValidator | unverified |
-| `monitor.megacap_share_max` | 0.333 | D-7 | `ConcentrationMonitor.ExecuteAsync`, `ConcentrationMonitor.cs` | verified 4.11 |
+| `monitor.megacap_share_max` | 0.333 | D-7 | `ConcentrationMonitor.ExecuteAsync`, `ConcentrationMonitor.cs`; the Worker's `distributions` route, `Program.cs`, where it is the bound a done-when line is scored against | verified 4.11; Worker 5.5.12 |
 | `monitor.distinct_tickers_60d_min` | 250 | — | `ConcentrationMonitor.ExecuteAsync`, `ConcentrationMonitor.cs` | verified 4.11 |
 | `monitor.cache_hit_rate_min` | 0.80 | — | CostLedger | unverified |
 | `cost.annual_budget` | 100 | — | CostLedger | unverified |

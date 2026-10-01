@@ -2684,3 +2684,32 @@ on the one that has run. **A store seeded before 5.5.11 is untouched**: version 
 under `ON CONFLICT DO NOTHING`, so its version 1 still reads two links and its operator
 edits stand. The two stores therefore disagree about what version 1 of this key held, which
 is recorded here rather than reconciled; each is consistent with itself.
+
+---
+
+## 2026-10-01, phase 5.5, `CONFIG_REFERENCE.md` made to describe the code [5.5.12]
+
+Two prose corrections and a pointer, each a clean edit under D-73 with the prior wording
+here. The Consumer cells that gained a consumer are verified content and are recorded in
+`PROGRESS.md` rather than here.
+
+### The `digest.chain` note
+
+> **`digest.chain` names the links and `local_model_config` orders and addresses them, and
+> neither is redundant** [5.7, closing the 5.3 finding]. D-136 gives the order to
+> `provider_order` filtered on `enabled`, and that table carries no name; this key carries the
+> name at each position and no address. `DigestChain.BuildAsync` pairs them by position, which
+> is what lets a link's identity be versioned config while its address stays an
+> operator-editable row, the split D-51 and D-136 already make. It is also the only thing that
+> can record which links were in the chain on a past date.
+
+The pairing claim held for neither link. `BuildAsync` reads `provider_order` and no
+endpoint; `LocalModelClient` reads the endpoint at `provider_order = 1` whatever the chain
+says; the secondary's SDK ignores the column.
+
+### The pointer in the Fundamentals section
+
+> **`fundamentals.widest_gap_alert_days` is in the cadence table below** rather than
+> here, with the other keys phase 1 wired up.
+
+No table in the document carried the key. It now has a row in the Fundamentals table.

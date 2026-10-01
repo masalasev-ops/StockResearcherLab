@@ -382,6 +382,10 @@ public sealed class ConfigResolutionTests
         // two names D-143 retires never appeared here, so nothing was removed and the
         // count moves by exactly the two that arrived. `ChainSeedTests` asserts all
         // four names, which is what says which two.
+        //
+        // **105 at 5.13**, `digest.warm_timeout_ms`, and **106 at 5.14**,
+        // `cost.price_per_mtok_usd`. Carried at 5.5.12, the narration having stopped at
+        // 104 while the assertion below moved on twice.
         Assert.Equal(106, ConfigSeeder.Keys.Count);
 
         var duplicates = ConfigSeeder.Keys

@@ -174,6 +174,11 @@ public sealed class ConfigSeeder
     /// introduces arrive and the two it retires were never here to remove. That is
     /// what the first commit's absence assertions bought, and it is why this count
     /// moved by two rather than staying still while two names changed underneath it.
+    ///
+    /// **105 at 5.13**, `digest.warm_timeout_ms`, the second bound for a second question,
+    /// and **106 at 5.14**, `cost.price_per_mtok_usd`, C26's price. Carried here at 5.5.12:
+    /// the narration had stopped at 104 while the count asserted beside it had moved on
+    /// twice, which is the drift a count stated in prose invites.
     /// </summary>
     public static IReadOnlyList<(string Key, string Value)> Keys { get; } =
     [

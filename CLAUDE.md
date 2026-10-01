@@ -88,8 +88,9 @@ file, and none of them fails loudly when broken.
     any researcher call and no orders are produced. Continuing with digests absent puts
     a night of thinner evidence into the record looking identical to every night around
     it [D-26].
-16. **Money is decimal, never `float` or `double`, in any monetary path.** `guards.ps1`
-    greps for it.
+16. **Money is decimal, never `float` or `double`, in any monetary path.** ~~`guards.ps1`
+    greps for it.~~ [amended, D-83, 5.5.8] `guards.ps1` asserts it of the schema, and
+    `MonetaryCarrierConformanceTests` asserts it of the C# that writes a `numeric` column.
 
 ---
 
@@ -305,9 +306,10 @@ A stage completes or it fails the run. Do not catch mid-stage and continue with
 partial rows: a partial run is worse than none, and the next stage cannot tell the
 difference between a short table and a real one.
 
-Two exceptions exist and both are enumerated in `RUNBOOK.md` rather than being general
+~~Two exceptions exist and both are enumerated in `RUNBOOK.md` rather than being general
 tolerance. A per-candidate model failure records a PASS and continues. A digest
-provider failure falls through the chain.
+provider failure falls through the chain.~~ [amended, D-159] A tolerated failure is a row
+in `RUNBOOK.md`'s failure table, and one that is not a row there fails the run.
 
 ### Names match the architecture
 

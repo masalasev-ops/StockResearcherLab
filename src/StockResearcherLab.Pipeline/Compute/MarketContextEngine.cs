@@ -447,16 +447,34 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
     {
         ArgumentNullException.ThrowIfNull(rows);
 
+        // **One window for both chains: the universe composite's 63 most recent sessions**
+        // [`METRICS.md`, "over the same window", 5.5.3]. A member whose last 64 bars straddle a
+        // hole reaches a session further back and returns a row dated before every other
+        // member's window, and five such members anywhere carry the universe onto that date.
+        // Chaining every date given compared a 63-session sector return with a 64-session
+        // universe one, the extra session's mean drawn from a few gap names' returns across
+        // their holes. Found by review after the first recompute and corrected before the record.
+        var window = rows
+            .Where(static r => r.Sector is null)
+            .Select(static r => r.Date)
+            .Distinct()
+            .OrderByDescending(static d => d)
+            .Take(RelativeStrengthWindow)
+            .ToHashSet();
+
+        if (window.Count < RelativeStrengthWindow)
+        {
+            return "{}";
+        }
+
         var chained = new Dictionary<string, (double Level, int Days)>(StringComparer.Ordinal);
         var universeLevel = 1.0;
-        var universeDays = 0;
 
-        foreach (var r in rows.OrderBy(static r => r.Date))
+        foreach (var r in rows.Where(r => window.Contains(r.Date)).OrderBy(static r => r.Date))
         {
             if (r.Sector is null)
             {
                 universeLevel *= 1 + r.MeanReturn;
-                universeDays++;
                 continue;
             }
 
@@ -471,7 +489,9 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
         {
             var (level, days) = chained[sector];
 
-            if (days < RelativeStrengthWindow || universeDays < RelativeStrengthWindow)
+            // A sector that does not cover every session of the window has no return over
+            // it, which is `rs_change_vs_sector`'s rule for a sector thin on any date.
+            if (days < RelativeStrengthWindow)
             {
                 continue;
             }

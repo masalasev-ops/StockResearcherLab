@@ -238,6 +238,68 @@ public sealed class MarketContextEngineTests
     }
 
     /// <summary>
+    /// **Both composites are chained over the same 63 sessions, the universe's most recent**
+    /// [`METRICS.md`, "over the same window", D-158, 5.5.3].
+    ///
+    /// A member whose last 64 bars straddle a hole reaches one session further back and
+    /// returns a row dated before every other member's window. Five such members anywhere in
+    /// the universe carry the universe composite onto that date, and a chain over every date
+    /// it is given then compares a 63-session sector return with a 64-session universe one.
+    /// The stray date here carries a return of +50 percent, standing for a few gap names'
+    /// return across their holes, and it must move nothing.
+    /// </summary>
+    [Fact]
+    public void AnOlderDateTheUniverseAloneCarriesIsOutsideTheWindow()
+    {
+        var rows = new List<MarketContextEngine.CompositeReturn>
+        {
+            new(null, new DateOnly(1994, 1, 2), 0.5),
+        };
+
+        for (var i = 0; i < 63; i++)
+        {
+            var date = new DateOnly(1994, 1, 3).AddDays(i);
+            rows.Add(new MarketContextEngine.CompositeReturn(null, date, 0.004));
+            rows.Add(new MarketContextEngine.CompositeReturn("SRL55-Alpha", date, 0.01));
+        }
+
+        var values = Parse(MarketContextEngine.SectorRelativeStrength(rows));
+
+        Assert.Equal(Math.Pow(1.01, 63) - Math.Pow(1.004, 63), values["SRL55-Alpha"], 5);
+    }
+
+    /// <summary>
+    /// A sector that does not cover every session of the window carries no value, rather than
+    /// a return over a different window from the universe's. Here Beta has 63 rows, one of
+    /// them on the older stray date and none on the window's last session.
+    /// </summary>
+    [Fact]
+    public void ASectorThatDoesNotCoverTheWindowCarriesNoValue()
+    {
+        var rows = new List<MarketContextEngine.CompositeReturn>
+        {
+            new(null, new DateOnly(1994, 1, 2), 0.0),
+            new("SRL55-Beta", new DateOnly(1994, 1, 2), 0.0),
+        };
+
+        for (var i = 0; i < 63; i++)
+        {
+            var date = new DateOnly(1994, 1, 3).AddDays(i);
+            rows.Add(new MarketContextEngine.CompositeReturn(null, date, 0.004));
+            rows.Add(new MarketContextEngine.CompositeReturn("SRL55-Alpha", date, 0.01));
+
+            if (i < 62)
+            {
+                rows.Add(new MarketContextEngine.CompositeReturn("SRL55-Beta", date, 0.0));
+            }
+        }
+
+        var values = Parse(MarketContextEngine.SectorRelativeStrength(rows));
+
+        Assert.Equal(new[] { "SRL55-Alpha" }, values.Keys.ToArray());
+    }
+
+    /// <summary>
     /// The universe composite is the mean over every active member, not the mean of the
     /// sector means, and it is computed by the stage's own statement against a store
     /// [`METRICS.md`, D-158, 5.5.3].

@@ -14080,3 +14080,26 @@ still names the grep D-83 retired, which is the plan's §7 item 3 and the operat
 
 `StatementColumnConformanceTests` now takes its statements from the same catalogue, so the
 column check and the money check cannot read different lists.
+### 5.5.3, second commit: both composites chained over one window, found by review
+
+**A read-only review of the branch, run from this session as a workflow of independent
+reviewers each checked by a sceptic, found a defect 5.5.3 introduced the conditions for.** It
+is not the sign-off review, which must run in a session that has not committed here.
+`SectorRelativeStrength` chained every date it was handed, its only test a minimum of 63. A
+member whose last 64 bars straddle a hole returns a row dated a session before every other
+member's window, and since 5.5.3 five such members anywhere in the universe carry the
+universe composite onto that date, where before it took five inside one sector. The value was
+then a 63-session sector return less a 64-session universe one, against `METRICS.md`'s "over
+the same window", the extra session's mean drawn from a few gap names' returns across their
+holes.
+
+**Both chains now run over the universe composite's 63 most recent sessions, and a sector that
+does not cover all 63 carries no value**, which is `rs_change_vs_sector`'s rule for a sector
+thin on any date. Two facts, red against the first commit's arithmetic: a stray older universe
+date at +50 percent turned Alpha's value from 0.585795 to -0.057180, and a sector covering 62 of
+the 63 sessions plus an older one carried a value. Green after, with the market context, range
+seam and write path suites, 20 in all.
+
+**C10 had already been recomputed under the first commit's arithmetic**, so it is re-run over
+the same dates, range and nightly, before the recompute is recorded. Nothing downstream reads
+the column, so nothing else is re-run.

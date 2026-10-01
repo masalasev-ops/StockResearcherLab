@@ -1,4 +1,5 @@
 using Npgsql;
+using StockResearcherLab.Core;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data;
 using StockResearcherLab.Pipeline.Select;
@@ -326,6 +327,57 @@ public sealed class ScreenRangeRunTests
         }
     }
 
+    /// <summary>
+    /// **The floor pass resolves the floor keys as of each session, not as of the range's
+    /// end** [INVARIANT 13, D-43, 5.5.6].
+    ///
+    /// `screens.floor_percentile` drops to 50 by a version stamped 2022-03-07, inside the
+    /// range. A nightly C13 run over 2022-03-06 resolves the 98 in force that day; until
+    /// 5.5.6 the range pass resolved both keys once, at the range's end, so every session
+    /// took the 50, including the ones before the stamp. Both sides of the stamp are
+    /// compared with what the nightly stage writes for the same date, because that is the
+    /// one reading of "the floor on that date" that cannot be argued with.
+    /// </summary>
+    [Fact]
+    public async Task TheFloorPassResolvesItsKeysAsOfEachSession()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct);
+
+        try
+        {
+            await SeedSpreadAsync(ct);
+            await SetFloorAsync("screens.floor_lookback_days", 2, "5", "2020-06-01", ct);
+            await SetFloorAsync("screens.floor_percentile", 2, "50", "2022-03-07", ct);
+
+            await Run().ScoreAsync(From, To, ct);
+            await Run().FloorAsync(From, To, ct);
+
+            var before = new DateOnly(2022, 3, 6);
+            var after = new DateOnly(2022, 3, 8);
+
+            var rangeBefore = await FloorOnAsync(before, ct);
+            var rangeAfter = await FloorOnAsync(after, ct);
+
+            Assert.NotNull(rangeBefore);
+            Assert.NotNull(rangeAfter);
+
+            await RunNightlyAsync(before, ct);
+            await RunNightlyAsync(after, ct);
+
+            Assert.Equal(await FloorOnAsync(before, ct), rangeBefore);
+            Assert.Equal(await FloorOnAsync(after, ct), rangeAfter);
+
+            // And the two sides of the stamp differ, so the equalities above are not two
+            // readings of one value.
+            Assert.NotEqual(rangeBefore, rangeAfter);
+        }
+        finally
+        {
+            await ClearAsync(ct);
+        }
+    }
+
     /// <summary>Re-running one date reproduces it byte-identically.</summary>
     [Fact]
     public async Task ReRunningOneDateReproducesIt()
@@ -603,6 +655,42 @@ public sealed class ScreenRangeRunTests
         }
     }
 
+    private static async Task<double?> FloorOnAsync(DateOnly date, CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
+        await using var cmd = new NpgsqlCommand(
+            "SELECT floor_score FROM screen_history WHERE screen_id = @s AND date = @d;", conn);
+
+        cmd.Parameters.AddWithValue("s", Screen);
+        cmd.Parameters.AddWithValue("d", date);
+
+        var value = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(true);
+
+        return value is null or DBNull ? null : Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>C13 as the evening sequence runs it, on one date, against the same store.</summary>
+    private static async Task RunNightlyAsync(DateOnly date, CancellationToken ct)
+    {
+        var stage = new ScreenEngine();
+        var config = new ConfigStore(TestDatabase.ConnectionString);
+
+        var context = new StageContext(
+            date, await config.RequireVersionAsync(date, ct).ConfigureAwait(true),
+            new StageData(TestDatabase.ConnectionString, new DeclaredAccess(stage)),
+            new FrozenClock(date),
+            config);
+
+        await stage.ExecuteAsync(context, ct).ConfigureAwait(true);
+    }
+
+    /// <summary>Per-file, as every other stage fixture in this suite keeps its own.</summary>
+    private sealed class FrozenClock(DateOnly today) : IClock
+    {
+        public DateTimeOffset UtcNow { get; } = new(today.Year, today.Month, today.Day, 21, 30, 0, TimeSpan.Zero);
+
+        public DateOnly Today { get; } = today;
+    }
     private static async Task SetFloorAsync(
         string key, int version, string value, string setAt, CancellationToken ct)
         => await ExecAsync(

@@ -165,11 +165,9 @@ public sealed class ScreenRangeRun
 
         await EnsurePassOneCompleteAsync(data, inScope, sessions, from, to, ct).ConfigureAwait(false);
 
-        var lookback = (int) ConfigValue.Long(
-            await config.RequireAsync("screens.floor_lookback_days", to, ct).ConfigureAwait(false));
-
-        var percentile = ConfigValue.Long(
-            await config.RequireAsync("screens.floor_percentile", to, ct).ConfigureAwait(false));
+        // The two floor keys, held per resolved config version so a range whose config
+        // never moved reads them once.
+        var floorsByVersion = new Dictionary<int, (int Lookback, long Percentile)>();
 
         var started = Stopwatch.StartNew();
         long rows = 0;
@@ -177,6 +175,28 @@ public sealed class ScreenRangeRun
         for (var i = 0; i < sessions.Count; i++)
         {
             var date = sessions[i];
+
+            // **Resolved per date and never once for the range** [INVARIANT 13, D-43,
+            // 5.5.6]. Until 5.5.6 both keys were resolved at the range's end, so a floor
+            // revision stamped inside the range was applied to every session before it
+            // as well, and each of those dates was floored under a rule it was never in
+            // force for. The nightly stage resolves them as of its own date, and this is
+            // the same stage run over many dates rather than a different one.
+            var version = await config.RequireVersionAsync(date, ct).ConfigureAwait(false);
+
+            if (!floorsByVersion.TryGetValue(version, out var floors))
+            {
+                floors = (
+                    (int) ConfigValue.Long(
+                        await config.RequireAsync("screens.floor_lookback_days", date, ct).ConfigureAwait(false)),
+                    ConfigValue.Long(
+                        await config.RequireAsync("screens.floor_percentile", date, ct).ConfigureAwait(false)));
+
+                floorsByVersion[version] = floors;
+            }
+
+            var (lookback, percentile) = floors;
+
             var screens = Selected(
                 await ScreenRegistry.LoadScoredAsync(config, date, ct).ConfigureAwait(false), only);
 

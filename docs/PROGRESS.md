@@ -13613,7 +13613,7 @@ Each row is filled when its checkpoint lands.
 |---|---|---|---|
 | 5.5.2 | Scratch files containing `DateTime.Today` and `Random.Shared.Next()`, and a third reading `TimeProvider.System` | **Exit 1**, 3 of 6 checks failing, naming `Scratch552Clock.cs:4 DateTime.Today`, `Scratch552TimeProvider.cs:4 TimeProvider` and `Scratch552Random.cs:4 Random.Shared`. `HEAD`'s guard over the same three staged files: **exit 0**, 5 checks over 216 files | **Exit 0** with the files removed, 6 checks over 213 files, every grep at zero |
 | 5.5.4 | `HEAD`, on the three `X-` ids | **22 of 82 failing**: all 21 ordered pairs whose owner is `X-NSI`, `X-ACC` or `X-FM`, every reader able to read the shadow's keys, and the older-form refusal | **82 of 82**, with `ScreenGateTests`, `ScreenEngine` and the registry suites, 126 in all |
-| 5.5.6 | `HEAD`, the whole range taking the second version | | |
+| 5.5.6 | `HEAD`, the whole range taking the second version | **Red**: on 2022-03-06, before the stamp, the nightly stage wrote a floor of 100 and the range pass 55, the 50th percentile from the version stamped 2022-03-07 | **Green**: both sides of the stamp equal what the nightly stage writes for the same date |
 | 5.5.8 | `double positionSize` in a monetary-owning component | | |
 | 5.5.9 | `screen_score_daily` removed from a copy of `SelectionRangeRun`'s reads | | |
 | 5.5.10 | `HEAD`, six stages | | |
@@ -13769,3 +13769,33 @@ was true of the store and could have stopped being true the first time the floor
 **The two range facts lower the shared lookback to five sessions** through a version 2 of
 `screens.floor_lookback_days`, and the file's cleanup now deletes any version above 1 of
 either floor key, because every screen fixture reads them.
+### 5.5.6, the floor pass resolves its keys per session
+
+`ScreenRangeRun.FloorAsync` resolved `screens.floor_lookback_days` and
+`screens.floor_percentile` once, at the range's end, while the session loop resolved the
+screen set per date. **It now resolves both per session**, held per resolved config version
+so a range whose config never moved reads them once, which is C08's and `SelectionRangeRun`'s
+shape. The cache is safe on the version D-72 defines, one plus the number of revisions in
+force, which moves on any revision of either key; a maximum over per-key versions would
+not have been, and the version was read before the cache was trusted.
+
+**The fact compares with the nightly stage rather than with a number worked here.**
+`screens.floor_percentile` drops to 50 by a version stamped 2022-03-07 inside the range, the
+floor pass runs over the whole range, and the floors it writes on 2022-03-06 and 2022-03-08
+are compared with what a nightly C13 run writes for each date. Red at `HEAD` on the date
+before the stamp, 55 against 100, and green after on both. It is in the red-before-green
+table above.
+
+**A third range-end read sits in the same method and is not in the authored row, so it is
+reported rather than taken.** `FloorAsync` builds the set of screens its pass-one guard
+checks with `ScreenRegistry.LoadScoredAsync(config, to, ct)`, as of the range's end. A
+screen registered by a state row stamped inside the range is then required to have been
+scored on every session of the range, including the ones before it existed, so the guard
+refuses a range it should accept. That fails loudly rather than silently, which is why it is
+a finding rather than a defect of the class this phase is about, and the per-screen guard at
+Q.7 is where it would be decided. `ScoreAsync` does not share it: its screen set is resolved
+inside the loop.
+
+**No live date moves.** `screens.floor_percentile` and `screens.floor_lookback_days` have
+only ever had version 1 in the store, read before 5.5.3's recompute was planned, so every
+floor the store holds was resolved under the version in force on its date either way.

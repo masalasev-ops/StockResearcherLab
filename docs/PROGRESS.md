@@ -14050,7 +14050,9 @@ The prior wording of the 18:05 row is in `CHANGELOG.md`, and the test is registe
 **Out of order, after 5.5.14 and before 5.5.15**, because the authored row could not be built
 as written and the operator's answer came at 5.5.14. `indicator_daily.median_dollar_volume_20d`
 is a monetary column, so `IndicatorEngine` is a monetary-owning component, and its file holds
-108 uses of `double`, every one in arithmetic writing `real` columns; the monetary value
+~~108 uses of `double`, every one in arithmetic writing `real` columns~~ [corrected by review: 82
+`double` and 26 `float`, 108 in all, the `float` tokens being casts and field types for the
+`real` columns; the conclusion stands]; the monetary value
 arrives from SQL as `decimal?` and is written as `decimal`. The other five monetary owners
 hold none. A file grep scoped from the registry is red at `HEAD` on a false positive, and the
 two ways round it were an exclusion, which the row forbids, or rewriting C08's arithmetic,
@@ -14118,3 +14120,21 @@ initialised with a target-typed `new()`, and a qualified `new System.Random(7)`.
 exits 1 naming the four constructions by file and line; with the files removed it reads six
 checks over 222 files, every grep at zero. The `Why` now names the three spellings matched and
 the ways a construction is not caught.
+### 5.5.8, second commit: the statement money check reads what it claimed to, found by review
+
+The review reproduced three mutations the statement half of
+`NoStatementCarriesMoneyThroughFloatingPoint` passed, so the claim that it covers every
+statement writing a `numeric` column was not true of its first form. **It returned on any
+statement without an `INSERT` head**, so no update was read, and phase 7's order transitions and
+phase 8's return columns are updates; it checked a `VALUES` item only when the item was a bare
+parameter, so `CAST(@cost AS float8)` passed; and it traced CTEs only through `JOIN cte alias`,
+so `JOIN insider AS i` hid the cast.
+
+**Now**: every `SET` assignment to a `numeric` column is read, an update's and an
+`ON CONFLICT DO UPDATE`'s, with the update's own `FROM` part held too where the assignment
+draws on it, coarse and erring toward reporting; every `VALUES` item is parsed with balanced
+parentheses, checked for a floating cast, and each parameter in it held to a `decimal`
+declaration; and aliases are traced with `AS` optional and in either case. The negative fixture
+carries all three reproduced mutations and a clean update beside them, and the check is green
+over today's statements. The figure "108 uses of `double`" in this phase's record is corrected in
+place: 82 `double` and 26 `float`.

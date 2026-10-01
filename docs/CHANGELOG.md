@@ -2744,3 +2744,21 @@ D-73, BUILD_PLAN being a spec; the authored wording is here.
 ### The 5.5.8 row, as authored
 
 > | 5.5.8 | INVARIANT 16's C# half gains an enforcement, absent since D-83 replaced the source grep with a schema assertion. A further `guards.ps1` check, or a test beside `SchemaParityTests`, finds no `double` or `float` in the tracked C# of the components that own monetary columns, **the scope read from the stage registry's declared write columns rather than from a list of files to skip**, which is the shape that strengthens as the system grows. `CLAUDE.md`'s sentence naming the old grep is reported and not waited on. **Done when** the check is green at `HEAD`, introducing `double positionSize` into a monetary-owning component makes it fail naming file and line, and removing it returns green |
+
+---
+
+## 2026-10-01, phase 5.5, `BUILD_PLAN.md`'s column-ownership carried obligation [5.5.15]
+
+The row read closed at 1.12 while the statement route stayed unchecked, which phase 1's
+sign-off recorded as finding G. A clean edit under D-73; the prior closing sentence is here.
+
+> **Closed at 1.12** [A27]. The staged bulk route is the first place a stage states in code exactly which columns it writes, so it is where the declaration became enforceable, and it did not need to wait for C21. `DeclaredAccess.EnsureColumnsDeclared` runs before the connection opens, alongside the table check |
+
+---
+
+## 2026-10-01, phase 5.5, a correction to the 5.5.8 entry above
+
+The entry gives `IndicatorEngine`'s file as holding "108 uses of `double`". It holds 82 `double`
+and 26 `float`, 108 in all, the `float` tokens being casts and field types for the `real`
+columns. Found by review and corrected here because this file is appended to and never
+rewritten; the conclusion the figure supported stands.

@@ -17,7 +17,7 @@ namespace StockResearcherLab.Tests.Stages;
 /// monetary column `numeric` and says nothing about the value a component computes and
 /// hands it. The row first authored here asked for that grep scoped from the registry, and
 /// it could not be green: `IndicatorEngine` owns `median_dollar_volume_20d` and its file holds
-/// 108 uses of `double`, every one in arithmetic that writes `real` columns, the monetary
+/// 82 uses of `double` and 26 of `float`, all in arithmetic, casts and fields for `real` columns, the monetary
 /// value itself arriving from SQL as `decimal?` and leaving as `decimal`. **The operator
 /// chose the check at the carrier instead**: the C# value bound for a `numeric` column must
 /// be `decimal`, and a statement computing one must not pass it through floating point. A
@@ -147,6 +147,27 @@ public sealed class MonetaryCarrierConformanceTests
         Assert.Contains(
             Violations("CostLedger", "cost_ledger", CostLedger.InsertSql, numeric, doubled),
             v => v.Contains("cost_ledger.cost", StringComparison.Ordinal));
+
+        // The three shapes review found the first form of this check passing [5.5.8, second
+        // commit]: a cast around a bound parameter, the cast reached through an AS-aliased join,
+        // and an update, which the first form never read at all.
+        Assert.Contains(
+            Violations("CostLedger", "cost_ledger", CostLedger.InsertSql.Replace("@cost", "CAST(@cost AS float8)", StringComparison.Ordinal), numeric, ledger),
+            v => v.Contains("cost_ledger.cost", StringComparison.Ordinal));
+
+        const string join = "LEFT JOIN insider i ";
+        var aliased = System.Text.RegularExpressions.Regex.Replace(cast, @"LEFT JOIN insider\s+i\s", "LEFT JOIN insider AS i ");
+        Assert.NotEqual(cast, aliased);
+        Assert.DoesNotContain(join, aliased, StringComparison.Ordinal);
+        Assert.Contains(
+            Violations("FlowEngine", "flow_daily", aliased, numeric, SourceTree.Of(files, "FlowEngine")),
+            v => v.Contains("flow_daily.insider_net_90d_usd", StringComparison.Ordinal));
+
+        Assert.Contains(
+            Violations("CostLedger", "cost_ledger", "UPDATE cost_ledger SET cost = (cost * 2)::float8 WHERE cost_ledger_id = 1;", numeric, ledger),
+            v => v.Contains("cost_ledger.cost", StringComparison.Ordinal));
+        Assert.Empty(
+            Violations("CostLedger", "cost_ledger", "UPDATE cost_ledger SET cost = cost * 2 WHERE cost_ledger_id = 1;", numeric, ledger));
     }
 
     // ------------------------------------------------------------ the check ---
@@ -166,7 +187,39 @@ public sealed class MonetaryCarrierConformanceTests
         }
 
         var text = Regex.Replace(sql, @"--[^\r\n]*", string.Empty);
-        var insert = Regex.Match(text, $@"INSERT\s+INTO\s+""?{Regex.Escape(table)}""?\s*\((?<c>[^)]*)\)");
+
+        // **Every SET assignment to a numeric column, an update's and a conflict clause's**
+        // [found by review]. The first form of this check returned on any statement without an
+        // INSERT head, so no update was ever read, and phase 7's order transitions and phase 8's
+        // return columns are updates. An assignment drawing on the update's own FROM part is
+        // held to that part too, which is coarse and errs toward reporting.
+        foreach (Match set in Regex.Matches(text,
+                     $@"(?:UPDATE\s+""?{Regex.Escape(table)}""?(?:\s+(?:AS\s+)?[a-z]\w*)?|DO\s+UPDATE)\s+SET\s+(?<s>.+?)(?=\s(?:FROM|WHERE|RETURNING)\b|;|$)",
+                     RegexOptions.Singleline | RegexOptions.IgnoreCase))
+        {
+            var tail = text[(set.Index + set.Length)..];
+            var from = Regex.Match(tail, @"^\s*FROM\s(?<f>.+?)(?=\sWHERE\b|;|$)", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+
+            foreach (var assignment in SplitTopLevel(set.Groups["s"].Value))
+            {
+                var m = Regex.Match(assignment, @"^(?:[a-z]\w*\.)?(?<c>[a-z_][a-z0-9_]*)\s*=\s*(?<e>.+)$", RegexOptions.Singleline);
+
+                if (!m.Success || !money.Contains(m.Groups["c"].Value))
+                {
+                    continue;
+                }
+
+                var expression = m.Groups["e"].Value;
+                var drawsOnFrom = from.Success && Regex.IsMatch(expression, @"\b[a-z_]\w*\.\w+");
+
+                if (FloatCast.IsMatch(expression) || (drawsOnFrom && FloatCast.IsMatch(from.Groups["f"].Value)))
+                {
+                    violations.Add($"{stage} -> {table}.{m.Groups["c"].Value}: a floating cast in an assignment to it");
+                }
+            }
+        }
+
+        var insert = Regex.Match(text, $@"INSERT\s+INTO\s+""?{Regex.Escape(table)}""?\s*\((?<c>[^)]*)\)", RegexOptions.IgnoreCase);
 
         if (!insert.Success)
         {
@@ -183,23 +236,30 @@ public sealed class MonetaryCarrierConformanceTests
                 continue;
             }
 
-            var values = Regex.Match(rest, @"^\s*VALUES\s*\((?<v>[^)]*)\)");
+            var values = Regex.Match(rest, @"^\s*VALUES\s*\(", RegexOptions.IgnoreCase);
 
             if (values.Success)
             {
-                // Bound through a parameter: the C# value bound must be declared decimal.
-                var token = values.Groups["v"].Value.Split(',').Select(v => v.Trim()).ElementAtOrDefault(k);
+                // The item itself carries no floating cast, whatever it is [found by review: a
+                // CAST around a parameter was skipped as not a parameter]; and every parameter
+                // in it is bound from a value declared decimal.
+                var item = SplitTopLevel(Balanced(rest, values.Index + values.Length)).ElementAtOrDefault(k) ?? string.Empty;
 
-                if (token is not null && token.StartsWith('@'))
+                if (FloatCast.IsMatch(item))
                 {
-                    var bound = Regex.Match(source, $@"AddWithValue\(\s*""{Regex.Escape(token[1..])}""\s*,\s*(?<e>[A-Za-z_]\w*)\s*\)");
+                    violations.Add($"{stage} -> {table}.{columns[k]}: a floating cast in its VALUES item");
+                }
+
+                foreach (Match parameter in Regex.Matches(item, @"@(?<p>[A-Za-z_]\w*)"))
+                {
+                    var bound = Regex.Match(source, $@"AddWithValue\(\s*""{Regex.Escape(parameter.Groups["p"].Value)}""\s*,\s*(?<e>[A-Za-z_]\w*)\s*\)");
                     var declared = bound.Success
                         ? Regex.Match(source, $@"(?<type>\b[A-Za-z_]\w*\??)\s+{Regex.Escape(bound.Groups["e"].Value)}\s*=")
                         : Match.Empty;
 
                     if (!declared.Success || declared.Groups["type"].Value is not ("decimal" or "decimal?"))
                     {
-                        violations.Add($"{stage} -> {table}.{columns[k]}: bound from {token}, whose C# value is " +
+                        violations.Add($"{stage} -> {table}.{columns[k]}: bound from @{parameter.Groups["p"].Value}, whose C# value is " +
                                        (declared.Success ? $"declared {declared.Groups["type"].Value}" : "not found declared"));
                     }
                 }
@@ -253,8 +313,9 @@ public sealed class MonetaryCarrierConformanceTests
 
         yield return ("the select-list item that writes it", item);
 
-        var aliases = Regex.Matches(final, @"(?:FROM|JOIN)\s+(?<cte>[a-z_][a-z0-9_]*)\s+(?<alias>[a-z_][a-z0-9_]*)\b")
-            .Where(m => ctes.ContainsKey(m.Groups["cte"].Value))
+        // AS optional and either case [found by review: `JOIN insider AS i` was not traced].
+        var aliases = Regex.Matches(final, @"\b(?:FROM|JOIN)\s+(?<cte>[a-z_][a-z0-9_]*)\s+(?:AS\s+)?(?<alias>[a-z_][a-z0-9_]*)\b", RegexOptions.IgnoreCase)
+            .Where(m => ctes.ContainsKey(m.Groups["cte"].Value) && !Regex.IsMatch(m.Groups["alias"].Value, "^(?:ON|WHERE|LEFT|RIGHT|INNER|JOIN|ORDER|GROUP|USING)$", RegexOptions.IgnoreCase))
             .ToDictionary(m => m.Groups["alias"].Value, m => m.Groups["cte"].Value, StringComparer.Ordinal);
 
         var tainted = new SortedSet<string>(StringComparer.Ordinal);
@@ -272,7 +333,7 @@ public sealed class MonetaryCarrierConformanceTests
                 continue;
             }
 
-            foreach (Match m in Regex.Matches(ctes[cte], @"(?:FROM|JOIN)\s+(?<cte>[a-z_][a-z0-9_]*)\b"))
+            foreach (Match m in Regex.Matches(ctes[cte], @"\b(?:FROM|JOIN)\s+(?<cte>[a-z_][a-z0-9_]*)\b", RegexOptions.IgnoreCase))
             {
                 if (ctes.ContainsKey(m.Groups["cte"].Value))
                 {
@@ -285,6 +346,20 @@ public sealed class MonetaryCarrierConformanceTests
         {
             yield return ($"the CTE {cte}", ctes[cte]);
         }
+    }
+
+    /// <summary>The text from <paramref name="open"/>, just past an opening parenthesis, to its match.</summary>
+    private static string Balanced(string text, int open)
+    {
+        var depth = 1;
+        var i = open;
+
+        for (; i < text.Length && depth > 0; i++)
+        {
+            depth += text[i] == '(' ? 1 : text[i] == ')' ? -1 : 0;
+        }
+
+        return text[open..Math.Max(open, i - 1)];
     }
 
     private static List<string> SplitTopLevel(string list)

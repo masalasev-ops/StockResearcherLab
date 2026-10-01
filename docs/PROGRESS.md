@@ -13614,7 +13614,7 @@ Each row is filled when its checkpoint lands.
 | 5.5.2 | Scratch files containing `DateTime.Today` and `Random.Shared.Next()`, and a third reading `TimeProvider.System` | **Exit 1**, 3 of 6 checks failing, naming `Scratch552Clock.cs:4 DateTime.Today`, `Scratch552TimeProvider.cs:4 TimeProvider` and `Scratch552Random.cs:4 Random.Shared`. `HEAD`'s guard over the same three staged files: **exit 0**, 5 checks over 216 files | **Exit 0** with the files removed, 6 checks over 213 files, every grep at zero |
 | 5.5.4 | `HEAD`, on the three `X-` ids | **22 of 82 failing**: all 21 ordered pairs whose owner is `X-NSI`, `X-ACC` or `X-FM`, every reader able to read the shadow's keys, and the older-form refusal | **82 of 82**, with `ScreenGateTests`, `ScreenEngine` and the registry suites, 126 in all |
 | 5.5.6 | `HEAD`, the whole range taking the second version | **Red**: on 2022-03-06, before the stamp, the nightly stage wrote a floor of 100 and the range pass 55, the 50th percentile from the version stamped 2022-03-07 | **Green**: both sides of the stamp equal what the nightly stage writes for the same date |
-| 5.5.8 | `double positionSize` in a monetary-owning component | | |
+| 5.5.8 | A monetary column's carrier changed to `double` [the row as amended on operator direction] | **Red against `HEAD`'s code** on all four facts: a `double` for `market_cap` failed inside Postgres with a binary-format error naming neither column nor invariant, a null carried as `double?` went through, and `CostLedger`'s cost was `var` and could not be read | **Green**: refused before the row is written, naming table and column; the statement check clean over today's statements and failing on both mutations |
 | 5.5.9 | `screen_score_daily` removed from a copy of `SelectionRangeRun`'s reads | **Red**: the check reports `src/StockResearcherLab.Pipeline/Select/SelectionRangeRun.cs: screen_score_daily`, while `DeclaredAccess` over the same mutilated list passes the read it gates | **Green**: no violation over today's code, every registered component's file found, statements read in at least twenty files |
 | 5.5.10 | `HEAD`, six stages | **Red at `HEAD`**: twelve declared writes across **eight** components no route checked, `CandidateAllocator` (2), `ConcentrationMonitor`, `CostLedger`, `GateEngine`, `HeadlineIngestor`, `NewsDigester`, `PercentileEngine` (2) and `ScreenEngine` (3) | **Green**: every one on `Statements()`, and the two column directions and both column-drop fixtures green, 10 in the two classes |
 | 5.5.12 | `HEAD`, the four Consumer rows | **Red at `HEAD` on thirteen read sites over thirteen keys**: the plan's four rows and its missing one, eight `RecordInspector` cells, and `BackfillPool`'s read of the pool timeout | **Green** after the cells were filled from the code |
@@ -14045,3 +14045,38 @@ is the operator's edit and is the carried obligation D-159 left.
 
 The prior wording of the 18:05 row is in `CHANGELOG.md`, and the test is registered in
 `FIXTURES.md`.
+### 5.5.8, INVARIANT 16's C# half, checked at the carrier, landed out of order
+
+**Out of order, after 5.5.14 and before 5.5.15**, because the authored row could not be built
+as written and the operator's answer came at 5.5.14. `indicator_daily.median_dollar_volume_20d`
+is a monetary column, so `IndicatorEngine` is a monetary-owning component, and its file holds
+108 uses of `double`, every one in arithmetic writing `real` columns; the monetary value
+arrives from SQL as `decimal?` and is written as `decimal`. The other five monetary owners
+hold none. A file grep scoped from the registry is red at `HEAD` on a false positive, and the
+two ways round it were an exclusion, which the row forbids, or rewriting C08's arithmetic,
+which would move every indicator value. **The operator chose the check at the carrier**, and
+the row is amended with its authored wording in `CHANGELOG.md`.
+
+**The bulk route is checked at the write, in production code.** `StageData.BulkUpsertAsync`
+reads the table's `numeric` columns on the connection it already opens, and the bulk writer,
+counting columns as values are written, refuses a `double` or `float`, null or not, by its
+static type, naming table, column and INVARIANT 16. `numeric` is this schema's money type,
+so the scope is every `numeric` column and not the monetary name pattern; nothing a stage
+writes today is refused, because a `double` reaching a `numeric` column already failed inside
+Postgres, as the red shows, with a message naming neither.
+
+**The statement route is checked by test.** For each statement in the shared
+`Corpus/StatementCatalogue` writing a `numeric` column: a value bound through a parameter is
+held to the C# declaration of what is bound, and `CostLedger`'s cost moved from `var` to an
+explicit `decimal` so that the declaration can be read; a value computed in SQL is held to its
+path, the select-list item that writes it and every CTE it draws from by alias, transitively,
+none of which may carry a floating cast. `FlowEngine`'s statement already holds one, `::real`
+on the ownership change, and it is off the money's path, which the negative fixture asserts
+alongside the cast it does catch.
+
+**What this does not catch, by the operator's choice**: a `double` used in arithmetic whose
+result is converted to `decimal` before it is written. INVARIANT 16's sentence in `CLAUDE.md`
+still names the grep D-83 retired, which is the plan's §7 item 3 and the operator's.
+
+`StatementColumnConformanceTests` now takes its statements from the same catalogue, so the
+column check and the money check cannot read different lists.

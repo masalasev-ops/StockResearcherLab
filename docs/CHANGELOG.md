@@ -2728,3 +2728,19 @@ D-73 for the row; the two failure rows are additions and remove nothing.
 
 `FlowEngine` and `SentimentEngine` ran in this slot from phases 1 and 2 and appeared nowhere
 in the document, failure table included.
+
+---
+
+## 2026-10-01, phase 5.5, `BUILD_PLAN.md`'s 5.5.8 row amended on operator direction
+
+The row as authored could not be green at `HEAD`. `indicator_daily.median_dollar_volume_20d`
+is a monetary column, so `IndicatorEngine` is a monetary-owning component, and its file
+holds 108 uses of `double` in arithmetic that writes `real` columns while the monetary
+value arrives from SQL as `decimal?` and is written as `decimal`. The three ways through
+were an exclusion, which the row forbids, rewriting C08's arithmetic, which would move every
+indicator value, or checking the carrier. The operator chose the carrier. A clean edit under
+D-73, BUILD_PLAN being a spec; the authored wording is here.
+
+### The 5.5.8 row, as authored
+
+> | 5.5.8 | INVARIANT 16's C# half gains an enforcement, absent since D-83 replaced the source grep with a schema assertion. A further `guards.ps1` check, or a test beside `SchemaParityTests`, finds no `double` or `float` in the tracked C# of the components that own monetary columns, **the scope read from the stage registry's declared write columns rather than from a list of files to skip**, which is the shape that strengthens as the system grows. `CLAUDE.md`'s sentence naming the old grep is reported and not waited on. **Done when** the check is green at `HEAD`, introducing `double positionSize` into a monetary-owning component makes it fail naming file and line, and removing it returns green |

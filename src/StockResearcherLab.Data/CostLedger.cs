@@ -116,7 +116,7 @@ public sealed class CostLedger : IWriteOwner
 
         var price = await PriceAsync(modelId, asOf, ct).ConfigureAwait(false);
 
-        var cost =
+        decimal cost =
             (inputTokens ?? 0) * price.Input / PerMillion
             + (outputTokens ?? 0) * price.Output / PerMillion
             + (cacheWriteTokens ?? 0) * price.CacheWrite / PerMillion

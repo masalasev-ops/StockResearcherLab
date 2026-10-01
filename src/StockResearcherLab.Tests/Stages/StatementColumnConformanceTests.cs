@@ -35,55 +35,8 @@ namespace StockResearcherLab.Tests.Stages;
 [Collection("database")]
 public sealed class StatementColumnConformanceTests
 {
-    /// <summary>
-    /// The stages that write through a hand-written statement, with it.
-    ///
-    /// Two, and a third arrives the next time a stage writes without going through the
-    /// staged bulk path. There is no marker in the registry that says which route a
-    /// stage takes, so this list is stated rather than derived, and
-    /// <see cref="EveryNamedStatementBelongsToARegisteredStage"/> is what keeps it from
-    /// naming something that no longer exists.
-    /// </summary>
     private static IEnumerable<(string Stage, string Table, WriteOperation Operation, string Sql)> Statements()
-    {
-        var date = new DateOnly(2026, 8, 7);
-        const WriteOperation insert = WriteOperation.Insert;
-        const WriteOperation update = WriteOperation.Update;
-
-        yield return ("FlowEngine", "flow_daily", insert, FlowEngine.Sql);
-
-        foreach (var source in PercentileEngine.Sources)
-        {
-            yield return ("PercentileEngine", source.Table, update, PercentileEngine.UpdateSql(source, date, 15));
-            yield return ("PercentileEngine", "percentile_cell_daily", insert, PercentileEngine.CellSql(source, date, 15));
-            yield return ("PercentileEngine", "percentile_cell_coverage", insert, PercentileEngine.CoverageSql(source.Table, date));
-        }
-
-        // The six statement writers 5.5.10 adds, and CostLedger, which the plan's count of
-        // six did not name. Each statement is built by the component's own builder, or for
-        // the three whose rows are assembled at run time, from the fixed head the builder
-        // itself uses.
-        var screen = new ScreenDefinition(
-            "S2", [ScreenMetric.Ranked("adx14", MetricDirection.High)], 1, ScreenState.Live, 8);
-
-        yield return ("ScreenEngine", "screen_score_daily", insert, ScreenEngine.ScoreSql(screen, date, 1));
-        yield return ("ScreenEngine", "screen_score_daily", update, ScreenEngine.RankSql("S2", date, 0.5));
-        yield return ("ScreenEngine", "screen_score_daily", update, ScreenEngine.ClearRanksSql("S2", date));
-        yield return ("ScreenEngine", "screen_history", insert, ScreenEngine.HistorySql("S2", date, 0.9, 0.9, 250));
-
-        yield return ("GateEngine", "gate_result", insert, GateEngine.Sql(
-            date, new GateEngine.GateThresholds(8, 5, 2, 30), GateReasons.All.ToHashSet()));
-
-        yield return ("CandidateAllocator", "candidate_set", insert,
-            CandidateAllocator.Sql([("S2", SlotQuota.For(8))], date));
-        yield return ("CandidateAllocator", "attribution", insert,
-            CandidateAllocator.AttributionSql([("S2", SlotQuota.For(8))], [("X-FM", SlotQuota.For(8))], date, 1));
-
-        yield return ("ConcentrationMonitor", "alert", insert, ConcentrationMonitor.AlertInsertHead);
-        yield return ("HeadlineIngestor", "headline", insert, HeadlineIngestor.InsertHead);
-        yield return ("NewsDigester", "news_digest", insert, NewsDigester.InsertHead);
-        yield return ("CostLedger", "cost_ledger", insert, CostLedger.InsertSql);
-    }
+        => StatementCatalogue.All();
 
     /// <summary>
     /// Every column a stage declares for a table appears in the statement that writes

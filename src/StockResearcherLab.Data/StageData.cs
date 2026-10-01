@@ -256,10 +256,17 @@ public sealed class StageData : IStageData
         await ExecuteAsync(conn, BulkUpsertSql.CreateStaging(staging, table, columns), ct)
             .ConfigureAwait(false);
 
+        // **Money is decimal at the write, not only in the schema** [INVARIANT 16, 5.5.8].
+        // The schema half holds every monetary column `numeric`; this holds the C# value
+        // bound for one to `decimal`, refusing a `double` or `float` by its static type before
+        // the row is written, so a monetary value computed in binary floating point cannot
+        // reach the store through the bulk route whatever arithmetic produced it.
+        var numeric = await NumericColumnsAsync(conn, table, ct).ConfigureAwait(false);
+
         await using (var importer = await conn.BeginBinaryImportAsync(
             BulkUpsertSql.Copy(staging, columns), ct).ConfigureAwait(false))
         {
-            await write(new NpgsqlBulkWriter(importer), ct).ConfigureAwait(false);
+            await write(new NpgsqlBulkWriter(importer, table, columns, numeric), ct).ConfigureAwait(false);
             await importer.CompleteAsync(ct).ConfigureAwait(false);
         }
 
@@ -294,13 +301,56 @@ public sealed class StageData : IStageData
         }
     }
 
-    private sealed class NpgsqlBulkWriter(NpgsqlBinaryImporter importer) : IBulkWriter
+    /// <summary>The table's `numeric` columns, which in this schema are the money [INVARIANT 16].</summary>
+    private static async Task<IReadOnlySet<string>> NumericColumnsAsync(
+        NpgsqlConnection conn, string table, CancellationToken ct)
     {
+        await using var cmd = new NpgsqlCommand(
+            "SELECT column_name FROM information_schema.columns " +
+            "WHERE table_schema = 'public' AND table_name = @t AND data_type = 'numeric';", conn);
+        cmd.Parameters.AddWithValue("t", table);
+
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            found.Add(reader.GetString(0));
+        }
+
+        return found;
+    }
+
+    private sealed class NpgsqlBulkWriter(
+        NpgsqlBinaryImporter importer, string table, IReadOnlyList<string> columns, IReadOnlySet<string> numeric)
+        : IBulkWriter
+    {
+        // The column the next value is for, counted from each row's start.
+        private int _column;
+
         public async Task StartRowAsync(CancellationToken ct = default)
-            => await importer.StartRowAsync(ct).ConfigureAwait(false);
+        {
+            _column = 0;
+            await importer.StartRowAsync(ct).ConfigureAwait(false);
+        }
 
         public async Task WriteAsync<T>(T? value, CancellationToken ct = default)
         {
+            var column = _column < columns.Count ? columns[_column] : null;
+            _column++;
+
+            // Refused by the static type, null or not: a null carried as `double?` is a
+            // monetary path in floating point that happened to hold nothing tonight.
+            var type = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+
+            if (column is not null && numeric.Contains(column) && (type == typeof(double) || type == typeof(float)))
+            {
+                throw new InvalidOperationException(
+                    $"{table}.{column} is numeric and was handed a {type.Name}. Money is decimal in " +
+                    "any monetary path, and a value computed in binary floating point carries its " +
+                    "rounding into the store however it is converted at the end [INVARIANT 16].");
+            }
+
             if (value is null)
             {
                 await importer.WriteNullAsync(ct).ConfigureAwait(false);
@@ -320,6 +370,8 @@ public sealed class StageData : IStageData
         /// </summary>
         public async Task WriteJsonAsync(string? json, CancellationToken ct = default)
         {
+            _column++;
+
             if (json is null)
             {
                 await importer.WriteNullAsync(ct).ConfigureAwait(false);

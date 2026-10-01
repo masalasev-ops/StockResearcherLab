@@ -38,9 +38,12 @@ public sealed class NewsDigesterTests : IAsyncLifetime
     /// `SeedChainAsync` is `ON CONFLICT DO NOTHING`, so calling it per test costs nothing
     /// and leaves an operator-edited row alone.
     /// </summary>
+    ///
+    /// **Both rows enabled, which the seed no longer gives** [5.5.11]. The seed is one link
+    /// from 5.5.11, the operator's standing direction, and every test here runs a two-link
+    /// chain, so the class asks for that state rather than inheriting it.
     public async ValueTask InitializeAsync()
-        => await new ConfigSeeder(TestDatabase.ConnectionString)
-            .SeedChainAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
+        => await TwoLinkChain.EnableAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// Runs after every test here, passing or failing, which clearing first cannot do:
@@ -115,6 +118,11 @@ public sealed class NewsDigesterTests : IAsyncLifetime
 
         var result = await RunAsync(link, ct);
         Assert.Equal(3, result.RowsWritten);
+
+        // The run log names the chain in force, both links in order here, so a night's
+        // line says which links it could have reached and not only which one answered
+        // [5.5.11]. StageRunner stores this line in run_log.
+        Assert.Contains(". Chain local, haiku", result.Detail, StringComparison.Ordinal);
 
         var rows = await ReadAsync(ct);
 

@@ -1,7 +1,10 @@
 using System.Text.Json.Nodes;
 using Npgsql;
+using StockResearcherLab.Core.Config;
 using StockResearcherLab.Core.Digest;
 using StockResearcherLab.Data;
+using StockResearcherLab.Pipeline;
+using StockResearcherLab.Pipeline.Select;
 using StockResearcherLab.Tests.Corpus;
 using Xunit;
 
@@ -27,7 +30,7 @@ public sealed class ChainSeedTests
     /// chose rather than a document already carrying.
     /// </summary>
     [Theory]
-    [InlineData("digest.chain", "[\"local\",\"haiku\"]")]
+    [InlineData("digest.chain", "[\"local\"]")]
     [InlineData("digest.rotation_count", "2")]
     [InlineData("digest.lookback_days", "7")]
     [InlineData("digest.health_timeout_ms", "5000")]
@@ -119,6 +122,10 @@ public sealed class ChainSeedTests
         var ct = TestContext.Current.CancellationToken;
         var seeder = new ConfigSeeder(TestDatabase.ConnectionString);
 
+        // From an empty table, so what is asserted is the seed's shape and not whatever a
+        // class testing a two-link chain left behind [5.5.11].
+        await ClearChainAsync(ct).ConfigureAwait(true);
+
         await seeder.SeedChainAsync(ct).ConfigureAwait(true);
         var second = await seeder.SeedChainAsync(ct).ConfigureAwait(true);
 
@@ -142,7 +149,9 @@ public sealed class ChainSeedTests
         Assert.Equal(2, rows.Count);
         Assert.Equal(ConfigSeeder.ChainLinks.Select(l => l.Order), rows.Select(x => x.Order));
         Assert.Equal(ConfigSeeder.ChainLinks.Select(l => l.Endpoint), rows.Select(x => x.Endpoint));
-        Assert.All(rows, x => Assert.True(x.Enabled));
+        // **The secondary is seeded disabled** [5.5.11], the operator's standing direction.
+        Assert.Equal(ConfigSeeder.ChainLinks.Select(l => l.Enabled), rows.Select(x => x.Enabled));
+        Assert.Equal([true, false], rows.Select(x => x.Enabled));
 
         // **The local link carries D-144's request options and the secondary's column
         // is null, asserted rather than left to the column's default.** A default of
@@ -273,6 +282,86 @@ public sealed class ChainSeedTests
     /// so. A link added to one and not the other is a chain with an address nothing can
     /// name, or a name nothing can reach.
     /// </summary>
+    /// <summary>
+    /// **A database built from the seed alone composes no link that reaches a paid
+    /// provider, and its chain builds** [5.5.11, phase 5.5 done-when line 6].
+    ///
+    /// The composition constructs the secondary only where <c>digest.chain</c>, resolved as
+    /// of the night, names it [`PipelineComposition`], and that name test is what this
+    /// asserts, over the seeded key values themselves rather than over a store an earlier
+    /// run may have edited. Then the chain is built over freshly seeded rows with both
+    /// links offered, and only the local one is taken: no length mismatch, and no second
+    /// position for the rotation to reach. Until 5.5.11 the seed named both links and
+    /// enabled both rows, so a fresh database with the key present composed the paid link
+    /// on its first night.
+    /// </summary>
+    [Fact]
+    public async Task ADatabaseBuiltFromTheSeedComposesNoPaidLink()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var date = new DateOnly(2026, 8, 12);
+        var seeded = new SeededConfig();
+
+        var named = await DigestChain.NamedLinksAsync(seeded, date, ct).ConfigureAwait(true);
+
+        Assert.Equal(["local"], named);
+        Assert.DoesNotContain(DigestProviders.Name(DigestProvider.Haiku), named);
+
+        await ClearChainAsync(ct).ConfigureAwait(true);
+        await new ConfigSeeder(TestDatabase.ConnectionString).SeedChainAsync(ct).ConfigureAwait(true);
+
+        var chain = await DigestChain.BuildAsync(
+            new StageData(TestDatabase.ConnectionString, LocalModelClient.Access()),
+            seeded,
+            date,
+            new Dictionary<DigestProvider, IDigestLink>
+            {
+                [DigestProvider.Local] = new NoLink(DigestProvider.Local),
+                [DigestProvider.Haiku] = new NoLink(DigestProvider.Haiku),
+            },
+            ct).ConfigureAwait(true);
+
+        Assert.Equal([DigestProvider.Local], chain.Order);
+        Assert.Null(chain.RotationTarget);
+    }
+
+    /// <summary>The seeder's own key values as a config store, every key at version 1.</summary>
+    private sealed class SeededConfig : IConfigStore
+    {
+        public Task<ConfigRow?> ResolveAsync(string key, DateOnly asOf, CancellationToken ct = default)
+            => Task.FromResult(ConfigSeeder.Keys
+                .Where(k => string.Equals(k.Key, key, StringComparison.Ordinal))
+                .Select(k => (ConfigRow?) new ConfigRow(k.Key, 1, k.Value, new DateOnly(2020, 1, 1)))
+                .SingleOrDefault());
+
+        public async Task<ConfigRow> RequireAsync(string key, DateOnly asOf, CancellationToken ct = default)
+            => (await ResolveAsync(key, asOf, ct).ConfigureAwait(false))
+               ?? throw new InvalidOperationException($"The seeder does not seed '{key}'.");
+
+        public Task<int?> ResolveVersionAsync(DateOnly asOf, CancellationToken ct = default) => Task.FromResult<int?>(1);
+
+        public Task<int> RequireVersionAsync(DateOnly asOf, CancellationToken ct = default) => Task.FromResult(1);
+    }
+
+    /// <summary>A link that is never asked anything; the chain is only built here.</summary>
+    private sealed class NoLink(DigestProvider provider) : IDigestLink
+    {
+        public DigestProvider Provider { get; } = provider;
+
+        public Task<LinkHealth> HealthAsync(CancellationToken ct = default)
+            => throw new InvalidOperationException("Building the chain asks no link anything.");
+
+        public Task<DigestAnswer> DigestAsync(DigestRequest request, CancellationToken ct = default)
+            => throw new InvalidOperationException("Building the chain asks no link anything.");
+    }
+
+    private static async Task ClearChainAsync(CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
+        await using var cmd = new NpgsqlCommand("DELETE FROM local_model_config;", conn);
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(true);
+    }
+
     [Fact]
     public void TheChainHasOneRowPerProviderInTheVocabulary()
     {

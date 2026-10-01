@@ -2660,3 +2660,27 @@ asked for, and the attached-terminal prompt is what covers the load that genuine
 **Nothing else in the note changed.** The persistent chrome, the argument for it, the
 visible-secondary state and the run health screen's detail and reconnect control all
 stand as written.
+
+---
+
+## 2026-10-01, phase 5.5, `CONFIG_REFERENCE.md`'s `digest.chain` default [5.5.11]
+
+The seeded value of `digest.chain` moves from the two links the corpus first documented to
+the one in force, `["local"]`, and the secondary's `local_model_config` row is seeded
+disabled beside it. The operator directed on 2026-08-25 that the digest step reach no paid
+provider until they have evaluated it, and until 5.5.11 that direction existed only as two
+edits to the one store that had run: a fresh database seeded the paid link and, with the
+Anthropic key present, composed it on its first night. A clean edit under D-73; the prior
+wording is here.
+
+### `CONFIG_REFERENCE.md`, the `digest.chain` row
+
+> | `digest.chain` | `["local","haiku"]` | D-25 | DigestChain, `BuildAsync` | **verified 5.7** |
+
+**What moved and what did not.** The default and its citation. D-25, the two-link design,
+stands; the chain still holds both rows and the rotation code is unchanged. Enabling the
+secondary is a version of this key and an edit to the row, on a fresh database exactly as
+on the one that has run. **A store seeded before 5.5.11 is untouched**: version 1 seeds
+under `ON CONFLICT DO NOTHING`, so its version 1 still reads two links and its operator
+edits stand. The two stores therefore disagree about what version 1 of this key held, which
+is recorded here rather than reconciled; each is consistent with itself.

@@ -13907,3 +13907,49 @@ read `SCHEMA.md` throughout; the header no longer counts them. **The invariant's
 
 `StatementTableConformanceTests` and this class now share `Corpus/SourceTree`, the source read
 both rest on.
+### 5.5.11, the operator's standing deferral gains a home in the repository
+
+**Of the three shapes the row offers, the seed was taken, and it needed two of them
+together.** `digest.chain` is seeded at `["local"]`, the value in force, and
+`ConfigSeeder.ChainLinks` seeds the secondary's `local_model_config` row disabled. Either alone
+fails: the chain refuses to build when its length and the enabled rows differ, so a one-link
+chain over two enabled rows, or two names over one, halts C33 on the first night. Together they
+give a fresh database exactly the state the store that has run is in. **The startup assertion
+was not taken**: a guard refusing the paid link while `digest.chain` names it would halt that
+same night instead of running it on the local link, which is the failure the seed avoids.
+
+**The exposure was a fresh database with the key present.** The composition builds the paid
+link only where `digest.chain`, resolved as of the night, names it and a key exists, and
+`Anthropic:ApiKey` has been in the Worker's secrets since 2026-08-25. So until 5.5.11, a
+database built from `seed.ps1` alone would have reached the paid provider on its first night,
+the rotation routing two candidates to the secondary regardless of primary health [D-27].
+
+**A store seeded before 5.5.11 is untouched**, version 1 seeding under `ON CONFLICT DO
+NOTHING`: the live store keeps version 1 at two links, the operator's version 2 at one, and its
+disabled row. The two kinds of store disagree about what version 1 held, recorded in
+`CHANGELOG.md` with the `CONFIG_REFERENCE.md` default's prior wording.
+
+**The run log names the chain in force.** C33's detail line, which `StageRunner` stores in
+`run_log`, ends with the chain by name and in order, so a night on a freshly seeded database
+reads "Chain local".
+
+| Fact | What it asserts |
+|---|---|
+| `ChainSeedTests.ADatabaseBuiltFromTheSeedComposesNoPaidLink`, new | `digest.chain` resolved over the seeder's own values names `local` alone, so the composition's name test constructs no paid link; and the chain built over freshly seeded rows with both links offered takes the local one only, with no rotation target |
+| `ChainSeedTests.TheChainHasTwoRowsAndReSeedingChangesNothing`, changed | From an emptied table, both rows seeded with the secondary disabled, and a second seed changes nothing |
+| `NewsDigesterTests.TheFourOutcomesAreWrittenAsFourDistinctStates`, extended | The detail line names the chain, here both links in order |
+
+**The digest tests stopped inheriting a two-link chain from the seed.** `NewsDigesterTests`
+said in terms that it ran both links "because `local_model_config` holds two enabled rows",
+and `DigestGateTests` read `digest.chain` from the seeded store. Each now asks for the
+two-link state through `Corpus/TwoLinkChain`, which enables both rows and, for the gate tests,
+reads `digest.chain` as both links through a wrapper over the real config store, so no config
+row is written to get it. `ChainSeedTests` empties the table before asserting the seed's own
+shape, so the order classes run in decides nothing.
+
+**The local test database still carries the old seed** and is not what this was verified
+against: it persists between local runs and seeds under `ON CONFLICT DO NOTHING`, so its
+`digest.chain` version 1 still reads two links. `ci.ps1` drops it before every run, and the
+gate is where the new seed is proved.
+
+**Neither enables the secondary nor spends money.** No paid call was made.

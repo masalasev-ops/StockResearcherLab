@@ -14138,3 +14138,19 @@ declaration; and aliases are traced with `AS` optional and in either case. The n
 carries all three reproduced mutations and a clean update beside them, and the check is green
 over today's statements. The figure "108 uses of `double`" in this phase's record is corrected in
 place: 82 `double` and 26 `float`.
+### 5.5.9, second commit: written tables held to the write set, and a handed store placed, found by review
+
+**Two holes in the statement-table check.** It pooled each file's reads and writes, which is
+what the authored row asked, so a statement could write a table its component declares only for
+reading, through a data-modifying CTE or a mislabelled call, and every check stayed green; and it
+did not scan a file that issues statements through an `IStageData` it is handed and declares
+nothing itself, `DigestChain` being one, reading `local_model_config` under C32's access.
+
+**Now**: a table after `INSERT INTO`, `UPDATE` or `DELETE FROM` must be in the file's declared
+write set, the owners' write sets and the `TableWrite` entries of any inline declaration; and a
+file of the handed-store shape is held to the access of the component a short map names,
+`DigestChain` to `LocalModelClient`, a file of that shape outside the map failing rather than
+being skipped. Neither found anything in today's code. One fact shows all three caught on
+mutated copies: C14 updating `screen_score_daily`, which it declares for reading;
+`DigestChain` joining `news_digest`, which C32 does not declare; and an unmapped file reading
+through a handed store.

@@ -91,6 +91,46 @@ public sealed class StatementTableConformanceTests
     }
 
     /// <summary>
+    /// **The two holes review found, each shown caught** [5.5.9, second commit]. C14 declares
+    /// `screen_score_daily` for reading; a statement of its own that updates it is reported as
+    /// a write it does not declare. `DigestChain` runs under C32's access; joined to a table C32
+    /// does not declare, it is reported. And a file issuing statements through a handed store
+    /// that nothing maps is reported rather than skipped.
+    /// </summary>
+    [Fact]
+    public async Task TheCheckFailsOnAnUndeclaredWriteAndOnAHandedStoreItCannotPlace()
+    {
+        var tables = await LiveTablesAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        var files = SourceTree.Files().ToDictionary(f => f.Key, f => f.Value, StringComparer.Ordinal);
+        var owners = Owners();
+
+        Assert.Empty(Violations(files, owners, tables));
+
+        var allocator = Assert.Single(files.Keys, k => k.EndsWith("/CandidateAllocator.cs", StringComparison.Ordinal));
+        var writing = new Dictionary<string, string>(files, StringComparer.Ordinal)
+        {
+            [allocator] = files[allocator] + "\nconst string Rogue = \"UPDATE screen_score_daily SET rank_within_screen = NULL;\";\n",
+        };
+        Assert.Contains(Violations(writing, owners, tables),
+            v => v.StartsWith($"{allocator}: writes screen_score_daily", StringComparison.Ordinal));
+
+        var chain = Assert.Single(files.Keys, k => k.EndsWith("/DigestChain.cs", StringComparison.Ordinal));
+        var joined = new Dictionary<string, string>(files, StringComparer.Ordinal)
+        {
+            [chain] = files[chain] + "\nconst string Rogue = \"SELECT 1 FROM local_model_config l JOIN news_digest d ON TRUE;\";\n",
+        };
+        Assert.Contains($"{chain}: news_digest", Violations(joined, owners, tables));
+
+        var placed = new Dictionary<string, string>(files, StringComparer.Ordinal)
+        {
+            ["src/StockResearcherLab.Pipeline/Unplaced.cs"] =
+                "public sealed class Unplaced { Task Run(IStageData data) => data.ReadAsync(\"price_daily\", \"SELECT 1 FROM price_daily\"); }",
+        };
+        Assert.Contains(Violations(placed, owners, tables),
+            v => v.StartsWith("src/StockResearcherLab.Pipeline/Unplaced.cs: issues statements", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The scan reads what it is meant to, so the assertion above cannot pass over a scan
     /// that found nothing. Every registered component's file is found, and the plan's case
     /// is among the statements read.
@@ -118,7 +158,30 @@ public sealed class StatementTableConformanceTests
 
     // ------------------------------------------------------------- the check ---
 
-    private sealed record Owner(string TypeName, IReadOnlySet<string> Tables);
+    private sealed record Owner(string TypeName, IReadOnlySet<string> Tables, IReadOnlySet<string> Writes);
+
+    /// <summary>What one file declares: every table, and the tables it declares writing.</summary>
+    private sealed record Scope(HashSet<string> Tables, HashSet<string> Writes);
+
+    /// <summary>
+    /// **Files that issue statements through an <c>IStageData</c> they are handed**, declaring
+    /// nothing themselves, mapped to the component whose access that store carries [5.5.9,
+    /// found by review]. `DigestChain` reads `local_model_config` through the store
+    /// `PipelineComposition` builds from `LocalModelClient.Access()`, so it is held to C32's
+    /// declaration. **Not a list of exemptions**: a file of this shape that is not here fails
+    /// the check, so a new one is named rather than skipped.
+    /// </summary>
+    private static readonly Dictionary<string, string> RunsUnderAccessOf = new(StringComparer.Ordinal)
+    {
+        ["DigestChain"] = "LocalModelClient",
+    };
+
+    private static readonly Regex Written = new(
+        @"\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:ONLY\s+)?""?(?<t>[a-z_][a-z0-9_]*)""?",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex DeclaredWrite = new(
+        @"TableWrite\(\s*""(?<t>[a-z_][a-z0-9_]*)""", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex Keyword = new(
         @"\b(?:FROM|JOIN|INTO|UPDATE)\s+(?:ONLY\s+)?""?(?<t>[a-z_][a-z0-9_]*)""?",
@@ -138,7 +201,8 @@ public sealed class StatementTableConformanceTests
     private static List<string> Violations(
         IReadOnlyDictionary<string, string> files, IReadOnlyList<Owner> owners, IReadOnlySet<string> tables)
     {
-        var declared = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        var declared = new Dictionary<string, Scope>(StringComparer.Ordinal);
+        var violations = new List<string>();
 
         foreach (var (path, text) in files)
         {
@@ -147,6 +211,27 @@ public sealed class StatementTableConformanceTests
             if (scope is not null)
             {
                 declared[path] = scope;
+                continue;
+            }
+
+            // Statements through a handed store, declaring nothing: held to the access the
+            // store carries, or named as unknown.
+            if (StatementTables(text, tables).Count == 0 || !text.Contains("IStageData", StringComparison.Ordinal)
+                || StaticClass.IsMatch(text))
+            {
+                continue;
+            }
+
+            var type = System.IO.Path.GetFileNameWithoutExtension(path);
+
+            if (RunsUnderAccessOf.TryGetValue(type, out var ownerName)
+                && owners.FirstOrDefault(o => o.TypeName == ownerName) is { } runsUnder)
+            {
+                declared[path] = new Scope([.. runsUnder.Tables], [.. runsUnder.Writes]);
+            }
+            else
+            {
+                violations.Add($"{path}: issues statements through a handed IStageData and this check does not know whose access it runs under");
             }
         }
 
@@ -158,8 +243,6 @@ public sealed class StatementTableConformanceTests
                           Tables: StatementTables(f.Value, tables)))
             .Where(h => h.Classes.Count > 0 && h.Tables.Count > 0)
             .ToList();
-
-        var violations = new List<string>();
 
         foreach (var (path, scope) in declared)
         {
@@ -173,7 +256,18 @@ public sealed class StatementTableConformanceTests
                 }
             }
 
-            violations.AddRange(needed.Where(t => !scope.Contains(t)).Select(t => $"{path}: {t}"));
+            violations.AddRange(needed.Where(t => !scope.Tables.Contains(t)).Select(t => $"{path}: {t}"));
+
+            // **A table a statement writes must be one the file declares writing** [INVARIANT
+            // 10, found by review]. Pooling reads and writes let a statement write, through a
+            // data-modifying CTE or a mislabelled call, a table its component declares only
+            // for reading, and every check stayed green.
+            violations.AddRange(Written.Matches(files[path])
+                .Select(m => m.Groups["t"].Value)
+                .Where(tables.Contains)
+                .Distinct(StringComparer.Ordinal)
+                .Where(t => !scope.Writes.Contains(t))
+                .Select(t => $"{path}: writes {t}, which it declares only for reading or not at all"));
         }
 
         violations.Sort(StringComparer.Ordinal);
@@ -186,18 +280,20 @@ public sealed class StatementTableConformanceTests
     /// registered component whose class it declares, and every inline
     /// <c>new DeclaredAccess(...)</c> in it.
     /// </summary>
-    private static HashSet<string>? Declared(string path, string text, IReadOnlyList<Owner> owners)
+    private static Scope? Declared(string path, string text, IReadOnlyList<Owner> owners)
     {
-        HashSet<string>? scope = null;
+        Scope? scope = null;
 
         foreach (var owner in owners.Where(o => SourceTree.Declares(text, o.TypeName)))
         {
-            (scope ??= new HashSet<string>(StringComparer.Ordinal)).UnionWith(owner.Tables);
+            scope ??= new Scope(new HashSet<string>(StringComparer.Ordinal), new HashSet<string>(StringComparer.Ordinal));
+            scope.Tables.UnionWith(owner.Tables);
+            scope.Writes.UnionWith(owner.Writes);
         }
 
         foreach (var arguments in DeclaredAccessArguments(text))
         {
-            scope ??= new HashSet<string>(StringComparer.Ordinal);
+            scope ??= new Scope(new HashSet<string>(StringComparer.Ordinal), new HashSet<string>(StringComparer.Ordinal));
 
             var strings = Quoted.Matches(arguments).Select(m => m.Groups["s"].Value).ToList();
 
@@ -205,7 +301,8 @@ public sealed class StatementTableConformanceTests
             {
                 // The first string is the declaring name, the rest are its tables, and a
                 // column name inside a TableWrite is a harmless extra rather than a table.
-                scope.UnionWith(strings.Skip(1).Where(s => Identifier.IsMatch(s)));
+                scope.Tables.UnionWith(strings.Skip(1).Where(s => Identifier.IsMatch(s)));
+                scope.Writes.UnionWith(DeclaredWrite.Matches(arguments).Select(m => m.Groups["t"].Value));
                 continue;
             }
 
@@ -222,7 +319,8 @@ public sealed class StatementTableConformanceTests
 
             if (created.Success && owners.FirstOrDefault(o => o.TypeName == created.Groups["t"].Value) is { } owner)
             {
-                scope.UnionWith(owner.Tables);
+                scope.Tables.UnionWith(owner.Tables);
+                scope.Writes.UnionWith(owner.Writes);
             }
             else if (StatementTablesUnfiltered(text).Count > 0)
             {
@@ -300,6 +398,8 @@ public sealed class StatementTableConformanceTests
                 g.Key,
                 g.SelectMany(c => (c is IReadOwner r ? r.ReadSet : [])
                         .Concat(c is IWriteOwner w ? w.WriteSet.Select(x => x.Table) : []))
+                    .ToHashSet(StringComparer.Ordinal),
+                g.SelectMany(c => c is IWriteOwner w ? w.WriteSet.Select(x => x.Table) : [])
                     .ToHashSet(StringComparer.Ordinal)))
             .OrderBy(o => o.TypeName, StringComparer.Ordinal)];
     }

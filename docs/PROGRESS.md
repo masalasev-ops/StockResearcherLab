@@ -14196,8 +14196,11 @@ mutated copies: C14 updating `screen_score_daily`, which it declares for reading
 through a handed store.
 ### 5.5.3, the recompute, 2026-10-01 [D-158]
 
-**Run against the live store from a Worker published at each commit, in the order D-158
-names, with `candidate_set` and `attribution` untouched.** Every figure below is a stage's
+**Run against the live store ~~from a Worker published at each commit~~ [corrected after the
+commit: C08, C11, both S2 passes and the first C10 ran from a Worker published from the working
+tree at 09:25, eleven minutes before 5.5.3's first commit, `7c9d735`; C10's two re-runs ran from
+Workers published at `9fc0a18` and `427d34f`], in the order D-158 names, with `candidate_set` and
+`attribution` untouched.** Every figure below is a stage's
 own `run_log` detail or a before-and-after hash of every date each table holds, the before
 read at 09:54 and the after at 12:35. The comparison is hashes per date, so it says which
 dates moved and not by how much, except where a column was exported whole.
@@ -14210,6 +14213,29 @@ dates moved and not by how much, except where a column was exported whole.
 | C11 PercentileEngine | range, then the two nightly dates | 26,846,423, then 21,238 each | 1h26m58s |
 | C13, both passes, S2 alone | `range-screens` 2021-01-11..2026-08-13 | 1,458 sessions, 62,996 ranked | 22m44s |
 | C13 ScreenEngine | nightly, 2026-08-24 and 08-25, every screen | 22,920 each | 7m19s, 7s |
+
+**The 09:25 Worker is `7c9d735`'s code, and running it before 5.5.4 to 5.5.7 landed moved
+nothing it wrote**, both established after the fact by a read-only workflow run from this
+session, which is not the sign-off review:
+
+- **Same code.** Its four assemblies match a fresh Release build of `7c9d735` method for
+  method, by IL and by resolved tokens: Core 569 methods, Data 397, Pipeline 2,862 and
+  Worker 58, none differing, with identical user strings. All 86 tracked production sources
+  match its PDB checksums byte for byte. The only difference is the informational version
+  stamp, which names `ef31b62`, the commit `HEAD` was on at build time. The comparison was
+  shown to discriminate: against `ef31b62` it finds exactly 5.5.3's four changed methods,
+  and against `83cc11a` 5.5.5's ScreenEngine and ScreenRangeRun changes. The session
+  transcript shows no production edit between the publish and the commit.
+- **Nothing it wrote would differ under later code.** Every production change from
+  `283c6b0` to `a042f37` was read against C08, C11 and C13's writes. 5.5.6's per-session
+  floor keys cannot differ while both keys have only version 1. 5.5.4 only gates reads.
+  5.5.8 only adds a refusal, which `indicator_daily`'s one numeric column, bound as `decimal?`,
+  would not trigger. The rest are off these paths. **The one exception code cannot settle is
+  5.5.5**: a rank on a row whose ticker was not an active member on its date, which
+  ScoreSql does not rewrite, would have been left standing below a floor where 5.5.5's code
+  nulls it. In the snapshot taken after the recompute, S2 has 0 ranked rows below its floor
+  or without one, over the range and both nights. The store-side query settling it is in
+  the operator's script, owed below.
 
 C10 was run twice more over the same dates, at the second commit and at the third. S2 alone
 was re-ranked, D-158 naming it as the screen that ranks on `adx14`, and every other screen's
@@ -14349,7 +14375,10 @@ here. The decision is the operator's and stays `OPEN`.
    `market_context_daily` after the third commit's C10 re-run, which is what shows
    `sector_relative_strength` back on the dates the second commit voided, and 5.5.5's count
    against the recomputed store. `p553\compare.ps1` in the session's temporary directory runs
-   the first against the snapshot taken before the recompute.
+   the first against the snapshot taken before the recompute. **All of items 1 and 2, with the
+   ranked-non-member query above, are one script for the operator to run**,
+   `p553\run-owed.ps1` beside it. It was reviewed twice by read-only workflows before it was
+   handed over, and asks for a typed yes before the delete.
 3. **`CLAUDE.md` §6 and INVARIANT 16's sentence**, both human-edited: §6 still counts two
    fail-closed exceptions where `RUNBOOK.md`'s table is now the enumeration [D-159], and
    INVARIANT 16 still names the grep D-83 retired. §6 is a carried obligation in

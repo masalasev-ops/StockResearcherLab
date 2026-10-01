@@ -13536,3 +13536,84 @@ hand-composed scratch host, and it attempted no run that would spend a provider 
 cent. It read the code for INVARIANTS 6, 7, 10, 11 and 15 rather than measuring them,
 those being properties of statements rather than of rows, except where `ci.ps1`'s 895
 tests measure them. It made no live call to any digest link.
+
+---
+
+## Phase 5.5, the corrections
+
+Branch `phase-5.5-corrections`, cut from `main` at `2349a7f`. The plan is
+`prompts/BuildPlans/phase-5.5-the-corrections.md`, archived as issued at
+`prompts/spent/phase-5.5-the-corrections.md` with the prompt that started the phase beside
+it. **Baseline `ci.ps1` green at `2349a7f`: 895 tests, 23 migrations, 5 guard checks over
+213 files, build 0 warnings, 2 minutes 27 seconds.**
+
+### 5.5.1, what was found, recorded before anything is closed
+
+**The audit's provenance is the plan's and is cited rather than measured here.** The plan
+states a sixteen-dimension conformance audit of `HEAD` `67cdc77` against `ARCHITECTURE.html`
+and `CLAUDE.md` §2, every finding adversarially verified against the lines and then against
+the record, and twenty-two findings surviving verification of twenty-nine. **No transcript
+of that audit is in the repository**, so none of those figures traces to anything that
+produced it, and the plan's own tables do not reconcile with them: §2 tabulates eighteen
+findings closed by this pass and §7 six more that only a human may close, which is
+twenty-four rather than twenty-two, beside five reported in §8 and three refuted there.
+They are recorded as the plan's statement and not as this record's.
+
+**The eighteen findings this pass closes are §2's table**, each against the checkpoint that
+closes it in `BUILD_PLAN.md`. They are not restated here; each checkpoint's section below
+records its own.
+
+**The six findings only a human may close, given a home here because they had none.** The
+plan says of the first that it is filed nowhere, with no `PROGRESS.md` entry, no carried
+obligation and no decision, and that is true of all six. They are reported and not taken
+[`CLAUDE.md` §13]. Each is stated in full at §7 of the plan; the disagreement in one line:
+
+| # | Document | The disagreement |
+|---|---|---|
+| 1 | `ARCHITECTURE.html` | No section describing a component carries a build-state marker, where `CLAUDE.md` §13 requires one, and 13 of its 36 components have no code. D-66 can be read as forbidding the markers, so one of two authored documents is wrong either way |
+| 2 | `CLAUDE.md` §13 | Restates D-73 as a closed list of documents, which D-73 says is the misreading it exists to prevent |
+| 3 | `CLAUDE.md` invariant 16 | "`guards.ps1` greps for it" names a mechanism D-83 replaced; 5.5.8 builds the C# half and the sentence still describes the old one |
+| 4 | `CLAUDE.md` invariant 10 | Enumerates three multi-writer tables where `SCHEMA.md` declares more since D-77 |
+| 5 | `ARCHITECTURE.html` §18 | The halt row is unconditional where D-115 authorises the warm-up carve-out the code implements |
+| 6 | `ARCHITECTURE.html` §18 | The sentiment row and D-14 give different answers and the code follows D-14 |
+
+**A seventh is owed by D-159 rather than found by the audit**: `CLAUDE.md` §6 counts two
+tolerated failures and D-159 replaces the count with a pointer to `RUNBOOK.md`'s failure
+table. It is a carried obligation in `BUILD_PLAN.md`.
+
+**What the drafting found wrong in the plan, before any code.** Three are corrected in the
+authored text and stated where they land: the count of checks that must be shown red, which
+the plan put at four in three places and nine rows state; D-160's premise that ranks can
+tie, which `RankSql`'s ordering on ticker makes impossible, so the plan's sizing query reads
+zero by construction; and `sector_relative_strength`'s reach, which is one jsonb column read
+by C36 and no screen, percentile or `attribution` row, the plan's sentence describing
+`regime_label`. Two more were corrected in the drafting: §03's column is Runs and not
+Cadence, and eight daily components are unbuilt rather than the six phases 6 and 7 build,
+C21 and C31 being daily too. The rest are carried to the checkpoint each bears on and
+recorded there.
+
+**One contradiction this checkpoint lands inside rather than resolves.** `CLAUDE.md` §3 says
+to archive the prompt after writing code and as implemented, and phases 4 and 5 archived
+once every checkpoint had landed. The plan archives before any code and gives its reason,
+and the operator directed that its checkpoints be worked in order. The archive is made now
+and says so in its header; which of the two is the rule is the operator's to settle.
+
+**Documents only.** No source file changed and the test count does not move.
+
+### Red before green
+
+Done-when line 5 asks that both results for each of the ten checks be recorded together.
+Each row is filled when its checkpoint lands.
+
+| Checkpoint | What it is shown failing against | Red | Green |
+|---|---|---|---|
+| 5.5.2 | Scratch files containing `DateTime.Today` and `Random.Shared.Next()` | | |
+| 5.5.4 | `HEAD`, on the three `X-` ids | | |
+| 5.5.6 | `HEAD`, the whole range taking the second version | | |
+| 5.5.8 | `double positionSize` in a monetary-owning component | | |
+| 5.5.9 | `screen_score_daily` removed from a copy of `SelectionRangeRun`'s reads | | |
+| 5.5.10 | `HEAD`, six stages | | |
+| 5.5.12 | `HEAD`, the four Consumer rows | | |
+| 5.5.13 | `HEAD`, one live row | | |
+| 5.5.14 | `HEAD`, two engines | | |
+| 5.5.15 | A copy of the order with one built daily component removed | | |

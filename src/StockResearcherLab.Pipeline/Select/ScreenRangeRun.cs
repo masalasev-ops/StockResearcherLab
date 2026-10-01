@@ -207,6 +207,14 @@ public sealed class ScreenRangeRun
                         ScreenEngine.RankSql(screen.ScreenId, date, floor.Value),
                         parameters: null, ct).ConfigureAwait(false);
                 }
+                else
+                {
+                    // No floor ranks nothing, in the table as well as in this pass [5.5.5].
+                    await data.WriteAsync(
+                        "screen_score_daily", WriteOperation.Update,
+                        ScreenEngine.ClearRanksSql(screen.ScreenId, date),
+                        parameters: null, ct).ConfigureAwait(false);
+                }
             }
 
             if (i % 100 == 0)

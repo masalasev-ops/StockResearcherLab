@@ -287,6 +287,11 @@ public sealed class ScreenEngine : IStage
 
         if (floorScore is null)
         {
+            // No floor ranks nothing, in the table as well as tonight [5.5.5].
+            await context.Data.WriteAsync(
+                "screen_score_daily", WriteOperation.Update,
+                ClearRanksSql(screen.ScreenId, context.Date), parameters: null, ct).ConfigureAwait(false);
+
             return new FloorOutcome(null, observationDays, 0);
         }
 
@@ -364,12 +369,23 @@ public sealed class ScreenEngine : IStage
     /// take the same rank rather than being separated by whichever the sort happened to
     /// put first. Ordering is score descending then ticker ascending, which makes the
     /// tie-break explicit and the result reproducible [`CLAUDE.md` §6].
+    ///
+    /// **The whole screen-date slice is restated, not only the rows that clear** [5.5.5].
+    /// Until 5.5.5 the statement updated the qualifying rows and left the rest as they
+    /// stood, which is right after pass one has written every rank null and wrong whenever
+    /// ranking runs again over a slice that already carries ranks: a floor pass re-run
+    /// after `screens.floor_percentile` moved left every name between the two floors
+    /// ranked, reading as having cleared a floor it does not clear. The first statement
+    /// below nulls every rank in the slice outside the ranked set; the second ranks the
+    /// set. The two touch disjoint rows, so one snapshot serves both.
+    ///
+    /// **The count returned is still the ranked rows and nothing else**, the outer
+    /// statement's, because C13's halt test reads it: every live screen with a floor
+    /// ranking nothing is a data fault [§18].
     /// </summary>
     public static string RankSql(string screenId, DateOnly date, double floorScore)
         => $"""
-            UPDATE screen_score_daily t
-            SET rank_within_screen = r.rk
-            FROM (
+            WITH ranked AS (
                 SELECT ticker,
                        dense_rank() OVER (ORDER BY score DESC, ticker ASC)::int AS rk
                 FROM screen_score_daily
@@ -377,10 +393,39 @@ public sealed class ScreenEngine : IStage
                   AND date = {Literal(date)}
                   AND score IS NOT NULL
                   AND score >= {Num(floorScore)}
-            ) r
+            ),
+            cleared AS (
+                UPDATE screen_score_daily c
+                SET rank_within_screen = NULL
+                WHERE c.screen_id = {Quote(screenId)}
+                  AND c.date = {Literal(date)}
+                  AND c.rank_within_screen IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM ranked q WHERE q.ticker = c.ticker)
+            )
+            UPDATE screen_score_daily t
+            SET rank_within_screen = r.rk
+            FROM ranked r
             WHERE t.screen_id = {Quote(screenId)}
               AND t.date = {Literal(date)}
               AND t.ticker = r.ticker;
+            """;
+
+    /// <summary>
+    /// Every rank in one screen-date slice nulled, for a date with no floor [5.5.5].
+    ///
+    /// **Both paths that find no floor call this**, the nightly one and the range one.
+    /// Until 5.5.5 both returned before touching a rank, so a date that lost its floor,
+    /// the lookback raised past what the screen has scored, kept every rank an earlier
+    /// floor gave it. A date with no floor ranks nothing [D-115], and that has to be true
+    /// of the table and not only of tonight's write.
+    /// </summary>
+    public static string ClearRanksSql(string screenId, DateOnly date)
+        => $"""
+            UPDATE screen_score_daily
+            SET rank_within_screen = NULL
+            WHERE screen_id = {Quote(screenId)}
+              AND date = {Literal(date)}
+              AND rank_within_screen IS NOT NULL;
             """;
 
     private static string Nullable(double? value)

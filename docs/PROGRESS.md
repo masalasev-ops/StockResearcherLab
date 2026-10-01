@@ -13728,3 +13728,44 @@ to build a key it cannot scope. No shadow calls it today; the refusal is what st
 `ScreenRegistry`, appended to rather than rewritten, and the phase 4 record's INVARIANT 2
 sentence, struck in place with the correction beside it. **The plan cites that sentence at
 `PROGRESS.md:10520`**; it opens at `:10519` and runs to `:10522`.
+**5.5.4 reached the remote before its own `ci.ps1` run**, which is the session's error and is
+recorded rather than smoothed. The gate run for 5.5.3 pushed whatever `HEAD` was when it
+finished, and 5.5.4 had been committed while it ran. The gate was then run on 5.5.4's own
+sha, `283c6b0`, and was green, so nothing red was ever on the branch; from 5.5.5 on the
+push names the sha the gate ran against.
+
+### 5.5.5, a floor that moves restates every rank it touches
+
+`ScreenEngine.RankSql` restates the whole screen-date slice: a data-modifying common table
+expression nulls every rank in the slice outside the ranked set, and the outer statement
+ranks the set. The two touch disjoint rows, and **the count returned is still the ranked
+rows alone**, because C13's halt test reads it. `ClearRanksSql` nulls a slice's ranks and
+both paths that find no floor call it, the nightly `ApplyFloorAsync` and the range
+`FloorAsync`. Neither path could ever have left a stale rank on a first pass, pass one
+writing every rank null, which is why the defect needed ranking re-run over a slice that
+already carried ranks.
+
+| Fact | Against the pre-5.5.5 code | After |
+|---|---|---|
+| `ScreenFloorTests.ARaisedFloorLeavesNoRankStandingBelowIt`, ranked at 50 then at 90 | **Red**: the name at 60 kept rank 41 | Green |
+| `ScreenRangeRunTests.ARaisedFloorLeavesNoRankBelowItAcrossTheRange`, the percentile moved from 50 to 98 and the floor pass re-run | **Red**: 60 stale ranks | Green, 0 |
+| `ScreenRangeRunTests.ADateThatLosesItsFloorLosesItsRanks`, the lookback raised past the fixture | **Red**: 66 ranks standing on dates with no floor | Green, 0 |
+
+With the floor, range, engine, gate, warm-up, selection and allocator suites, 93 green.
+
+**The store-wide count, run once against the live store at 2026-10-01 09:44, before the
+5.5.3 recompute:**
+
+```
+SELECT count(*) FROM screen_score_daily s JOIN screen_history h USING (screen_id, date)
+WHERE s.rank_within_screen IS NOT NULL AND (h.floor_score IS NULL OR s.score < h.floor_score);
+```
+
+**0, over 375,387 ranked rows.** That is the answer the record predicts: every rank in the
+store was written by a pass one followed by a pass two, or by a nightly run, and the defect
+needed a floor pass re-run over ranks already standing. So §06's "floors already applied"
+was true of the store and could have stopped being true the first time the floor moved.
+
+**The two range facts lower the shared lookback to five sessions** through a version 2 of
+`screens.floor_lookback_days`, and the file's cleanup now deletes any version above 1 of
+either floor key, because every screen fixture reads them.

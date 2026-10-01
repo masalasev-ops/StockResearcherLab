@@ -49,7 +49,7 @@ cannot reach them.
 | 3.5 The record for one name on one date | ~~**BUILD COMPLETE, AWAITING SIGN-OFF**~~ **PHASE 3.5 SIGNED OFF, 2026-08-23.** **Step 1:** GitHub CI green at `0e8ca25` and `ci.ps1` re-run independently there and at `75ed6b0`. **Step 2:** the review ran in a session that had not committed here, re-measured every store-side line against the database, and returned nine exceptions; **eight are closed** and the corrections are recorded below. **One survives, named rather than carried quietly:** `RecordInspector` holds a second copy of the as-of membership pick, agreeing with `Universe.AsOf` today with nothing holding it so, and closing it is a change to a statement six components read. It blocks nothing in phase 4 | ~~`54da3d5`~~ `75ed6b0` | Checkpoints 3.5.1 to 3.5.4 built, and the sign-off corrections after them. ~~495 tests~~ **498 tests**, the three added by the panel correction. `C36 RecordInspector` at `/record?ticker=&date=`, four panels, reading fourteen stores through the same guarded route a stage uses and behind an empty write set. D-107, D-108 and D-109 authored. Migrations 0014, 0015 and 0016. Both range passes run: C01 over 292 evaluation dates in 14.94 minutes, C11 over 1,462 trading dates in 48.54 minutes, both at zero provider units. ~~495 tests. Sign-off step 2 must run in a session that has not committed here~~ [both superseded at the head of this cell] |
 | 4 Screens and selection | **SIGNED OFF 2026-08-24.** Built 4.1 to 4.14, the four owed items closed at Q.8 to Q.11, reviewed at step 2, and the review's exceptions closed. The record has started | `cd8310d` at the run | Checkpoints 4.1 to 4.13, then `Q.1` to `Q.7` closing the nine reported items as D-121 to D-129, then 4.14, then `Q.8` to `Q.11`. Components: C12, C13, C14 and C28. Migrations `0017` to `0021`. **4.14 froze 74,767 attribution rows** over 1,457 sessions in 12.72 minutes, 34,932 of them candidates and 39,835 shadow, beside 3,812,120 gate rows and 28 alerts. `RUNBOOK.md`'s prohibition is operative. ~~**Five done-when lines hold and one does not**: screen overlap measures 0.5 percent against §06's 10 to 15, which is what near-independent ranking produces and is reported unadjusted [`CLAUDE.md` §11]. Two items reported and not closed, both §3 Writes cells.~~ **The overlap line is amended to the measurement at Q.9** and the done-when moves with it, all three readings named; **the two §3 Writes cells are amended at Q.8**; **§05's S3 tilt and S5 fill sentences are corrected at Q.10 and Q.11**, with both composition questions filed to phase 8. Nothing was re-measured and no screen changed. ~~**Sign-off step 2 is owed and needs a session that has not committed here**~~ **Step 2 ran 2026-08-24 in a session that had not committed here.** It re-ran `ci.ps1` at `c4e782d`, re-ran `distributions` and `persistence` over the frozen range, and queried the store directly; every recorded figure reproduced except one. **It returned six exceptions and six smaller items.** Five exceptions and four of the smaller items are closed in the pass recorded below, at **722 tests** and `ci.ps1` green at `d09ef2e`. ~~**Three things are open and all three are the operator's**: item 42, what a session is, which 54 days in the frozen range turn on and which two measurements now size; and §16's `screen_score_daily` size against the measured 305 MB with the database-size row beside it, both belonging with the `3 → 3 sign-off` obligation.~~ **All three are authored or filed as of 2026-08-24 and the phase signs off.** **Item 42 closes at D-130**: a session is a date the exchange traded, read from the exchange calendar rather than inferred from the store. Its code change reaches every compute range execution and is filed as a carried obligation naming `TradingCalendar.SessionsAsync`, and phase 8 gains an obligation for C21 to skip a non-session date with the eight frozen rows named by date. **The two size figures ride with the `3 → 3 sign-off` obligation**, both being authored figures. **What survives the sign-off is not an open question but a frozen fact**: 57 `attribution` rows stand on 54 days the exchange was shut, they cannot be rewritten, and what reads them excludes them. ~~**SIX OF SIX DONE-WHEN LINES HOLD**~~ **The done-when now reads four holding and two stating no bound**, the overlap clause having become a description at Q.9 and the measure having gone on scoring it as a bound until the review found it. Every figure is unchanged. ~~**The phase is not signed off**: that call is the operator's and item 42 is under it~~ **Signed off 2026-08-24 on the operator's direction, item 42 having been authored as D-130.** Both sign-off steps are met: step 1 with `ci.ps1` green at the branch head and step 2 in a session that had not committed here |
 | 5 Digest chain | ~~**IN PROGRESS. 5.1, 5.2, 5.3's first commit and 5.4 landed**~~ **ALL FOURTEEN CHECKPOINTS BUILT, 2026-08-25.** ~~NOT READY FOR SIGN-OFF: three done-when lines need runs rather than code, and one of them needs a spending decision.~~ **Restated 2026-08-27 at the sign-off review, this row having gone two done-when lines and ten tests stale.** Every owed line is met or deferred: 5.12's night and 5.13's prompt are met, and three are deferred by operator direction on the one evaluation of the secondary. **Both sign-off steps have now run.** Step 1: `ci.ps1` green at ~~`4db0c28` with **885 tests**~~ **`49e235e` with 895 tests**, re-run independently at `9a8d5c1` where the four intervening commits touch `docs/` alone, 23 migrations and 5 guard checks over 213 files. Step 2: the review ran in a session that had not committed here and is recorded at the foot of this file; it returned six exceptions and ~~all six were then closed on the operator's explicit authorisation of 2026-08-27, which is recorded in the review section with what it does and does not cover~~ **the six carried obligations were closed as filed on 2026-08-27 and authorised on 2026-08-28 after reading**, the review section carrying what that covers and what it does not. **The struck wording claimed an authorisation that had not been given at the date it named**, which is the finding rather than the correction: on the 27th the operator had directed that the findings be closed and had not read the rows written to close them, and a direction to close a finding is not a reading of the text written to close it. ~~**Whether the phase signs off is the operator's call and is not taken here** [phase 4's precedent].~~ **PHASE 5 SIGNED OFF, 2026-08-28, on the operator's direction, with two exceptions named rather than carried quietly.** **Exception one: the secondary link has never been called live, and everything that turns on one call stays open with it.** 5.6's single call, 5.14's measured rotation cost against §07's $1.30, and the phase's second done-when line, the fall-through visible in the record, are all the same call and all wait on the operator. `Anthropic:ApiKey` has been placed in the Worker and Tests projects since 2026-08-25, so **what is owed is the spending decision and the evaluation rather than the credential**, and `digest.chain` is `["local"]` by the operator's direction of that date. D-25, D-27 and D-140 stand and the rotation stays in the code; what is deferred is the evidence. **Two lines the sign-off does not carry as open**, because the record has them met: 5.12's night ran end to end on 2026-08-25 with its chain of counts, and 5.13's live half against a genuinely cold model ran on 2026-08-27. **Exception two: the third done-when line is not evaluable in this phase and is re-asked at phase 7** [D-139]. "Stopping both halts the run before any researcher call and produces no orders" names a researcher and an order that do not exist until phases 6 and 7. What 5.11 proves is the narrower observable in full and it was recorded as narrower before the phase began. What is owed is listed at the foot of the phase 5 record below | ~~`4db0c28`~~ ~~`49e235e`~~ `f0f0c7d` | Plan drafted at `edb1c2d` and its authored items adopted 2026-08-24 on the operator's direction: D-131 to D-142, the fourteen checkpoints, and the scope line amended to name C29 HeadlineIngestor, which it had never carried. Two carried obligations closed, one added for phase 9. Baseline `ci.ps1` green at `edb1c2d`, 722 tests, 5 guard checks over 182 files, 21 migrations. **5.1 and 5.2 landed.** 5.1's sweep measured six things over the 32 candidates of 2026-08-12 at 160 provider units; 5.2 is migration `0022`, `DigestProvider`, `SCHEMA.md` and `FIXTURES.md`, **`ci.ps1` green at `a2db04e` with 735 tests, 22 migrations and 5 guard checks over 186 files**. **The phase stops at 5.3 on three blockers, none of them a build session's**: the measured median article is 1,248 tokens against `ARCHITECTURE.html` §07's five to eight hundred, so D-133's cap of three is a decision rather than a seeded value and 5.1's stopping rule fired; the local model is a reasoning model and returns zero characters of digest at any token cap, which under D-137 would run every night on the paid link with the local server healthy; and the Anthropic key is a placeholder. The full statement is in the 5.2 block below. **Two of the three are now drafted as D-143 and D-144**, unauthored, in §12 of the phase plan; the third is a credential the operator is replacing. **5.3's first commit seeded seven decided keys and no provisional value**, four names asserted absent, `ci.ps1` green at `b2e50dc` with 749 tests. **5.4 built C29 HeadlineIngestor** under D-132's run scope, `ci.ps1` green at `1cdbb5a` with **756 tests** and 5 guard checks over 189 files. **D-143 and D-144 were then authored**, and 5.3's second commit, 5.5, 5.7 and 5.8 followed: two keys seeded and `Keys.Count` at 104, migration `0023` for `request_options`, C32 LocalModelClient with a health check that reads content rather than a status, the chain with D-137's retry and fall-through and `digest.chain`'s consumer closed, and C33 NewsDigester writing D-134's four outcomes under D-143's token selection. **`ci.ps1` green at each: `fd152b7` 760 tests and 23 migrations, `bea793f` 780, `84296bb` 798, `da741c5` 812.** 5.6 and 5.14 wait on the Anthropic key. **5.9 landed on 2026-08-25**, C36's fifth panel, with `ARCHITECTURE.html` §03's C36 cell and §20's U8 row amended in the same commit and the prior wordings in `CHANGELOG.md`. **One local night was run first so the panel had something to open**: 32 candidates, 275 headlines over 29 tickers, 32 digests from 81 articles, and D-134's outcomes at 13 prose, 16 `NO MATERIAL NEWS`, 3 null and 0 absent. **Three findings came out of running it**, all recorded below: C33 cannot execute in the composed pipeline until 5.6 exists, because `digest.chain` names a link nothing implements; the article instant was read as an absence, which had been silently reordering D-143's selection since 5.8 and is corrected at the commit before 5.9; and the gate halted a run live on a cold local model, which is INVARIANT 15 observed rather than stubbed. `psql` is at `E:\PostgreSql\v18\bin\psql.exe` and is recorded in `RUNBOOK.md`. **5.10 and 5.11 landed on 2026-08-25**: D-138's hash with the rotation routed to the chain's second position rather than to a named link, and the gate's four observables with both `FIXTURES.md` forward items registered. **Each states its evidenced half and its waiting half separately**, the waiting half of both being a real secondary. **The night was then re-digested with 5.10 in place**: 2 of the 32 rows carry `was_rotation`, both fell through to `local` because the second position could not answer, and the run log carries the passed-over reason beside the count. The selection reproduced exactly at 81 articles and the model's outcomes moved by one, which is recorded rather than smoothed |
-| 5.5 The corrections | **IN PROGRESS.** The phase block and D-158 to D-160 adopted 2026-10-01, drafted by the build session and read and authorised by the operator: D-158 and D-159 `ACTIVE` on the operator's choice among the options put, D-160 `OPEN`. Baseline `ci.ps1` green at `2349a7f`, **895 tests**, 23 migrations and 5 guard checks over 213 files | | Plan at `prompts/BuildPlans/phase-5.5-the-corrections.md`, drafted from a conformance audit of `67cdc77`. The phase's record starts at "Phase 5.5" below |
+| 5.5 The corrections | ~~**IN PROGRESS.**~~ **BUILD COMPLETE, AWAITING SIGN-OFF, 2026-10-01.** The phase block and D-158 to D-160 adopted 2026-10-01, drafted by the build session and read and authorised by the operator: D-158 and D-159 `ACTIVE` on the operator's choice among the options put, D-160 `OPEN`. Baseline `ci.ps1` green at `2349a7f`, **895 tests**, 23 migrations and 5 guard checks over 213 files. **All fifteen checkpoints landed**, 5.5.8 out of order, and 5.5.2, 5.5.3, 5.5.8 and 5.5.9 gained five corrective commits between them, four found by a read-only review run from this session and one, 5.5.3's third, by the recompute's own comparison. **1,001 tests**, `ci.ps1` green at every commit, 6 guard checks over 222 files. **D-158's recompute ran** over C08, C10, C11 and S2's two C13 passes, with `candidate_set` and `attribution` untouched. **Owed, none of it a build session's**: S2's rows on 2026-08-13, which this session's recompute wrote outside the screens' backfill and was refused leave to remove; two reads against the store refused with it; `CLAUDE.md` §6 and INVARIANT 16's sentence; D-160; and the sign-off review in a session that has not committed here. The list is at the foot of the phase 5.5 record | `427d34f` at the last gate | Plan at `prompts/BuildPlans/phase-5.5-the-corrections.md`, drafted from a conformance audit of `67cdc77`. The phase's record starts at "Phase 5.5" below |
 | 6 Researcher | NOT STARTED | | |
 | 7 Risk and execution | NOT STARTED | | |
 | 8 Learning loops | NOT STARTED | | |
@@ -349,7 +349,7 @@ per-member weight of 10 was right.
 | 1.6 | Sentiment over the whole universe | 101 |
 | 1.7 | Flow ingest, and D-68's reopening clause fired on measurement | 112 |
 | 1.8 | Events ingest and the derived `flow_daily` | 127 |
-| 1.10 | Fixtures registered, and the conformance test reads SCHEMA.md's writers | 130 |
+| 1.10 | Fixtures registered, and the conformance test reads SCHEMA.md's writers [recorded met against a registry holding none of the filing-date and stale-file fixtures 1.10 names; registered at 5.5.13, recorded at 5.5.15] | 130 |
 | D-71 | The form4 shortfall separated from the client stopping early | 134 |
 | INVARIANT 16 | Asserted from `SCHEMA.md` rather than excluded per file | 136 |
 
@@ -13617,10 +13617,10 @@ Each row is filled when its checkpoint lands.
 | 5.5.8 | A monetary column's carrier changed to `double` [the row as amended on operator direction] | **Red against `HEAD`'s code** on all four facts: a `double` for `market_cap` failed inside Postgres with a binary-format error naming neither column nor invariant, a null carried as `double?` went through, and `CostLedger`'s cost was `var` and could not be read | **Green**: refused before the row is written, naming table and column; the statement check clean over today's statements and failing on both mutations |
 | 5.5.9 | `screen_score_daily` removed from a copy of `SelectionRangeRun`'s reads | **Red**: the check reports `src/StockResearcherLab.Pipeline/Select/SelectionRangeRun.cs: screen_score_daily`, while `DeclaredAccess` over the same mutilated list passes the read it gates | **Green**: no violation over today's code, every registered component's file found, statements read in at least twenty files |
 | 5.5.10 | `HEAD`, six stages | **Red at `HEAD`**: twelve declared writes across **eight** components no route checked, `CandidateAllocator` (2), `ConcentrationMonitor`, `CostLedger`, `GateEngine`, `HeadlineIngestor`, `NewsDigester`, `PercentileEngine` (2) and `ScreenEngine` (3) | **Green**: every one on `Statements()`, and the two column directions and both column-drop fixtures green, 10 in the two classes |
-| 5.5.12 | `HEAD`, the four Consumer rows | **Red at `HEAD` on thirteen read sites over thirteen keys**: the plan's four rows and its missing one, eight `RecordInspector` cells, and `BackfillPool`'s read of the pool timeout | **Green** after the cells were filled from the code |
+| 5.5.12 | `HEAD`, the four Consumer rows | **Red at `HEAD` on ~~thirteen read sites over thirteen keys~~ fourteen read sites over fourteen keys** [count corrected by review; the enumeration beside it always added to fourteen]: the plan's four rows and its missing one, eight `RecordInspector` cells, and `BackfillPool`'s read of the pool timeout | **Green** after the cells were filled from the code |
 | 5.5.13 | `HEAD`, one live row | **Red at `HEAD` on two live rows**, the plan having found one: `FlowIngestorTests.ANameThatReturnedNoRowsIsOfferedAgainRatherThanSkipped` and `FundamentalsRangeTests.ASweepAskedForADifferentRangeEndStartsOver` | **Green**: every live citation resolves, the rows this checkpoint added included |
 | 5.5.14 | `HEAD`, two engines | **Red at `HEAD`** on `FlowEngine` and `SentimentEngine`, both against the 18:05 row reading "Indicators, valuation, market context" | **Green** with the row naming all five stages |
-| 5.5.15 | A copy of the order with one built daily component removed | | |
+| 5.5.15 | A copy of the order with one built daily component removed, and the order itself with `GateEngine` commented out | **Red**: the copy's check reports `["GateEngine"]`, and against the mutated order the converse fails with `Collection: ["GateEngine"]` | **Green** with the order restored: the eight unbuilt daily components excluded by id, name and Runs cell, `NightlyRunTests` 14 |
 
 ### 5.5.2, the two determinism patterns widened
 
@@ -13896,8 +13896,10 @@ for the registry and checked by nothing at the call. That is a phase 5 shape and
 not a change this checkpoint makes; its statement is now on the column list, which is the half
 of the gap that can be closed from here.
 
-**The plan's "fourteen call sites" is not the count.** 24 `IStageData.WriteAsync` calls exist
-outside the tests, 23 in the Pipeline and `CostLedger`'s separate route besides; the figure
+**The plan's "fourteen call sites" is not the count.** ~~24 `IStageData.WriteAsync` calls exist
+outside the tests, 23 in the Pipeline and `CostLedger`'s separate route besides;~~ [corrected by review: 25
+`IStageData.WriteAsync` calls outside the tests, all in the Pipeline, 23 before 5.5.5 and its two
+`ClearRanksSql` calls since; `CostLedger` makes none, writing through its own data source]; the figure
 does not bear on the shape taken.
 
 `WriteOwnershipConformanceTests`' header enumerated three splits, attribution, proposal, and
@@ -13964,7 +13966,7 @@ form would not have seen the consumer its own row leads with**: `FundamentalsIng
 read config. A companion fact asserts the scan finds more than eighty read sites over more than
 fifty keys, and that one among them.
 
-**Red at `HEAD` on thirteen read sites, not four rows.**
+**Red at `HEAD` on ~~thirteen~~ fourteen read sites, not four rows** [count corrected by review].
 
 | Key | Consumer the cell did not name |
 |---|---|
@@ -14192,3 +14194,177 @@ being skipped. Neither found anything in today's code. One fact shows all three 
 mutated copies: C14 updating `screen_score_daily`, which it declares for reading;
 `DigestChain` joining `news_digest`, which C32 does not declare; and an unmapped file reading
 through a handed store.
+### 5.5.3, the recompute, 2026-10-01 [D-158]
+
+**Run against the live store from a Worker published at each commit, in the order D-158
+names, with `candidate_set` and `attribution` untouched.** Every figure below is a stage's
+own `run_log` detail or a before-and-after hash of every date each table holds, the before
+read at 09:54 and the after at 12:35. The comparison is hashes per date, so it says which
+dates moved and not by how much, except where a column was exported whole.
+
+| Stage | Over | Rows | Took |
+|---|---|---|---|
+| C08 IndicatorEngine | range 2021-01-04..2026-08-13, 1,463 trading dates over 292 epochs | 3,814,985 | 17m13s |
+| C08 | nightly, 2026-08-24 and 08-25 | 2,865 each | 2m09s, 53s |
+| C10 MarketContextEngine | range, then the two nightly dates, at the first commit | 1,463, 1, 1 | 16m11s |
+| C11 PercentileEngine | range, then the two nightly dates | 26,846,423, then 21,238 each | 1h26m58s |
+| C13, both passes, S2 alone | `range-screens` 2021-01-11..2026-08-13 | 1,458 sessions, 62,996 ranked | 22m44s |
+| C13 ScreenEngine | nightly, 2026-08-24 and 08-25, every screen | 22,920 each | 7m19s, 7s |
+
+C10 was run twice more over the same dates, at the second commit and at the third. S2 alone
+was re-ranked, D-158 naming it as the screen that ranks on `adx14`, and every other screen's
+scores and floors hash identically on every backfill date, which is the check that nothing
+else read the column.
+
+**What D-158 moved.**
+
+- **`adx14`**: null on 2,646 rows against 2,542, **104 newly null and none un-nulled, over
+  five names.** BACA.US carries 100 of them, 2026-01-07..2026-08-06; CHK.US, FPAC.US, GSAH.US
+  and ROCC.US one date each. That is the any-session reading: names whose high and low were
+  flat when their window opened. No `adx14` was exactly 0 before the recompute, so none of
+  the 104 is a 0 turned null at the final session. `indicator_daily`'s ADX value or percentile
+  differs on 110 dates, and `percentile_cell_daily`'s ADX cells on 104.
+- **S2**: scores differ on 110 dates and floors on 71, 66 of them before 2026-08-06, a mean
+  absolute move of 0.0014 and a largest of 0.0197. **Over the backfill, 5 names left the
+  ranked set, 1 joined and 222 ranks moved, on 38 dates**: 1 leaving and 107 rank moves
+  before 2026-08-06, and the rest inside the reload span below, where the two causes are not
+  separated.
+- **`sector_relative_strength`**: under the second commit's window it moved on 1,460 of 1,465
+  dates and was `{}` on 431, which is the third commit's subject. **C10 was re-run at the third
+  commit, ending 13:08**: 1,463 rows over 1,463 trading dates in 20m02s, a median of 740 ms a
+  date against the second commit's 432, and one row on each nightly date, exit 0 at each.
+  The range's detail line counts no sectors, so whether every date the second commit voided
+  now carries a block is a read of the store, owed below with the store.
+
+**Moved by something other than D-158, and named so it is not read as D-158's.**
+
+- **C02's trailing reload.** `price.reload_window_days` is 20. The two nightly ingests run on
+  2026-08-26 reloaded bars for 2026-08-06..08-25, after `indicator_daily` on 08-06..08-12
+  had been computed on 2026-08-22, 08-13's on 2026-08-18 and 08-24's at `run_log` 6192. The recompute read the
+  reloaded bars, so every indicator column on those seven dates moved, breadth and
+  `regime_label` on 08-06..08-13 with them, and every screen's scores on 2026-08-24.
+  2026-08-25, computed after the last reload, moved on nothing outside the ADX columns and
+  S2. The first changed date is the reload window's first date. Attributed from `run_log`
+  and the key, not row by row.
+- **2026-08-13, the date the last C11 range did not reach.** Its percentiles before were
+  `run_log` 1756's of 2026-08-20, ranked over flow values C09 rewrote the next day at 1761,
+  and it held no `percentile_cell_daily` rows, the ranges since having ended at 08-12. The
+  recompute's C11 range ran to 08-13 and brought it level. That is the one `flow_daily` date
+  that moved, attributed the same way.
+
+**One error of mine, which the store still carries.** `range-screens` for S2 was run to
+2026-08-13, the compute layer's range end, where every screen's backfill ends at 2026-08-12.
+**S2 now holds 2,865 scores, 54 ranked, and a floor on a session no other screen has.** C13's
+floor window is the last 250 dates the screen scored, so S2's nightly floors on 2026-08-24 and
+08-25, 78.0197 and 78.0187 before and 78 after, were drawn over a window holding it. No
+`candidate_set` row exists on 2026-08-13 and nothing has read it. **Removing the rows and
+re-running S2's two nightly dates is a write to the live store, and this session was refused
+it**, so it is owed to the operator below. Until then the two nightly floors are not D-158's
+alone, and GCT.US entering S2's ranked set on 2026-08-25 sits on one of them.
+
+**The boundaries.** `adx14`: `indicator_daily`, `percentile_cell_daily`, `screen_score_daily`
+and `screen_history` carry the corrected reading on every date they hold, through
+2026-08-25. `candidate_set`, 34,996 rows, and `attribution`, 74,900 rows over 2021-12-27 to
+2026-08-25, keep the seats taken and the scores frozen under the old reading
+[INVARIANT 4, D-158], so on S2's 110 dates the two disagree by construction. The first seat
+taken under the corrected reading is the first night run after this pass.
+`sector_relative_strength`: corrected on every date `market_context_daily` holds, and frozen
+nowhere. Until the recompute, C36's market panel was its only reader.
+
+**5.5.5's live count** is the one recorded at 5.5.5: 0 stale ranks over 375,387 ranked rows,
+read before the recompute. A second count against the recomputed store was refused with the
+store, and is owed beside the rows above.
+### 5.5.15, the evening order's converse, and the record corrected
+
+`NightlyRunTests.EveryDailyCatalogueComponentIsInTheEveningOrder` reads §03's Runs cell
+through `ArchitectureDocument.RunsByComponent` and asserts that every component given a daily
+time is in `NightlyRun.EveningOrder`. **The eight no phase has built are excluded by id and
+name, and each exclusion is itself checked**: daily in the catalogue, absent from the
+registry. So building one fails the test until it is taken off the list and put in the order.
+`.AnOrderMissingABuiltDailyComponentIsReported` runs the same check over a copy of the order
+without `GateEngine` and asserts that `GateEngine` is the name reported.
+
+**Red against the order itself as well as the copy.** With `GateEngine` commented out of
+`NightlyRun.EveningOrder`, the converse fails with `Collection: ["GateEngine"]`. Restored, it
+passes, with `NightlyRunTests` 14 green. The red-before-green table is filled.
+
+**The 1.12 obligation row** now reads closed on the staged route at 1.12, and on the
+statement route at 5.5.10 by test rather than at the call. **The plan's wording was "closed on
+the staged route with the statement route open"**, written before 5.5.10 closed the statement
+route by test. The row records both routes and that `StageData.WriteAsync` still checks no
+column, which is the part of the plan's sentence that stays true.
+
+**1.10's done-when line was recorded met against a registry holding none of its fixtures.**
+`BUILD_PLAN.md`'s 1.10 row asks for the substitution and exclusion fixtures to be registered
+in `FIXTURES.md`; phase 1's checkpoint table records 1.10 landed. The registry held none of
+the five rows 5.5.13 added: the four filing-date states, with INVARIANT 12's property form
+beside them, and the stale-file abort. The table row is annotated in place.
+
+**Corrections this pass made to its own record, found by the read-only review run from this
+session**, which is not the sign-off review:
+
+- 5.5.12's red was fourteen read sites over fourteen keys, not thirteen. The enumeration
+  beside it always added to fourteen.
+- 5.5.10's call-site count was 25 `IStageData.WriteAsync` calls, all in the Pipeline, 23
+  before 5.5.5 and its two `ClearRanksSql` calls since. `CostLedger` makes none.
+- 5.5.3's second commit cited `rs_change_vs_sector`'s rule as C08 applies it, and C08 does
+  not apply it. Struck in place, with a finding against C08 recorded under the third commit.
+- **The `CHANGELOG.md` entry for this checkpoint's obligation edit landed in `d312e88`**, the
+  5.5.8 second commit, because the whole file was staged there. The entry is correct, but it
+  sits in the wrong commit.
+
+**A limit of 5.5.12's check, kept by review and recorded rather than closed**:
+`ConfigReferenceDocumentTests` holds every read site to its key's Consumer cell, and does
+not hold a Consumer cell to a read site. A cell naming a component that no longer reads the
+key passes.
+
+**D-160's sizing query, run before S2 was recomputed**, counting screen, bucket and date
+triples where the last seated name's score equals the first eligible unseated name's: **683
+tied of 12,644 boundaries, 5.4 percent, on 565 dates**, 2021-12-27 to 2026-08-25. By screen,
+boundaries and ties: S1 3,489 and 0; S2 3,430 and 32; S3 2,242 and 4; S4 3,483 and 647. S4's
+ties are 95 percent of the total. The query does not model C14's de-duplication across
+screens, so a name tied at one screen's last seat and seated by another counts as a tie
+here. The decision is the operator's and stays `OPEN`.
+### Phase 5.5's definition of done, walked line by line
+
+| Line | Status | Evidence |
+|---|---|---|
+| `adx14` and `sector_relative_strength` cannot be written at a forbidden value, a test for each failing on the pre-5.5.3 code, the boundary date recorded with the recompute | **Met, one comparison owed** | The four 5.5.3 facts red on the pre-5.5.3 code; the recompute and both boundaries above. The third commit's C10 re-run is recorded above, and its comparison against the store is owed with the store |
+| No registered screen reads another's config, over every ordered pair read from the seeder | **Met** | 5.5.4: 56 ordered pairs from `SeededScreens.Ids()`, 22 of 82 red at `HEAD` |
+| No rank survives a floor it does not clear, as a unit property and a store-wide count run once live | **Met** | 5.5.5's three facts, and 0 stale over 375,387 ranked rows at 2026-10-01 09:44 |
+| No done-when line reports `holds` on a range with no data, both lines over an empty range, the megacap fact no longer resting on the defect | **Met** | 5.5.7 |
+| The ten checks shown red before green, both results recorded together | **Met** | The table above, all ten rows |
+| A database built from `seed.ps1` alone constructs no paid link | **Met** | 5.5.11, `ChainSeedTests.ADatabaseBuiltFromTheSeedComposesNoPaidLink` |
+| `CONFIG_REFERENCE.md` and `FIXTURES.md` each gain the test that keeps them true, both failing at `HEAD` | **Met** | 5.5.12 red on fourteen read sites, 5.5.13 on two live rows |
+
+### What is owed after this pass
+
+**To the operator, and none of it a build session's:**
+
+1. **S2's rows on 2026-08-13**: 2,865 in `screen_score_daily` and 1 in `screen_history`,
+   written by this session's recompute outside the screens' backfill. They are to be removed,
+   and C13 re-run for 2026-08-24 and 08-25 so S2's two nightly floors are drawn over the same
+   250 dates as every other screen's. The write was refused to this session.
+2. **Two reads against the store, refused to this session with the write**: the re-hash of
+   `market_context_daily` after the third commit's C10 re-run, which is what shows
+   `sector_relative_strength` back on the dates the second commit voided, and 5.5.5's count
+   against the recomputed store. `p553\compare.ps1` in the session's temporary directory runs
+   the first against the snapshot taken before the recompute.
+3. **`CLAUDE.md` §6 and INVARIANT 16's sentence**, both human-edited: §6 still counts two
+   fail-closed exceptions where `RUNBOOK.md`'s table is now the enumeration [D-159], and
+   INVARIANT 16 still names the grep D-83 retired. §6 is a carried obligation in
+   `BUILD_PLAN.md`; INVARIANT 16's is the plan's §7 item 3.
+4. **The plan's §7 findings**, six, untouched as directed, INVARIANT 16's sentence among them.
+5. **D-160**, sized above and `OPEN`.
+6. **The sign-off review**, in a session that has not committed here.
+
+**Findings this pass reported and did not take:**
+
+- **C08 does not apply `METRICS.md` §2's thin rule for `rs_change_vs_sector`**, recorded under
+  the third commit. A C08 rebuild, which bundles under `SCREEN_LIFECYCLE.md` §6.7.
+- **C10's window cannot tell a non-session from a thin session** until it can read the
+  exchange calendar. It is appended to D-130's `TradingCalendar` obligation, because moving
+  that list does not reach C10.
+- **`FloorAsync`'s third range-end read**, `LoadScoredAsync` at `to`, recorded at 5.5.6.
+- **`CostLedger` writes through its own data source**, outside `DeclaredAccess`, recorded at
+  5.5.10.

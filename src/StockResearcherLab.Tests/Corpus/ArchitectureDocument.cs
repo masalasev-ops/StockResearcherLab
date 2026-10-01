@@ -37,6 +37,26 @@ public static class ArchitectureDocument
     public static IReadOnlySet<string> ComponentNames()
         => Components().Values.ToHashSet(StringComparer.Ordinal);
 
+    public sealed record RunsRow(string Id, string Name, string Runs);
+
+    // The id, the name, the rest of the name cell, and the Runs cell after it.
+    private static readonly Regex RunsCell = new(
+        @"<b>(?<id>C\d+)</b>\s*</td>\s*<td>\s*(?<name>[A-Za-z][A-Za-z0-9]*)(?:(?!</td>).)*</td>\s*<td>(?<runs>(?:(?!</td>).)*)</td>",
+        RegexOptions.Compiled | RegexOptions.Singleline);
+
+    /// <summary>
+    /// Each component's Runs cell, tags stripped: "Daily 18:05", "Weekly, Sun", "On demand"
+    /// [5.5.15]. Read for the evening order's converse, which asks of every component the
+    /// catalogue runs daily whether the order holds it.
+    /// </summary>
+    public static IReadOnlyList<RunsRow> RunsByComponent()
+        => [.. RunsCell.Matches(File.ReadAllText(Path))
+            .Select(m => new RunsRow(
+                m.Groups["id"].Value,
+                m.Groups["name"].Value,
+                Regex.Replace(m.Groups["runs"].Value, "<[^>]+>", string.Empty).Trim()))
+            .OrderBy(r => r.Id, StringComparer.Ordinal)];
+
     /// <summary>
     /// Component name to the tables its Reads cell names [D-74].
     ///

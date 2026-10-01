@@ -447,53 +447,79 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
     {
         ArgumentNullException.ThrowIfNull(rows);
 
-        // **One window for both chains: the universe composite's 63 most recent sessions**
-        // [`METRICS.md`, "over the same window", 5.5.3]. A member whose last 64 bars straddle a
-        // hole reaches a session further back and returns a row dated before every other
-        // member's window, and five such members anywhere carry the universe onto that date.
-        // Chaining every date given compared a 63-session sector return with a 64-session
-        // universe one, the extra session's mean drawn from a few gap names' returns across
-        // their holes. Found by review after the first recompute and corrected before the record.
-        var window = rows
-            .Where(static r => r.Sector is null)
-            .Select(static r => r.Date)
-            .Distinct()
-            .OrderByDescending(static d => d)
-            .Take(RelativeStrengthWindow)
-            .ToHashSet();
+        // **One window per comparison: the sector's own 63 most recent dates, ending on the
+        // newest date the universe carries, with the universe chained over exactly those**
+        // [`METRICS.md`, "over the same window", D-130, 5.5.3]. Chaining every date given
+        // compared a 63-session sector return with a longer universe one: a member whose last
+        // 64 bars straddle a hole returns a row older than every other member's, and five such
+        // members anywhere carry the universe onto that date. Found by review after the first
+        // recompute.
+        //
+        // **The window is the sector's dates and not the universe's, because `price_daily`
+        // holds bars on days the exchange was shut** [D-130]. Five of a holiday's 1 to 18 carry
+        // the universe onto it while no sector reaches its floor, so a window taken from the
+        // universe's dates held a non-session every sector lacked, and the recompute wrote `{}`
+        // on 431 of 1,465 dates. Found by the recompute's comparison, corrected before the record.
+        //
+        // **What this costs until D-130's calendar reaches this stage**: the store cannot tell
+        // a non-session from a session on which a sector fell below its floor, so a sector thin
+        // on a session inside its window reaches one date further back rather than carrying no
+        // value as `METRICS.md` §2 has it. Carried with D-130's obligation [`BUILD_PLAN.md`].
+        var universe = new Dictionary<DateOnly, double>();
+        var bySector = new Dictionary<string, List<CompositeReturn>>(StringComparer.Ordinal);
 
-        if (window.Count < RelativeStrengthWindow)
+        foreach (var r in rows)
+        {
+            if (r.Sector is null)
+            {
+                universe[r.Date] = r.MeanReturn;
+                continue;
+            }
+
+            if (!bySector.TryGetValue(r.Sector, out var series))
+            {
+                bySector[r.Sector] = series = [];
+            }
+
+            series.Add(r);
+        }
+
+        if (universe.Count == 0)
         {
             return "{}";
         }
 
-        var chained = new Dictionary<string, (double Level, int Days)>(StringComparer.Ordinal);
-        var universeLevel = 1.0;
-
-        foreach (var r in rows.Where(r => window.Contains(r.Date)).OrderBy(static r => r.Date))
-        {
-            if (r.Sector is null)
-            {
-                universeLevel *= 1 + r.MeanReturn;
-                continue;
-            }
-
-            var prior = chained.GetValueOrDefault(r.Sector, (Level: 1.0, Days: 0));
-            chained[r.Sector] = (prior.Level * (1 + r.MeanReturn), prior.Days + 1);
-        }
+        var newest = universe.Keys.Max();
 
         var buffer = new StringBuilder("{");
         var first = true;
 
-        foreach (var sector in chained.Keys.OrderBy(k => k, StringComparer.Ordinal))
+        foreach (var sector in bySector.Keys.OrderBy(k => k, StringComparer.Ordinal))
         {
-            var (level, days) = chained[sector];
+            var window = bySector[sector]
+                .Where(r => r.Date <= newest)
+                .OrderByDescending(static r => r.Date)
+                .Take(RelativeStrengthWindow)
+                .ToList();
 
-            // A sector that does not cover every session of the window has no return over
-            // it, which is `rs_change_vs_sector`'s rule for a sector thin on any date.
-            if (days < RelativeStrengthWindow)
+            // A sector with no row on the newest date would be compared as of an older one,
+            // and one with fewer than 63 dates has no 63-date return. The universe carries
+            // every date a sector does, its floor being met by the sector's own members; a
+            // hand-built row set that breaks that gets no value rather than a shorter chain.
+            if (window.Count < RelativeStrengthWindow
+                || window[0].Date != newest
+                || window.Exists(r => !universe.ContainsKey(r.Date)))
             {
                 continue;
+            }
+
+            var level = 1.0;
+            var universeLevel = 1.0;
+
+            for (var i = window.Count - 1; i >= 0; i--)
+            {
+                level *= 1 + window[i].MeanReturn;
+                universeLevel *= 1 + universe[window[i].Date];
             }
 
             if (!first)

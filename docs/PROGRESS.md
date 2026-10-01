@@ -14096,8 +14096,10 @@ the same window", the extra session's mean drawn from a few gap names' returns a
 holes.
 
 **Both chains now run over the universe composite's 63 most recent sessions, and a sector that
-does not cover all 63 carries no value**, which is `rs_change_vs_sector`'s rule for a sector
-thin on any date. Two facts, red against the first commit's arithmetic: a stray older universe
+does not cover all 63 carries no value** [replaced at the third commit, below], ~~which is
+`rs_change_vs_sector`'s rule for a sector thin on any date~~ [corrected at 5.5.3's third
+commit: it is `METRICS.md` §2's rule for that column and not what C08 does, which reads the
+composite at the window's two ends and lets a thin date between them pass]. Two facts, red against the first commit's arithmetic: a stray older universe
 date at +50 percent turned Alpha's value from 0.585795 to -0.057180, and a sector covering 62 of
 the 63 sessions plus an older one carried a value. Green after, with the market context, range
 seam and write path suites, 20 in all.
@@ -14105,6 +14107,42 @@ seam and write path suites, 20 in all.
 **C10 had already been recomputed under the first commit's arithmetic**, so it is re-run over
 the same dates, range and nightly, before the recompute is recorded. Nothing downstream reads
 the column, so nothing else is re-run.
+### 5.5.3, third commit: each sector's window from its own dates, found by the recompute
+
+**The second commit's window voided the column across most of the store's recent history.**
+C10 re-run under it over 2021-01-04..2026-08-13 and the two nightly dates wrote `{}` on 431 of
+1,465 dates: 2021-01-04..2021-01-08 at the range's head, and 426 in four runs from 2024-11-28
+on, the last 2026-06-29..2026-08-25 whole.
+**`price_daily` holds bars on days the exchange was shut** [D-130], and on 2026-08-12 the
+universe's 63 most recent dates held two of them, 2026-06-19 and 2026-07-03, each carrying the
+universe composite on five members' returns while no sector reached its floor of five. Every
+sector covered 61 of the 63 and carried no value. The second commit's facts had built the
+universe and the sectors on the same dates, so none of them could see it.
+
+**Now each sector is compared over its own 63 most recent dates, ending on the newest date the
+universe carries, with the universe chained over exactly those dates.** A non-session the sector
+is thin on drops out of both chains without a bar-count threshold, which D-130 rejects, and the
+store holds no calendar this stage can read. A sector with no row on the newest date carries no
+value, so neither of the second commit's facts moves.
+
+**What it costs, carried rather than closed**: the store cannot tell a non-session from a
+session on which a sector fell below its floor, so a sector thin on a real session reaches one
+date further back where `METRICS.md` §2 has it carry no value. The obligation is appended to
+D-130's `TradingCalendar` row in `BUILD_PLAN.md`, because moving that list does not reach C10:
+its window is each member's last 64 bars and not a session list.
+
+| Fact | Against the second commit | After |
+|---|---|---|
+| `MarketContextEngineTests.ADateInsideTheWindowTheUniverseAloneCarriesLeavesBothChains`, new, a +50 percent universe-only date mid-window | **Red**: `{}`, Alpha carrying no value | Green, 1.01^63 - 1.004^63 |
+
+The market context suite, 13, green.
+
+**One finding against C08, reported rather than taken.** `METRICS.md` §2 makes
+`rs_change_vs_sector` null when the sector has fewer than its floor of members on any date in
+the window. `IndicatorEngine` drops a thin date from the composite's chain through `HAVING`,
+and `Change(rsSector, 63)` reads the ratio at the window's two ends only, so a thin date
+between them passes. It is a code reading against an authored definition in a column the
+screens rank on, and changing it forces a C08 rebuild, which is not this pass's to take.
 ### 5.5.2, second commit: the `Random` pattern widened, found by review
 
 The same review found that INVARIANT 6's `Random` pattern, as the plan wrote it and as 5.5.2

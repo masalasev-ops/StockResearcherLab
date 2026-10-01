@@ -300,6 +300,48 @@ public sealed class MarketContextEngineTests
     }
 
     /// <summary>
+    /// **A date inside the window that the universe carries and the sector does not leaves
+    /// both chains, rather than voiding the sector** [`METRICS.md`, "over the same window",
+    /// D-130, 5.5.3].
+    ///
+    /// `price_daily` holds bars on days the exchange was shut, 1 to 18 a holiday, and five of
+    /// them carry the universe composite onto that day while no sector reaches its floor
+    /// [D-130]. Taking the window from the universe's dates put 2026-06-19 and 2026-07-03
+    /// inside 2026-08-12's, every sector covered 61 of its 63, and the recompute wrote `{}` on
+    /// 431 of 1,465 dates, 426 of them in runs from 2024-11-28 on. Found by the recompute's
+    /// comparison.
+    ///
+    /// Here the stray day sits mid-window at +50 percent, standing for a few names' moves
+    /// across a holiday, and Alpha has a row on each of the 63 sessions either side of it.
+    /// The value is Alpha's 63 sessions against the universe's over the same 63.
+    /// </summary>
+    [Fact]
+    public void ADateInsideTheWindowTheUniverseAloneCarriesLeavesBothChains()
+    {
+        var rows = new List<MarketContextEngine.CompositeReturn>();
+        var stray = new DateOnly(1994, 1, 3).AddDays(30);
+
+        for (var i = 0; i < 64; i++)
+        {
+            var date = new DateOnly(1994, 1, 3).AddDays(i);
+
+            if (date == stray)
+            {
+                rows.Add(new MarketContextEngine.CompositeReturn(null, date, 0.5));
+                continue;
+            }
+
+            rows.Add(new MarketContextEngine.CompositeReturn(null, date, 0.004));
+            rows.Add(new MarketContextEngine.CompositeReturn("SRL55-Alpha", date, 0.01));
+        }
+
+        var values = Parse(MarketContextEngine.SectorRelativeStrength(rows));
+
+        Assert.Equal(new[] { "SRL55-Alpha" }, values.Keys.ToArray());
+        Assert.Equal(Math.Pow(1.01, 63) - Math.Pow(1.004, 63), values["SRL55-Alpha"], 5);
+    }
+
+    /// <summary>
     /// The universe composite is the mean over every active member, not the mean of the
     /// sector means, and it is computed by the stage's own statement against a store
     /// [`METRICS.md`, D-158, 5.5.3].

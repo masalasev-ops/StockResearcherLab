@@ -13799,3 +13799,35 @@ inside the loop.
 **No live date moves.** `screens.floor_percentile` and `screens.floor_lookback_days` have
 only ever had version 1 in the store, read before 5.5.3's recompute was planned, so every
 floor the store holds was resolved under the version in force on its date either way.
+### 5.5.7, the two lines that scored a pass on no data
+
+**The persistence lags.** `ScreenPersistence`'s three lags are `double?`, read through a
+nullable sibling of `Number`, so `avg` over no pair is null rather than 0; the D-5 and D-21
+pair counts are computed in the `overlap` CTE and printed beside their lags as lag 1's
+already was; and the printed row moved out of the Worker into
+`PersistenceMeasure.TableRow`, where a lag with no pair prints `no pair` and never a number.
+The Worker prints `TableHeader` and `TableRow` and computes nothing.
+
+**The distributions lines.** The megacap line returns no bound when no candidate row in the
+range carries a size bucket, and the attribution line returns no bound when the range holds
+no candidate, the shape the 60-session line already used. `Worker distributions` prints a
+null verdict as `no bound stated`, with the reason in the measured text beside it.
+
+| Fact | Against the pre-5.5.7 code | After |
+|---|---|---|
+| `SelectionDistributionsTests.NoLineReportsHoldsOnARangeWithNoData`, new | **Red**: the megacap line `holds` over an empty range | Green, both lines no bound |
+| `ScreenRangeRunTests.ALagWithNoPairIsUnknownRatherThanZero`, new, ten sessions ranked every day | **Red**: D-21 read 0 | Green: D-1 1.0000, D-21 `no pair` with 0 pairs |
+
+**The red for the second was taken in a form that compiles against both shapes**:
+`Assert.Null` on a non-nullable `double` is refused by the xUnit analyzer as an error, so the
+red run asserted `((double?) screen.Lag21).HasValue` false, and the fact was then written with
+`Assert.Null` once the field was nullable.
+
+**`TheMegacapLineScoresAgainstTheConfiguredBound` was reworked**, its proof having rested on
+the defect: it flipped the verdict between bounds of 0 and 1 over an empty range, which
+worked only because an empty range scored a share of zero. It now seeds four candidates on
+2003-06-02, one large, and asserts the share at 25.0 percent before flipping the bound over
+it. It passed against the pre-5.5.7 code too, which is right: it tests the bound, and the
+bound was never the defect. With the range and distributions suites, 32 green.
+
+**The 5.5.6 gate passed at `3794624` and that sha is pushed.**

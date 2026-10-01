@@ -378,6 +378,45 @@ public sealed class ScreenRangeRunTests
         }
     }
 
+    /// <summary>
+    /// **A lag with no pair is unknown, not zero** [5.5.7, `CLAUDE.md` §6].
+    ///
+    /// Ten sessions, one name ranked on every one. D-1 has nine pairs and an overlap of 1.
+    /// D-21 has none: no session in the range has one twenty-one sessions before it. Until
+    /// 5.5.7 the null the statement returned for that lag was read as 0 and printed as
+    /// 0.0000, which reads as a screen whose ranked set is entirely replaced within a month,
+    /// a finding, when nothing was measured.
+    /// </summary>
+    [Fact]
+    public async Task ALagWithNoPairIsUnknownRatherThanZero()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct);
+
+        try
+        {
+            await Run().ScoreAsync(From, To, ct);
+
+            await ExecAsync(
+                "UPDATE screen_score_daily SET rank_within_screen = 1 " +
+                "WHERE date BETWEEN @f AND @t AND score IS NOT NULL;",
+                ct, ("f", From), ("t", To));
+
+            var screen = Assert.Single(await PersistenceMeasure
+                .MeasureAsync(TestDatabase.ConnectionString, From, To, ct));
+
+            Assert.Equal((double?) 1d, screen.Lag1);
+            Assert.Null(screen.Lag21);
+            Assert.Equal(0L, screen.Pairs21);
+            Assert.Contains("| 1.0000 | ", PersistenceMeasure.TableRow(screen), StringComparison.Ordinal);
+            Assert.Contains("| " + PersistenceMeasure.NoPair + " |", PersistenceMeasure.TableRow(screen), StringComparison.Ordinal);
+        }
+        finally
+        {
+            await ClearAsync(ct);
+        }
+    }
+
     /// <summary>Re-running one date reproduces it byte-identically.</summary>
     [Fact]
     public async Task ReRunningOneDateReproducesIt()
@@ -538,7 +577,7 @@ public sealed class ScreenRangeRunTests
 
             Assert.Equal(Screen, screen.ScreenId);
             Assert.True(screen.Pairs > 0);
-            Assert.Equal(1d, screen.Lag1, 6);
+            Assert.Equal(1d, screen.Lag1!.Value, 6);
             Assert.Equal(1d, screen.MeanRankedSize, 6);
             Assert.Equal(
                 PersistenceMeasure.ChanceOverlap(screen.MeanRankedSize, screen.MeanScoredSize),

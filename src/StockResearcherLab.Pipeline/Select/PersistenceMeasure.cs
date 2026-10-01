@@ -24,21 +24,29 @@ namespace StockResearcherLab.Pipeline.Select;
 /// The overlap two independent draws of the ranked set's own size from the scored
 /// population would give, computed per screen from its own sizes [§5].
 /// </param>
-/// <param name="Lag1">Mean Jaccard overlap between D and D-1.</param>
+/// <param name="Pairs5">The pairs D-5 averaged over, disclosed as lag 1's are [5.5.7].</param>
+/// <param name="Pairs21">The pairs D-21 averaged over.</param>
+/// <param name="Lag1">
+/// Mean Jaccard overlap between D and D-1, **null where there was no pair to average**
+/// [5.5.7, `CLAUDE.md` §6]. Until 5.5.7 a lag with no pair read as 0, which is a finding,
+/// a ranked set entirely replaced, standing where nothing was measured.
+/// </param>
 /// <param name="Lag5">The same at D and D-5.</param>
 /// <param name="Lag21">The same at D and D-21.</param>
 /// <param name="LargeShare">The ranked set's large-bucket share, for the size-proxy reading.</param>
 public sealed record ScreenPersistence(
     string ScreenId,
     long Pairs,
+    long Pairs5,
+    long Pairs21,
     long DatesRanked,
     long DatesScored,
     double MeanRankedSize,
     double MeanScoredSize,
     double Chance,
-    double Lag1,
-    double Lag5,
-    double Lag21,
+    double? Lag1,
+    double? Lag5,
+    double? Lag21,
     double LargeShare);
 
 /// <summary>
@@ -92,14 +100,16 @@ public static class PersistenceMeasure
             found.Add(new ScreenPersistence(
                 (string) row[0]!,
                 Convert.ToInt64(row[1], CultureInfo.InvariantCulture),
+                Convert.ToInt64(row[10], CultureInfo.InvariantCulture),
+                Convert.ToInt64(row[11], CultureInfo.InvariantCulture),
                 Convert.ToInt64(row[8], CultureInfo.InvariantCulture),
                 Convert.ToInt64(row[9], CultureInfo.InvariantCulture),
                 ranked,
                 scored,
                 ChanceOverlap(ranked, scored),
-                Number(row[4]),
-                Number(row[5]),
-                Number(row[6]),
+                NullableNumber(row[4]),
+                NullableNumber(row[5]),
+                NullableNumber(row[6]),
                 Number(row[7])));
         }
 
@@ -208,6 +218,10 @@ public static class PersistenceMeasure
                     screen_id,
                     count(*) FILTER (WHERE prior_1 IS NOT NULL AND ranked IS NOT NULL)::bigint
                         AS pairs,
+                    count(*) FILTER (WHERE prior_5 IS NOT NULL AND ranked IS NOT NULL)::bigint
+                        AS pairs_5,
+                    count(*) FILTER (WHERE prior_21 IS NOT NULL AND ranked IS NOT NULL)::bigint
+                        AS pairs_21,
                     {overlaps}
                 FROM lagged
                 GROUP BY screen_id
@@ -222,7 +236,9 @@ public static class PersistenceMeasure
                 overlap.lag_21,
                 buckets.large_share,
                 sizes.dates_ranked,
-                scored_dates.dates_scored
+                scored_dates.dates_scored,
+                overlap.pairs_5,
+                overlap.pairs_21
             FROM overlap
             JOIN sizes ON sizes.screen_id = overlap.screen_id
             JOIN scored_dates ON scored_dates.screen_id = overlap.screen_id
@@ -240,8 +256,42 @@ public static class PersistenceMeasure
     /// </summary>
     public const string JaccardFunction = "jaccard";
 
+    /// <summary>The token a lag with no pair prints in place of a figure [5.5.7].</summary>
+    public const string NoPair = "no pair";
+
+    /// <summary>The printed table's header, beside the row it heads.</summary>
+    public const string TableHeader =
+        "| Screen | Dates ranked | of scored | Pairs | Mean ranked | Mean scored | Chance | " +
+        "D-1 | D-5 | D-21 | Pairs D-5 | Pairs D-21 | Large |";
+
+    /// <summary>
+    /// One screen's row of the printed table. **A lag with no pair prints <see cref="NoPair"/>
+    /// and never a number**, and each lag's pair count is printed beside it, so a figure
+    /// taken over a handful of pairs cannot be read as one taken over the window [5.5.7].
+    /// </summary>
+    public static string TableRow(ScreenPersistence s)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+
+        return string.Create(CultureInfo.InvariantCulture,
+            $"| {s.ScreenId} | {s.DatesRanked:N0} | {s.DatesScored:N0} | {s.Pairs:N0} | " +
+            $"{s.MeanRankedSize:0.0} | {s.MeanScoredSize:0.0} | {s.Chance:0.0000} | " +
+            $"{Lag(s.Lag1)} | {Lag(s.Lag5)} | {Lag(s.Lag21)} | {s.Pairs5:N0} | {s.Pairs21:N0} | " +
+            $"{s.LargeShare:P1} |");
+    }
+
+    private static string Lag(double? value)
+        => value is { } v ? v.ToString("0.0000", CultureInfo.InvariantCulture) : NoPair;
+
     private static double Number(object? value)
         => value is null or DBNull ? 0d : Convert.ToDouble(value, CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Null for null, where <see cref="Number"/> reads it as zero. The lags are read
+    /// through this one: <c>avg</c> over no pair is null, and null is the answer [5.5.7].
+    /// </summary>
+    private static double? NullableNumber(object? value)
+        => value is null or DBNull ? null : Convert.ToDouble(value, CultureInfo.InvariantCulture);
 
     private static string Int(int value) => value.ToString(CultureInfo.InvariantCulture);
 

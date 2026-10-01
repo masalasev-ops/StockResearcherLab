@@ -2713,3 +2713,18 @@ says; the secondary's SDK ignores the column.
 > here, with the other keys phase 1 wired up.
 
 No table in the document carried the key. It now has a row in the Fundamentals table.
+
+---
+
+## 2026-10-01, phase 5.5, `RUNBOOK.md`'s cycle table and failure table [5.5.14, D-159]
+
+The 18:05 row named three of the five stages the code runs there, and the failure table
+gained the two per-ticker tolerances D-159 makes it the one list of. A clean edit under
+D-73 for the row; the two failure rows are additions and remove nothing.
+
+### The cycle table's 18:05 row
+
+> | 18:05 | Indicators, valuation, market context |
+
+`FlowEngine` and `SentimentEngine` ran in this slot from phases 1 and 2 and appeared nowhere
+in the document, failure table included.

@@ -13619,7 +13619,7 @@ Each row is filled when its checkpoint lands.
 | 5.5.10 | `HEAD`, six stages | **Red at `HEAD`**: twelve declared writes across **eight** components no route checked, `CandidateAllocator` (2), `ConcentrationMonitor`, `CostLedger`, `GateEngine`, `HeadlineIngestor`, `NewsDigester`, `PercentileEngine` (2) and `ScreenEngine` (3) | **Green**: every one on `Statements()`, and the two column directions and both column-drop fixtures green, 10 in the two classes |
 | 5.5.12 | `HEAD`, the four Consumer rows | **Red at `HEAD` on thirteen read sites over thirteen keys**: the plan's four rows and its missing one, eight `RecordInspector` cells, and `BackfillPool`'s read of the pool timeout | **Green** after the cells were filled from the code |
 | 5.5.13 | `HEAD`, one live row | **Red at `HEAD` on two live rows**, the plan having found one: `FlowIngestorTests.ANameThatReturnedNoRowsIsOfferedAgainRatherThanSkipped` and `FundamentalsRangeTests.ASweepAskedForADifferentRangeEndStartsOver` | **Green**: every live citation resolves, the rows this checkpoint added included |
-| 5.5.14 | `HEAD`, two engines | | |
+| 5.5.14 | `HEAD`, two engines | **Red at `HEAD`** on `FlowEngine` and `SentimentEngine`, both against the 18:05 row reading "Indicators, valuation, market context" | **Green** with the row naming all five stages |
 | 5.5.15 | A copy of the order with one built daily component removed | | |
 
 ### 5.5.2, the two determinism patterns widened
@@ -14026,3 +14026,22 @@ citations too.
 **Two rows corrected in place**: the flat series no longer reads "the index exactly 0",
 struck with D-158's null beside it, and the column-drop fixture's row records its extension
 at 5.5.10.
+### 5.5.14, `RUNBOOK.md` made to describe the night that runs
+
+`Corpus/RunbookDocument` parses the nightly cycle table, and
+`RunbookCycleTests.EveryStageOfTheEveningOrderIsNamedAtTheTimeItsCommentGives` holds every
+stage in `NightlyRun.EveningOrder` to the row at the clock time its own comment in
+`NightlyRun.cs` gives. **The table is prose, so a stage is named by its subject**, the class
+name with its role dropped, `FlowEngine` "flow" and `MarketContextEngine` "market context";
+the rule is derived rather than listed. Red at `HEAD` on exactly the two engines the plan
+named, green once the 18:05 row names C08, C09, C10, C34 and C35.
+
+**The failure table gains the two per-ticker tolerances** [D-159]: a provider 404, tolerated
+by the four stages that catch it alone, C02, C03, C05 and C06, read in the code, and D-71's
+short page, `FlowIngestor`'s through `EodhdClient`. `RUNBOOK.md`'s own paragraph saying both
+"are enumerated above in the failure table" is now true, and the table is the one list.
+**`CLAUDE.md` §6 still counts two exceptions and names one that does not exist yet**, which
+is the operator's edit and is the carried obligation D-159 left.
+
+The prior wording of the 18:05 row is in `CHANGELOG.md`, and the test is registered in
+`FIXTURES.md`.

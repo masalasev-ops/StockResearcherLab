@@ -13618,7 +13618,7 @@ Each row is filled when its checkpoint lands.
 | 5.5.9 | `screen_score_daily` removed from a copy of `SelectionRangeRun`'s reads | **Red**: the check reports `src/StockResearcherLab.Pipeline/Select/SelectionRangeRun.cs: screen_score_daily`, while `DeclaredAccess` over the same mutilated list passes the read it gates | **Green**: no violation over today's code, every registered component's file found, statements read in at least twenty files |
 | 5.5.10 | `HEAD`, six stages | **Red at `HEAD`**: twelve declared writes across **eight** components no route checked, `CandidateAllocator` (2), `ConcentrationMonitor`, `CostLedger`, `GateEngine`, `HeadlineIngestor`, `NewsDigester`, `PercentileEngine` (2) and `ScreenEngine` (3) | **Green**: every one on `Statements()`, and the two column directions and both column-drop fixtures green, 10 in the two classes |
 | 5.5.12 | `HEAD`, the four Consumer rows | **Red at `HEAD` on thirteen read sites over thirteen keys**: the plan's four rows and its missing one, eight `RecordInspector` cells, and `BackfillPool`'s read of the pool timeout | **Green** after the cells were filled from the code |
-| 5.5.13 | `HEAD`, one live row | | |
+| 5.5.13 | `HEAD`, one live row | **Red at `HEAD` on two live rows**, the plan having found one: `FlowIngestorTests.ANameThatReturnedNoRowsIsOfferedAgainRatherThanSkipped` and `FundamentalsRangeTests.ASweepAskedForADifferentRangeEndStartsOver` | **Green**: every live citation resolves, the rows this checkpoint added included |
 | 5.5.14 | `HEAD`, two engines | | |
 | 5.5.15 | A copy of the order with one built daily component removed | | |
 
@@ -13994,3 +13994,35 @@ the commits that moved the assertion.
 
 **The 5.5.11 gate passed at `4513e2c`, on a freshly created test database, and that sha is
 pushed.**
+**The first gate run on 5.5.12 stopped at its test step with no result line, and the rerun
+was green at 986 tests.** The first run overlapped a local `dotnet test` of this session's
+own; the rerun ran alone. No message was lost this time because none was produced: the log
+ends at `[11] Test`. Recorded with the 5.5.2 flake rather than closed, and from here no local
+test runs beside a gate.
+
+### 5.5.13, `FIXTURES.md` made true, and kept true
+
+`FixtureRegistryConformanceTests` parses the registry table's Used-by column, drops struck
+text, reads a citation opening with a dot as another method of the class cited last in the
+same cell, and resolves every live citation by reflection against the test assembly.
+
+**Red at `HEAD` on two live rows, not one.** The plan's, "Rotation pool name that returns
+no rows", citing a method that left the suite when D-95 closed C05's rotation at 3.5; and
+"Six pool members and a sweep with room for three", citing
+`FundamentalsRangeTests.ASweepAskedForADifferentRangeEndStartsOver`, which 3.16 split into
+a later-range-end and an earlier-range-end method when an earlier end stopped starting over.
+**Both were struck in place on the pattern the D-71 row already uses**, each with what
+replaced it named beside the strike.
+
+**Registered, and the forward list cut.** The five rows 1.10 asked for, the four
+filing-date states with INVARIANT 12's property form beside them and the freshness guard's
+stale-file abort, and the six `[phase 1]` forward items deleted, the clean-gap one being the
+3.5.1 universe-criteria row's already. **That 1.10 was recorded met against a registry with
+none of the five is recorded at 5.5.15**, as the row directs. Beside them, every fixture this
+phase added through 5.5.12 is registered, those being fixtures that exist, pass and were
+registered nowhere, which is this checkpoint's own subject; the registry test resolves their
+citations too.
+
+**Two rows corrected in place**: the flat series no longer reads "the index exactly 0",
+struck with D-158's null beside it, and the column-drop fixture's row records its extension
+at 5.5.10.

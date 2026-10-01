@@ -13607,7 +13607,7 @@ Each row is filled when its checkpoint lands.
 
 | Checkpoint | What it is shown failing against | Red | Green |
 |---|---|---|---|
-| 5.5.2 | Scratch files containing `DateTime.Today` and `Random.Shared.Next()` | | |
+| 5.5.2 | Scratch files containing `DateTime.Today` and `Random.Shared.Next()`, and a third reading `TimeProvider.System` | **Exit 1**, 3 of 6 checks failing, naming `Scratch552Clock.cs:4 DateTime.Today`, `Scratch552TimeProvider.cs:4 TimeProvider` and `Scratch552Random.cs:4 Random.Shared`. `HEAD`'s guard over the same three staged files: **exit 0**, 5 checks over 216 files | **Exit 0** with the files removed, 6 checks over 213 files, every grep at zero |
 | 5.5.4 | `HEAD`, on the three `X-` ids | | |
 | 5.5.6 | `HEAD`, the whole range taking the second version | | |
 | 5.5.8 | `double positionSize` in a monetary-owning component | | |
@@ -13617,3 +13617,30 @@ Each row is filled when its checkpoint lands.
 | 5.5.13 | `HEAD`, one live row | | |
 | 5.5.14 | `HEAD`, two engines | | |
 | 5.5.15 | A copy of the order with one built daily component removed | | |
+
+### 5.5.2, the two determinism patterns widened
+
+`guards.ps1` now runs six checks. **INVARIANT 11's pattern** is
+`DateTime(Offset)?\s*\.\s*(Today|(Utc)?Now)`, so `DateTime.Today` and `DateTimeOffset.Now`
+are caught beside the two spellings it already had. **A sixth check matches
+`\bTimeProvider\b`**, `TimeProvider.System` being the framework's own ambient clock and
+reachable past a pattern that names only `DateTime` and `DateTimeOffset`; both exclude
+`SystemClock.cs` and nothing else. **INVARIANT 6's `Random` pattern** is
+`new\s+Random\s*\(|Random\s*\.\s*Shared`, so a seeded construction surfaces for reading
+rather than only the empty one, and its `Why`, empty since it was written, now says why.
+The `DateTime` prefix is kept: a bare `.Today` matches `IClock.Today`, which is the
+injected surface.
+
+**The red and green are in the table above.** The three scratch files were staged so the
+tracked-file scan would see them, the guard at `HEAD` passed over all three, the widened
+guard failed on all three naming file and line, and with them removed it read zero on
+every grep. Nothing of them was committed.
+
+**Two literals went false with the count and both now derive it.** `guards.ps1`'s summary
+line said "four greps" as written words and `ci.ps1` repeated it in its result line, so
+adding a check would have left both describing five checks while six ran. Each now counts:
+the guard from its own check list, `ci.ps1` from the guard's summary line, and `ci.ps1`
+throws if that line stops carrying the split.
+
+**One sentence in the plan was off by a line.** It cites `SystemClockTests.cs:38` for
+`new SystemClock().Today`; the call is at `:39`. The point it makes stands.

@@ -2,11 +2,11 @@
 <#
     guards.ps1 - the CI greps for the invariants that are grep-checkable.
 
-    Five checks. Four are greps over src/ and the fifth is INVARIANT 16, which
-    asserts over the schema instead. Each states what it ran against beside its
-    result, and any failure fails the run.
+    Six checks. Five are greps over src/ and one is INVARIANT 16, which asserts
+    over the schema instead. Each states what it ran against beside its result,
+    and any failure fails the run.
 
-    THE FOUR GREPS each expect zero. A zero expectation is self-validating: a
+    THE GREPS each expect zero. A zero expectation is self-validating: a
     wrong pattern that finds nothing and a right pattern that finds nothing are
     indistinguishable from the number alone, so the file set is asserted
     non-empty first and the pattern is printed for reading.
@@ -53,7 +53,7 @@
     what caught both occurrences.
 
     COMMENTS ARE STRIPPED before matching. // to end of line, over every
-    extension scanned. -- to end of line, over .sql ONLY. Two of the four
+    extension scanned. -- to end of line, over .sql ONLY. Two of the grep
     patterns otherwise match the prose that states the invariant, in
     0001_snapshot.sql and in a test comment, and a comment naming a rule is not
     a breach of it. The cost is one blind spot: a breach to the right of a //
@@ -81,10 +81,18 @@ $checks = @(
     @{
         Invariant  = 'INVARIANT 11'
         What       = 'no ambient clock: DateTime and DateTimeOffset are read only in the clock implementation'
-        Pattern    = 'DateTime(Offset)?\s*\.\s*(Utc)?Now'
+        Pattern    = 'DateTime(Offset)?\s*\.\s*(Today|(Utc)?Now)'
         Extensions = @('.cs', '.razor')
         Exclude    = @('src/StockResearcherLab.Data/SystemClock.cs')
-        Why        = 'SystemClock.cs is the implementation and is the one place this is allowed'
+        Why        = 'SystemClock.cs is the implementation and is the one place this is allowed. Today is matched beside Now because DateTime.Today reads the same ambient clock in the machine''s own zone, which is two breaches in one [5.5.2]. The DateTime prefix is kept: a bare .Today matches IClock.Today, which is the injected surface rather than a breach'
+    },
+    @{
+        Invariant  = 'INVARIANT 11'
+        What       = 'no ambient clock: TimeProvider is read only in the clock implementation'
+        Pattern    = '\bTimeProvider\b'
+        Extensions = @('.cs', '.razor')
+        Exclude    = @('src/StockResearcherLab.Data/SystemClock.cs')
+        Why        = 'TimeProvider.System is the framework''s own ambient clock, and the pattern above names only DateTime and DateTimeOffset, so a stage reaching for it would pass that check while reading exactly what INVARIANT 11 forbids [5.5.2]. IClock is this system''s injected clock; a second abstraction over the same reading is a second door rather than a second name for the first'
     },
     @{
         Invariant  = 'INVARIANT 6'
@@ -97,10 +105,10 @@ $checks = @(
     @{
         Invariant  = 'INVARIANT 6'
         What       = 'the prefix is byte-identical within a night: Random is seeded from the run date'
-        Pattern    = 'new\s+Random\s*\(\s*\)'
+        Pattern    = 'new\s+Random\s*\(|Random\s*\.\s*Shared'
         Extensions = @('.cs', '.razor')
         Exclude    = @()
-        Why        = ''
+        Why        = 'CLAUDE.md section 6 requires Random to be seeded from the run date, so the arbitration tie-break and the random portfolio reproduce exactly. Random.Shared is unseeded by construction. A seeded construction is matched as well, deliberately: whether the seed is the run date is not something a pattern can read, so every construction surfaces for a reader rather than the one spelling that is plainly wrong, and D-138 is the precedent for preferring a hash written here to System.Random at all, its sequence being a runtime detail a framework upgrade can move [5.5.2]'
     },
     @{
         Invariant  = 'INVARIANT 16'
@@ -377,8 +385,8 @@ if ($failed -gt 0) {
     exit 1
 }
 
-# The scope is asserted rather than printed for a human to eyeball. Five checks
-# finding zero over a set that quietly shrank produces a line identical to five
+# The scope is asserted rather than printed for a human to eyeball. Six checks
+# finding zero over a set that quietly shrank produces a line identical to six
 # checks finding zero over everything.
 $missed = @($expected | Where-Object { -not $swept.Contains($_) })
 if ($missed.Count -gt 0) {
@@ -388,5 +396,9 @@ if ($missed.Count -gt 0) {
     exit 1
 }
 
-Write-Host "guards.ps1: ok. $($checks.Count) checks over $($swept.Count) files, four greps finding none of what they look for and one schema assertion over the migrations."
+# Counted rather than written out. The line said "four greps" as a literal, and the
+# literal stayed true only until a check was added [5.5.2].
+$greps = @($checks | Where-Object { $_.Kind -ne 'schema' }).Count
+$schemas = $checks.Count - $greps
+Write-Host "guards.ps1: ok. $($checks.Count) checks over $($swept.Count) files, $greps greps finding none of what they look for and $schemas schema assertion(s) over the migrations."
 exit 0

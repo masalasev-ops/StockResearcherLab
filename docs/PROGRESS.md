@@ -13615,7 +13615,7 @@ Each row is filled when its checkpoint lands.
 | 5.5.4 | `HEAD`, on the three `X-` ids | **22 of 82 failing**: all 21 ordered pairs whose owner is `X-NSI`, `X-ACC` or `X-FM`, every reader able to read the shadow's keys, and the older-form refusal | **82 of 82**, with `ScreenGateTests`, `ScreenEngine` and the registry suites, 126 in all |
 | 5.5.6 | `HEAD`, the whole range taking the second version | **Red**: on 2022-03-06, before the stamp, the nightly stage wrote a floor of 100 and the range pass 55, the 50th percentile from the version stamped 2022-03-07 | **Green**: both sides of the stamp equal what the nightly stage writes for the same date |
 | 5.5.8 | `double positionSize` in a monetary-owning component | | |
-| 5.5.9 | `screen_score_daily` removed from a copy of `SelectionRangeRun`'s reads | | |
+| 5.5.9 | `screen_score_daily` removed from a copy of `SelectionRangeRun`'s reads | **Red**: the check reports `src/StockResearcherLab.Pipeline/Select/SelectionRangeRun.cs: screen_score_daily`, while `DeclaredAccess` over the same mutilated list passes the read it gates | **Green**: no violation over today's code, every registered component's file found, statements read in at least twenty files |
 | 5.5.10 | `HEAD`, six stages | | |
 | 5.5.12 | `HEAD`, the four Consumer rows | | |
 | 5.5.13 | `HEAD`, one live row | | |
@@ -13831,3 +13831,33 @@ it. It passed against the pre-5.5.7 code too, which is right: it tests the bound
 bound was never the defect. With the range and distributions suites, 32 green.
 
 **The 5.5.6 gate passed at `3794624` and that sha is pushed.**
+### 5.5.9, the declared-access gate reads the statement
+
+`StatementTableConformanceTests` holds every table a statement names after `FROM`, `JOIN`,
+`INTO` or `UPDATE` against what the code issuing it declares. **The plan's "the SQL each
+component issues" is read from the source**, statements being assembled at run time: per
+file, the declared tables are the read and write sets of every registered component whose
+class the file declares and every inline `new DeclaredAccess(...)` in it, a stage argument
+resolved to that stage's sets and an unresolvable one failing the test rather than being
+skipped. Identifiers are kept only where the live schema has a table or view of that name,
+so CTEs, aliases and functions drop out without an exception list. **A static class whose
+statements no declaration covers is a helper, and its tables are required of every declaring
+file that calls it**: `Universe.AsOf`'s `security_daily` is D-101's rule, and it now holds
+of every caller by test rather than by convention.
+
+**Clean over today's code.** No component's statements name a table its declarations omit.
+The negative fixture is the plan's: `screen_score_daily` removed from a copy of
+`SelectionRangeRun`'s floor-read declaration is reported, and `DeclaredAccess` built from the
+same mutilated list passes `EnsureCanRead("screen_history")`, which is the gap this closes.
+
+**The first run reported seven violations and all seven were the test's own parsing
+defect**, recorded because it is what a check that fails loudly looks like: the pattern for
+quoted strings matched lower case only, so it missed a declaring name like `"BackfillRun"` and
+then skipped the first table as though it were the name. Fixed before anything landed.
+
+**Two limits, stated so a green run is not read as more.** A table interpolated into a
+statement, `FROM {source.Table}`, has no literal to read, and C11's percentile statements are
+of that form, so they stay with the column check. And the unit is the file: a file holding
+two declarations is held to their union, so `SelectionRangeRun`'s three are checked together
+and a statement under one reading a table only another declares would pass. The plan's own
+case is caught because no other declaration in that file names `screen_score_daily`.

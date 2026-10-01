@@ -105,10 +105,10 @@ $checks = @(
     @{
         Invariant  = 'INVARIANT 6'
         What       = 'the prefix is byte-identical within a night: Random is seeded from the run date'
-        Pattern    = 'new\s+Random\s*\(|Random\s*\.\s*Shared'
+        Pattern    = 'new\s+(?:System\s*\.\s*)?Random\s*\(|\bRandom\??\s+\w+\s*(?:\{[^}]*\}\s*)?=\s*new\s*\(|Random\s*\.\s*Shared'
         Extensions = @('.cs', '.razor')
         Exclude    = @()
-        Why        = 'CLAUDE.md section 6 requires Random to be seeded from the run date, so the arbitration tie-break and the random portfolio reproduce exactly. Random.Shared is unseeded by construction. A seeded construction is matched as well, deliberately: whether the seed is the run date is not something a pattern can read, so every construction surfaces for a reader rather than the one spelling that is plainly wrong, and D-138 is the precedent for preferring a hash written here to System.Random at all, its sequence being a runtime detail a framework upgrade can move [5.5.2]'
+        Why        = 'CLAUDE.md section 6 requires Random to be seeded from the run date, so the arbitration tie-break and the random portfolio reproduce exactly. Random.Shared is unseeded by construction. A seeded construction is matched as well, deliberately: whether the seed is the run date is not something a pattern can read, so a construction surfaces for a reader rather than only the one spelling that is plainly wrong. Three spellings are matched: new Random(...), qualified or not; a target-typed new() assigned to a field, property or local typed Random; and Random.Shared. A construction reached some other way, through reflection or a factory, is not, and the pattern widened at review when its first form missed the target-typed and qualified spellings [5.5.2], and D-138 is the precedent for preferring a hash written here to System.Random at all, its sequence being a runtime detail a framework upgrade can move [5.5.2]'
     },
     @{
         Invariant  = 'INVARIANT 16'

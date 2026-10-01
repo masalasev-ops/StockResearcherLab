@@ -14103,3 +14103,18 @@ seam and write path suites, 20 in all.
 **C10 had already been recomputed under the first commit's arithmetic**, so it is re-run over
 the same dates, range and nightly, before the recompute is recorded. Nothing downstream reads
 the column, so nothing else is re-run.
+### 5.5.2, second commit: the `Random` pattern widened, found by review
+
+The same review found that INVARIANT 6's `Random` pattern, as the plan wrote it and as 5.5.2
+landed it, matched `new Random(` and `Random.Shared` and nothing else, while its `Why` said
+every construction surfaces. `Random r = new();`, the target-typed form this codebase uses
+133 times for other types, and `new System.Random(...)` both read zero. It was latent, nothing
+under `src/` constructing a `Random`, and phase 7 is where the arbitration tie-break and the
+random portfolio would write the first.
+
+**Red, then green, over three staged scratch files**: two `Random` fields and a property
+initialised with a target-typed `new()`, and a qualified `new System.Random(7)`. The guard as
+5.5.2 first landed it exited 0 over all three, six checks over 225 files; the widened pattern
+exits 1 naming the four constructions by file and line; with the files removed it reads six
+checks over 222 files, every grep at zero. The `Why` now names the three spellings matched and
+the ways a construction is not caught.

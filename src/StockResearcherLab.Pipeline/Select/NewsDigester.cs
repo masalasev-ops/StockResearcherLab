@@ -229,6 +229,12 @@ public sealed class NewsDigester : IStage
             CultureInfo.InvariantCulture,
             $". {rows.Count(r => r.WasRotation):N0} rotated to {(target is null ? "nowhere, the chain holding one link" : DigestProviders.Name(target.Value))}");
 
+        // The chain in force, by name and in order, so the run log says which links a
+        // night could have reached and not only which one answered [5.5.11]. A night on a
+        // database built from `seed.ps1` alone reads "chain local", which is the operator's
+        // standing direction made visible where a reader would look for it.
+        detail += ". Chain " + string.Join(", ", chain.Order.Select(DigestProviders.Name));
+
         if (chain.PassedOver.Count > 0)
         {
             // The second half of D-137's record. Without it a night that ran entirely on
@@ -345,10 +351,16 @@ public sealed class NewsDigester : IStage
         return sb.Append(");").ToString();
     }
 
+    /// <summary>
+    /// The insert's head, public so the column conformance test holds it against
+    /// <see cref="WriteSet"/> [5.5.10].
+    /// </summary>
+    public const string InsertHead =
+        "INSERT INTO news_digest (ticker, date, digest_text, provider, model_name, was_rotation) VALUES ";
+
     private static string InsertSql(IReadOnlyList<Row> rows, DateOnly date)
     {
-        var sb = new StringBuilder(
-            "INSERT INTO news_digest (ticker, date, digest_text, provider, model_name, was_rotation) VALUES ");
+        var sb = new StringBuilder(InsertHead);
 
         for (var i = 0; i < rows.Count; i++)
         {

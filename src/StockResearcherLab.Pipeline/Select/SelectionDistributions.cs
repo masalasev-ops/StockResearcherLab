@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data;
 
@@ -175,6 +175,16 @@ public static class SelectionDistributions
             """,
             (line, rows) =>
             {
+                // **No candidate row carrying a size bucket is no share, not a share of
+                // zero** [5.5.7]. The statement divides by NULLIF(count, 0) and returns null,
+                // and reading that null as zero put an empty range under every bound.
+                if (rows[0][0] is null or DBNull)
+                {
+                    return new DoneWhenLine(
+                        line, "no candidate row in the range carries a size bucket, so there is no share to score",
+                        null);
+                }
+
                 var whole = Number(rows[0][0]);
                 var riskOff = Number(rows[0][1]);
                 var riskOffRows = Convert.ToInt64(rows[0][2], CultureInfo.InvariantCulture);
@@ -327,6 +337,14 @@ public static class SelectionDistributions
             """,
             (line, rows) =>
             {
+                // **Zero candidates is nothing to check, not every candidate checked**
+                // [5.5.7]. Zero without a row is what the line asks for, so an empty range
+                // passed it without a single row having been looked at.
+                if (Convert.ToInt64(rows[0][0], CultureInfo.InvariantCulture) == 0)
+                {
+                    return new DoneWhenLine(line, "no candidate in the range, so there is nothing to check", null);
+                }
+
                 var unattributed = Convert.ToInt64(rows[0][2], CultureInfo.InvariantCulture);
                 var unstamped = Convert.ToInt64(rows[0][3], CultureInfo.InvariantCulture);
 

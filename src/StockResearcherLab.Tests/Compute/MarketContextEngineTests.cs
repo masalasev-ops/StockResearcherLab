@@ -209,6 +209,252 @@ public sealed class MarketContextEngineTests
         }
     }
 
+    /// <summary>
+    /// The sector value is a difference of two trailing returns, not a ratio of two
+    /// growth factors [`METRICS.md`, D-158, 5.5.3].
+    ///
+    /// One sector at +1 percent a day and a universe at +0.4 percent, both over 63
+    /// sessions. The sector's 63-session return is 1.01^63 - 1 and the universe's is
+    /// 1.004^63 - 1, so the value is 1.01^63 - 1.004^63, about 0.584. The ratio the
+    /// code emitted until 5.5.3 is 1.01^63 / 1.004^63 - 1, about 0.452: the same sign,
+    /// a plausible size, and a different number, which is why nothing noticed.
+    /// </summary>
+    [Fact]
+    public void TheSectorValueIsTheSectorReturnMinusTheUniverseReturn()
+    {
+        var rows = new List<MarketContextEngine.CompositeReturn>();
+
+        for (var i = 0; i < 63; i++)
+        {
+            var date = new DateOnly(1994, 1, 3).AddDays(i);
+            rows.Add(new MarketContextEngine.CompositeReturn(null, date, 0.004));
+            rows.Add(new MarketContextEngine.CompositeReturn("SRL55-Alpha", date, 0.01));
+        }
+
+        var values = Parse(MarketContextEngine.SectorRelativeStrength(rows));
+
+        Assert.Equal(new[] { "SRL55-Alpha" }, values.Keys.ToArray());
+        Assert.Equal(Math.Pow(1.01, 63) - Math.Pow(1.004, 63), values["SRL55-Alpha"], 5);
+    }
+
+    /// <summary>
+    /// **Both composites are chained over the same 63 sessions, the universe's most recent**
+    /// [`METRICS.md`, "over the same window", D-158, 5.5.3].
+    ///
+    /// A member whose last 64 bars straddle a hole reaches one session further back and
+    /// returns a row dated before every other member's window. Five such members anywhere in
+    /// the universe carry the universe composite onto that date, and a chain over every date
+    /// it is given then compares a 63-session sector return with a 64-session universe one.
+    /// The stray date here carries a return of +50 percent, standing for a few gap names'
+    /// return across their holes, and it must move nothing.
+    /// </summary>
+    [Fact]
+    public void AnOlderDateTheUniverseAloneCarriesIsOutsideTheWindow()
+    {
+        var rows = new List<MarketContextEngine.CompositeReturn>
+        {
+            new(null, new DateOnly(1994, 1, 2), 0.5),
+        };
+
+        for (var i = 0; i < 63; i++)
+        {
+            var date = new DateOnly(1994, 1, 3).AddDays(i);
+            rows.Add(new MarketContextEngine.CompositeReturn(null, date, 0.004));
+            rows.Add(new MarketContextEngine.CompositeReturn("SRL55-Alpha", date, 0.01));
+        }
+
+        var values = Parse(MarketContextEngine.SectorRelativeStrength(rows));
+
+        Assert.Equal(Math.Pow(1.01, 63) - Math.Pow(1.004, 63), values["SRL55-Alpha"], 5);
+    }
+
+    /// <summary>
+    /// A sector that does not cover every session of the window carries no value, rather than
+    /// a return over a different window from the universe's. Here Beta has 63 rows, one of
+    /// them on the older stray date and none on the window's last session.
+    /// </summary>
+    [Fact]
+    public void ASectorThatDoesNotCoverTheWindowCarriesNoValue()
+    {
+        var rows = new List<MarketContextEngine.CompositeReturn>
+        {
+            new(null, new DateOnly(1994, 1, 2), 0.0),
+            new("SRL55-Beta", new DateOnly(1994, 1, 2), 0.0),
+        };
+
+        for (var i = 0; i < 63; i++)
+        {
+            var date = new DateOnly(1994, 1, 3).AddDays(i);
+            rows.Add(new MarketContextEngine.CompositeReturn(null, date, 0.004));
+            rows.Add(new MarketContextEngine.CompositeReturn("SRL55-Alpha", date, 0.01));
+
+            if (i < 62)
+            {
+                rows.Add(new MarketContextEngine.CompositeReturn("SRL55-Beta", date, 0.0));
+            }
+        }
+
+        var values = Parse(MarketContextEngine.SectorRelativeStrength(rows));
+
+        Assert.Equal(new[] { "SRL55-Alpha" }, values.Keys.ToArray());
+    }
+
+    /// <summary>
+    /// **A date inside the window that the universe carries and the sector does not leaves
+    /// both chains, rather than voiding the sector** [`METRICS.md`, "over the same window",
+    /// D-130, 5.5.3].
+    ///
+    /// `price_daily` holds bars on days the exchange was shut, 1 to 18 a holiday, and five of
+    /// them carry the universe composite onto that day while no sector reaches its floor
+    /// [D-130]. Taking the window from the universe's dates put 2026-06-19 and 2026-07-03
+    /// inside 2026-08-12's, every sector covered 61 of its 63, and the recompute wrote `{}` on
+    /// 431 of 1,465 dates, 426 of them in runs from 2024-11-28 on. Found by the recompute's
+    /// comparison.
+    ///
+    /// Here the stray day sits mid-window at +50 percent, standing for a few names' moves
+    /// across a holiday, and Alpha has a row on each of the 63 sessions either side of it.
+    /// The value is Alpha's 63 sessions against the universe's over the same 63.
+    /// </summary>
+    [Fact]
+    public void ADateInsideTheWindowTheUniverseAloneCarriesLeavesBothChains()
+    {
+        var rows = new List<MarketContextEngine.CompositeReturn>();
+        var stray = new DateOnly(1994, 1, 3).AddDays(30);
+
+        for (var i = 0; i < 64; i++)
+        {
+            var date = new DateOnly(1994, 1, 3).AddDays(i);
+
+            if (date == stray)
+            {
+                rows.Add(new MarketContextEngine.CompositeReturn(null, date, 0.5));
+                continue;
+            }
+
+            rows.Add(new MarketContextEngine.CompositeReturn(null, date, 0.004));
+            rows.Add(new MarketContextEngine.CompositeReturn("SRL55-Alpha", date, 0.01));
+        }
+
+        var values = Parse(MarketContextEngine.SectorRelativeStrength(rows));
+
+        Assert.Equal(new[] { "SRL55-Alpha" }, values.Keys.ToArray());
+        Assert.Equal(Math.Pow(1.01, 63) - Math.Pow(1.004, 63), values["SRL55-Alpha"], 5);
+    }
+
+    /// <summary>
+    /// The universe composite is the mean over every active member, not the mean of the
+    /// sector means, and it is computed by the stage's own statement against a store
+    /// [`METRICS.md`, D-158, 5.5.3].
+    ///
+    /// Twenty members over 70 sessions, each moving by a constant fraction a day so that
+    /// every composite is a closed form. Alpha: five members at +1 percent. Beta: ten at
+    /// zero. Gamma: two at -1 percent, below the five-member floor, so it carries no key
+    /// of its own. And three members with no sector at zero, which carry no key either.
+    /// **All twenty are in the universe composite**: (5 x 0.01 + 2 x -0.01) / 20 is
+    /// 0.0015 a day. The mean of the sector means the code took until 5.5.3 counts only
+    /// Alpha and Beta, (0.01 + 0) / 2 = 0.005 a day, which weighs Alpha's five as much as
+    /// Beta's ten and leaves out the five members in no qualifying sector.
+    ///
+    /// Alpha is then 1.01^63 - 1.0015^63 and Beta is 1 - 1.0015^63.
+    /// </summary>
+    [Fact]
+    public async Task TheUniverseCompositeWeighsEveryActiveMemberEqually()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var start = new DateOnly(1994, 1, 3);
+        const int sessions = 70;
+        var asOf = start.AddDays(sessions - 1);
+
+        var members = new List<(string Ticker, string? Sector, double Daily)>();
+        members.AddRange(Enumerable.Range(1, 5).Select(i => ($"SRL55A{i:00}.US", (string?) "SRL55-Alpha", 0.01)));
+        members.AddRange(Enumerable.Range(1, 10).Select(i => ($"SRL55B{i:00}.US", (string?) "SRL55-Beta", 0.0)));
+        members.AddRange(Enumerable.Range(1, 2).Select(i => ($"SRL55C{i:00}.US", (string?) "SRL55-Gamma", -0.01)));
+        members.AddRange(Enumerable.Range(1, 3).Select(i => ($"SRL55N{i:00}.US", (string?) null, 0.0)));
+
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
+        await ClearFixtureAsync(conn).ConfigureAwait(true);
+
+        foreach (var (ticker, sector, daily) in members)
+        {
+            await using (var cmd = new NpgsqlCommand(
+                """
+                INSERT INTO security_daily (ticker, date, sector, size_bucket, market_cap, is_active)
+                VALUES (@t, @d, @s, 'small', 1000000000, true);
+                """, conn))
+            {
+                cmd.Parameters.AddWithValue("t", ticker);
+                cmd.Parameters.AddWithValue("d", start);
+                cmd.Parameters.AddWithValue("s", (object?) sector ?? DBNull.Value);
+                await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(true);
+            }
+
+            for (var i = 0; i < sessions; i++)
+            {
+                var price = Math.Round((decimal) (100 * Math.Pow(1 + daily, i)), 6);
+
+                await using var bar = new NpgsqlCommand(
+                    """
+                    INSERT INTO price_daily (ticker, date, open, high, low, close, adj_close, volume)
+                    VALUES (@t, @d, @p, @p, @p, @p, @p, 1000);
+                    """, conn);
+                bar.Parameters.AddWithValue("t", ticker);
+                bar.Parameters.AddWithValue("d", start.AddDays(i));
+                bar.Parameters.AddWithValue("p", price);
+                await bar.ExecuteNonQueryAsync(ct).ConfigureAwait(true);
+            }
+        }
+
+        var rows = new List<MarketContextEngine.CompositeReturn>();
+
+        await using (var cmd = new NpgsqlCommand(MarketContextEngine.SectorCompositeSql(asOf, 5), conn))
+        await using (var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(true))
+        {
+            while (await r.ReadAsync(ct).ConfigureAwait(true))
+            {
+                rows.Add(new MarketContextEngine.CompositeReturn(
+                    await r.IsDBNullAsync(0, ct).ConfigureAwait(true) ? null : r.GetString(0),
+                    DateOnly.FromDateTime(r.GetDateTime(1)),
+                    (double) r.GetDecimal(2)));
+            }
+        }
+
+        await ClearFixtureAsync(conn).ConfigureAwait(true);
+
+        var values = Parse(MarketContextEngine.SectorRelativeStrength(rows));
+
+        Assert.Equal(new[] { "SRL55-Alpha", "SRL55-Beta" }, values.Keys.ToArray());
+        Assert.Equal(Math.Pow(1.01, 63) - Math.Pow(1.0015, 63), values["SRL55-Alpha"], 5);
+        Assert.Equal(1 - Math.Pow(1.0015, 63), values["SRL55-Beta"], 5);
+    }
+
+    /// <summary>The emitted object as sector to value.</summary>
+    private static SortedDictionary<string, double> Parse(string json)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        var values = new SortedDictionary<string, double>(StringComparer.Ordinal);
+
+        foreach (var p in doc.RootElement.EnumerateObject())
+        {
+            values[p.Name] = p.Value.GetDouble();
+        }
+
+        return values;
+    }
+
+    private static async Task ClearFixtureAsync(NpgsqlConnection conn)
+    {
+        foreach (var sql in new[]
+                 {
+                     "DELETE FROM price_daily WHERE ticker LIKE 'SRL55%';",
+                     "DELETE FROM security_daily WHERE ticker LIKE 'SRL55%';",
+                 })
+        {
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        }
+    }
+
     private static async Task ClearAsync(NpgsqlConnection conn, DateOnly date)
     {
         await using var cmd = new NpgsqlCommand("DELETE FROM market_context_daily WHERE date = @d;", conn);

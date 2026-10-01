@@ -174,6 +174,11 @@ public sealed class ConfigSeeder
     /// introduces arrive and the two it retires were never here to remove. That is
     /// what the first commit's absence assertions bought, and it is why this count
     /// moved by two rather than staying still while two names changed underneath it.
+    ///
+    /// **105 at 5.13**, `digest.warm_timeout_ms`, the second bound for a second question,
+    /// and **106 at 5.14**, `cost.price_per_mtok_usd`, C26's price. Carried here at 5.5.12:
+    /// the narration had stopped at 104 while the count asserted beside it had moved on
+    /// twice, which is the drift a count stated in prose invites.
     /// </summary>
     public static IReadOnlyList<(string Key, string Value)> Keys { get; } =
     [
@@ -575,12 +580,17 @@ public sealed class ConfigSeeder
         // authored and neither name is ever seeded**: the two below replace them, and
         // `ChainSeedTests` asserts all four names in the state they now stand in.
         //
-        // `digest.chain` is seeded at its documented value and its consumer is not
-        // bound here. D-136 gives the chain's order to `local_model_config.provider_order`
-        // filtered on `enabled`, so what this key is for is a question 5.7 answers;
-        // seeding a documented key at its documented value chooses nothing, and
-        // `CONFIG_REFERENCE.md`'s Consumer column stays honest about it [5.3 finding].
-        ("digest.chain", "[\"local\",\"haiku\"]"),
+        // `digest.chain` is seeded at the value in force, `["local"]`, and not at the two
+        // links the corpus first documented [5.5.11]. The operator directed on 2026-08-25
+        // that the digest step reach no paid provider until they have evaluated it, and
+        // until 5.5.11 that direction lived only as two edits to one store: this key at
+        // version 2 and the second chain row disabled. ON CONFLICT DO NOTHING left both
+        // edits alone on a re-seed and gave a fresh database the paid link on its first
+        // night, the Anthropic key being present. Seeded here and in `ChainLinks` together,
+        // since the chain refuses to build when its length and the enabled rows differ.
+        // Enabling the secondary is a version of this key and a row edit, as it is on the
+        // store that has run.
+        ("digest.chain", "[\"local\"]"),
         ("digest.rotation_count", "2"),
         ("digest.lookback_days", "7"),
         ("digest.health_timeout_ms", "5000"),
@@ -662,11 +672,17 @@ public sealed class ConfigSeeder
     /// answering in under two seconds, and reporting healthy. The secondary's null is
     /// a link that needs no provider-specific parameter rather than one whose options
     /// are unknown, and it is asserted rather than left to the column's default.
+    ///
+    /// **The secondary's row is seeded disabled** [5.5.11], with `digest.chain` at
+    /// `["local"]` beside it, so a database built from `seed.ps1` alone composes no link
+    /// that reaches a paid provider. That is the operator's standing direction of
+    /// 2026-08-25, which until 5.5.11 existed only as an edit to the one store that had
+    /// run. The row exists so enabling the link is an edit rather than an insert.
     /// </summary>
-    public static IReadOnlyList<(int Order, string Endpoint, string? RequestOptions)> ChainLinks { get; } =
+    public static IReadOnlyList<(int Order, string Endpoint, string? RequestOptions, bool Enabled)> ChainLinks { get; } =
     [
-        (1, "http://localhost:11434/v1", "{\"reasoning_effort\": \"none\"}"),
-        (2, "https://api.anthropic.com", null),
+        (1, "http://localhost:11434/v1", "{\"reasoning_effort\": \"none\"}", true),
+        (2, "https://api.anthropic.com", null, false),
     ];
 
     private readonly string _connectionString;
@@ -719,7 +735,7 @@ public sealed class ConfigSeeder
     {
         const string sql = """
             INSERT INTO local_model_config (provider_order, endpoint, enabled, request_options)
-            VALUES (@order, @endpoint, TRUE, @options::jsonb)
+            VALUES (@order, @endpoint, @enabled, @options::jsonb)
             ON CONFLICT (provider_order) DO NOTHING;
             """;
 
@@ -727,11 +743,12 @@ public sealed class ConfigSeeder
         await conn.OpenAsync(ct).ConfigureAwait(false);
 
         var inserted = 0;
-        foreach (var (order, endpoint, options) in ChainLinks)
+        foreach (var (order, endpoint, options, enabled) in ChainLinks)
         {
             await using var cmd = new NpgsqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("order", order);
             cmd.Parameters.AddWithValue("endpoint", endpoint);
+            cmd.Parameters.AddWithValue("enabled", enabled);
 
             // Null rather than an empty object [D-144]. A link that needs no
             // provider-specific parameter and a link whose parameters are an empty

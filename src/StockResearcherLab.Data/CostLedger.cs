@@ -61,6 +61,14 @@ public sealed class CostLedger : IWriteOwner
         _config = config;
     }
 
+    /// <summary>
+    /// The insert, public so the column conformance test holds it against
+    /// <see cref="WriteSet"/> [5.5.10].
+    /// </summary>
+    public const string InsertSql =
+        "INSERT INTO cost_ledger (date, model_id, portfolio_id, input_tokens, " +
+        "cache_write_tokens, cache_read_tokens, output_tokens, cost, was_batch) " +
+        "VALUES (@date, @model, @portfolio, @in, @cw, @cr, @out, @cost, @batch);";
     public string Name => "CostLedger";
 
     public IReadOnlyList<TableWrite> WriteSet { get; } =
@@ -108,17 +116,15 @@ public sealed class CostLedger : IWriteOwner
 
         var price = await PriceAsync(modelId, asOf, ct).ConfigureAwait(false);
 
-        var cost =
+        decimal cost =
             (inputTokens ?? 0) * price.Input / PerMillion
             + (outputTokens ?? 0) * price.Output / PerMillion
             + (cacheWriteTokens ?? 0) * price.CacheWrite / PerMillion
             + (cacheReadTokens ?? 0) * price.CacheRead / PerMillion;
 
         await using var connection = new NpgsqlDataSourceBuilder(_connectionString).Build();
-        await using var command = connection.CreateCommand(
-            "INSERT INTO cost_ledger (date, model_id, portfolio_id, input_tokens, " +
-            "cache_write_tokens, cache_read_tokens, output_tokens, cost, was_batch) " +
-            "VALUES (@date, @model, @portfolio, @in, @cw, @cr, @out, @cost, @batch);");
+        await using var command = connection.CreateCommand(InsertSql);
+
 
         command.Parameters.AddWithValue("date", date);
         command.Parameters.AddWithValue("model", modelId);

@@ -41,9 +41,12 @@ public sealed class IndicatorEngineTests
         // smoothing of a constant is that constant. atr_pct is 2/100.
         Assert.Equal(0.02f, row.AtrPct!.Value, 5);
 
-        // Neither high nor low moves, so +DM and -DM are zero throughout, both
-        // directional indicators are zero, and the index over them is zero.
-        Assert.Equal(0f, row.Adx14!.Value, 5);
+        // Neither high nor low moves, so +DM and -DM are zero throughout and so are both
+        // directional indicators. DX is then zero divided by zero at every session, which
+        // is undefined rather than zero, and METRICS.md section 2 makes the index null
+        // there [D-158]. This line asserted 0 until 5.5.3: the reference test encoded the
+        // defect it should have caught.
+        Assert.Null(row.Adx14);
 
         // Every average equals the close, so both distances are zero.
         Assert.Equal(0f, row.Dist20Dma!.Value, 6);
@@ -278,6 +281,36 @@ public sealed class IndicatorEngineTests
     private static IReadOnlyDictionary<DateOnly, double> Level(
         IReadOnlyList<IndicatorEngine.Bar> history, double level)
         => history.ToDictionary(b => b.Date, _ => level);
+
+    /// <summary>
+    /// The same null reached with the close moving, so the flat series above is not the
+    /// only shape that reaches it [D-158, 5.5.3].
+    ///
+    /// High 101 and low 99 on every bar with the close alternating 99.5 and 100.5 inside
+    /// them. True range is still 2 throughout, max(2, 1.5, 0.5), so the true-range guard
+    /// is never what fires, and +DM and -DM are still zero, neither extreme ever moving.
+    /// ATR is computed and ADX is not, which is the distinction the test exists for: a
+    /// name whose range is real and whose direction is undefined.
+    /// </summary>
+    [Fact]
+    public void AMovingCloseInsideAConstantRangeHasNoDirectionalIndex()
+    {
+        var history = new List<IndicatorEngine.Bar>(Bars);
+
+        for (var i = 0; i < Bars; i++)
+        {
+            var close = i % 2 == 0 ? 99.5m : 100.5m;
+
+            history.Add(new IndicatorEngine.Bar(
+                AsOf.AddDays(i - Bars + 1), High: 101m, Low: 99m, Close: close, AdjClose: close, Volume: 1000));
+        }
+
+        var row = IndicatorEngine.Compute(
+            "SRLTEST.RANGE", AsOf, history, Warmup, BaseLookback, BaseMaxRange, medianDollarVolume: 2_000_000m);
+
+        Assert.NotNull(row.AtrPct);
+        Assert.Null(row.Adx14);
+    }
 
     /// <summary>Close 100, high 101, low 99, volume 1,000, adjusted equal to raw.</summary>
     private static IReadOnlyList<IndicatorEngine.Bar> Flat(int count)

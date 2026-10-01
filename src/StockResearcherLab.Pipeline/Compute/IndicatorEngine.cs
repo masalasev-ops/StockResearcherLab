@@ -877,18 +877,28 @@ public sealed class IndicatorEngine : IStage, IBackfillStage
 
         for (var t = WilderPeriod - 1; t < len; t++)
         {
-            if (smoothedTr[t] <= 0)
+            // **Null where +DI + -DI is zero, at any session of the window** [METRICS.md
+            // section 2, D-158]. DX is zero divided by zero there, which is undefined
+            // rather than zero, and under strict null propagation an undefined input
+            // makes the index over it undefined. Wilder's smoothing is zero at a session
+            // only where every input up to it is zero, so this is a name whose high and
+            // low had not moved by then. Until 5.5.3 this wrote 0, which reads to a
+            // rubric as "no trend" about a name whose trend strength is unknown.
+            //
+            // **Tested on the smoothed movements rather than on the sum of the two
+            // indicators**, because both indicators divide by smoothed true range: where
+            // that is zero too they are NaN, and NaN compares false with everything, so a
+            // test on their sum would pass a NaN through as a value. One condition before
+            // either division covers both cases.
+            if (smoothedTr[t] <= 0 || smoothedPlus[t] + smoothedMinus[t] <= 0)
             {
-                // A name that has not moved at all across the window has no
-                // directional index rather than one of zero.
                 return (smoothedTr[^1], null);
             }
 
             var plusDi = 100 * smoothedPlus[t] / smoothedTr[t];
             var minusDi = 100 * smoothedMinus[t] / smoothedTr[t];
-            var sum = plusDi + minusDi;
 
-            dx.Add(sum <= 0 ? 0 : 100 * Math.Abs(plusDi - minusDi) / sum);
+            dx.Add(100 * Math.Abs(plusDi - minusDi) / (plusDi + minusDi));
         }
 
         return dx.Count < WilderPeriod

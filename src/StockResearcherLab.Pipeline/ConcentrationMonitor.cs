@@ -222,11 +222,17 @@ public sealed class ConcentrationMonitor : IStage
             """;
     }
 
+    /// <summary>
+    /// The alert insert's head, public so the column conformance test holds it against
+    /// <see cref="WriteSet"/> [5.5.10].
+    /// </summary>
+    public const string AlertInsertHead = "INSERT INTO alert (date, alert_type, detail, acknowledged) VALUES (";
+
     private static async Task<long> RaiseAsync(
         StageContext context, string type, string detail, CancellationToken ct)
         => await context.Data.WriteAsync(
             "alert", WriteOperation.Insert,
-            "INSERT INTO alert (date, alert_type, detail, acknowledged) VALUES (" +
+            AlertInsertHead +
             Literal(context.Date) + ", " + Quote(type) + ", " + Quote(detail) + ", FALSE);",
             parameters: null, ct).ConfigureAwait(false);
 

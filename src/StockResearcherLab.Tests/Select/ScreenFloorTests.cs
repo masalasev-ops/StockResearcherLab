@@ -225,6 +225,42 @@ public sealed class ScreenFloorTests
         }
     }
 
+    /// <summary>
+    /// **A raised floor leaves no rank standing below it** [5.5.5, §06].
+    ///
+    /// Ranked at 50, then at 90 with no score written in between, which is what a floor
+    /// pass re-run after `screens.floor_percentile` moves does. Until 5.5.5 the statement
+    /// updated only the rows that cleared the floor, so a name at 60 kept the rank 50 gave
+    /// it and read as having cleared a floor of 90: "floors already applied" stopped being
+    /// true with nothing failing.
+    /// </summary>
+    [Fact]
+    public async Task ARaisedFloorLeavesNoRankStandingBelowIt()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ClearAsync(ct);
+
+        try
+        {
+            await SeedScoresAsync(RunDate, Enumerable.Range(1, 100).Select(x => (double?) x), ct);
+
+            await RankAsync(50d, ct);
+            Assert.NotNull(await RankOfScoreAsync(RunDate, 60, ct));
+
+            await RankAsync(90d, ct);
+
+            Assert.Null(await RankOfScoreAsync(RunDate, 60, ct));
+            Assert.Null(await RankOfScoreAsync(RunDate, 89, ct));
+            Assert.Equal(1, await RankOfScoreAsync(RunDate, 100, ct));
+            Assert.Equal(11, await RankOfScoreAsync(RunDate, 90, ct));
+            Assert.Equal(11L, await RankedCountAsync(RunDate, ct));
+        }
+        finally
+        {
+            await ClearAsync(ct);
+        }
+    }
+
     /// <summary>Ties take the same rank, so the order two equal names arrive in cannot matter.</summary>
     [Fact]
     public void TheRankIsDenseAndTheTieBreakIsExplicit()
@@ -281,6 +317,15 @@ public sealed class ScreenFloorTests
                 "screen_score_daily", WriteOperation.Update,
                 ScreenEngine.RankSql(ScreenId, date, floor.Value), parameters: null, ct).ConfigureAwait(true);
         }
+    }
+
+    private static async Task RankAsync(double floor, CancellationToken ct)
+    {
+        var data = new StageData(TestDatabase.ConnectionString, new DeclaredAccess(new ScreenEngine()));
+
+        await data.WriteAsync(
+            "screen_score_daily", WriteOperation.Update,
+            ScreenEngine.RankSql(ScreenId, RunDate, floor), parameters: null, ct).ConfigureAwait(true);
     }
 
     private static async Task<(int Days, double? P98)> TrailingAsync(

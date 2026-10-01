@@ -1,7 +1,13 @@
+using System.Text.RegularExpressions;
 using Npgsql;
+using StockResearcherLab.Core.Gates;
+using StockResearcherLab.Core.Screens;
 using StockResearcherLab.Core.Stages;
+using StockResearcherLab.Data;
 using StockResearcherLab.Pipeline;
 using StockResearcherLab.Pipeline.Compute;
+using StockResearcherLab.Pipeline.Ingest;
+using StockResearcherLab.Pipeline.Select;
 using StockResearcherLab.Tests.Corpus;
 using Xunit;
 
@@ -29,25 +35,8 @@ namespace StockResearcherLab.Tests.Stages;
 [Collection("database")]
 public sealed class StatementColumnConformanceTests
 {
-    /// <summary>
-    /// The stages that write through a hand-written statement, with it.
-    ///
-    /// Two, and a third arrives the next time a stage writes without going through the
-    /// staged bulk path. There is no marker in the registry that says which route a
-    /// stage takes, so this list is stated rather than derived, and
-    /// <see cref="EveryNamedStatementBelongsToARegisteredStage"/> is what keeps it from
-    /// naming something that no longer exists.
-    /// </summary>
-    private static IEnumerable<(string Stage, string Table, string Sql)> Statements()
-    {
-        yield return ("FlowEngine", "flow_daily", FlowEngine.Sql);
-
-        foreach (var source in PercentileEngine.Sources)
-        {
-            yield return ("PercentileEngine", source.Table, PercentileEngine.UpdateSql(
-                source, new DateOnly(2026, 8, 7), 15));
-        }
-    }
+    private static IEnumerable<(string Stage, string Table, WriteOperation Operation, string Sql)> Statements()
+        => StatementCatalogue.All();
 
     /// <summary>
     /// Every column a stage declares for a table appears in the statement that writes
@@ -58,11 +47,15 @@ public sealed class StatementColumnConformanceTests
     {
         var declared = DeclaredWrites();
 
-        foreach (var (stage, table, sql) in Statements())
+        foreach (var (stage, table, operation, sql) in Statements())
         {
+            // Matched on the operation as well [5.5.10]. A component declaring an insert
+            // and an update on one table declares two column sets, and the update's
+            // statement is held to its own rather than to the union.
             var columns = declared
                 .Where(w => string.Equals(w.Component, stage, StringComparison.Ordinal)
-                            && string.Equals(w.Table, table, StringComparison.Ordinal))
+                            && string.Equals(w.Table, table, StringComparison.Ordinal)
+                            && w.Operation == operation)
                 .SelectMany(w => w.Columns)
                 .ToList();
 
@@ -89,6 +82,45 @@ public sealed class StatementColumnConformanceTests
 
         Assert.Empty(Missing(source.PercentileColumns, sql));
         Assert.Equal([dropped], Missing(source.PercentileColumns, mutilated));
+
+        // **A partial declaration is discriminated as well as a percentile one** [5.5.10].
+        // C13's rank update declares one column of a table it also inserts into, and C14's
+        // attribution insert declares the columns C21 does not own. Each statement is
+        // checked against its own set, and a column taken out of either is named.
+        var date = new DateOnly(2026, 8, 7);
+
+        var rank = ScreenEngine.RankSql("S2", date, 0.5);
+        Assert.Empty(Missing(ScreenEngine.RankColumns, rank));
+        Assert.Equal(
+            ["rank_within_screen"],
+            Missing(ScreenEngine.RankColumns, rank.Replace("rank_within_screen", "some_other_column", StringComparison.Ordinal)));
+
+        var attribution = CandidateAllocator.AttributionSql(
+            [("S2", SlotQuota.For(8))], [("X-FM", SlotQuota.For(8))], date, 1);
+        Assert.Empty(Missing(CandidateAllocator.AttributionColumns, attribution));
+        Assert.Equal(
+            ["gate_state"],
+            Missing(CandidateAllocator.AttributionColumns, attribution.Replace("gate_state", "some_other_column", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// The write direction discriminates too. C13's rank update with a second assignment
+    /// added, to <c>score</c>, which the update does not declare and the insert does, is
+    /// reported: the update reaching into a column its declaration does not give it [5.5.10].
+    /// </summary>
+    [Fact]
+    public void TheWriteCheckFailsWhenAStatementWritesPastItsDeclaration()
+    {
+        var rank = ScreenEngine.RankSql("S2", new DateOnly(2026, 8, 7), 0.5);
+        const string assignment = "SET rank_within_screen = r.rk";
+
+        Assert.Contains(assignment, rank, StringComparison.Ordinal);
+
+        var widened = rank.Replace(assignment, assignment + ", score = 0", StringComparison.Ordinal);
+
+        Assert.Equal(["rank_within_screen"], Written(rank, "screen_score_daily", WriteOperation.Update));
+        Assert.Contains("score", Written(widened, "screen_score_daily", WriteOperation.Update));
+        Assert.DoesNotContain("score", ScreenEngine.RankColumns);
     }
 
     [Fact]
@@ -99,11 +131,138 @@ public sealed class StatementColumnConformanceTests
             .Select(o => o.Name)
             .ToHashSet(StringComparer.Ordinal);
 
-        foreach (var (stage, _, _) in Statements())
+        foreach (var (stage, _, _, _) in Statements())
         {
             Assert.Contains(stage, registered);
         }
     }
+
+    /// <summary>
+    /// **Every component that declares the columns it inserts or updates has those columns
+    /// checked on one route or the other** [5.5.10].
+    ///
+    /// The staged bulk route checks at the call, <see cref="DeclaredAccess.EnsureColumnsDeclared"/>
+    /// refusing an undeclared column before a connection opens. The statement route is
+    /// checked here, by <see cref="Statements"/>, and only for what that list names. Until
+    /// 5.5.10 it named two components, and `BUILD_PLAN.md` carried column ownership as closed
+    /// at 1.12 while every other statement writer declared columns nothing compared with
+    /// anything. This walks the registry so that cannot recur: a declared insert or update
+    /// is either a statement on the list or a bulk write naming that table in the component's
+    /// own source, and anything else is named here.
+    ///
+    /// Deletes are not walked. A delete writes no column, so a column list declared on one
+    /// is held to nothing either way.
+    /// </summary>
+    [Fact]
+    public void EveryComponentDeclaringWriteColumnsIsCheckedOnOneRoute()
+    {
+        var files = SourceTree.Files();
+        var stated = Statements().Select(s => (s.Stage, s.Table, s.Operation)).ToHashSet();
+
+        var uncovered = new List<string>();
+
+        foreach (var owner in PipelineComposition.AllOwnersForConformance(TestDatabase.ConnectionString))
+        {
+            var bulk = BulkTables(SourceTree.Of(files, owner.GetType().Name));
+
+            foreach (var write in owner.WriteSet.Where(w => w.Columns.Count > 0
+                         && w.Operation is WriteOperation.Insert or WriteOperation.Update))
+            {
+                if (stated.Contains((owner.Name, write.Table, write.Operation))
+                    || (write.Operation == WriteOperation.Insert && bulk.Contains(write.Table)))
+                {
+                    continue;
+                }
+
+                uncovered.Add($"{owner.Name} -> {write.Operation} {write.Table}");
+            }
+        }
+
+        uncovered.Sort(StringComparer.Ordinal);
+
+        Assert.True(uncovered.Count == 0,
+            "Declared write columns no route checks. Each needs its statement on Statements(), or a " +
+            "bulk write naming the table:\n  " + string.Join("\n  ", uncovered));
+    }
+
+    /// <summary>
+    /// **No statement writes a column its component does not declare for that operation**
+    /// [INVARIANT 10, 5.5.10]. The direction above asks that a declaration is not fiction;
+    /// this one asks that a statement does not write past it, which is what column
+    /// ownership means: two components sharing a table each own a part of it, and a
+    /// statement reaching into the other's part is the breach the bulk route refuses at the
+    /// call. Read off the statement's own column list for an insert and its <c>SET</c>
+    /// assignments for an update, and kept to the columns the table has, so a parse that
+    /// picked up an alias names nothing rather than everything.
+    /// </summary>
+    [Fact]
+    public async Task EveryColumnAStatementWritesIsDeclared()
+    {
+        var actual = await ColumnsByTableAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        var declared = DeclaredWrites();
+
+        var undeclared = new List<string>();
+
+        foreach (var (stage, table, operation, sql) in Statements())
+        {
+            var columns = declared
+                .Where(w => w.Component == stage && w.Table == table && w.Operation == operation)
+                .SelectMany(w => w.Columns)
+                .ToHashSet(StringComparer.Ordinal);
+
+            var written = Written(sql, table, operation).Where(actual[table].Contains).ToList();
+
+            Assert.True(written.Count > 0, $"{stage}'s {operation} on {table} parsed as writing nothing, so this check passed over it.");
+
+            undeclared.AddRange(written.Where(c => !columns.Contains(c)).Select(c => $"{stage} -> {operation} {table}.{c}"));
+        }
+
+        Assert.True(undeclared.Count == 0,
+            "Statements write columns their component does not declare: " +
+            string.Join(", ", undeclared.Distinct(StringComparer.Ordinal).OrderBy(s => s, StringComparer.Ordinal)));
+    }
+
+    /// <summary>
+    /// The columns a statement writes into one table: an insert's column list and every
+    /// <c>SET</c> assignment an update on that table makes, an <c>ON CONFLICT ... DO UPDATE</c>
+    /// included.
+    /// </summary>
+    private static List<string> Written(string sql, string table, WriteOperation operation)
+    {
+        var written = new List<string>();
+        var name = Regex.Escape(table);
+
+        if (operation == WriteOperation.Insert)
+        {
+            foreach (Match m in Regex.Matches(sql, $@"INSERT\s+INTO\s+""?{name}""?\s*\((?<c>[^)]*)\)"))
+            {
+                written.AddRange(m.Groups["c"].Value.Split(',').Select(c => c.Trim().Trim('"')));
+            }
+        }
+
+        foreach (Match m in Regex.Matches(sql,
+                     $@"UPDATE\s+""?{name}""?(?:\s+(?:AS\s+)?[a-z]\w*)?\s+SET\s+(?<s>.+?)(?=\s(?:FROM|WHERE|RETURNING)\b|;|$)",
+                     RegexOptions.Singleline))
+        {
+            written.AddRange(Assignments(m.Groups["s"].Value));
+        }
+
+        foreach (Match m in Regex.Matches(sql, @"DO\s+UPDATE\s+SET\s+(?<s>.+?)(?=\s(?:WHERE|RETURNING)\b|;|$)", RegexOptions.Singleline))
+        {
+            written.AddRange(Assignments(m.Groups["s"].Value));
+        }
+
+        return [.. written.Where(c => c.Length > 0).Distinct(StringComparer.Ordinal)];
+
+        static IEnumerable<string> Assignments(string set)
+            => Regex.Matches(set, @"(?:^|,)\s*(?:[a-z]\w*\.)?(?<c>[a-z_][a-z0-9_]*)\s*=")
+                .Select(a => a.Groups["c"].Value);
+    }
+
+    /// <summary>The tables a component's source passes literally to <c>BulkUpsertAsync</c>.</summary>
+    private static HashSet<string> BulkTables(string source)
+        => [.. Regex.Matches(source, @"BulkUpsertAsync\(\s*""(?<t>[a-z_][a-z0-9_]*)""")
+            .Select(m => m.Groups["t"].Value)];
 
     /// <summary>
     /// Every column any component declares is a column the database has.
@@ -139,10 +298,10 @@ public sealed class StatementColumnConformanceTests
 
     // ---------------------------------------------------------------- helpers ---
 
-    private static IReadOnlyList<(string Component, string Table, IReadOnlyList<string> Columns)>
+    private static IReadOnlyList<(string Component, string Table, WriteOperation Operation, IReadOnlyList<string> Columns)>
         DeclaredWrites()
         => PipelineComposition.AllOwnersForConformance(TestDatabase.ConnectionString)
-            .SelectMany(o => o.WriteSet.Select(w => (Component: o.Name, w.Table, w.Columns)))
+            .SelectMany(o => o.WriteSet.Select(w => (Component: o.Name, w.Table, w.Operation, w.Columns)))
             .Where(w => w.Columns.Count > 0)
             .ToList();
 

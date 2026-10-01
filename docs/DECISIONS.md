@@ -3354,6 +3354,108 @@ computed.
 
 ---
 
+## The corrections
+
+Phase 5.5's three. **Drafted by the build session on 2026-10-01 from
+`prompts/BuildPlans/phase-5.5-the-corrections.md` §4, read by the operator the same day,
+and chosen by the operator from options put as a choice**, the operator remaining the
+decider of record. The drafts stated the options and chose none; the choices below are the
+operator's. D-160 is not chosen and stands under Open.
+
+**Two of the plan's premises were corrected in the drafting rather than carried**, and both
+bear on what these decisions cost. `sector_relative_strength` reaches no screen, no
+percentile and no `attribution` row: the plan's "stored on every attribution row and shown
+on screen U1" is `SCHEMA.md`'s description of `regime_label`. And ranks never tie, which is
+D-160's.
+
+**D-158 `adx14` and `sector_relative_strength` are corrected to `METRICS.md`, and the
+compute layer is recomputed over the backfill with `candidate_set` and `attribution` left
+as they were frozen.** `ACTIVE`
+Two values the compute layer wrote disagreed with the only written definition of either,
+and that document says at its head that it is a draft and not yet authored. So neither side
+won by default, and a build session may not decide that the code's reading is the right one
+[`CLAUDE.md` §13].
+
+**`adx14`.** `METRICS.md` §2 makes it null when `+DI + -DI` is zero. `IndicatorEngine.Wilder`
+wrote 0 there; its null guard tested smoothed true range instead, which is a different
+condition and is not met by a series that has a range.
+`IndicatorEngineTests.TheFlatSeriesReproducesItsClosedForm` built exactly that series, high
+101 and low 99 on every bar, and asserted the 0. **The column reaches the record**: C11
+percentiles it, S2 ranks on it, and S2's scores, floors and ranks, and the scores frozen on
+`attribution`, were computed with a 0 standing where `METRICS.md` says unknown. From phase 6
+it reaches the researcher: `prompts/candidate-block.md` carries the column and
+`prompts/rubrics.md` reads ADX below 15 as noise rather than a trend, so a 0 that means
+unknown would read as evidence against [`CLAUDE.md` §6, null means unknown].
+
+**Null at any session of the window, not only across all of it.** Wilder's smoothing is zero
+at a session only where every input up to it is zero, so `+DI + -DI` is zero at an early
+session for a name whose high and low were flat at the start of the window, and DX there is
+zero divided by zero. Under `METRICS.md`'s strict null propagation an undefined input makes
+the index undefined, which is the rule the existing true-range guard already applies at any
+session.
+
+**`sector_relative_strength`.** `METRICS.md` defines each sector's value as its composite's
+63-session return minus the universe composite's, the universe composite being the same
+equal-weighted construction over every active member. `MarketContextEngine` built the
+universe composite as the mean of the sector means, so a sector of eight counted as much as
+a sector of four hundred, and names in a null sector or a sector below
+`market.sector_composite_min_members` on a date were left out of it; and it emitted
+`level / universeLevel - 1`, a ratio of growth factors rather than a difference of returns.
+No test asserted the arithmetic. **Its reach is narrower than `adx14`'s**: one jsonb column
+on `market_context_daily`, read today by C36's market panel and from phase 6 by the cached
+prefix [`prompts/prefix-template.md`].
+
+**The options, as they were put.** Correct the code and recompute the compute layer over
+the backfill window, leaving the frozen tables as they stand. Correct the code for the
+forward path only and accept two definitions inside one backfill. Or correct `METRICS.md` to
+the code. **The first was taken for both metrics**, separately for each, the drafting having
+noted that the two need not take the same option.
+
+**What the recompute is, for each.** For `sector_relative_strength`, C10 over the backfill
+and nothing downstream, no reader comparing it across dates. For `adx14`, C08, C11 and both
+of C13's passes over the backfill, so that S2's floors are drawn from scores computed on the
+definition its live scores will use, which is D-58's reason for refusing a floor drawn from
+a different population than the one it gates. **C14 is not re-run**, because its range run
+writes `attribution` as well as `candidate_set` and the attribution write is not re-run
+[INVARIANT 4, `RUNBOOK.md`]. So before the boundary `screen_score_daily` and
+`screen_history` describe the corrected definition while `candidate_set` and `attribution`
+describe the seats taken under the old one, and the boundary date is recorded in
+`PROGRESS.md` so the two can be segmented rather than pooled [`CLAUDE.md` §12].
+
+**Why now.** There is no live history: `PROGRESS.md` records phases 6 to 10 as not started,
+no `proposal` or `order` row exists, and `VALIDITY.md` §3's sample has not begun. After phase
+6's first night the same change splits a record the experiment is read from.
+
+**D-159 `RUNBOOK.md`'s failure table is the one enumeration of tolerated failures.**
+`ACTIVE`
+`CLAUDE.md` §6 says a stage completes or fails the run, and that two exceptions exist and
+are enumerated in `RUNBOOK.md` rather than being general tolerance: a per-candidate model
+failure recording a PASS, and a digest provider failure falling through the chain. Both are
+rows in the failure table, the first as `ProposalValidator`'s retry-then-PASS, which phase 6
+builds, and the second as the digest fall-through.
+
+**What ran was a different pair plus one.** Three tolerances ship: a per-ticker `404` read
+as "not carried" across the ingest stages [D-100], a short page from an exhausted server
+recorded rather than thrown [D-71], and the digest fall-through [D-137]. `RUNBOOK.md`'s
+paragraph on why a per-ticker write failure is not tolerated says the first two "are
+enumerated above in the failure table", and neither row was there. So `CLAUDE.md` counted
+two and one of its two did not exist yet, `RUNBOOK.md`'s prose named two its own table did
+not carry, and the table carried one of the three that ran.
+
+**The options, as they were put.** The table is the enumeration and `CLAUDE.md` stops
+carrying a count. `CLAUDE.md` keeps its own enumeration, corrected to the three that run.
+Or the two per-ticker cases are true answers rather than tolerated failures, on the reading
+`RUNBOOK.md` gives the `404`. **The first was taken.** One list rather than two, on the
+reasoning `CLAUDE.md` §9 applies to fixtures: a second list is what goes silently incomplete
+the moment an entry is added to the first.
+
+**So a tolerance is a row in `RUNBOOK.md`'s failure table or it is not a tolerance.** The
+table gains the `404` and short-page rows at 5.5.14. **`CLAUDE.md` §6 is the operator's
+edit and is owed rather than made here** [`CLAUDE.md` §13]: until it is made, it carries a
+count of two that this decision replaces with a pointer.
+
+---
+
 ## Open
 
 **D-53 Whether the local digest model stays local once measured.** `OPEN`
@@ -3475,3 +3577,48 @@ under the first option X-PEAD raises no bar until it reaches the sample floor
 about a year in. Registering it costs the other addition nothing over that year,
 and the bar rises to 1.18 standard errors at the first evaluation where there is
 genuinely a selection of two.
+
+**D-160 How a tie in screen score at the last seat is broken.** `OPEN`
+Drafted by the build session on 2026-10-01 from `prompts/BuildPlans/phase-5.5-the-corrections.md`
+§4 and read by the operator the same day; no option is chosen.
+
+**What happens today.** C13 ranks with `dense_rank() OVER (ORDER BY score DESC, ticker
+ASC)` [`ScreenEngine.RankSql`]. The ticker is inside the window's ordering and is unique
+within a screen and date, so no two names ever share a rank: two names on one score are
+separated by ticker, the alphabetically earlier first. C14 seats by rank and then by ticker
+[`CandidateAllocator`], and that second key is never reached. **So the alphabetical
+preference sits in C13 at equal score rather than in C14 at equal rank**, and where a seated
+and an unseated name share a score at a bucket's last seat, the earlier ticker takes the
+seat every time. `RankSql`'s own comment says two names on one score take the same rank,
+which the statement it documents does not do. **The plan this was drafted from stated the
+premise the other way**, that `dense_rank` lets names share a rank, and its sizing query
+compared ranks, which reads zero by construction.
+
+**Why it is a decision and not a defect.** `ARCHITECTURE.html` §10 argues that a tie at a
+cutoff is broken by a date-seeded coin flip, because every alternative carries a preference
+and the comparison would then measure the preference rather than the rule. That argument is
+made about arbitration in C18, and no authored document states a tie-break for ranking or
+seating. Ticker order is reproducible and carries no view the screens hold, which is the
+case for leaving it; it is one fixed preference applied every time, which is the case §10
+makes against such a rule.
+
+**What it must settle.** Whether C13 breaks equal scores by ticker, by a draw, or not at
+all; and whether `RankSql`'s comment or its statement is the one corrected.
+
+**Options, none chosen here.** Keep ticker ascending, recorded as the rule, and correct the
+comment. Or replace the ticker in C13's ordering with a stable hash of the date and the
+ticker, D-138's construction, so equal scores are ordered by a draw that differs by date and
+reproduces exactly. Or drop the ticker from the window's ordering so equal scores share a
+rank as the comment says, and break the tie at the seat in C14 by that draw, which puts the
+decision where §10's argument comes closest to applying and changes what
+`rank_within_screen` means for every reader. **Either of the last two changes ranks
+wherever a tie exists**, which is a screen-definition change under `CLAUDE.md` §12, and
+bundles with D-158's boundary if taken before phase 6 rather than drawing a second one.
+
+**The query that sizes it, against tables that exist.** Over the frozen range, count the
+screen, bucket and date triples where the score of the last name seated equals the score of
+the first eligible name not seated. If the count is small this is an observation; if it is
+not, §10's argument applies to a population `VALIDITY.md` §3 reads the per-screen result
+off.
+
+**Blocked on nothing, and blocking no checkpoint in phase 5.5.**

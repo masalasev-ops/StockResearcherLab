@@ -211,6 +211,68 @@ public sealed class NightlyRunTests
     }
 
     /// <summary>
+    /// The daily components no phase has built yet, by id and name: phase 6's C15 to C17,
+    /// phase 7's C18, C20 and C25, phase 8's C21 and phase 9's C31 [5.5.15]. Each is held
+    /// below to being daily in the catalogue and absent from the registry, so building one
+    /// fails this file until it is taken off the list and put into the order.
+    /// </summary>
+    private static readonly (string Id, string Name)[] NotYetBuilt =
+    [
+        ("C15", "DossierBuilder"), ("C16", "ResearcherClient"), ("C17", "ProposalValidator"),
+        ("C18", "RiskGate"), ("C20", "PositionManager"), ("C21", "ForwardReturnFiller"),
+        ("C25", "PortfolioRunner"), ("C31", "ReadModelBuilder"),
+    ];
+
+    /// <summary>
+    /// **The converse: every component the catalogue runs daily is in the evening order**
+    /// [5.5.15]. The direction above asks that each name in the order is a catalogue
+    /// component; this one asks that no daily component is missing from it, which is what
+    /// catches a stage that was built and never added. The components no phase has built are
+    /// excluded by name, and each exclusion is itself checked, so the list cannot hide a
+    /// component that exists.
+    /// </summary>
+    [Fact]
+    public void EveryDailyCatalogueComponentIsInTheEveningOrder()
+    {
+        var runs = ArchitectureDocument.RunsByComponent();
+        var registered = PipelineComposition.AllOwnersForConformance(TestDatabase.ConnectionString)
+            .Select(o => o.Name)
+            .Concat(PipelineComposition.AllReadOwnersForConformance(TestDatabase.ConnectionString).Select(o => o.Name))
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var (id, name) in NotYetBuilt)
+        {
+            var row = Assert.Single(runs, r => r.Id == id);
+            Assert.Equal(name, row.Name);
+            Assert.StartsWith("Daily", row.Runs, StringComparison.Ordinal);
+            Assert.DoesNotContain(name, registered);
+        }
+
+        Assert.Empty(MissingFromTheOrder(NightlyRun.EveningOrder, runs));
+    }
+
+    /// <summary>
+    /// The converse discriminates: an order with one built daily component taken out of it
+    /// is reported, and that component is the one named.
+    /// </summary>
+    [Fact]
+    public void AnOrderMissingABuiltDailyComponentIsReported()
+    {
+        var runs = ArchitectureDocument.RunsByComponent();
+        var shortened = NightlyRun.EveningOrder.Where(n => n != "GateEngine").ToArray();
+
+        Assert.Equal(["GateEngine"], MissingFromTheOrder(shortened, runs));
+    }
+
+    private static List<string> MissingFromTheOrder(
+        IReadOnlyCollection<string> order, IReadOnlyList<ArchitectureDocument.RunsRow> runs)
+        => [.. runs
+            .Where(r => r.Runs.StartsWith("Daily", StringComparison.Ordinal))
+            .Select(r => r.Name)
+            .Where(n => NotYetBuilt.All(x => x.Name != n) && !order.Contains(n))
+            .OrderBy(n => n, StringComparer.Ordinal)];
+
+    /// <summary>
     /// Checkpoint 2.12. The compute layer's two ordering constraints, which are the
     /// only ones in the evening order that are about data rather than about the clock.
     ///

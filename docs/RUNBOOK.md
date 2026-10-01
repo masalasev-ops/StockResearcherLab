@@ -16,7 +16,7 @@ night.
 | 17:40 | Freshness guard. Recency, completeness and settledness. Aborts everything on the first two; the third re-reads on a later run [D-65] |
 | 17:45 | Fundamentals, flow, events |
 | 18:00 | Sentiment, whole universe |
-| 18:05 | Indicators, valuation, market context |
+| 18:05 | Indicators, valuation, market context, flow and sentiment derivations: C08, C09, C10, C34 and C35, C10 after C08 because breadth reads `indicator_daily` [5.5.14] |
 | 18:15 | Percentiles |
 | 18:20 | Gates |
 | 18:25 | Screens |
@@ -86,6 +86,8 @@ the wrong one of these reports an empty table that is empty for the ordinary rea
 |---|---|---|---|
 | Recency: the newest date in `price_daily` is older than the most recent completed trading session | FreshnessGuard | Abort. No orders | The provider has not updated, or a run was missed. Check the provider, then check `run_log` for a gap. Rerun when fresh. A skipped night costs nothing |
 | Completeness: the row count is below `freshness.row_count_abort_below` | FreshnessGuard | Abort. No orders. Between the abort floor and `freshness.row_count_alert_below`, alert without aborting | A truncated file. Check the provider and rerun. Do not revise the threshold from a single night: the bound is asked again against accumulated settled counts at sign-off, and moving it because a measurement missed it is what `CLAUDE.md` §11 prohibits [D-64] |
+| A provider 404 for one ticker, `Symbol not found` | PriceIngestor, FundamentalsIngestor, FlowIngestor and EventsIngestor, each catching the 404 alone | **Tolerated.** Zero rows for that ticker and the sweep continues [D-100, D-159] | Nothing. The provider does not carry the ticker, which is a fact about the world rather than a fault. Any other status fails the stage |
+| A short page: a paged read the server ran out of before its reported total | FlowIngestor, through `EodhdClient` | **Tolerated.** The rows delivered are written and the shortfall is recorded rather than thrown [D-71, D-159] | Nothing unless the shortfall grows. A client that stops asking while pages remain is a different failure and stays fatal |
 | Settledness: a date's row count is below a configured fraction of the median count of the dates before it | FreshnessGuard | **Not an abort.** The ingest walks back to the newest date that does pass, and C02's trailing re-load window tops the short date up on a later run | Nothing. The session is still accreting, which the probe saw run for hours and into the following evening. If every candidate date fails, the run has nothing settled to work on and stops on recency instead |
 | Filing date substitution rate above `fundamentals.substitution_rate_alert`, or any ticker whose widest clean gap exceeds 180 days | FundamentalsIngestor | Alert | The provider's date handling has changed. Investigate before the next backfill, since every substituted row reads late by that ticker's own widest gap and the rate going up widens that silently. A widest gap above 180 days is a filer whose fundamentals reach a screen too late to be worth much, and the universe should be told rather than left to carry it [D-62] |
 | A screen returns zero names | ScreenEngine | Normal. Smaller candidate set | Nothing |

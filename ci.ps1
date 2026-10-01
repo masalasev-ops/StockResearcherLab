@@ -485,7 +485,15 @@ try {
     # stopped being one at 1.8: it asserts the schema against SCHEMA.md rather than
     # counting hits, so a summary saying zero each would describe the guard wrongly
     # while quoting its numbers correctly.
-    $results['guards.ps1'] = "exit 0, $checks checks over $sweptFiles files, four greps finding none and one schema assertion"
+    # The split is read off the same summary line rather than written here as words.
+    # It read "four greps" as a literal and went false the moment a check was added
+    # [5.5.2], which is the second-list defect one level out from guards.ps1.
+    $split = [regex]::Match("$summary", '(\d+) greps finding none.*?(\d+) schema assertion')
+    if (-not $split.Success) {
+        throw 'guards.ps1 printed a summary line without its grep and schema counts.'
+    }
+
+    $results['guards.ps1'] = "exit 0, $checks checks over $sweptFiles files, $($split.Groups[1].Value) greps finding none and $($split.Groups[2].Value) schema assertion(s)"
 
     # ---- Set up .NET 10. CI's actions/setup-dotnet@v4. --------------------
     Write-Step 'Set up .NET 10'

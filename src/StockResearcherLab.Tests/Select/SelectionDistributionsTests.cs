@@ -119,21 +119,75 @@ public sealed class SelectionDistributionsTests
     }
 
     /// <summary>
+    /// **No line reports `holds` on a range with no data** [5.5.7]. The megacap line had no
+    /// share to score and the attribution line no candidate to check, and both returned
+    /// `holds`: an empty range's null share read as zero, which is under any bound, and
+    /// zero candidates left zero without a row, which is what the line asks for. A pass
+    /// manufactured out of nothing is the failure `CLAUDE.md` §1 describes.
+    /// </summary>
+    [Fact]
+    public async Task NoLineReportsHoldsOnARangeWithNoData()
+    {
+        var lines = await MeasureWithAsync(MegacapShareMax, TestContext.Current.CancellationToken);
+
+        var megacap = Assert.Single(lines, m => m.Line.StartsWith("megacap", StringComparison.Ordinal));
+        var attribution = Assert.Single(lines, m => m.Line.StartsWith("attribution", StringComparison.Ordinal));
+
+        Assert.Null(megacap.Holds);
+        Assert.Null(attribution.Holds);
+    }
+
+    /// <summary>
     /// **The megacap line scores against `monitor.megacap_share_max` and not a literal**
     /// [phase 4 sign-off]. C28 alerts on that key and this line scores the same guarantee,
     /// so a literal here would be one bound stated twice [`CLAUDE.md` §8].
+    ///
+    /// **Over four seeded candidates rather than an empty range** [5.5.7]. Until 5.5.7 this
+    /// flipped the verdict over an empty range, which proved the bound configurable only
+    /// because an empty range scored a share of zero: the proof rested on the defect the
+    /// line above closes. One large name in four is a share of a quarter, which a bound of
+    /// zero cannot admit and a bound of one cannot refuse.
     /// </summary>
     [Fact]
     public async Task TheMegacapLineScoresAgainstTheConfiguredBound()
     {
         var ct = TestContext.Current.CancellationToken;
+        var date = new DateOnly(2003, 6, 2);
 
-        // A bound of zero cannot be met by any share at all and a bound of one cannot be
-        // missed, so the verdict flips between them. A literal third would return the same
-        // verdict twice and this would fail.
-        var strict = Line(await MeasureWithAsync(0d, ct));
-        var loose = Line(await MeasureWithAsync(1d, ct));
+        await ClearCandidatesAsync(date, ct);
 
+        DoneWhenLine strict, loose;
+
+        try
+        {
+            await using (var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true))
+            {
+                foreach (var (ticker, bucket) in new[] { ("SRLDW.A", "large"), ("SRLDW.B", "small"), ("SRLDW.C", "small"), ("SRLDW.D", "mid") })
+                {
+                    await using var cmd = new Npgsql.NpgsqlCommand(
+                        "INSERT INTO candidate_set (ticker, date, screens_surfacing, size_bucket) " +
+                        "VALUES (@t, @d, ARRAY['S1'], @b);", conn);
+                    cmd.Parameters.AddWithValue("t", ticker);
+                    cmd.Parameters.AddWithValue("d", date);
+                    cmd.Parameters.AddWithValue("b", bucket);
+                    await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(true);
+                }
+            }
+
+            // A bound of zero cannot be met by any share at all and a bound of one cannot be
+            // missed, so the verdict flips between them. A literal third would return the same
+            // verdict twice and this would fail.
+            strict = Line(await SelectionDistributions.MeasureAsync(
+                TestDatabase.ConnectionString, date, date, Live, 0d, ct).ConfigureAwait(true));
+            loose = Line(await SelectionDistributions.MeasureAsync(
+                TestDatabase.ConnectionString, date, date, Live, 1d, ct).ConfigureAwait(true));
+        }
+        finally
+        {
+            await ClearCandidatesAsync(date, ct);
+        }
+
+        Assert.Contains("whole range 25.0 percent", strict.Measured, StringComparison.Ordinal);
         Assert.False(strict.Holds);
         Assert.True(loose.Holds);
 
@@ -204,6 +258,15 @@ public sealed class SelectionDistributionsTests
     }
 
     // ------------------------------------------------------------- plumbing ---
+
+    private static async Task ClearCandidatesAsync(DateOnly date, CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
+        await using var cmd = new Npgsql.NpgsqlCommand(
+            "DELETE FROM candidate_set WHERE date = @d AND ticker LIKE 'SRLDW.%';", conn);
+        cmd.Parameters.AddWithValue("d", date);
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(true);
+    }
 
     private static async Task<IReadOnlyList<DoneWhenLine>> MeasureWithAsync(double max, CancellationToken ct)
         => await SelectionDistributions.MeasureAsync(

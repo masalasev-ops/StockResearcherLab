@@ -1,4 +1,5 @@
 using Npgsql;
+using StockResearcherLab.Core;
 using StockResearcherLab.Core.Stages;
 using StockResearcherLab.Data;
 using StockResearcherLab.Pipeline.Select;
@@ -251,6 +252,171 @@ public sealed class ScreenRangeRunTests
         }
     }
 
+    /// <summary>
+    /// **No rank survives a floor it does not clear, after `screens.floor_percentile`
+    /// moves and the floor pass alone is re-run** [5.5.5, §06].
+    ///
+    /// Twenty-one names over ten sessions, the lookback lowered to five so a floor exists,
+    /// floored at the 50th percentile and then at the 98th with no score written in
+    /// between. The count is §06's "floors already applied" stated as a query: a ranked
+    /// row on a date with no floor, or below its date's floor. Until 5.5.5 the rank
+    /// statement updated only the rows that cleared, so every name between the two floors
+    /// kept the rank the lower one gave it.
+    /// </summary>
+    [Fact]
+    public async Task ARaisedFloorLeavesNoRankBelowItAcrossTheRange()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct);
+
+        try
+        {
+            await SeedSpreadAsync(ct);
+            await SetFloorAsync("screens.floor_lookback_days", 2, "5", "2020-06-01", ct);
+            await SetFloorAsync("screens.floor_percentile", 2, "50", "2020-06-01", ct);
+
+            await Run().ScoreAsync(From, To, ct);
+            await Run().FloorAsync(From, To, ct);
+
+            var lower = await RankedRowsAsync(ct);
+            Assert.True(lower > 0, "the lower floor ranked nothing, so the raise has nothing to clear");
+
+            await SetFloorAsync("screens.floor_percentile", 3, "98", "2020-07-01", ct);
+            await Run().FloorAsync(From, To, ct);
+
+            Assert.Equal(0L, await StaleRanksAsync(ct));
+            Assert.True(await RankedRowsAsync(ct) < lower, "the raised floor ranks no fewer names than the lower one");
+        }
+        finally
+        {
+            await ClearAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// **A date that loses its floor loses its ranks** [5.5.5]. The lookback raised past the
+    /// fixture's ten sessions after it has been floored, so every date's floor is null
+    /// when the floor pass is re-run. Until 5.5.5 the null-floor path returned before
+    /// touching a rank, so every rank the earlier floor gave stood on a date with none.
+    /// </summary>
+    [Fact]
+    public async Task ADateThatLosesItsFloorLosesItsRanks()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct);
+
+        try
+        {
+            await SeedSpreadAsync(ct);
+            await SetFloorAsync("screens.floor_lookback_days", 2, "5", "2020-06-01", ct);
+            await SetFloorAsync("screens.floor_percentile", 2, "50", "2020-06-01", ct);
+
+            await Run().ScoreAsync(From, To, ct);
+            await Run().FloorAsync(From, To, ct);
+            Assert.True(await RankedRowsAsync(ct) > 0, "nothing was ranked, so nothing can be shown to clear");
+
+            await SetFloorAsync("screens.floor_lookback_days", 3, "50", "2020-07-01", ct);
+            await Run().FloorAsync(From, To, ct);
+
+            Assert.Equal(0, await RankedRowsAsync(ct));
+            Assert.Equal(0L, await StaleRanksAsync(ct));
+        }
+        finally
+        {
+            await ClearAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// **The floor pass resolves the floor keys as of each session, not as of the range's
+    /// end** [INVARIANT 13, D-43, 5.5.6].
+    ///
+    /// `screens.floor_percentile` drops to 50 by a version stamped 2022-03-07, inside the
+    /// range. A nightly C13 run over 2022-03-06 resolves the 98 in force that day; until
+    /// 5.5.6 the range pass resolved both keys once, at the range's end, so every session
+    /// took the 50, including the ones before the stamp. Both sides of the stamp are
+    /// compared with what the nightly stage writes for the same date, because that is the
+    /// one reading of "the floor on that date" that cannot be argued with.
+    /// </summary>
+    [Fact]
+    public async Task TheFloorPassResolvesItsKeysAsOfEachSession()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct);
+
+        try
+        {
+            await SeedSpreadAsync(ct);
+            await SetFloorAsync("screens.floor_lookback_days", 2, "5", "2020-06-01", ct);
+            await SetFloorAsync("screens.floor_percentile", 2, "50", "2022-03-07", ct);
+
+            await Run().ScoreAsync(From, To, ct);
+            await Run().FloorAsync(From, To, ct);
+
+            var before = new DateOnly(2022, 3, 6);
+            var after = new DateOnly(2022, 3, 8);
+
+            var rangeBefore = await FloorOnAsync(before, ct);
+            var rangeAfter = await FloorOnAsync(after, ct);
+
+            Assert.NotNull(rangeBefore);
+            Assert.NotNull(rangeAfter);
+
+            await RunNightlyAsync(before, ct);
+            await RunNightlyAsync(after, ct);
+
+            Assert.Equal(await FloorOnAsync(before, ct), rangeBefore);
+            Assert.Equal(await FloorOnAsync(after, ct), rangeAfter);
+
+            // And the two sides of the stamp differ, so the equalities above are not two
+            // readings of one value.
+            Assert.NotEqual(rangeBefore, rangeAfter);
+        }
+        finally
+        {
+            await ClearAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// **A lag with no pair is unknown, not zero** [5.5.7, `CLAUDE.md` §6].
+    ///
+    /// Ten sessions, one name ranked on every one. D-1 has nine pairs and an overlap of 1.
+    /// D-21 has none: no session in the range has one twenty-one sessions before it. Until
+    /// 5.5.7 the null the statement returned for that lag was read as 0 and printed as
+    /// 0.0000, which reads as a screen whose ranked set is entirely replaced within a month,
+    /// a finding, when nothing was measured.
+    /// </summary>
+    [Fact]
+    public async Task ALagWithNoPairIsUnknownRatherThanZero()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct);
+
+        try
+        {
+            await Run().ScoreAsync(From, To, ct);
+
+            await ExecAsync(
+                "UPDATE screen_score_daily SET rank_within_screen = 1 " +
+                "WHERE date BETWEEN @f AND @t AND score IS NOT NULL;",
+                ct, ("f", From), ("t", To));
+
+            var screen = Assert.Single(await PersistenceMeasure
+                .MeasureAsync(TestDatabase.ConnectionString, From, To, ct));
+
+            Assert.Equal((double?) 1d, screen.Lag1);
+            Assert.Null(screen.Lag21);
+            Assert.Equal(0L, screen.Pairs21);
+            Assert.Contains("| 1.0000 | ", PersistenceMeasure.TableRow(screen), StringComparison.Ordinal);
+            Assert.Contains("| " + PersistenceMeasure.NoPair + " |", PersistenceMeasure.TableRow(screen), StringComparison.Ordinal);
+        }
+        finally
+        {
+            await ClearAsync(ct);
+        }
+    }
+
     /// <summary>Re-running one date reproduces it byte-identically.</summary>
     [Fact]
     public async Task ReRunningOneDateReproducesIt()
@@ -411,7 +577,7 @@ public sealed class ScreenRangeRunTests
 
             Assert.Equal(Screen, screen.ScreenId);
             Assert.True(screen.Pairs > 0);
-            Assert.Equal(1d, screen.Lag1, 6);
+            Assert.Equal(1d, screen.Lag1!.Value, 6);
             Assert.Equal(1d, screen.MeanRankedSize, 6);
             Assert.Equal(
                 PersistenceMeasure.ChanceOverlap(screen.MeanRankedSize, screen.MeanScoredSize),
@@ -494,7 +660,94 @@ public sealed class ScreenRangeRunTests
         await ExecAsync("DELETE FROM config_rows WHERE key LIKE @k;", ct, ("k", $"screens.{Screen}.%"));
         await ExecAsync("DELETE FROM config_rows WHERE key LIKE '" + SeededScreens.AnyStateVersionTwo +
             "' AND version = 2;", ct);
+
+        // The two shared floor keys are read by every screen fixture, so a version this
+        // file writes must not outlive it [5.5.5].
+        await ExecAsync(
+            "DELETE FROM config_rows WHERE key IN ('screens.floor_percentile', 'screens.floor_lookback_days') " +
+            "AND version > 1;", ct);
     }
+
+    /// <summary>
+    /// Twenty names beside `SRLR.A`, at `adx14_pctile` 5 to 100 on every session, so a
+    /// floor separates them.
+    /// </summary>
+    private static async Task SeedSpreadAsync(CancellationToken ct)
+    {
+        for (var n = 1; n <= 20; n++)
+        {
+            var ticker = $"SRLR.B{n:00}";
+
+            for (var day = From; day <= To; day = day.AddDays(1))
+            {
+                await ExecAsync("""
+                    INSERT INTO security_daily (ticker, date, sector, size_bucket, market_cap, is_active)
+                    VALUES (@t, @d, @sec, 'mid', 1000000000, TRUE)
+                    ON CONFLICT (ticker, date) DO UPDATE SET is_active = TRUE;
+                    """, ct, ("t", ticker), ("d", day), ("sec", Sector));
+
+                await ExecAsync("""
+                    INSERT INTO indicator_daily (ticker, date, adx14_pctile) VALUES (@t, @d, @p)
+                    ON CONFLICT (ticker, date) DO UPDATE SET adx14_pctile = EXCLUDED.adx14_pctile;
+                    """, ct, ("t", ticker), ("d", day), ("p", (float) (5 * n)));
+            }
+        }
+    }
+
+    private static async Task<double?> FloorOnAsync(DateOnly date, CancellationToken ct)
+    {
+        await using var conn = await TestDatabase.OpenAsync(ct).ConfigureAwait(true);
+        await using var cmd = new NpgsqlCommand(
+            "SELECT floor_score FROM screen_history WHERE screen_id = @s AND date = @d;", conn);
+
+        cmd.Parameters.AddWithValue("s", Screen);
+        cmd.Parameters.AddWithValue("d", date);
+
+        var value = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(true);
+
+        return value is null or DBNull ? null : Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>C13 as the evening sequence runs it, on one date, against the same store.</summary>
+    private static async Task RunNightlyAsync(DateOnly date, CancellationToken ct)
+    {
+        var stage = new ScreenEngine();
+        var config = new ConfigStore(TestDatabase.ConnectionString);
+
+        var context = new StageContext(
+            date, await config.RequireVersionAsync(date, ct).ConfigureAwait(true),
+            new StageData(TestDatabase.ConnectionString, new DeclaredAccess(stage)),
+            new FrozenClock(date),
+            config);
+
+        await stage.ExecuteAsync(context, ct).ConfigureAwait(true);
+    }
+
+    /// <summary>Per-file, as every other stage fixture in this suite keeps its own.</summary>
+    private sealed class FrozenClock(DateOnly today) : IClock
+    {
+        public DateTimeOffset UtcNow { get; } = new(today.Year, today.Month, today.Day, 21, 30, 0, TimeSpan.Zero);
+
+        public DateOnly Today { get; } = today;
+    }
+    private static async Task SetFloorAsync(
+        string key, int version, string value, string setAt, CancellationToken ct)
+        => await ExecAsync(
+            "INSERT INTO config_rows (key, version, value, set_at, set_by) " +
+            "VALUES (@k, @v, @val::jsonb, @at::timestamptz, 'test') " +
+            "ON CONFLICT (key, version) DO UPDATE SET value = EXCLUDED.value, set_at = EXCLUDED.set_at;",
+            ct, ("k", key), ("v", version), ("val", value), ("at", setAt + " 12:00:00Z"));
+
+    /// <summary>
+    /// §06's "floors already applied" as a query, over the fixture's range: a ranked row on
+    /// a date with no floor, or below its date's floor. The same statement is run once
+    /// against the live store [5.5.5].
+    /// </summary>
+    private static async Task<long> StaleRanksAsync(CancellationToken ct)
+        => await ScalarAsync(
+            "SELECT count(*)::bigint FROM screen_score_daily s JOIN screen_history h USING (screen_id, date) " +
+            "WHERE s.date BETWEEN @f AND @t AND s.rank_within_screen IS NOT NULL " +
+            "AND (h.floor_score IS NULL OR s.score < h.floor_score);", ct);
 
     private static async Task ExecAsync(
         string sql, CancellationToken ct, params (string Name, object Value)[] parameters)

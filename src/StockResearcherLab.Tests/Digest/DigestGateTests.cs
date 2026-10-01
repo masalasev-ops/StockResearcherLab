@@ -41,9 +41,12 @@ public sealed class DigestGateTests : IAsyncLifetime
     /// and not `local_model_config` [D-136], so on a fresh database this class fails
     /// wherever it happens to run first.
     /// </summary>
+    ///
+    /// **Both rows enabled and both links named, which the seed no longer gives** [5.5.11].
+    /// The rows are set here and `digest.chain` is read through <see cref="TwoLinkChain.Config"/>,
+    /// so the gate is tested against two links without a config row being written.
     public async ValueTask InitializeAsync()
-        => await new ConfigSeeder(TestDatabase.ConnectionString)
-            .SeedChainAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        => await TwoLinkChain.EnableAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
     public async ValueTask DisposeAsync()
         => await ClearAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
@@ -218,7 +221,7 @@ public sealed class DigestGateTests : IAsyncLifetime
             Date, 1,
             new StageData(TestDatabase.ConnectionString, new DeclaredAccess(stage)),
             new FixedClock(new DateTimeOffset(2026, 8, 12, 22, 33, 0, TimeSpan.Zero), Date),
-            new ConfigStore(TestDatabase.ConnectionString));
+            new TwoLinkChain.Config(new ConfigStore(TestDatabase.ConnectionString)));
 
     /// <summary>
     /// A link that is healthy or is not, and answers the same way either way. Health and

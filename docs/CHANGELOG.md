@@ -2660,3 +2660,105 @@ asked for, and the attached-terminal prompt is what covers the load that genuine
 **Nothing else in the note changed.** The persistent chrome, the argument for it, the
 visible-secondary state and the run health screen's detail and reconnect control all
 stand as written.
+
+---
+
+## 2026-10-01, phase 5.5, `CONFIG_REFERENCE.md`'s `digest.chain` default [5.5.11]
+
+The seeded value of `digest.chain` moves from the two links the corpus first documented to
+the one in force, `["local"]`, and the secondary's `local_model_config` row is seeded
+disabled beside it. The operator directed on 2026-08-25 that the digest step reach no paid
+provider until they have evaluated it, and until 5.5.11 that direction existed only as two
+edits to the one store that had run: a fresh database seeded the paid link and, with the
+Anthropic key present, composed it on its first night. A clean edit under D-73; the prior
+wording is here.
+
+### `CONFIG_REFERENCE.md`, the `digest.chain` row
+
+> | `digest.chain` | `["local","haiku"]` | D-25 | DigestChain, `BuildAsync` | **verified 5.7** |
+
+**What moved and what did not.** The default and its citation. D-25, the two-link design,
+stands; the chain still holds both rows and the rotation code is unchanged. Enabling the
+secondary is a version of this key and an edit to the row, on a fresh database exactly as
+on the one that has run. **A store seeded before 5.5.11 is untouched**: version 1 seeds
+under `ON CONFLICT DO NOTHING`, so its version 1 still reads two links and its operator
+edits stand. The two stores therefore disagree about what version 1 of this key held, which
+is recorded here rather than reconciled; each is consistent with itself.
+
+---
+
+## 2026-10-01, phase 5.5, `CONFIG_REFERENCE.md` made to describe the code [5.5.12]
+
+Two prose corrections and a pointer, each a clean edit under D-73 with the prior wording
+here. The Consumer cells that gained a consumer are verified content and are recorded in
+`PROGRESS.md` rather than here.
+
+### The `digest.chain` note
+
+> **`digest.chain` names the links and `local_model_config` orders and addresses them, and
+> neither is redundant** [5.7, closing the 5.3 finding]. D-136 gives the order to
+> `provider_order` filtered on `enabled`, and that table carries no name; this key carries the
+> name at each position and no address. `DigestChain.BuildAsync` pairs them by position, which
+> is what lets a link's identity be versioned config while its address stays an
+> operator-editable row, the split D-51 and D-136 already make. It is also the only thing that
+> can record which links were in the chain on a past date.
+
+The pairing claim held for neither link. `BuildAsync` reads `provider_order` and no
+endpoint; `LocalModelClient` reads the endpoint at `provider_order = 1` whatever the chain
+says; the secondary's SDK ignores the column.
+
+### The pointer in the Fundamentals section
+
+> **`fundamentals.widest_gap_alert_days` is in the cadence table below** rather than
+> here, with the other keys phase 1 wired up.
+
+No table in the document carried the key. It now has a row in the Fundamentals table.
+
+---
+
+## 2026-10-01, phase 5.5, `RUNBOOK.md`'s cycle table and failure table [5.5.14, D-159]
+
+The 18:05 row named three of the five stages the code runs there, and the failure table
+gained the two per-ticker tolerances D-159 makes it the one list of. A clean edit under
+D-73 for the row; the two failure rows are additions and remove nothing.
+
+### The cycle table's 18:05 row
+
+> | 18:05 | Indicators, valuation, market context |
+
+`FlowEngine` and `SentimentEngine` ran in this slot from phases 1 and 2 and appeared nowhere
+in the document, failure table included.
+
+---
+
+## 2026-10-01, phase 5.5, `BUILD_PLAN.md`'s 5.5.8 row amended on operator direction
+
+The row as authored could not be green at `HEAD`. `indicator_daily.median_dollar_volume_20d`
+is a monetary column, so `IndicatorEngine` is a monetary-owning component, and its file
+holds 108 uses of `double` in arithmetic that writes `real` columns while the monetary
+value arrives from SQL as `decimal?` and is written as `decimal`. The three ways through
+were an exclusion, which the row forbids, rewriting C08's arithmetic, which would move every
+indicator value, or checking the carrier. The operator chose the carrier. A clean edit under
+D-73, BUILD_PLAN being a spec; the authored wording is here.
+
+### The 5.5.8 row, as authored
+
+> | 5.5.8 | INVARIANT 16's C# half gains an enforcement, absent since D-83 replaced the source grep with a schema assertion. A further `guards.ps1` check, or a test beside `SchemaParityTests`, finds no `double` or `float` in the tracked C# of the components that own monetary columns, **the scope read from the stage registry's declared write columns rather than from a list of files to skip**, which is the shape that strengthens as the system grows. `CLAUDE.md`'s sentence naming the old grep is reported and not waited on. **Done when** the check is green at `HEAD`, introducing `double positionSize` into a monetary-owning component makes it fail naming file and line, and removing it returns green |
+
+---
+
+## 2026-10-01, phase 5.5, `BUILD_PLAN.md`'s column-ownership carried obligation [5.5.15]
+
+The row read closed at 1.12 while the statement route stayed unchecked, which phase 1's
+sign-off recorded as finding G. A clean edit under D-73; the prior closing sentence is here.
+
+> **Closed at 1.12** [A27]. The staged bulk route is the first place a stage states in code exactly which columns it writes, so it is where the declaration became enforceable, and it did not need to wait for C21. `DeclaredAccess.EnsureColumnsDeclared` runs before the connection opens, alongside the table check |
+
+---
+
+## 2026-10-01, phase 5.5, a correction to the 5.5.8 entry above
+
+The entry gives `IndicatorEngine`'s file as holding "108 uses of `double`". It holds 82 `double`
+and 26 `float`, 108 in all, the `float` tokens being casts and field types for the `real`
+columns. Found by review and corrected here because this file is appended to and never
+rewritten; the conclusion the figure supported stands.

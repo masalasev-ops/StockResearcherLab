@@ -10,9 +10,12 @@ namespace StockResearcherLab.Tests.Stages;
 /// Ownership is per operation, so the unit of the assertion is a table and an
 /// operation, and at most one component may claim any one of them.
 ///
-/// SCHEMA.md names three splits and no fourth: attribution, proposal, and order
-/// with fill and position. Those are the only tables where more than one
-/// component may appear at all, and the test permits those and nothing else.
+/// SCHEMA.md names the splits, the only tables where more than one component may
+/// appear at all, and the test permits those and nothing else. **This header
+/// enumerated three until 5.5.10**, attribution, proposal, and order with fill and
+/// position, and went stale when D-77 added the compute tables C11 updates beside
+/// their writers: the code read the document and stayed right while the prose
+/// describing it did not. It no longer counts them, for that reason.
 ///
 /// **Which tables those are is read off SCHEMA.md rather than listed here**
 /// [1.10, closing the open item carried from 0.4]. So is which component writes

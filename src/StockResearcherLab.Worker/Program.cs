@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using StockResearcherLab.Core.Config;
 using StockResearcherLab.Core.Screens;
@@ -357,17 +357,12 @@ async Task<int> PersistenceAsync()
         .MeasureAsync(RequireConnectionString(), from, to).ConfigureAwait(false);
 
     Console.WriteLine($"persistence  {from:yyyy-MM-dd}..{to:yyyy-MM-dd}");
-    Console.WriteLine(
-        "| Screen | Dates ranked | of scored | Pairs | Mean ranked | Mean scored | Chance | " +
-        "D-1 | D-5 | D-21 | Large |");
-    Console.WriteLine("|---|---|---|---|---|---|---|---|---|---|---|");
+    Console.WriteLine(PersistenceMeasure.TableHeader);
+    Console.WriteLine("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
 
     foreach (var s in measured)
     {
-        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
-            $"| {s.ScreenId} | {s.DatesRanked:N0} | {s.DatesScored:N0} | {s.Pairs:N0} | " +
-            $"{s.MeanRankedSize:0.0} | {s.MeanScoredSize:0.0} | {s.Chance:0.0000} | " +
-            $"{s.Lag1:0.0000} | {s.Lag5:0.0000} | {s.Lag21:0.0000} | {s.LargeShare:P1} |"));
+        Console.WriteLine(PersistenceMeasure.TableRow(s));
     }
 
     // The reading is a human's and this prints the numbers rather than naming one. Section

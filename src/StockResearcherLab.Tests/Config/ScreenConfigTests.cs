@@ -203,6 +203,103 @@ public sealed class ScreenConfigFacadeTests
     [Fact]
     public void OwnBuildsThisScreensKey()
         => Assert.Equal("screens.S3.metrics", For("S3").Own("metrics"));
+
+    /// <summary>
+    /// **No registered screen reads another registered screen's keys, over every ordered
+    /// pair** [INVARIANT 2, 5.5.4].
+    ///
+    /// The ids are read off the seeder rather than listed, so a ninth screen is in the
+    /// pairs the moment it is seeded. And each screen's keys are read off the seeder by
+    /// their own prefix rather than by asking the facade which keys it scopes, because a
+    /// test that asked the facade would agree with the facade whatever it did. Until 5.5.4
+    /// the facade decided scope by id shape, `[Ss]\d+`, so every key of the three `X-`
+    /// shadows read as shared and any screen could read them.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DistinctPairs))]
+    public void NoRegisteredScreenReadsAnotherRegisteredScreensKeys(string reader, string owner)
+    {
+        var keys = OwnedKeys(owner);
+
+        Assert.NotEmpty(keys);
+
+        foreach (var key in keys)
+        {
+            Assert.False(For(reader).CanRead(key), $"{reader} can read {owner}'s key {key}.");
+            Assert.Throws<ForeignScreenConfigException>(() => For(reader).EnsureCanRead(key));
+        }
+    }
+
+    /// <summary>Every registered screen reads every key the seeder gives it.</summary>
+    [Theory]
+    [MemberData(nameof(Registered))]
+    public void EveryRegisteredScreenReadsItsOwnKeys(string id)
+    {
+        var keys = OwnedKeys(id);
+
+        Assert.NotEmpty(keys);
+        Assert.All(keys, key => Assert.True(For(id).CanRead(key), $"{id} cannot read its own key {key}."));
+    }
+
+    /// <summary>
+    /// The two floor keys are one rule for every screen and stay readable by all. A scope
+    /// rule that took any segment after `screens.` as an id would bind them to an id
+    /// called `floor_percentile` and refuse them to every screen.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Registered))]
+    public void TheSharedFloorKeysAreReadableByEveryRegisteredScreen(string id)
+    {
+        Assert.True(For(id).CanRead("screens.floor_percentile"));
+        Assert.True(For(id).CanRead("screens.floor_lookback_days"));
+    }
+
+    /// <summary>
+    /// The older top-level form is recognised for ids of the older shape alone, so a
+    /// screen whose id it cannot express refuses to build a key in it rather than
+    /// building one every screen could read.
+    /// </summary>
+    [Fact]
+    public void TheOlderFormIsRefusedForAnIdItCannotScope()
+        => Assert.Throws<InvalidOperationException>(() => For("X-ACC").OwnLegacy("threshold"));
+
+    public static TheoryData<string> Registered()
+    {
+        var data = new TheoryData<string>();
+
+        foreach (var id in SeededScreens.Ids())
+        {
+            data.Add(id);
+        }
+
+        return data;
+    }
+
+    public static TheoryData<string, string> DistinctPairs()
+    {
+        var data = new TheoryData<string, string>();
+
+        foreach (var reader in SeededScreens.Ids())
+        {
+            foreach (var owner in SeededScreens.Ids().Where(o => !string.Equals(o, reader, StringComparison.Ordinal)))
+            {
+                data.Add(reader, owner);
+            }
+        }
+
+        return data;
+    }
+
+    /// <summary>
+    /// The seeded keys that belong to one screen, by prefix: <c>screens.&lt;id&gt;.</c>,
+    /// and the older top-level <c>&lt;id&gt;.</c> that S5's thresholds still use.
+    /// </summary>
+    private static List<string> OwnedKeys(string id)
+        => [.. ConfigSeeder.Keys
+            .Select(k => k.Key)
+            .Where(k => k.StartsWith($"screens.{id}.", StringComparison.Ordinal)
+                        || k.StartsWith($"{id.ToLowerInvariant()}.", StringComparison.Ordinal))
+            .OrderBy(k => k, StringComparer.Ordinal)];
 }
 
 /// <summary>

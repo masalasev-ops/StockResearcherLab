@@ -354,10 +354,45 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
     private static async Task<string> SectorRelativeStrengthAsync(
         StageContext context, int minMembers, CancellationToken ct)
     {
-        var sql = $"""
+        var rows = await context.Data.ReadAsync(
+            "price_daily", SectorCompositeSql(context.Date, minMembers), ct).ConfigureAwait(false);
+
+        return SectorRelativeStrength(
+            [.. rows.Select(static r => new CompositeReturn(
+                r[0] as string,
+                DateOnly.FromDateTime((DateTime) r[1]!),
+                (double) (decimal) r[2]!))]);
+    }
+
+    /// <summary>
+    /// One composite's mean member return on one date. <see cref="Sector"/> is null for
+    /// the universe composite.
+    /// </summary>
+    public readonly record struct CompositeReturn(string? Sector, DateOnly Date, double MeanReturn);
+
+    /// <summary>
+    /// The statement behind <see cref="SectorRelativeStrengthAsync"/>, public so a test can
+    /// run it against a fixture whose answer is worked by hand [5.5.3].
+    ///
+    /// **Two kinds of row, and the second is what 5.5.3 added** [D-158]. Each sector's mean
+    /// member return per date, as before, and the universe's, carried with a null sector:
+    /// the mean over **every active member**, as `METRICS.md` defines it, including a name
+    /// with no sector and a name in a sector too small to carry a composite of its own.
+    /// Until 5.5.3 the universe composite was the mean of the sector means, which weighed
+    /// a sector of eight as heavily as a sector of four hundred and left out every member
+    /// in no qualifying sector.
+    ///
+    /// **The member floor applies to the universe's dates as well as the sectors'.**
+    /// `market.sector_composite_min_members` is below which a composite is one name's
+    /// noise, and a member whose last 64 bars straddle a hole contributes returns on dates
+    /// no other member is reading. The sector rows have always had the floor; without it
+    /// the universe chain would take those dates at one or two names each.
+    /// </summary>
+    public static string SectorCompositeSql(DateOnly date, int minMembers)
+        => $"""
             WITH universe AS (
-                SELECT m.ticker, m.sector FROM {Universe.AsOf(context.Date)} m
-                 WHERE m.is_active AND m.sector IS NOT NULL
+                SELECT m.ticker, m.sector FROM {Universe.AsOf(date)} m
+                 WHERE m.is_active
             ),
             windowed AS (
                 SELECT u.sector, b.ticker, b.date, b.adj_close, b.rn
@@ -366,7 +401,7 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
                     SELECT p.ticker, p.date, p.adj_close,
                            row_number() OVER (ORDER BY p.date DESC) AS rn
                     FROM price_daily p
-                    WHERE p.ticker = u.ticker AND p.date <= {Literal(context.Date)}
+                    WHERE p.ticker = u.ticker AND p.date <= {Literal(date)}
                       AND p.adj_close IS NOT NULL AND p.adj_close > 0
                     ORDER BY p.date DESC
                     LIMIT {CompositeWindow.ToString(CultureInfo.InvariantCulture)}
@@ -383,42 +418,50 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
             )
             SELECT sector, date, avg(r) AS mean_return
             FROM rets
-            WHERE r IS NOT NULL
+            WHERE r IS NOT NULL AND sector IS NOT NULL
             GROUP BY sector, date
             HAVING count(*) >= {minMembers.ToString(CultureInfo.InvariantCulture)}
-            ORDER BY sector, date;
+            UNION ALL
+            SELECT NULL::text, date, avg(r)
+            FROM rets
+            WHERE r IS NOT NULL
+            GROUP BY date
+            HAVING count(*) >= {minMembers.ToString(CultureInfo.InvariantCulture)}
+            ORDER BY 1 NULLS FIRST, 2;
             """;
 
-        var rows = await context.Data.ReadAsync("price_daily", sql, ct).ConfigureAwait(false);
+    /// <summary>
+    /// The chain and the comparison, over the rows <see cref="SectorCompositeSql"/>
+    /// returns. Public and free of any store so the arithmetic can be worked by hand [5.5.3].
+    ///
+    /// **Each sector's value is its trailing return minus the universe's** [`METRICS.md`,
+    /// D-158]: (sector level - 1) - (universe level - 1), which is the difference of the
+    /// two levels. Until 5.5.3 it was their ratio less one, a quantity with the same sign
+    /// and a different size that no definition names.
+    ///
+    /// **Each chain is multiplied in date order whatever order the rows arrive in**, so the
+    /// floating-point result is the same for any caller rather than for the one statement
+    /// that happens to sort them [`CLAUDE.md` section 6].
+    /// </summary>
+    public static string SectorRelativeStrength(IReadOnlyList<CompositeReturn> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
 
         var chained = new Dictionary<string, (double Level, int Days)>(StringComparer.Ordinal);
         var universeLevel = 1.0;
         var universeDays = 0;
-        var byDate = new Dictionary<DateOnly, List<double>>();
 
-        foreach (var r in rows)
+        foreach (var r in rows.OrderBy(static r => r.Date))
         {
-            var sector = (string) r[0]!;
-            var date = DateOnly.FromDateTime((DateTime) r[1]!);
-            var mean = (double) (decimal) r[2]!;
-
-            var prior = chained.GetValueOrDefault(sector, (Level: 1.0, Days: 0));
-            chained[sector] = (prior.Level * (1 + mean), prior.Days + 1);
-
-            if (!byDate.TryGetValue(date, out var list))
+            if (r.Sector is null)
             {
-                byDate[date] = list = [];
+                universeLevel *= 1 + r.MeanReturn;
+                universeDays++;
+                continue;
             }
 
-            list.Add(mean);
-        }
-
-        // The universe composite is the same construction over every sector present,
-        // so the two are comparable by construction rather than by assumption.
-        foreach (var date in byDate.Keys.OrderBy(d => d))
-        {
-            universeLevel *= 1 + byDate[date].Average();
-            universeDays++;
+            var prior = chained.GetValueOrDefault(r.Sector, (Level: 1.0, Days: 0));
+            chained[r.Sector] = (prior.Level * (1 + r.MeanReturn), prior.Days + 1);
         }
 
         var buffer = new StringBuilder("{");
@@ -428,7 +471,7 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
         {
             var (level, days) = chained[sector];
 
-            if (days < RelativeStrengthWindow || universeDays < RelativeStrengthWindow || universeLevel <= 0)
+            if (days < RelativeStrengthWindow || universeDays < RelativeStrengthWindow)
             {
                 continue;
             }
@@ -442,7 +485,7 @@ public sealed class MarketContextEngine : IStage, IBackfillStage
 
             buffer.Append(JsonSerializer.Serialize(sector))
                 .Append(':')
-                .Append(((level / universeLevel) - 1).ToString("F6", CultureInfo.InvariantCulture));
+                .Append((level - universeLevel).ToString("F6", CultureInfo.InvariantCulture));
         }
 
         return buffer.Append('}').ToString();

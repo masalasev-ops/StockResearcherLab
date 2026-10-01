@@ -13644,3 +13644,60 @@ throws if that line stops carrying the split.
 
 **One sentence in the plan was off by a line.** It cites `SystemClockTests.cs:38` for
 `new SystemClock().Today`; the call is at `:39`. The point it makes stands.
+**The first `ci.ps1` run on 5.5.2's commit failed one test and the second passed.**
+`WriteOwnershipConformanceTests.EveryWritingComponentIsNamedAsAWriterInSchemaDocument`
+failed inside the full suite at `ef31b62` and passed alone, 9 of 9 in its class, and the
+rerun of the whole gate was green with 895 tests. **Its message was not kept**: the call
+that ran the gate printed only its last eleven lines, which is the session's own error,
+and the rerun kept the full log. The class sits in no collection, so it runs beside every
+other class, but the two things it reads were read and neither varies:
+`AllOwnersForConformance` opens nothing and builds the same owners each time, and
+`SchemaDocument` reads `SCHEMA.md` with no cache and no test writes to `docs/`. **The cause
+is not established.** One candidate, unconfirmed: `ci.ps1` checks the repository out into a
+fresh temporary worktree, and an on-access scanner holding a newly created file open while
+the test reads it would fail a read without failing the code. Recorded as a flake with no
+cause rather than closed.
+
+### 5.5.3, the two metric corrections
+
+**Shown red before green, the four facts against the pre-5.5.3 code and then against the
+corrected code.** Built in two steps so the red was a wrong answer rather than a missing
+method: `MarketContextEngine`'s statement and arithmetic were first moved into two public
+static members unchanged, the facts were run against them, and only then was the arithmetic
+corrected.
+
+| Fact | Against the pre-5.5.3 code | After |
+|---|---|---|
+| `IndicatorEngineTests.TheFlatSeriesReproducesItsClosedForm` | **Red**: `Assert.Null` failure, `adx14` read 0 | Green |
+| `IndicatorEngineTests.AMovingCloseInsideAConstantRangeHasNoDirectionalIndex`, new | **Red**: `adx14` read 0 | Green |
+| `MarketContextEngineTests.TheSectorValueIsTheSectorReturnMinusTheUniverseReturn`, new | **Red**: `ArgumentNullException`, the old arithmetic having no universe composite to read | Green |
+| `MarketContextEngineTests.TheUniverseCompositeWeighsEveryActiveMemberEqually`, new | **Red**: Alpha 0.367051 against 0.772713 worked by hand | Green |
+
+The last is the stage's own statement run against a store: twenty members over 70
+sessions, five in Alpha at +1 percent a day, ten in Beta at zero, two in Gamma at -1
+percent and below the five-member floor, and three with no sector. 0.367051 is
+1.01^63 / 1.005^63 - 1, the ratio over the mean of the two qualifying sector means, which
+is exactly the pair of defects D-158 names. With those 30 and the suites that exercise the
+same two stages, `IndicatorEngineTests`, `MarketContextEngineTests`, `RangeSeamTests`,
+`StageWritePathTests` and `IndicatorSeamTests`, all green.
+
+**`adx14`.** Null where smoothed +DM plus smoothed -DM is zero at any session of the window,
+tested before either division. **The plan called the true-range guard "now redundant" and
+it is not**: with smoothed true range at zero, +DI and -DI are both 0/0, which is NaN in
+.NET, and NaN compares false with everything, so a guard written on the sum of the two
+indicators would let a NaN through as a value. One condition on the smoothed inputs covers
+both cases.
+
+**`sector_relative_strength`.** The statement returns the universe composite as rows with a
+null sector, the mean over every active member, a name with no sector and a name in a
+sector below `market.sector_composite_min_members` included. The member floor applies to the
+universe's dates as it always has to the sectors': a member whose last 64 bars straddle a
+hole contributes returns on dates no other member reads, and without the floor the universe
+chain would take those dates at one or two names each. The value is the difference of the
+two levels. Each chain is multiplied in date order whatever order the rows arrive in.
+
+**The store holds no `adx14` that is exactly 0**, read before anything ran: 0 of 3,820,759
+`indicator_daily` rows, 2,542 null. So the correction reaches the store through the
+any-session reading rather than through the final value: a name whose high and low were
+flat for the first fourteen bars of its 250-bar window has carried an index computed partly
+over zero DX values. How many is what the recompute below answers.

@@ -12,7 +12,9 @@ namespace StockResearcherLab.Core.Screens;
 /// code change.
 ///
 /// **Every screen is loaded through its own facade**, so a definition cannot be built
-/// from another screen's keys even here [INVARIANT 2, D-120].
+/// from another screen's keys even here [INVARIANT 2, D-120]. **True of every registered
+/// screen from 5.5.4 and not before**: until then the facade decided scope by id shape,
+/// and the three shadows' keys read as shared to every screen.
 /// </summary>
 public static class ScreenRegistry
 {
@@ -151,7 +153,9 @@ public static class ScreenRegistry
             // The three stabilisation thresholds sit in the older top-level namespace,
             // which is where CONFIG_REFERENCE.md has documented them since the first
             // corpus. They are as much this screen's as the composite keys are, and the
-            // facade refuses another screen's under either form.
+            // facade refuses another screen's under either form. For the newer form that
+            // holds of every id from 5.5.4; the older form is S5's alone, and the facade
+            // refuses to build one for an id it cannot scope.
             await NumberAsync(facade, facade.OwnLegacy("stabilisation_z_max"), asOf, ct).ConfigureAwait(false),
             await NumberAsync(facade, facade.OwnLegacy("sentiment_delta_min"), asOf, ct).ConfigureAwait(false),
             await IntAsync(facade, facade.OwnLegacy("news_gate_min_articles"), asOf, ct).ConfigureAwait(false));

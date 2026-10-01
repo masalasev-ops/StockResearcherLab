@@ -42,17 +42,34 @@ public sealed class ForeignScreenConfigException : InvalidOperationException
 public sealed class ScreenConfigFacade
 {
     /// <summary>
-    /// A key scoped to a named screen, in either of the two forms this corpus uses:
-    /// <c>screens.S5.quality_metrics</c> and the older top-level <c>s5.*</c> that
-    /// predates the <c>screens.</c> namespace.
+    /// A key in the <c>screens.</c> namespace scoped to a named screen:
+    /// <c>screens.&lt;id&gt;.&lt;suffix&gt;</c>, **for any id**.
     ///
-    /// **Matching both is what stops the older form being a hole in the rule.** The
-    /// four <c>s5.*</c> keys in <c>CONFIG_REFERENCE.md</c> are as much S5's as
-    /// <c>screens.S5.quality_metrics</c> is, and a guard that only knew the newer
-    /// prefix would let any screen read them.
+    /// **Scope is decided by segment count and never by the shape of the id** [5.5.4].
+    /// Until 5.5.4 one pattern served both forms and required the id to look like
+    /// <c>S1</c>, so every key of the three shadows, <c>screens.X-NSI.metrics</c> and the
+    /// rest, read as shared and any screen could read them while INVARIANT 2 read as
+    /// enforced. Three or more segments is a screen's key; two, as in
+    /// <c>screens.floor_percentile</c>, is one rule for every screen. The segment is
+    /// mandatory: an id pattern of <c>[^.]+</c> with <c>screens.</c> optional would bind
+    /// <c>screens.floor_percentile</c> to an id called <c>screens</c> and refuse it to all.
     /// </summary>
-    private static readonly Regex ScreenScoped = new(
-        @"^(?:screens\.)?(?<id>[Ss]\d+)\.", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex Namespaced = new(
+        @"^screens\.(?<id>[^.]+)\.[^.]", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The older top-level form, <c>s5.*</c>, which predates the <c>screens.</c>
+    /// namespace and is recognised for ids of that older shape alone.
+    ///
+    /// **Matching it is what stops the older form being a hole in the rule.** The four
+    /// <c>s5.*</c> keys in <c>CONFIG_REFERENCE.md</c> are as much S5's as
+    /// <c>screens.S5.quality_metrics</c> is, and a guard that only knew the newer prefix
+    /// would let any screen read them. It cannot be widened to any first segment, which
+    /// would make every top-level key, <c>gates.gap_pct</c> included, a screen's;
+    /// <see cref="OwnLegacy"/> refuses instead for an id it cannot express.
+    /// </summary>
+    private static readonly Regex Legacy = new(
+        @"^(?<id>[Ss]\d+)\.", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly IConfigStore _inner;
 
@@ -76,7 +93,12 @@ public sealed class ScreenConfigFacade
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
 
-        var match = ScreenScoped.Match(key);
+        var match = Namespaced.Match(key);
+
+        if (!match.Success)
+        {
+            match = Legacy.Match(key);
+        }
 
         return !match.Success
             || string.Equals(match.Groups["id"].Value, ScreenId, StringComparison.OrdinalIgnoreCase);
@@ -118,7 +140,22 @@ public sealed class ScreenConfigFacade
     /// <see cref="Own"/> has: a call site cannot reach another screen's threshold.
     ///
     /// Lower-cased invariantly, that being the form the older keys are written in.
+    ///
+    /// **Refused for an id the older form cannot scope** [5.5.4]. <c>x-acc.threshold</c>
+    /// matches no screen pattern, so it would read as shared and every screen could read
+    /// it; a key that cannot be scoped is not built at all.
     /// </summary>
     public string OwnLegacy(string suffix)
-        => $"{ScreenId.ToLowerInvariant()}.{suffix}";
+    {
+        var key = $"{ScreenId.ToLowerInvariant()}.{suffix}";
+
+        if (!Legacy.IsMatch(key))
+        {
+            throw new InvalidOperationException(
+                $"Screen '{ScreenId}' cannot have a key in the older top-level form: '{key}' would " +
+                "match no screen and read as shared. Use Own, the screens.<id>. namespace [5.5.4].");
+        }
+
+        return key;
+    }
 }

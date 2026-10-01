@@ -10518,9 +10518,13 @@ reads 3 on all 74,767 with no nulls, one version being in force across the whole
 because nothing in the store changed inside it [INVARIANT 13].
 
 **The other four invariants this phase names were read in the code rather than measured.**
-INVARIANT 2 holds through `ScreenConfigFacade` refusing another screen's key and S5
+~~INVARIANT 2 holds through `ScreenConfigFacade` refusing another screen's key and S5
 carrying its own two metric lists, with
-`ScreenGateTests.S5ScoresWithS1AbsentFromTheRegistryEntirely` as the proof. INVARIANT 3
+`ScreenGateTests.S5ScoresWithS1AbsentFromTheRegistryEntirely` as the proof.~~ [corrected at 5.5.4: it held for the five
+live ids only. The facade scoped by id shape, `[Ss]\d+`, so every key of the three `X-`
+shadows read as shared and any screen could read them, and the proof named exercises S5
+against S1 alone. 5.5.4 scopes by segment count and asserts every ordered pair of
+seeded ids.] INVARIANT 3
 holds because `CandidateAllocator.Sql` numbers seats inside `PARTITION BY screen_id,
 size_bucket` and joins a per-bucket seat count, so no expression in the statement can move
 a seat between buckets; small measuring 34.8 against a target of 37.5 is that rule visible.
@@ -13608,7 +13612,7 @@ Each row is filled when its checkpoint lands.
 | Checkpoint | What it is shown failing against | Red | Green |
 |---|---|---|---|
 | 5.5.2 | Scratch files containing `DateTime.Today` and `Random.Shared.Next()`, and a third reading `TimeProvider.System` | **Exit 1**, 3 of 6 checks failing, naming `Scratch552Clock.cs:4 DateTime.Today`, `Scratch552TimeProvider.cs:4 TimeProvider` and `Scratch552Random.cs:4 Random.Shared`. `HEAD`'s guard over the same three staged files: **exit 0**, 5 checks over 216 files | **Exit 0** with the files removed, 6 checks over 213 files, every grep at zero |
-| 5.5.4 | `HEAD`, on the three `X-` ids | | |
+| 5.5.4 | `HEAD`, on the three `X-` ids | **22 of 82 failing**: all 21 ordered pairs whose owner is `X-NSI`, `X-ACC` or `X-FM`, every reader able to read the shadow's keys, and the older-form refusal | **82 of 82**, with `ScreenGateTests`, `ScreenEngine` and the registry suites, 126 in all |
 | 5.5.6 | `HEAD`, the whole range taking the second version | | |
 | 5.5.8 | `double positionSize` in a monetary-owning component | | |
 | 5.5.9 | `screen_score_daily` removed from a copy of `SelectionRangeRun`'s reads | | |
@@ -13701,3 +13705,26 @@ two levels. Each chain is multiplied in date order whatever order the rows arriv
 any-session reading rather than through the final value: a name whose high and low were
 flat for the first fourteen bars of its 250-bar window has carried an index computed partly
 over zero DX values. How many is what the recompute below answers.
+### 5.5.4, the screen config facade scopes by segment count
+
+`ScreenConfigFacade` decided whether a key belonged to a screen by the shape of the id,
+`[Ss]\d+`, so every key of the three shadows read as shared to every screen and INVARIANT 2
+was enforced for five ids of eight. **It now scopes by segment count**:
+`screens.<id>.<suffix>` is `<id>`'s for any id, two segments under `screens.` is shared, and
+the older top-level form stays recognised for ids of the older shape, which is S5's four
+keys. Every key the seeder writes under `screens.` has three segments except the two floor
+keys, read off the seeder before the rule was written.
+
+**The theory is driven off the seeder twice**, for the ids through `SeededScreens.Ids()` and
+for each screen's keys by their own prefix, so it does not ask the facade which keys the
+facade scopes. 56 ordered pairs, 8 own-key cases and 8 floor-key cases; red at `HEAD` on the
+21 pairs whose owner is a shadow, green after.
+
+**One hole beside it was closed with it.** `OwnLegacy` built `<id>.<suffix>` for any id, and
+for an `X-` id that key matches no screen pattern and would read as shared. It now refuses
+to build a key it cannot scope. No shadow calls it today; the refusal is what stops one.
+
+**The three sentences that claimed this already held** are corrected: two comments in
+`ScreenRegistry`, appended to rather than rewritten, and the phase 4 record's INVARIANT 2
+sentence, struck in place with the correction beside it. **The plan cites that sentence at
+`PROGRESS.md:10520`**; it opens at `:10519` and runs to `:10522`.

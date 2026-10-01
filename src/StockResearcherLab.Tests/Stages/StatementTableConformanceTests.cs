@@ -49,7 +49,7 @@ public sealed class StatementTableConformanceTests
     {
         var tables = await LiveTablesAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        var violations = Violations(SourceFiles(), Owners(), tables);
+        var violations = Violations(SourceTree.Files(), Owners(), tables);
 
         Assert.True(violations.Count == 0,
             "Statements name tables their code does not declare. DeclaredAccess passes these, because " +
@@ -68,7 +68,7 @@ public sealed class StatementTableConformanceTests
     public async Task TheCheckFailsWhenATableLeavesADeclaredList()
     {
         var tables = await LiveTablesAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-        var files = SourceFiles();
+        var files = SourceTree.Files();
         var owners = Owners();
 
         var key = Assert.Single(files.Keys, k => k.EndsWith("/SelectionRangeRun.cs", StringComparison.Ordinal));
@@ -76,7 +76,7 @@ public sealed class StatementTableConformanceTests
         const string declared = "[\"screen_history\", \"screen_score_daily\"]";
         Assert.Contains(declared, files[key], StringComparison.Ordinal);
 
-        var mutated = new Dictionary<string, string>(files, StringComparer.Ordinal)
+        var mutated = new Dictionary<string, string>(files.ToDictionary(f => f.Key, f => f.Value), StringComparer.Ordinal)
         {
             [key] = files[key].Replace(declared, "[\"screen_history\"]", StringComparison.Ordinal),
         };
@@ -99,11 +99,11 @@ public sealed class StatementTableConformanceTests
     public async Task TheScanReadsTheStatementsItIsMeantTo()
     {
         var tables = await LiveTablesAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-        var files = SourceFiles();
+        var files = SourceTree.Files();
 
         foreach (var owner in Owners())
         {
-            Assert.True(files.Values.Any(text => Declares(text, owner.TypeName)),
+            Assert.True(files.Values.Any(text => SourceTree.Declares(text, owner.TypeName)),
                 $"{owner.TypeName} is a registered component and no source file under src/ declares it.");
         }
 
@@ -190,7 +190,7 @@ public sealed class StatementTableConformanceTests
     {
         HashSet<string>? scope = null;
 
-        foreach (var owner in owners.Where(o => Declares(text, o.TypeName)))
+        foreach (var owner in owners.Where(o => SourceTree.Declares(text, o.TypeName)))
         {
             (scope ??= new HashSet<string>(StringComparer.Ordinal)).UnionWith(owner.Tables);
         }
@@ -272,9 +272,6 @@ public sealed class StatementTableConformanceTests
         }
     }
 
-    private static bool Declares(string text, string typeName)
-        => Regex.IsMatch(text, $@"\b(?:class|record)\s+{Regex.Escape(typeName)}\b");
-
     /// <summary>Identifiers after the four keywords that the live schema has as a table or view.</summary>
     private static HashSet<string> StatementTables(string text, IReadOnlySet<string> tables)
         => [.. StatementTablesUnfiltered(text).Where(tables.Contains)];
@@ -305,35 +302,6 @@ public sealed class StatementTableConformanceTests
                         .Concat(c is IWriteOwner w ? w.WriteSet.Select(x => x.Table) : []))
                     .ToHashSet(StringComparer.Ordinal)))
             .OrderBy(o => o.TypeName, StringComparer.Ordinal)];
-    }
-
-    /// <summary>
-    /// Every C# source file under <c>src/</c> outside the tests and the build output, keyed
-    /// by its repository path, with line comments removed so prose about SQL is not read as
-    /// SQL.
-    /// </summary>
-    private static Dictionary<string, string> SourceFiles()
-    {
-        var root = SchemaDocument.RepositoryRoot;
-        var src = System.IO.Path.Combine(root, "src");
-
-        var files = new Dictionary<string, string>(StringComparer.Ordinal);
-
-        foreach (var file in Directory.EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
-                     .OrderBy(f => f, StringComparer.Ordinal))
-        {
-            var rel = System.IO.Path.GetRelativePath(root, file).Replace('\\', '/');
-
-            if (rel.Contains("/bin/", StringComparison.Ordinal) || rel.Contains("/obj/", StringComparison.Ordinal)
-                || rel.StartsWith("src/StockResearcherLab.Tests/", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            files[rel] = Regex.Replace(File.ReadAllText(file), @"//[^\r\n]*", string.Empty);
-        }
-
-        return files;
     }
 
     private static async Task<IReadOnlySet<string>> LiveTablesAsync(CancellationToken ct)

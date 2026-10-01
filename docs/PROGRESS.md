@@ -13616,7 +13616,7 @@ Each row is filled when its checkpoint lands.
 | 5.5.6 | `HEAD`, the whole range taking the second version | **Red**: on 2022-03-06, before the stamp, the nightly stage wrote a floor of 100 and the range pass 55, the 50th percentile from the version stamped 2022-03-07 | **Green**: both sides of the stamp equal what the nightly stage writes for the same date |
 | 5.5.8 | `double positionSize` in a monetary-owning component | | |
 | 5.5.9 | `screen_score_daily` removed from a copy of `SelectionRangeRun`'s reads | **Red**: the check reports `src/StockResearcherLab.Pipeline/Select/SelectionRangeRun.cs: screen_score_daily`, while `DeclaredAccess` over the same mutilated list passes the read it gates | **Green**: no violation over today's code, every registered component's file found, statements read in at least twenty files |
-| 5.5.10 | `HEAD`, six stages | | |
+| 5.5.10 | `HEAD`, six stages | **Red at `HEAD`**: twelve declared writes across **eight** components no route checked, `CandidateAllocator` (2), `ConcentrationMonitor`, `CostLedger`, `GateEngine`, `HeadlineIngestor`, `NewsDigester`, `PercentileEngine` (2) and `ScreenEngine` (3) | **Green**: every one on `Statements()`, and the two column directions and both column-drop fixtures green, 10 in the two classes |
 | 5.5.12 | `HEAD`, the four Consumer rows | | |
 | 5.5.13 | `HEAD`, one live row | | |
 | 5.5.14 | `HEAD`, two engines | | |
@@ -13861,3 +13861,49 @@ of that form, so they stay with the column check. And the unit is the file: a fi
 two declarations is held to their union, so `SelectionRangeRun`'s three are checked together
 and a statement under one reading a table only another declares would pass. The plan's own
 case is caught because no other declaration in that file names `screen_score_daily`.
+### 5.5.10, column ownership on the statement route
+
+**The plan's second shape was taken**, the test side. Its first, `IStageData.WriteAsync`
+taking the columns with each call site passing its own declared array, would compare a
+declaration with itself and could never fail.
+
+`StatementColumnConformanceTests.Statements()` now carries the operation and names every
+statement writer: `FlowEngine`, `PercentileEngine` with its two cell inserts beside its
+updates, `ScreenEngine`'s score insert, rank update, rank clear and history insert,
+`GateEngine`, `CandidateAllocator`'s candidate and attribution inserts, `ConcentrationMonitor`,
+`HeadlineIngestor`, `NewsDigester` and `CostLedger`. The three whose rows are assembled at run
+time are held through the fixed insert head each builder already used, now a public constant,
+the shape `FlowEngine.Sql` already had; `CostLedger`'s statement is a public constant too.
+**The existing check is matched on the operation**, so `RankSql` is held to the update's one
+column rather than to the insert's six.
+
+| Fact | What it asserts |
+|---|---|
+| `EveryComponentDeclaringWriteColumnsIsCheckedOnOneRoute`, new | Every declared insert or update with columns is on `Statements()` or is a bulk write naming its table in the component's own source. **Red at `HEAD` on eight components and twelve writes**, the table above |
+| `EveryColumnAStatementWritesIsDeclared`, new | **The direction the plan did not ask for and invariant 10 is about**: a statement writes no column outside its component's declaration for that operation, read off an insert's column list and an update's `SET` assignments, `ON CONFLICT DO UPDATE` included, kept to the table's real columns, and asserting each statement parsed as writing something |
+| `TheWriteCheckFailsWhenAStatementWritesPastItsDeclaration`, new | Its negative fixture: `RankSql` with `score = 0` added is reported |
+| `TheCheckFailsWhenADeclaredColumnLeavesTheStatement`, extended | Now covers `ScreenEngine.RankSql` and `CandidateAllocator.AttributionSql`, a partial declaration discriminated as well as a percentile one |
+
+**Green over today's code in both directions**: no statement declares a column it does not
+write, and none writes a column it does not declare.
+
+**The plan's "six of eight" counted two short.** `CostLedger` declares columns and writes by
+statement, and `PercentileEngine` was on the list for its updates only.
+
+**`CostLedger` writes `cost_ledger` through its own `NpgsqlDataSource` and not through
+`StageData`, so its insert never passes `DeclaredAccess` at all.** Its write set is declared
+for the registry and checked by nothing at the call. That is a phase 5 shape and a finding,
+not a change this checkpoint makes; its statement is now on the column list, which is the half
+of the gap that can be closed from here.
+
+**The plan's "fourteen call sites" is not the count.** 24 `IStageData.WriteAsync` calls exist
+outside the tests, 23 in the Pipeline and `CostLedger`'s separate route besides; the figure
+does not bear on the shape taken.
+
+`WriteOwnershipConformanceTests`' header enumerated three splits, attribution, proposal, and
+order with fill and position, and has been stale since D-77 added the compute tables. The code
+read `SCHEMA.md` throughout; the header no longer counts them. **The invariant's own text in
+`CLAUDE.md` carries the same stale enumeration and is the plan's §7 item 4, for the operator.**
+
+`StatementTableConformanceTests` and this class now share `Corpus/SourceTree`, the source read
+both rest on.

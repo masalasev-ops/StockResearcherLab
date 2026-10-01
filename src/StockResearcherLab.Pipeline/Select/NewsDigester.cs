@@ -345,10 +345,16 @@ public sealed class NewsDigester : IStage
         return sb.Append(");").ToString();
     }
 
+    /// <summary>
+    /// The insert's head, public so the column conformance test holds it against
+    /// <see cref="WriteSet"/> [5.5.10].
+    /// </summary>
+    public const string InsertHead =
+        "INSERT INTO news_digest (ticker, date, digest_text, provider, model_name, was_rotation) VALUES ";
+
     private static string InsertSql(IReadOnlyList<Row> rows, DateOnly date)
     {
-        var sb = new StringBuilder(
-            "INSERT INTO news_digest (ticker, date, digest_text, provider, model_name, was_rotation) VALUES ");
+        var sb = new StringBuilder(InsertHead);
 
         for (var i = 0; i < rows.Count; i++)
         {
